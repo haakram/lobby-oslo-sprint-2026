@@ -40,7 +40,7 @@ async function fetchToken(): Promise<{ token: string } | VoiceProblem> {
 
 /**
  * The receptionist in the browser: microphone check, server token, ElevenLabs WebRTC session,
- * transcript and the four reception tools. Every booking or message the agent records goes to
+ * transcript and the five reception tools. Every booking or message the agent records goes to
  * `onRecord`; a fresh sink per call drops repeats and caps the count. Use inside `ConversationProvider`.
  */
 export function useReceptionVoice(onRecord: (record: ReceptionRecord) => void) {
@@ -59,12 +59,16 @@ export function useReceptionVoice(onRecord: (record: ReceptionRecord) => void) {
 
   const sink = useRef<ReceptionSink | null>(null);
   const newSink = useCallback(() => createCallSink((record) => onRecordRef.current(record)), []);
-  // Today in Oslo and the demo occupancy come from the tools' defaults.
+  // A new tool set per call, so haggling starts over. Today in Oslo and the demo occupancy come from
+  // the tools' defaults.
+  const [callNumber, setCallNumber] = useState(0);
   const tools = useMemo(
     () => createReceptionTools({ sink: { record: (item) => (sink.current ??= newSink()).record(item) } }),
-    [newSink],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callNumber only resets the haggling
+    [newSink, callNumber],
   );
   useConversationClientTool("get_room_price", tools.get_room_price);
+  useConversationClientTool("get_counter_offer", tools.get_counter_offer);
   useConversationClientTool("check_availability", tools.check_availability);
   useConversationClientTool("record_booking_request", tools.record_booking_request);
   useConversationClientTool("record_message", tools.record_message);
@@ -118,6 +122,7 @@ export function useReceptionVoice(onRecord: (record: ReceptionRecord) => void) {
     setLanguage(null);
     // A new call: its own record of what was already taken down.
     sink.current = newSink();
+    setCallNumber((n) => n + 1);
     startSession({ conversationToken: result.token, connectionType: "webrtc" });
   }, [newSink, startSession]);
 

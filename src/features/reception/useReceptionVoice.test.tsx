@@ -51,10 +51,11 @@ describe("useReceptionVoice", () => {
     vi.unstubAllGlobals();
   });
 
-  it("registers exactly the four reception tools", () => {
+  it("registers exactly the five reception tools", () => {
     renderHook(() => useReceptionVoice(vi.fn()));
     expect([...fake.tools.keys()].sort()).toEqual([
       "check_availability",
+      "get_counter_offer",
       "get_room_price",
       "record_booking_request",
       "record_message",

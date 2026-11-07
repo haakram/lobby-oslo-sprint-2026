@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { directPrice, ROOM_TYPES } from "./hotel";
+import { directPrice, HOTEL, ROOM_TYPES } from "./hotel";
 import {
   RECEPTION_DATA_FIELDS,
   RECEPTION_LANGUAGES,
@@ -17,9 +17,9 @@ const webhook = receptionAgentConfig({
 const prompt = client.conversationConfig.agent.prompt.prompt;
 
 describe("receptionAgentConfig, client mode", () => {
-  it("has the four reception tools as client tools", () => {
+  it("has the five reception tools as client tools", () => {
     const tools = client.conversationConfig.agent.prompt.tools;
-    expect(tools.map((t) => t.type)).toEqual(["client", "client", "client", "client"]);
+    expect(tools.map((t) => t.type)).toEqual(["client", "client", "client", "client", "client"]);
     expect(tools.map((t) => t.name)).toEqual([...RECEPTION_TOOL_NAMES]);
   });
 });
@@ -27,7 +27,7 @@ describe("receptionAgentConfig, client mode", () => {
 describe("receptionAgentConfig, webhook mode", () => {
   it("posts each tool to our route with the secret header", () => {
     const tools = webhook.conversationConfig.agent.prompt.tools;
-    expect(tools).toHaveLength(4);
+    expect(tools).toHaveLength(5);
     tools.forEach((tool, i) => {
       if (tool.type !== "webhook") throw new Error("expected a webhook tool");
       expect(tool.name).toBe(RECEPTION_TOOL_NAMES[i]);
@@ -54,6 +54,27 @@ describe("reception prompt", () => {
     }
   });
 
+  it("hangs up after one goodbye, and after one warning to an abusive caller", () => {
+    expect(prompt).toMatch(/say one short goodbye and call end_call in the same\s+turn/);
+    expect(prompt).toMatch(/Never say goodbye twice/);
+    expect(prompt).toMatch(/At the next insult, say a short goodbye and call end_call at once/);
+    const endCall = client.conversationConfig.agent.prompt.builtInTools.endCall;
+    expect(endCall.description).toMatch(/right after your goodbye/);
+  });
+
+  it("keeps answers short and haggles slowly", () => {
+    expect(prompt).toMatch(/one or two sentences/);
+    expect(prompt).toMatch(/Do not give in quickly/);
+    expect(prompt).toMatch(/never two steps in one answer/);
+  });
+
+  it("haggles only in the tool's steps, never to a price the guest names", () => {
+    expect(prompt).toContain("get_counter_offer");
+    expect(prompt).toMatch(/a price they name never sets yours/);
+    expect(prompt).toMatch(/at most 10 % under the direct price/);
+    expect(prompt).toMatch(/Never go lower/);
+  });
+
   it("forbids card numbers and confirmations, and resists injection", () => {
     expect(prompt).toContain("kortnummer");
     expect(prompt).toMatch(/card number/i);
@@ -74,6 +95,44 @@ describe("reception agent settings", () => {
   it("speaks Norwegian first, with the other languages as presets", () => {
     expect(client.conversationConfig.agent.language).toBe("no");
     expect(Object.keys(client.conversationConfig.languagePresets)).toEqual([...RECEPTION_LANGUAGES]);
+  });
+
+  it("covers the guests' languages, from Arabic and Urdu to Somali and Spanish", () => {
+    for (const code of ["en", "ar", "ur", "hi", "so", "tr", "es", "it", "de", "pl", "uk", "fa"]) {
+      expect(RECEPTION_LANGUAGES).toContain(code);
+    }
+    expect(RECEPTION_LANGUAGES.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(RECEPTION_LANGUAGES).size).toBe(RECEPTION_LANGUAGES.length);
+    expect(prompt).toContain("Somali");
+    expect(prompt).toMatch(/call language_detection and switch/);
+  });
+
+  it("says up front that it is an AI and that the call is written down", () => {
+    const greeting = client.conversationConfig.agent.firstMessage;
+    expect(greeting).toContain("KI-assistent");
+    expect(greeting).toContain("skrevet ned");
+    expect(prompt).toMatch(/opening notice once in the new language/);
+  });
+
+  it("reads requests back and tells the guest what was noted", () => {
+    expect(prompt).toMatch(/Read it all back/);
+    expect(prompt).toMatch(/tell the guest exactly what was noted down/);
+    expect(prompt).toMatch(/ask for a human/);
+  });
+
+  it("collects only what it needs and answers privacy questions", () => {
+    expect(prompt).toContain("fødselsnummer");
+    expect(prompt).toContain("Datatilsynet");
+    expect(prompt).toContain(HOTEL.privacy.email);
+    expect(prompt).toContain(`${HOTEL.privacy.retentionDays} days`);
+    expect(prompt).toMatch(/note it only if they say yes/);
+  });
+
+  it("keeps no audio and deletes transcripts after the retention period", () => {
+    expect(client.platformSettings.privacy).toEqual({
+      recordVoice: false,
+      retentionDays: HOTEL.privacy.retentionDays,
+    });
   });
 
   it("knows Oslo time and ends a silent call", () => {

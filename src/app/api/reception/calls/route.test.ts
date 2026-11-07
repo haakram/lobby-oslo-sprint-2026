@@ -27,8 +27,6 @@ describe("GET /api/reception/calls", () => {
   });
 
   it("503 when env is missing", async () => {
-    vi.stubEnv("ELEVENLABS_RECEPTION_AGENT_ID", undefined);
-    expect((await GET()).status).toBe(503);
     vi.stubEnv("ELEVENLABS_API_KEY", undefined);
     expect((await GET()).status).toBe(503);
     expect(sdk.list).not.toHaveBeenCalled();

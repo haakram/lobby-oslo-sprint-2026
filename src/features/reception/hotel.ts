@@ -71,7 +71,14 @@ export const HOTEL = {
     "Resepsjonen er betjent 07:00–23:00.",
     "Flytoget går fra Oslo S til flyplassen på under 25 minutter, og det er fem minutters gange til stasjonen.",
     "Treningsrommet i kjelleren er åpent hele døgnet for gjester.",
+    "Inngangen er trinnfri, og heisen går til alle etasjer. To dobbeltrom er tilrettelagt for rullestol, med bred dør og dusj uten terskel.",
+    "Førerhunder og andre assistansehunder er alltid velkomne, uten tillegg.",
   ],
+  privacy: {
+    controller: "Hotell Nattskift AS",
+    email: "personvern@nattskift.example",
+    retentionDays: 30,
+  },
 } as const satisfies {
   name: "Hotell Nattskift";
   city: "Oslo";
@@ -79,6 +86,8 @@ export const HOTEL = {
   checkIn: "15:00";
   checkOut: "11:00";
   facts: readonly string[];
+  /** Who answers for the callers' personal data, where to ask, and how long call records are kept. */
+  privacy: { controller: string; email: string; retentionDays: number };
 };
 
 export const DIRECT_DISCOUNT = 0.1;
@@ -116,4 +125,33 @@ export function findRoomType(input: string): RoomType | undefined {
       fold(r.englishName) === key ||
       ALIASES[key] === r.id,
   );
+}
+
+/**
+ * Haggling. The receptionist may go down in fixed steps from the direct price, never further: what a
+ * caller claims another site charges never sets the price (they could say anything). Step 0 is the
+ * direct price; step 1 adds a perk; step 2 takes 5 % off; step 3, the last offer, 10 % off.
+ */
+export const DISCOUNT_STEPS = [0, 0, 0.05, 0.1] as const;
+export const LAST_DISCOUNT_STEP = DISCOUNT_STEPS.length - 1;
+/** The largest discount off the direct price the hotel allows. */
+export const MAX_EXTRA_DISCOUNT = DISCOUNT_STEPS[LAST_DISCOUNT_STEP];
+
+/** Free extras the receptionist may add from step 1. */
+export const PERKS = {
+  late_checkout: "Sen utsjekk kl. 13:00",
+  free_parking: "Gratis parkering",
+} as const;
+export type Perk = keyof typeof PERKS;
+export const PERK_IDS = Object.keys(PERKS) as Perk[];
+
+/** The price per night at a discount step: never below the hotel's floor. */
+export function offerPrice(room: RoomType, step: number): number {
+  const index = Math.min(Math.max(Math.trunc(step), 0), LAST_DISCOUNT_STEP);
+  return Math.round(directPrice(room) * (1 - DISCOUNT_STEPS[index]));
+}
+
+/** The lowest price per night the hotel will ever take for a room. */
+export function floorPrice(room: RoomType): number {
+  return offerPrice(room, LAST_DISCOUNT_STEP);
 }

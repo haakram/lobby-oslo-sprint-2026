@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
-const FLOOR_H = 6;
+const FLOOR_GAP = 15; // visual-only floor spacing so lower floors stay readable
 const KIND = {
   room: 0x3b5568, corridor: 0x2a3a46, hub: 0x5a7a8c, service: 0x6b5d8a,
   elevator: 0xb8c4cc, stairwell: 0x8a7a64,
@@ -15,7 +15,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setClearColor(0x0b1116);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x0b1116, 70, 160);
+scene.fog = new THREE.Fog(0x0b1116, 100, 260);
 const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
@@ -46,6 +46,35 @@ function labelSprite(text, size = 1) {
   return s;
 }
 
+const shared = new THREE.Group(); // cross-floor stairs and the elevator shaft
+scene.add(shared);
+let view = "auto", lastKey = "";
+const robotFloor = () => Math.round(robot.position.y / FLOOR_GAP) + 1;
+
+function setOpacity(group, k) {
+  group.traverse((o) => {
+    const m = o.material;
+    if (!m) return;
+    m.userData.base ??= m.opacity;
+    m.userData.dw ??= m.depthWrite;
+    m.transparent = true;
+    m.opacity = m.userData.base * k;
+    m.depthWrite = k < 1 ? false : m.userData.dw;
+  });
+}
+// Auto: floors above the robot fade out, All: everything, N: only floor N.
+function refreshVisibility(force) {
+  const rf = robotFloor(), key = view + ":" + rf;
+  if (key === lastKey && !force) return;
+  lastKey = key;
+  for (const [f, g] of Object.entries(hotel.floorGroups)) {
+    const n = Number(f);
+    g.visible = view === "auto" || view === "all" || Number(view) === n;
+    setOpacity(g, view === "auto" && n > rf ? 0.12 : 1);
+  }
+  shared.visible = view === "auto" || view === "all";
+}
+
 function buildHotel(data) {
   hotel.nodes = data.nodes;
   hotel.special = data.special;
@@ -53,23 +82,24 @@ function buildHotel(data) {
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;
   const w = Math.max(...xs) - Math.min(...xs) + 8, d = Math.max(...zs) - Math.min(...zs) + 8;
   const floors = [...new Set(Object.values(data.nodes).map((n) => n.floor))].sort();
+  const floorY = (f) => (f - 1) * FLOOR_GAP;
   for (const f of floors) {
     const g = new THREE.Group();
     const slab = new THREE.Mesh(new THREE.BoxGeometry(w, 0.25, d),
-      new THREE.MeshStandardMaterial({ color: 0x1a2a36, transparent: true, opacity: 0.28, roughness: 1 }));
-    slab.position.set(cx, (f - 1) * FLOOR_H - 0.2, cz);
+      new THREE.MeshStandardMaterial({ color: 0x1a2a36, transparent: true, opacity: 0.45, roughness: 1 }));
+    slab.position.set(cx, floorY(f) - 0.2, cz);
     const edge = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry),
       new THREE.LineBasicMaterial({ color: 0x3a5668 }));
     edge.position.copy(slab.position);
     g.add(slab, edge);
-    const tag = labelSprite("Floor " + f, 1.4);
-    tag.position.set(cx - w / 2 + 3, (f - 1) * FLOOR_H + 0.8, cz + d / 2 - 0.5);
+    const tag = labelSprite("Floor " + f, 1.5);
+    tag.position.set(cx - w / 2 - 3, floorY(f) + 1, cz);
     g.add(tag);
     scene.add(g);
     hotel.floorGroups[f] = g;
   }
   for (const [name, n] of Object.entries(data.nodes)) {
-    const y = (n.floor - 1) * FLOOR_H;
+    const y = floorY(n.floor);
     hotel.pos[name] = new THREE.Vector3(n.x, y, n.z);
     const dims = {
       room: [2.4, 1.1, 2.4], corridor: [1.6, 0.12, 1.6], hub: [3.2, 0.9, 3.2],
@@ -87,18 +117,21 @@ function buildHotel(data) {
       hotel.floorGroups[n.floor].add(s);
     }
   }
-  const pts = [], stairPts = [];
+  const perFloor = {}, cross = [];
   for (const e of data.edges) {
     const a = hotel.pos[e.a], b = hotel.pos[e.b];
     if (!a || !b) continue;
-    (e.stairs ? stairPts : pts).push(a.x, a.y + 0.15, a.z, b.x, b.y + 0.15, b.z);
+    const seg = [a.x, a.y + 0.15, a.z, b.x, b.y + 0.15, b.z];
+    if (data.nodes[e.a].floor !== data.nodes[e.b].floor) cross.push(...seg);
+    else (perFloor[data.nodes[e.a].floor] ??= []).push(...seg);
   }
   const line = (arr, color, opacity) => {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
     return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
   };
-  scene.add(line(pts, 0x8fb0c4, 0.7), line(stairPts, 0x8a7a64, 0.4));
+  for (const [f, arr] of Object.entries(perFloor)) hotel.floorGroups[f].add(line(arr, 0x8fb0c4, 0.7));
+  if (cross.length) shared.add(line(cross, 0x8a7a64, 0.4));
   const el = Object.entries(data.nodes).filter(([, n]) => n.kind === "elevator").map(([k]) => hotel.pos[k]);
   if (el.length > 1) {
     const lo = Math.min(...el.map((p) => p.y)), hi = Math.max(...el.map((p) => p.y)) + 1.4;
@@ -108,7 +141,7 @@ function buildHotel(data) {
     const shaftEdges = new THREE.LineSegments(new THREE.EdgesGeometry(shaft.geometry),
       new THREE.LineBasicMaterial({ color: 0xb8c4cc, transparent: true, opacity: 0.5 }));
     shaftEdges.position.copy(shaft.position);
-    scene.add(shaft, shaftEdges);
+    shared.add(shaft, shaftEdges);
   }
   robotMat = new THREE.MeshStandardMaterial({ color: LAMP, emissive: LAMP, emissiveIntensity: 1.4 });
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 0.9, 20), robotMat);
@@ -124,14 +157,22 @@ function buildHotel(data) {
   robot.scale.setScalar(1.7);
   scene.add(robot);
   robot.position.copy(hotel.pos[data.special?.dock] || new THREE.Vector3());
+  refreshVisibility(true);
   frame(cx, cz, w, d, floors.length);
 }
 
+// Camera at ~24 degrees elevation, fitted to the stack; target sits low so the bottom floor clears the deck.
 function frame(cx, cz, w, d, nf) {
-  const mid = ((nf - 1) * FLOOR_H) / 2;
-  controls.target.set(cx, mid, cz);
-  const span = Math.max(w, d, nf * FLOOR_H);
-  camera.position.set(cx - span * 0.6, mid + span * 1.0, cz + span * 1.2);
+  const elev = (24 * Math.PI) / 180, azim = (-28 * Math.PI) / 180;
+  const stackH = (nf - 1) * FLOOR_GAP + 4;
+  const tanV = Math.tan((camera.fov * Math.PI) / 360);
+  const needH = stackH * Math.cos(elev) + d * Math.sin(elev);
+  const needW = w * Math.cos(azim) + d * Math.abs(Math.sin(azim));
+  const dist = 1.4 * Math.max(needH / (2 * tanV), needW / (2 * tanV * camera.aspect));
+  const ty = stackH / 2 - 5;
+  controls.target.set(cx, ty, cz);
+  camera.position.set(
+    cx + dist * Math.cos(elev) * Math.sin(azim), ty + dist * Math.sin(elev), cz + dist * Math.cos(elev) * Math.cos(azim));
   controls.update();
 }
 
@@ -142,8 +183,9 @@ function flash(name, color) {
     new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
   ringM.rotation.x = -Math.PI / 2;
   ringM.position.set(p.x, p.y + 0.1, p.z);
-  scene.add(ringM);
-  flashes.push({ name, color: new THREE.Color(color), ring: ringM, t: 0 });
+  const group = hotel.floorGroups[hotel.nodes[name].floor];
+  group.add(ringM);
+  flashes.push({ name, color: new THREE.Color(color), ring: ringM, group, t: 0 });
 }
 
 function resize() {
@@ -303,8 +345,9 @@ function tick(dt) {
     hotel.meshes[f.name].material.emissive.copy(f.color).multiplyScalar(Math.max(0, 1 - u) * 0.9);
     f.ring.scale.setScalar(1 + u * 4);
     f.ring.material.opacity = Math.max(0, 0.9 * (1 - u));
-    if (u >= 1) { scene.remove(f.ring); flashes.splice(i, 1); }
+    if (u >= 1) { f.group.remove(f.ring); flashes.splice(i, 1); }
   }
+  refreshVisibility();
   if (ring) { const s = 1 + 0.15 * Math.sin(performance.now() / 300); ring.scale.set(s, s, s); }
 }
 
@@ -346,12 +389,17 @@ async function pollRuns() {
     runInfo = runs.find((r) => r.shift === shift) || runInfo;
   } catch (e) { console.warn(e); }
 }
+let inflight = false;
 async function pollRun() {
-  if (!shift) return;
+  if (!shift || inflight) return;
+  const mine = shift, from = next;
+  inflight = true;
   try {
-    const d = await getJSON(`/api/run/${shift}?from=${next}`);
+    const d = await getJSON(`/api/run/${mine}?from=${from}`);
+    // the run may have been switched (or lines already appended) while we waited
+    if (mine !== shift || from !== next) return;
     if (d.lines.length) { lines.push(...d.lines); next = d.next; }
-  } catch (e) { console.warn(e); }
+  } catch (e) { console.warn(e); } finally { inflight = false; }
 }
 function select(id, info) {
   shift = id; runInfo = info; lines = []; next = 0; cursor = 0; following = true; playing = true;
@@ -373,9 +421,9 @@ $("speed").addEventListener("change", (e) => { speed = Number(e.target.value); }
 $("scrub").addEventListener("input", (e) => { following = false; playing = false; rebuild(Number(e.target.value)); render(); });
 $("liveBtn").addEventListener("click", () => { following = true; playing = true; render(); });
 document.querySelectorAll(".floors button").forEach((b) => b.addEventListener("click", () => {
-  const f = Number(b.dataset.floor);
+  view = b.dataset.floor;
   document.querySelectorAll(".floors button").forEach((x) => x.classList.toggle("on", x === b));
-  for (const [k, g] of Object.entries(hotel.floorGroups)) g.visible = f === 0 || Number(k) === f;
+  refreshVisibility(true);
 }));
 
 (async function init() {

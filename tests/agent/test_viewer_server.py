@@ -72,10 +72,22 @@ def test_api_run_from_offset(base):
 
 
 def test_rejects_bad_shift_id_and_traversal(base):
-    for path in ["/api/run/../../.env", "/api/run/not-a-shift", "/api/run/w2-xyz", "/static/../.env",
+    for path in ["/api/run/../../.env", "/api/run/not-a-shift", "/api/run/w2-xyz", "/static/../.env", "/static/.env",
                  "/static/%2e%2e/.env", "/static/..%2f.env", "/api/run/..%2f..%2f.env"]:
         assert get(base + path)[0] == 404, path
     assert get(f"{base}/api/run/w2-cccccccc33")[0] == 404  # valid id, no file
+
+
+def test_half_written_last_line_is_not_served_until_complete(base, tmp_path):
+    path = tmp_path / f"{LIVE}.jsonl"
+    with path.open("a") as fh:
+        fh.write('{"v":1,"type":"sta')  # no newline: writer is mid-line
+    data = json.loads(get(f"{base}/api/run/{LIVE}")[1])
+    assert len(data["lines"]) == 2 and data["next"] == 2
+    with path.open("a") as fh:
+        fh.write('te","clock":9,"location":"lobby","score":2}\n')
+    data = json.loads(get(f"{base}/api/run/{LIVE}?from=2")[1])
+    assert data["next"] == 3 and data["lines"][0]["type"] == "state" and data["lines"][0]["score"] == 2
 
 
 def test_hotel_json_served(base):

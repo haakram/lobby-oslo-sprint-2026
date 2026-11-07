@@ -81,6 +81,16 @@ def make_handler(runs_dir: Path):
             self.end_headers()
             self.wfile.write(body)
 
+        def _host_ok(self) -> bool:
+            """Only our own loopback names answer: a rebound DNS name carries another Host."""
+            port = self.server.server_address[1]
+            return self.headers.get("Host") in (f"127.0.0.1:{port}", f"localhost:{port}")
+
+        def _forbidden(self) -> None:
+            self.send_response(403)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def _is_api(self) -> bool:
             return urlsplit(self.path).path.startswith("/api/")
 
@@ -98,6 +108,8 @@ def make_handler(runs_dir: Path):
                 self.send_header("Access-Control-Allow-Origin", origin)
 
         def do_OPTIONS(self):
+            if not self._host_ok():
+                return self._forbidden()
             origin = self._allowed_origin() if self._is_api() else None
             if origin is None:
                 self.send_response(403)
@@ -129,6 +141,8 @@ def make_handler(runs_dir: Path):
             self._send(200, body, ctype)
 
         def do_GET(self):
+            if not self._host_ok():
+                return self._forbidden()
             parts = urlsplit(self.path)
             path = parts.path
             if path == "/":

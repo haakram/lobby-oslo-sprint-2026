@@ -13,6 +13,7 @@
 #   ./scripts/secrets.sh copy > /path/to/private-file     ./scripts/secrets.sh paste < private-file
 # Written for the bash 3.2 that ships with macOS.
 set -euo pipefail
+umask 077 # every file this script writes is owner-only (600)
 cd "$(dirname "$0")/.."
 
 # The secrets the product reads (ARCHITECTURE.md § 4.4). Add a name here when a new secret is added.
@@ -41,7 +42,17 @@ case "${1:-}" in
     [ -n "$names" ] || { echo "✗ no keys set in .env or .env.local" >&2; exit 1; }
     if have pbcopy && [ -t 1 ]; then
       printf '%s' "$out" | pbcopy
+      # Clear the clipboard after a minute, but only if it still holds exactly what we put there.
+      sum=$(printf '%s' "$out" | cksum)
+      delay=${SECRETS_CLEAR_AFTER:-60}
+      case "$delay" in ''|*[!0-9]*|0*) delay=60 ;; esac # positive integer, else 60
+      (
+        trap '' HUP # survive the terminal closing
+        sleep "$delay"
+        [ "$(pbpaste | cksum)" = "$sum" ] && pbcopy < /dev/null
+      ) > /dev/null 2>&1 &
       echo "✓ copied to the clipboard:$names"
+      echo "  The clipboard is cleared in ${delay}s. Turn off Universal Clipboard and pause clipboard managers while you transfer."
       echo "  Send it privately (AirDrop, or a one-time password-manager share). The receiver runs: ./scripts/secrets.sh paste"
     else
       printf '%s' "$out"
@@ -50,6 +61,7 @@ case "${1:-}" in
   paste)
     if [ -t 0 ] && have pbpaste; then input=$(pbpaste); from_clipboard=1; else input=$(cat); from_clipboard=0; fi
     [ -f .env ] || { [ -f .env.example ] && cp .env.example .env; } || touch .env
+    chmod 600 .env
     names=""
     for k in $KEYS; do
       line=$(printf '%s\n' "$input" | tr -d '\r' | grep -E "^$k=.+" | tail -n 1 || true)
@@ -62,10 +74,11 @@ case "${1:-}" in
       cat "$tmp" > .env && rm -f "$tmp"
       names="$names $k"
     done
+    chmod 600 .env
     [ -n "$names" ] || { echo "✗ found no KEY=value lines for:$(printf ' %s' $KEYS)" >&2; exit 1; }
-    [ "$from_clipboard" = 1 ] && pbcopy < /dev/null
+    if [ "$from_clipboard" = 1 ]; then pbcopy < /dev/null; fi
     echo "✓ written to .env:$names"
-    [ "$from_clipboard" = 1 ] && echo "✓ clipboard cleared"
+    if [ "$from_clipboard" = 1 ]; then echo "✓ clipboard cleared"; fi
     ;;
   status)
     for k in $KEYS; do

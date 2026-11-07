@@ -49,3 +49,27 @@ def test_final_armed_only_from_environment(tmp_path, monkeypatch):
 def test_missing_files_and_key_ok(tmp_path):
     s = load_settings((str(tmp_path / "nope"),))
     assert s.key == "" and s.anthropic_key is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://nightshift.wybe.me/", "http://localhost:8000", "http://127.0.0.1:9999/",
+     "https://example.org/"],
+)
+def test_url_pin_accepts(tmp_path, monkeypatch, url):
+    monkeypatch.setenv("WYBE_NIGHTSHIFT_URL", url)
+    assert load_settings((str(tmp_path / "nope"),)).url == url
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["http://nightshift.wybe.me/", "http://evil.example/", "ftp://localhost/", "nightshift.wybe.me",
+     "http://localhost.evil.example/", "http://127.0.0.1.evil.example/",
+     "http://localhost@evil.example/", "file:///etc/passwd"],
+)
+def test_url_pin_refuses(tmp_path, monkeypatch, url):
+    monkeypatch.setenv("WYBE_NIGHTSHIFT_URL", url)
+    monkeypatch.setenv("WYBE_NIGHTSHIFT_KEY", "secret-value-zzz")
+    with pytest.raises(ValueError) as exc:
+        load_settings((str(tmp_path / "nope"),))
+    assert "WYBE_NIGHTSHIFT_URL" in str(exc.value) and "secret-value-zzz" not in str(exc.value)

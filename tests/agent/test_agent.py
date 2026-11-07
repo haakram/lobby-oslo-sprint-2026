@@ -358,9 +358,14 @@ CALIBRATED_NIGHT_RATCHET = 1500  # +70: the stale-look rule before corridor step
 
 @pytest.fixture(scope="module")
 def calibrated_night(tmp_path_factory):
+    """Played as the final plays it (the call budget is the final's): navigate is final-only now, so
+    a practice night walks every leg (1,571 calls offline) where the final's executor navigates
+    (1,387). The session's mode is the only thing the executor reads of it."""
     fake = FakeWybe()
-    result = run_shift(client_for(tmp_path_factory.mktemp("calibrated"), fake.handler), seed=1,
-                       sim_end="06:00:00")
+    client = client_for(tmp_path_factory.mktemp("calibrated"), fake.handler)
+    session = client.start_shift("practice", seed=1)  # the fake's practice shift ...
+    session.mode = "final"  # ... with the final's executor behaviour
+    result = run_shift(client, session=session, sim_end="06:00:00")
     return fake, result
 
 

@@ -41,12 +41,16 @@ from agent.world import Hotel, RobotState, clock_to_seconds
 
 IDLE_SCANS_WHEN_FULL = 3  # scans between dock tries while the battery is full (each 60 s, ~1 %)
 NAV_MIN_HOPS = 2  # plain moves in a row that one navigate replaces, once the call pace needs it
-CALL_PROJECTION_LIMIT = 1250  # calls a whole night is heading for before navigate is used (final cap ~1,320)
+CALL_PROJECTION_LIMIT = 1250  # a final's night projected past this navigates (when no call cap is set)
 NIGHT_S = 8 * 3600
 # Offline seeds 1-3: navigate on 2+ hop legs saves 170-220 calls a night for 10-35 points of slower
 # walking; a night cut by the final's call cap loses 150-200 points of its last hour (live seeds 2, 4).
 WET_LOOK_S = 10 * 60  # a corridor approach looked at longer ago than this is looked at again
 # (live batch 5: 7 slips in 4 nights still, on patches younger than the 30 min window used before)
+WET_LOOK_BUSY_S = 45 * 60  # ... the window while busy (2+ tasks queued or battery under BUSY_BATTERY):
+# live seed 16 spent 143 re-looks (12 sim-min, 169 calls) to avoid at most 2 slips (-15 and 60 s each)
+BUSY_QUEUE = 2
+BUSY_BATTERY = 40.0
 DEFAULT_EXPERIMENTS = ("spill_done",)  # live seed 4: two spill reports verified (+43, +63) when
 # the sign stood on the patch; the report, not the place, carries the credit (like a room check)
 
@@ -458,11 +462,16 @@ class Executor:
         return leg
 
     def _nav_min_hops(self) -> int | None:
-        """Navigate only when the night's call pace, projected from the first sim hour on, would
-        pass CALL_PROJECTION_LIMIT (NS_NAV_MIN_HOPS forces a leg length; 0 switches navigate off)."""
+        """Navigate only in the final, and only when the night's call pace, projected from the first
+        sim hour on, would pass the session's call cap (CALL_PROJECTION_LIMIT when none is set).
+        A practice night has no call cap: navigate's ~25 % slower metres (same battery a minute)
+        cost live rich nights ~6-11 sim-min and ~5-8 % battery from 23:00 on (NS_NAV_MIN_HOPS
+        forces a leg length in either mode; 0 switches navigate off)."""
         forced = os.environ.get("NS_NAV_MIN_HOPS")
         if forced is not None and forced.isdigit():
             return int(forced) or None
+        if self.session.mode != "final":
+            return None
         try:
             elapsed = clock_to_seconds(self.state.clock) - clock_to_seconds("22:00:00")
         except (ValueError, AttributeError):
@@ -472,7 +481,7 @@ class Executor:
         if elapsed < 3600:
             return None
         projected = self.session.calls * NIGHT_S / elapsed
-        return NAV_MIN_HOPS if projected > CALL_PROJECTION_LIMIT else None
+        return NAV_MIN_HOPS if projected > (self.session.call_cap or CALL_PROJECTION_LIMIT) else None
 
     def _navigate(self, leg: list[str]) -> bool:
         """One navigate to the leg's end; False (nothing moved) when the server declined."""
@@ -496,9 +505,10 @@ class Executor:
         return True
 
     def _stale_before_corridor(self, here: str, to: str) -> bool:
-        """Step into a corridor whose wetness is unknown and whose approach was last looked at
-        more than WET_LOOK_S ago (live seed 1: 6-7 slips a night, -15 and 60 s each, all on the
-        first step onto a patch that appeared after the first-visit look)."""
+        """Step into a corridor whose wetness is unknown and whose approach was never looked at,
+        or last looked at more than WET_LOOK_S ago (WET_LOOK_BUSY_S while busy) (live seed 1: 6-7
+        slips a night, -15 and 60 s each, all on the first step onto a patch that appeared after
+        the first-visit look)."""
         nodes = self.hotel.nodes
         if nodes.get(to, {}).get("kind") != "corridor" or nodes.get(here, {}).get("kind") == "room":
             return False
@@ -509,7 +519,13 @@ class Executor:
         except (ValueError, AttributeError):
             return False
         last = self._look_clock.get(here)
-        return last is None or now - last > WET_LOOK_S
+        return last is None or now - last > (WET_LOOK_BUSY_S if self._busy() else WET_LOOK_S)
+
+    def _busy(self) -> bool:
+        """BUSY_QUEUE or more tasks queued, or the battery under BUSY_BATTERY: time is dearer than
+        a rare slip, so corridor approaches are looked at again less often."""
+        battery = self._battery()
+        return len(self.queue) >= BUSY_QUEUE or (battery is not None and battery < BUSY_BATTERY)
 
     def _look_on_arrival(self) -> bool:
         """The first time at a non-room place this shift: one look (5 s), so wet warnings, metres

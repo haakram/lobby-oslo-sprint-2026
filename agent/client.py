@@ -16,6 +16,7 @@ from agent.guard import check_mode
 
 BACKOFF = (0.5, 1, 2)
 RETRY_AFTER_MAX_S = 30.0  # a 429's Retry-After is honoured up to this
+RATE_BACKOFF_S = 1.0  # a 429 without Retry-After waits this, doubling per retry (1, 2, 4 s)
 STATE_FIELDS = ("clock", "location", "score", "battery", "hands", "cart")
 
 
@@ -116,9 +117,11 @@ class WybeClient:
                 if cmd == "start_shift":
                     break  # as above: never a blind second start
                 continue
-            if resp.status_code == 429:  # too fast: back off (Retry-After if given) and retry
-                last = "HTTP 429"
+            if resp.status_code == 429:  # too fast: back off, then send the same call again
+                last = "HTTP 429"  # (measured live: 20 req/s clean, "Too many requests" above ~22)
                 wait = _retry_after(resp.headers.get("Retry-After"))
+                if wait is None:
+                    wait = RATE_BACKOFF_S * 2**attempt
                 continue
             if resp.status_code >= 400:
                 raise WybeError(f"HTTP {resp.status_code}: {resp.text[:200]}")

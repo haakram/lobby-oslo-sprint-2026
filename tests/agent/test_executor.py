@@ -1266,3 +1266,71 @@ def test_ambiguity_stops_the_search_at_once(tmp_path):
     with pytest.raises(ActionFailed, match="did not guess"):  # request unknown to the ledger: both free
         flows._find(ex, "wallet", "ground floor corridor", None)
     assert not calls(fake, "scan") and not calls(fake, "pick")
+
+
+# --- Late-night capacity Task 2: navigate only in the final; a busy robot re-looks less often ----------
+
+
+def _pace(ex, session, *, clock, calls, mode="practice", cap=None):
+    """The executor at `clock` with `calls` sent so far, in `mode`, with the session's call cap."""
+    session.mode, session.call_cap, session.calls = mode, cap, calls
+    ex.state.clock = clock
+    return ex._nav_min_hops()
+
+
+def test_practice_never_navigates_even_at_a_high_call_pace(tmp_path, monkeypatch):
+    monkeypatch.delenv("NS_NAV_MIN_HOPS", raising=False)
+    _, session, ex = setup(tmp_path, rids=set())
+    # 01:00, 3,000 calls: a 8,000-call night, far past any limit; a practice night still walks
+    assert _pace(ex, session, clock="01:00:00", calls=3000) is None
+    assert _pace(ex, session, clock="05:30:00", calls=1500, cap=1320) is None
+
+
+def test_final_navigates_on_the_call_pace_against_its_cap_or_the_default_limit(tmp_path, monkeypatch):
+    from agent.executor import CALL_PROJECTION_LIMIT, NAV_MIN_HOPS
+
+    monkeypatch.delenv("NS_NAV_MIN_HOPS", raising=False)
+    _, session, ex = setup(tmp_path, rids=set())
+    # 3 sim hours in: projected = calls x 8 / 3
+    assert _pace(ex, session, clock="01:00:00", calls=600, mode="final") == NAV_MIN_HOPS  # 1,600
+    assert _pace(ex, session, clock="01:00:00", calls=450, mode="final") is None  # 1,200
+    assert CALL_PROJECTION_LIMIT == 1250
+    assert _pace(ex, session, clock="22:50:00", calls=900, mode="final") is None  # first hour: no projection
+    # the cap, when the final sets one (default_max_calls(16) = 4,224), replaces the default limit
+    assert _pace(ex, session, clock="01:00:00", calls=600, mode="final", cap=4224) is None  # 1,600
+    assert _pace(ex, session, clock="01:00:00", calls=1700, mode="final", cap=4224) == NAV_MIN_HOPS  # 4,533
+
+
+def test_the_nav_env_override_wins_in_both_modes(tmp_path, monkeypatch):
+    _, session, ex = setup(tmp_path, rids=set())
+    monkeypatch.setenv("NS_NAV_MIN_HOPS", "3")
+    assert _pace(ex, session, clock="22:10:00", calls=0) == 3  # practice, no pace at all
+    assert _pace(ex, session, clock="22:10:00", calls=0, mode="final") == 3
+    monkeypatch.setenv("NS_NAV_MIN_HOPS", "0")  # 0 switches navigate off, even at a final's high pace
+    assert _pace(ex, session, clock="01:00:00", calls=3000, mode="final") is None
+    assert _pace(ex, session, clock="01:00:00", calls=3000) is None
+
+
+def test_the_wet_look_window_is_45_min_when_busy_and_10_min_when_not(tmp_path):
+    from agent.executor import WET_LOOK_BUSY_S, WET_LOOK_S
+    from agent.world import clock_to_seconds
+
+    assert (WET_LOOK_S, WET_LOOK_BUSY_S) == (10 * 60, 45 * 60)
+    _, _session, ex = setup(tmp_path, rids=set())
+    here, to = "corridor-1a", "corridor-1b"
+    assert ex.hotel.nodes[here]["kind"] == ex.hotel.nodes[to]["kind"] == "corridor"
+    assert not ex.hotel.is_wet(here, to)
+    queued = [Task(f"R-90{i}", Kind.AMENITY, "x", "22:00:00", room="317", item="towel") for i in range(2)]
+
+    def stale(clock, *, queue=(), battery=80.0):
+        ex.state.clock, ex.queue, ex.state.battery = clock, list(queue), battery
+        return ex._stale_before_corridor(here, to)
+
+    ex._look_clock[here] = clock_to_seconds("23:00:00")
+    assert stale("23:20:00")  # not busy: 20 min > 10 min
+    assert not stale("23:20:00", queue=queued)  # 2 queued: 20 min < 45 min
+    assert not stale("23:20:00", queue=queued[:1], battery=35.0)  # battery under 40 %: busy too
+    assert stale("23:20:00", queue=queued[:1])  # one queued task and a good battery: not busy
+    assert stale("23:50:00", queue=queued)  # 50 min > 45 min
+    del ex._look_clock[here]  # never looked at: looked at before the first step in, busy or not
+    assert stale("23:20:00", queue=queued, battery=20.0)

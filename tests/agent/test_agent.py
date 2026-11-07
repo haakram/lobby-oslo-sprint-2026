@@ -547,3 +547,36 @@ def test_manager_skip_drops_the_queued_request(tmp_path):
     assert [d["request"] for d in skipped] == ["R-001"] and skipped[0]["was_queued"] is True
     assert skipped[0]["reported"] is True
     assert result["requests_served"] == 1
+
+
+# --- the close-out near 06:00 (NIGHT_END_S was a day late, so _too_late never fired) ---------------
+
+
+def test_too_late_is_true_near_six_and_false_earlier():
+    from agent.agent import NIGHT_END_S, _too_late
+    from agent.planner import Params, estimate_seconds
+    from agent.tasks import parse_request
+    from agent.world import Hotel, RobotState, clock_to_seconds
+
+    assert NIGHT_END_S == clock_to_seconds("06:00:00") == 30 * 3600  # one scale: 06:00 the next day
+    hotel, state = Hotel.load(), RobotState()
+    state.location = "charging-dock"
+    task = parse_request("R-001", "319 wants a towel.", "05:57:00")
+    assert 150 < estimate_seconds(task, state, hotel, Params()) < 300  # a ~3-4 min task
+    for clock, late in (("05:58:00", True), ("05:50:00", False), ("03:00:00", False),
+                        ("23:30:00", False), ("22:00:00", False)):
+        state.clock = clock
+        assert _too_late(task, state, hotel, Params()) is late, clock
+
+
+def test_a_request_that_cannot_finish_by_six_is_reported_declined(tmp_path):
+    from agent.planner import Params
+    from agent.world import clock_to_seconds
+
+    fake = FakeWybe(requests=[("05:58:00", "R-001", "319 wants a towel.")])
+    client = client_for(tmp_path, fake.handler)
+    session = client.start_shift("practice", seed=1)
+    fake._now = clock_to_seconds("05:58:00")  # R-001 comes with the loop's first status
+    run_shift(client, session=session, params=Params(use_cart=False))
+    assert fake.reports == {"R-001": "declined"}
+    assert _decisions(tmp_path, {"shift": session.shift_id}, "closed_out")

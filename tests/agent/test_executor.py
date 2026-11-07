@@ -1378,7 +1378,7 @@ def _unread_at_docks(fake):
     return seen
 
 
-def test_forced_charge_docks_again_after_each_wake_until_the_target(tmp_path):
+def test_forced_charge_docks_again_after_each_wake(tmp_path):
     from agent.executor import CHARGE_TARGET_FORCED
 
     fake, session, ex = setup(tmp_path, requests=_every(2))
@@ -1389,8 +1389,8 @@ def test_forced_charge_docks_again_after_each_wake_until_the_target(tmp_path):
     ex.refresh()
     assert ex.ensure_battery() is True
     docks = calls(fake, "dock")
-    assert ex.state.battery >= CHARGE_TARGET_FORCED and ex.state.location == "charging-dock"
-    assert len(docks) >= 12, len(docks)  # +30 % at 1 %/min, woken every 2 min: one walk, many docks
+    assert ex.state.battery >= 25 and ex.state.location == "charging-dock"  # 15 min and back to 25 %
+    assert len(docks) >= 7, len(docks)  # woken every 2 min: one walk, many docks
     assert unread == [0] * len(docks)  # never a dock with a message unread (it would return at once)
     assert len(reads) == 1 + len(docks)  # the inbox read after every wake
     assert [t.request for t in ex.queue] == [f"R-{i:03d}" for i in range(1, len(ex.queue) + 1)]
@@ -1401,7 +1401,18 @@ def test_forced_charge_docks_again_after_each_wake_until_the_target(tmp_path):
     assert block["forced"] is True and block["target"] == CHARGE_TARGET_FORCED
     assert block["from"] == 10 and block["to"] == ex.state.battery
     assert block["woken"] == len(docks) and block["queued"] == len(ex.queue)
-    assert 28 <= block["minutes"] <= 34, block
+    assert 15 <= block["minutes"] <= 17, block
+
+
+def test_forced_charge_docks_through_wakes_up_to_a_target_it_can_reach(tmp_path):
+    # 05:30: the target has shrunk to 22 % (10 + 0.4 x 30), reached in ~12 min, before the 15 min bound.
+    fake, session, ex = _at_clock(tmp_path, _every(2, start="05:32:00", n=12), battery=10, clock="05:30:00")
+    _inbox_hook(ex)
+    unread = _unread_at_docks(fake)
+    assert ex.ensure_battery() is True
+    [block] = decisions(session, "charge_block")
+    assert block["target"] == 22.0 and ex.state.battery >= 22.0 and block["minutes"] < 15, block
+    assert block["woken"] == len(calls(fake, "dock")) >= 5 and unread == [0] * block["woken"]
 
 
 def test_message_on_the_way_to_a_forced_charge_is_read_before_the_dock(tmp_path):
@@ -1434,7 +1445,7 @@ def test_forced_charge_without_a_hook_reads_the_inbox_itself(tmp_path):
     assert ex.read_inbox is None and ex.ensure_battery() is True
     docks = calls(fake, "dock")
     assert len(docks) >= 8 and unread == [0] * len(docks)
-    assert not ex.inbox_waiting and ex.state.battery >= 40
+    assert not ex.inbox_waiting and ex.state.battery >= 25
 
 
 def test_non_forced_charge_still_stops_on_the_first_wake(tmp_path):
@@ -1537,24 +1548,10 @@ def test_run_shift_wires_the_inbox_hook_into_the_forced_block(tmp_path):
     assert not fake.false_done and not fake.unsafe
 
 
-# --- late-night capacity Task 3 (4b): a pre-emptive block before the rush --------------------------
+# --- late-night capacity Task 3, fix round 1: bounded blocks, the end of the night, skips -----------
 
 
-@pytest.fixture
-def pre_on(monkeypatch):
-    """The pre-emptive block switched on (off by default: the offline bench did not pay for it)."""
-    from agent import executor
-
-    monkeypatch.setattr(executor, "PRE_BLOCK", True)
-
-
-def test_pre_block_is_off_by_default():
-    from agent.executor import PRE_BLOCK
-
-    assert PRE_BLOCK is False  # bench: scale 1.3 2021.2 -> 2014.2 on, 1.6 2171.8 -> 2162.1
-
-
-def _at_two(tmp_path, requests, battery, clock="02:00:00"):
+def _at_clock(tmp_path, requests, battery, clock):
     """A shift whose fake clock is moved to `clock` (requests after it), the robot at the dock."""
     from agent.world import clock_to_seconds
 
@@ -1567,61 +1564,93 @@ def _at_two(tmp_path, requests, battery, clock="02:00:00"):
     return fake, session, ex
 
 
-def test_pre_block_after_two_docks_through_wakes_until_two_requests_wait(tmp_path, pre_on):
-    fake, session, ex = _at_two(tmp_path, _every(2, start="02:02:00", n=10), battery=35)
+def test_a_forced_block_starts_no_dock_after_15_min_once_over_25(tmp_path):
+    # Live manager skips arrive 7-30 min after a request (median 18.7) and a skipped request scores 0
+    # even when done: a forced block leaves with 25 % or more after 15 min instead of filling to 40 %.
+    from agent.executor import BATTERY_LOW, FORCED_BLOCK_MAX_S
+
+    assert FORCED_BLOCK_MAX_S == 15 * 60
+    fake, session, ex = setup(tmp_path, requests=_every(2, n=30))
     _inbox_hook(ex)
-    unread = _unread_at_docks(fake)
-    assert ex.ensure_battery() is True  # 35 % is over BATTERY_LOW: only the pre-emptive block docks
-    docks = calls(fake, "dock")
-    assert len(docks) == 2 and unread == [0, 0]  # woken at 02:02 (1 queued), at 02:04 (2 queued): done
-    assert [t.request for t in ex.queue] == ["R-001", "R-002"]
-    [block] = decisions(session, "charge_block")
-    assert block["pre"] is True and block["forced"] is False and block["woken"] == 2
-    assert block["queued"] == 2 and block["target"] == 40.0
-
-
-def test_pre_block_never_starts_a_dock_after_15_min(tmp_path, pre_on):
-    fake, session, ex = _at_two(tmp_path, _every(2, start="02:02:00", n=20), battery=20)
-    reads = []
-
-    def read_and_drop():  # every request skipped by the manager at once: the queue never grows
-        reads.append(ex.cmd("inbox"))
-        ex.inbox_waiting = False
-
-    ex.read_inbox = read_and_drop
+    ex.read_inbox()
+    fake.battery = 14.5
+    ex.refresh()
     assert ex.ensure_battery() is True
     [block] = decisions(session, "charge_block")
-    assert block["minutes"] <= 17 and len(calls(fake, "dock")) == 8, block  # last dock started at 02:14
-    assert ex.state.battery < 40  # the target was not reached: the bound ended it
+    assert block["forced"] is True and block["minutes"] <= 16.5, block
+    assert ex.state.battery >= BATTERY_LOW and ex.state.battery < block["target"]
 
 
-def test_pre_block_with_one_queued_docks_once_over_the_target(tmp_path, pre_on):
-    fake, session, ex = _at_two(tmp_path, _every(3, start="02:03:00", n=4), battery=44)
+def test_a_forced_block_under_25_after_15_min_keeps_docking(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=_every(2, n=30))
     _inbox_hook(ex)
-    ex.queue.append(parse_request("R-900", "104 wants a towel.", "01:59:00"))
+    ex.read_inbox()
+    fake.battery = 5
+    ex.refresh()
     assert ex.ensure_battery() is True
-    assert len(calls(fake, "dock")) == 1  # 44 % is over the 40 % target: one dock, to the next message
-    assert decisions(session, "charge_block")[0]["pre"] is True
+    [block] = decisions(session, "charge_block")
+    assert block["minutes"] > 16 and ex.state.battery >= 25, block  # 5 % + 16 min is still under 25
 
 
-def test_no_pre_block_before_two_with_two_queued_in_a_task_or_switched_off(tmp_path, monkeypatch, pre_on):
-    from agent import executor
+def test_no_forced_charge_when_the_battery_lasts_to_six(tmp_path):
+    fake, session, ex = _at_clock(tmp_path, [], battery=14, clock="05:50:00")
+    ex.queue.append(parse_request("R-009", "104 wants a towel.", "05:49:00"))
+    assert ex.ensure_battery() is False  # 10 min x 0.75 + 5 = 12.5 <= 14: work, not a charge
+    assert not calls(fake, "dock") and decisions(session, "charge_deferred")
+    fake, _session, ex = _at_clock(tmp_path, _every(2, start="05:42:00", n=8), battery=14, clock="05:40:00")
+    ex.queue.append(parse_request("R-009", "104 wants a towel.", "05:39:00"))
+    assert ex.ensure_battery() is True  # 20 min x 0.75 + 5 = 20 > 14: forced
+    assert calls(fake, "dock")
 
-    queued = [parse_request(f"R-90{i}", "104 wants a towel.", "01:00:00") for i in range(2)]
-    fake, _session, ex = _at_two(tmp_path, [], battery=35, clock="01:50:00")
-    assert ex.ensure_battery() is False  # before 02:00
-    fake, _session, ex = _at_two(tmp_path, [], battery=35)
-    ex.queue.extend(queued)
-    assert ex.ensure_battery() is False  # two already wait
-    ex.queue.clear()
-    ex.current = queued[0]
-    assert ex.ensure_battery() is False  # inside a task: only a forced charge
-    ex.current = None
-    monkeypatch.setattr(executor, "PRE_BLOCK", False)
-    assert ex.ensure_battery() is False
-    fake, _session, ex = _at_two(tmp_path, [], battery=46)
-    assert ex.ensure_battery() is False  # over 45 %
-    assert not calls(fake, "dock")
+
+def test_the_battery_needed_to_six_wraps_midnight(tmp_path):
+    from agent.executor import DRAIN_EST_PER_MIN
+
+    assert DRAIN_EST_PER_MIN == 0.75
+    _, _session, ex = setup(tmp_path, rids=set())
+
+    def needed(clock):
+        ex.state.clock = clock
+        return ex._needed_to_six()
+
+    assert needed("05:50:00") == 0.75 * 10 + 5
+    assert needed("00:00:00") == 0.75 * 360 + 5  # after midnight: 6 h left, not 30 h or -18 h
+    assert needed("23:30:00") == 0.75 * 390 + 5
+    assert needed("06:00:00") == 5.0
+    ex.state.clock = "05:50:00"
+    assert ex._lasts_the_night(12.5) and not ex._lasts_the_night(12.4)
+
+
+def test_charged_line_counts_the_wakes_of_a_chain(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=_every(2))
+    _inbox_hook(ex)
+    ex.read_inbox()
+    fake.battery = 10
+    ex.refresh()
+    ex.ensure_battery()
+    [charged] = decisions(session, "charged")
+    [block] = decisions(session, "charge_block")
+    assert charged["woken"] is True and charged["wakes"] == block["woken"] > 1
+
+
+def test_a_request_skipped_during_a_block_in_its_flow_ends_declined(tmp_path):
+    from agent.agent import _read_inbox
+
+    reqs = [("22:01:00", "R-001", "319 wants a towel."),
+            ("22:06:00", "skip", "Skip R-001, 319 checked out. Don't bother with it."),
+            *_every(3, start="22:09:00", n=10)[1:]]
+    fake, session, ex = setup(tmp_path, requests=reqs)
+    task = next_task(ex, session, "R-001")
+    seen, pending = {"R-001"}, ex.queue
+    ex.read_inbox = lambda: _read_inbox(ex, None, seen, pending)
+    fake.battery = ex.state.battery = 10  # forced: the block reads the skip while R-001 runs
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status in ("declined", "skipped"), out
+    assert not calls(fake, "place", since=since)  # no 0-point delivery
+    assert not calls(fake, "pick", since=since)
+    assert fake.reports.get("R-001") == "cancelled"
+    assert decisions(session, "skipped_while_charging")
 
 
 # --- late-night capacity Task 3 (5): a floor-1 top-up before a ride up ----------------------------

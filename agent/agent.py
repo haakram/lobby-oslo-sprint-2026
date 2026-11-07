@@ -212,7 +212,9 @@ _SKIP = re.compile(r"^\s*Skip (R-\d+)\b")
 def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]) -> None:
     """The manager's "Skip R-NNN, 327 checked out. Don't bother with it.": the request is dropped
     from the queue and marked skipped. Live: a skipped request scores 0 even when done and verified
-    (seed 4 R-019), so the trip is pure loss. A running task finishes; the inbox is read between tasks."""
+    (seed 4 R-019), so the trip is pure loss. The inbox is read between tasks and, through the
+    executor's hook, during a charge block, also one inside a running task's flow: a running request
+    skipped then ends declined after the block (Executor._decline_if_skipped)."""
     dropped = [t for t in pending if t.request == rid]
     for task in dropped:
         pending.remove(task)
@@ -226,17 +228,16 @@ def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]
            reported=reply.ok, reply=str(reply.result)[:80])
 
 
-NIGHT_END_S = clock_to_seconds("06:00:00") + 24 * 3600  # the server ends the shift at 06:00
+NIGHT_END_S = clock_to_seconds("06:00:00")  # the server ends the shift at 06:00 (already the next day)
 
 
 def _too_late(task: Task, state: RobotState, hotel: Hotel, params: Params) -> bool:
-    """True when the task's estimated time runs past 06:00 (clocks after midnight wrap)."""
+    """True when the task's estimated time runs past 06:00. clock_to_seconds puts clocks before
+    noon on the next day (05:58 -> 107,880 s), the same scale as NIGHT_END_S."""
     try:
         now = clock_to_seconds(state.clock)
     except (ValueError, AttributeError):
         return False
-    if now < clock_to_seconds("12:00:00"):
-        now += 24 * 3600
     from agent.planner import UNREACHABLE_S, estimate_seconds
 
     secs = estimate_seconds(task, state, hotel, params)

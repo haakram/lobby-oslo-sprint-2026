@@ -160,3 +160,14 @@ export function floorRuns(m: RouteMatrix, path: string[]): FloorRun[] {
   }
   return runs;
 }
+
+/** Elevator rides along a node path: each step from one elevator to another on a different floor. */
+export function elevatorRides(m: RouteMatrix, path: string[]): number {
+  let rides = 0;
+  for (let i = 1; i < path.length; i++) {
+    const a = m.nodes[path[i - 1]];
+    const b = m.nodes[path[i]];
+    if (a?.kind === "elevator" && b?.kind === "elevator" && a.floor !== b.floor) rides += 1;
+  }
+  return rides;
+}

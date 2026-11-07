@@ -189,6 +189,8 @@ GROWTH_PER_HOUR = 0.075  # [obs] the same delivery is worth ~7.5 % more per hour
 WAIT_DECAY_PER_MIN = 0.6  # [obs] fitted; anything in 0-1 fits the 1-5 min waits seen (§ 4 suggests 0.5)
 MIN_POINTS = 5
 VERIFIED_BONUS = 5  # [obs] 20 of 20 verified "done" reports; none for room checks
+JUDGEMENT_BONUS = 5  # [obs] scout: declined on a false follow-up, cancelled on a skipped request
+OUTCOMES = ("done", "failed", "declined", "cancelled")  # [obs] the server's own list
 FALSE_DONE = -35  # [obs] 4 of 4 (all bags); never seen on another kind, applied everywhere
 WRONG_ITEM = -10  # [hyp] a non-matching item into a room with an open request (never observed live)
 DND_KNOCK = 0  # [obs] 6 knocks on the DND door 208 cost nothing (R-023's -30 was two slips)
@@ -198,6 +200,7 @@ SLIP_POINTS = -15  # [obs] each of the 5 slips on the live seed-1 night cost exa
 OFF_DUTY = "The robot is off duty. Start a shift first."
 ENDED = "That shift has already ended. Start a new one."
 INBOX_EVENT = {"type": "inbox", "text": "New message from the night manager."}
+_SKIP_TEXT = re.compile(r"^Skip (R-\d+)\b")  # [obs] "Skip R-040, 323 checked out. Don't bother with it."
 UNDOCK_EVENT = {"type": "dock", "text": "The robot undocks."}
 SLIP_EVENT = {"type": "slip", "text": "The robot slipped on a wet floor and lost a minute."}
 SHIFT_EVENT = {"type": "shift", "text": "Shift ended. The day shift takes over."}
@@ -320,6 +323,7 @@ class _Request:
     floor: int | None = None  # spill
     source: str | None = None  # noise: the room the noise comes from
     dup_of: str | None = None  # [hyp] a repeat of an earlier request (same text and room)
+    skipped: bool = False  # [obs] after "Skip R-NNN" it scores 0, done or not (live seed 4 R-019)
 
 
 def _item_in(text: str) -> str | None:
@@ -637,6 +641,13 @@ class FakeWybe:
             req.arrived_s = self._now
             msg = {"from": "night manager", "at": self._clock(),
                    "text": req.text if req.rid is None else f"{req.rid}: {req.text}"}
+            if skip := _SKIP_TEXT.match(req.text):  # a spec like ("22:10:00", "skip", "Skip R-001, ...")
+                msg.update(text=req.text, request=skip.group(1))
+                if (target := self._requests.get(skip.group(1))) is not None:
+                    target.skipped = True
+                self._unread.append(msg)
+                self._events.append(dict(INBOX_EVENT))
+                continue
             if req.rid is not None:
                 msg["request"] = req.rid
                 req.dup_of = next((r.rid for r in self._requests.values() if r.text == req.text
@@ -766,6 +777,8 @@ class FakeWybe:
     def _complete(self, req: _Request) -> None:
         hours = (self._now - clock_to_seconds(START_CLOCK)) / 3600
         req.completed = True
+        if req.skipped:
+            return  # [obs] seed 4 R-019: done and verified after the skip, 0 points
         self.score += points_for(req.kind, hours, (self._now - req.arrived_s) / 60)
 
     def _undock(self) -> None:
@@ -817,14 +830,25 @@ class FakeWybe:
             return False, f"No request called '{rid}'."
         if rid in self.reports:
             return False, f"{rid} is already reported."
+        if outcome not in OUTCOMES:
+            return False, "Outcome should be done, failed, declined or cancelled."  # [obs] scout probe 1
         self.reports[rid] = outcome
+        if outcome == "declined":  # [obs] scout: +5 for a follow-up with no order (5 of 5); 0 on a DND room
+            if req.kind == "followup" and not self._has_order(req):
+                self.score += JUDGEMENT_BONUS
+            return True, "Noted."
+        if outcome == "cancelled":  # [obs] scout seed 4 R-019: +5 after the manager's "Skip R-NNN"
+            if req.skipped:
+                self.score += JUDGEMENT_BONUS
+            return True, "Noted."
         if outcome != "done":
             return True, "Noted."
         if req.kind == "room_check" and req.checked and not req.completed:
             self._complete(req)  # room checks score only on the report, no separate +5
             return True, "Noted. Thanks."
         if req.kind != "room_check" and req.completed:
-            self.score += VERIFIED_BONUS
+            if not req.skipped:
+                self.score += VERIFIED_BONUS
             return True, "Noted. Thanks."
         self.score += FALSE_DONE
         self.false_done.append(rid)
@@ -1100,6 +1124,11 @@ class FakeWybe:
             return True, f"Placed {item} here." if target == self._location else f"Placed {item} in {target}."
         self._judge_delivery(target, item)
         return True, f"Placed {item} inside {target}."
+
+    def _has_order(self, claim: _Request) -> bool:
+        """An earlier carried-item request for the claim's room and item (true follow-up)."""
+        return any(r.rid != claim.rid and r.kind in ("amenity", "tray", "lost_item") and r.room == claim.room
+                   and r.item == claim.item and r.due_s <= claim.due_s for r in self._requests.values())
 
     def _judge_delivery(self, room: str, item: str) -> None:
         open_reqs = self._open_requests(room)

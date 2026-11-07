@@ -91,7 +91,7 @@ def _seed2_mechanism(tmp_path, extra=()):
     for rid in sorted(got):
         ex.ledger.add(got[rid])
     assert ex.run(got["R-001"]).status == "done"
-    assert ex.run(got["R-002"]).note == "duplicate of R-001"
+    assert ex.run(got["R-002"]).note.startswith("Duplicate of R-001")
     return fake, session, ex, got
 
 
@@ -161,9 +161,9 @@ def test_a_later_declined_duplicate_does_not_block_the_original(tmp_path):
     got = collect(ex, session, {"R-001", "R-002"})
     ex.ledger.add(got["R-001"])
     ex.ledger.add(got["R-002"])
-    assert ex.run(got["R-002"]).note == "duplicate of R-001"
+    assert ex.run(got["R-002"]).note.startswith("Duplicate of R-001")
     assert ex.run(got["R-001"]).status == "done"
-    assert fake.reports == {"R-001": "done", "R-002": "failed"} and not fake.false_done
+    assert fake.reports == {"R-001": "done", "R-002": "declined"} and not fake.false_done
 
 
 def test_a_named_guests_lost_item_counts_by_the_room_the_clerk_gave(tmp_path):

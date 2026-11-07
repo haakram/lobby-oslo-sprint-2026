@@ -10,7 +10,6 @@ before any knock or keycard, and "done" needs an observed score rise.
 from __future__ import annotations
 
 import functools
-import os
 import re
 from collections.abc import Callable
 from dataclasses import replace
@@ -379,12 +378,13 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
             ex.log("probe", name="followup_ask", request=task.request, reply=str(answer.result)[:300])
         except ActionFailed as exc:
             ex.log("probe", name="followup_ask", request=task.request, reply=f"failed: {exc}"[:200])
-    if orig is None or orig.status == "done":
-        why = "no order on record" if orig is None else f"{orig.request} was already done"
-        h.log(f"delivered nothing: {why}", h.before, ex.score_now(), original=orig.request if orig else None)
-        if orig is None and os.environ.get("NS_DECLINE_FOLLOWUPS") == "1":
-            raise Declined(f"No {item.replace('-', ' ')} order from {num} on record tonight")
-        raise ActionFailed(f"no order for {item} from {num} on record")
+    if orig is None:  # a false claim: declined with the reason scores +5 live (failed 0, done -20)
+        h.log("delivered nothing: no order on record", h.before, ex.score_now(), original=None)
+        raise Declined(f"No {item} order from {num} on record tonight; nothing was ordered.")
+    if orig.status == "done":
+        h.log(f"delivered nothing: {orig.request} was already done", h.before, ex.score_now(),
+              original=orig.request)
+        raise Declined(f"The {item} order from {num} ({orig.request}) was already delivered tonight")
     queued = next((t for t in ex.queue if t.request == orig.request), None)
     if queued is not None:  # still waiting: do it now, under its own id
         ex.queue.remove(queued)

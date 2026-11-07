@@ -312,7 +312,7 @@ def test_follow_up_and_its_order_are_delivered_once_through_the_loop(tmp_path):
                        params=Params(use_cart=False))
     placed = [e for e in fake.log if e["cmd"] == "place" and e["ok"]]
     assert [e["args"] for e in placed] == [{"item": "towel", "where": "room-104"}]
-    assert fake.reports == {"R-001": "done", "R-002": "failed"}
+    assert fake.reports == {"R-001": "done", "R-002": "declined"}
     assert not fake.false_done and not fake.wrong_deliveries
     assert _decisions(tmp_path, result, "hypothesis")
     assert result["requests_served"] == 1  # R-001, also when the follow-up ran it
@@ -330,7 +330,7 @@ def test_full_night_with_the_live_request_types(tmp_path):
         if kind in ("bags", "noise", "spill") or (kind == "amenity" and rid == "R-008"):
             assert fake.reports.get(rid) == "done", (rid, kind, fake.reports.get(rid))
         if kind == "followup":
-            assert fake.reports.get(rid) == "failed", rid
+            assert fake.reports.get(rid) in ("failed", "declined"), rid
     ids = {d["id"] for d in _decisions(tmp_path, result, "hypothesis")}
     assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill", "H-duplicate"} <= ids
     assert result["score"] >= 250
@@ -522,3 +522,22 @@ def test_setup_failure_after_the_start_still_ends_the_shift(tmp_path, monkeypatc
     assert fake._ended and fake.log[-1]["cmd"] == "end_shift"
     lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
     assert lines[-1]["type"] == "end" and lines[-1]["reason"] == result["reason"]
+
+
+# --- scout: the manager's "Skip R-NNN" drops the request (live: a skipped request scores 0 even when done) ---
+
+
+def test_manager_skip_drops_the_queued_request(tmp_path):
+    fake = FakeWybe(requests=[
+        ("22:03:30", "R-001", "104 wants a towel."),
+        ("22:03:31", "skip", "Skip R-001, 104 checked out. Don't bother with it."),
+        ("22:03:32", "R-002", "106 wants a pillow."),
+    ])
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00")
+    assert fake.reports["R-001"] == "cancelled"  # live seed 4 R-019: +5 for the cancelled report
+    assert "R-002" in fake.reports
+    assert not any(e["cmd"] == "place" and (e["args"] or {}).get("where") == "room-104" for e in fake.log)
+    skipped = _decisions(tmp_path, result, "request_skipped")
+    assert [d["request"] for d in skipped] == ["R-001"] and skipped[0]["was_queued"] is True
+    assert skipped[0]["reported"] is True
+    assert result["requests_served"] == 1

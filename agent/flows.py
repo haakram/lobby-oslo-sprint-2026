@@ -14,7 +14,7 @@ import re
 from collections.abc import Callable
 from dataclasses import replace
 
-from agent.executor import ActionFailed, Executor
+from agent.executor import ActionFailed, Declined, Executor
 from agent.routing import NoRoute, best_tour
 from agent.tasks import ITEM_ALIASES, Kind, Task
 from agent.world import Hotel
@@ -46,7 +46,9 @@ def handle(ex: Executor, task: Task) -> Result:
     if dup := ex.ledger.duplicate_of(task):
         score = ex.score_now()
         flows_extra.hyp(ex, "H-duplicate", task, f"not redone: same text and room as {dup}", score, score)
-        raise ActionFailed(f"duplicate of {dup}")
+        # Live (scout, seed 1): a duplicate reported done is a false done (-30) even though the first
+        # copy was delivered; declined is never punished.
+        raise Declined(f"Duplicate of {dup}, which was already handled; not done twice")
     if task.kind is Kind.UNKNOWN:
         task = _classify(ex, task)
     if task.kind not in (Kind.FOLLOWUP, Kind.NOISE):  # those keep their own logic

@@ -72,7 +72,7 @@ DOCK_LEARN_S = 120  # the dock is learnt only from a first status this close to 
 @dataclass
 class Outcome:
     request: str
-    status: Literal["done", "failed", "skipped"]
+    status: Literal["done", "failed", "declined", "skipped"]
     points: int
     note: str
 
@@ -82,8 +82,9 @@ class ActionFailed(Exception):
 
 
 class Declined(ActionFailed):
-    """The request is turned down on purpose (no such order on record): reported "declined",
-    which the server pays 5 for a false follow-up (scout, live), where "failed" pays 0."""
+    """The request is turned down for a true reason and reported `declined` (the server's third
+    outcome besides done/failed; the fourth is cancelled). Live (scout, 5 of 5): a follow-up claim
+    with no order on record reported declined scores +5; the same as failed scores 0, and as done -20."""
 
 
 class _Replan:

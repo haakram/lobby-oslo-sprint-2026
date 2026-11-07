@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -205,6 +206,26 @@ def _vet_brain(ex: Executor, original: Task, better: Task) -> Task:
     return vetted
 
 
+_SKIP = re.compile(r"^\s*Skip (R-\d+)\b")
+
+
+def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]) -> None:
+    """The manager's "Skip R-NNN, 327 checked out. Don't bother with it.": the request is dropped
+    from the queue and marked skipped. Live: a skipped request scores 0 even when done and verified
+    (seed 4 R-019), so the trip is pure loss. A running task finishes; the inbox is read between tasks."""
+    dropped = [t for t in pending if t.request == rid]
+    for task in dropped:
+        pending.remove(task)
+    seen.add(rid)
+    ex.ledger.set_status(rid, "skipped")
+    # Live (scout, seed 4 R-019): reporting the skipped request `cancelled` scores +5; a request
+    # already reported is refused ("already reported"), which costs nothing.
+    reply = ex.cmd("report", request=rid, outcome="cancelled",
+                   note="Skipped as instructed: the guest checked out.")
+    ex.log("request_skipped", request=rid, text=text[:120], was_queued=bool(dropped),
+           reported=reply.ok, reply=str(reply.result)[:80])
+
+
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:
     reply = ex.cmd("inbox")
     ex.inbox_waiting = False
@@ -213,6 +234,11 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
         if not isinstance(msg, dict) or not isinstance(msg.get("request"), str):
             continue
         rid = msg["request"]
+        text = str(msg.get("text", ""))
+        sender = str(msg.get("from", "")).lower()
+        if (m := _SKIP.match(text)) and "manager" in sender:  # only the manager's inbox instructs
+            _skip(ex, m.group(1), text, seen, pending)
+            continue
         if rid in seen:
             continue
         seen.add(rid)

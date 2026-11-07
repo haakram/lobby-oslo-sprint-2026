@@ -673,9 +673,9 @@ def test_follow_up_without_an_order_delivers_nothing(tmp_path):
     fake, session, ex, task = solo(tmp_path, FOLLOW.format(319, "water bottle"))
     assert task.kind is Kind.FOLLOWUP
     out = ex.run(task)
-    assert out.status == "failed" and out.note == "no order for water-bottle from 319 on record"
+    assert out.status == "declined" and out.note == "No water-bottle order from 319 on record tonight; nothing was ordered."
     assert not calls(fake, "place") and not calls(fake, "knock")
-    assert fake.reports == {"R-001": "failed"} and fake.score == 0
+    assert fake.reports == {"R-001": "declined"} and fake.score == 5  # live: +5 for the declined false claim
     assert hypotheses(session, "H-followup")
 
 
@@ -685,8 +685,8 @@ def test_follow_up_for_a_done_order_delivers_nothing(tmp_path):
     assert ex.run(next_task(ex, session, "R-001")).status == "done"
     places = len(calls(fake, "place"))
     out = ex.run(next_task(ex, session, "R-002"))
-    assert out.status == "failed" and "no order for phone-charger from 319 on record" in out.note
-    assert len(calls(fake, "place")) == places and fake.reports["R-002"] == "failed"
+    assert out.status == "declined" and "order from 319" in out.note and "already delivered" in out.note
+    assert len(calls(fake, "place")) == places and fake.reports["R-002"] == "declined"
 
 
 def test_follow_up_runs_the_pending_original_first(tmp_path):
@@ -714,7 +714,7 @@ def test_duplicate_request_is_reported_failed_not_redone(tmp_path):
     ex.ledger.add(got["R-001"])
     ex.ledger.add(got["R-002"])
     out = ex.run(got["R-002"])
-    assert out.status == "failed" and out.note == "duplicate of R-001"
+    assert out.status == "declined" and out.note.startswith("Duplicate of R-001")
     assert not calls(fake, "pick") and not calls(fake, "move")
     assert ex.run(got["R-001"]).status == "done"
     assert hypotheses(session, "H-duplicate")
@@ -942,7 +942,7 @@ HYPOTHESIS_RUNS = {
                        lambda f, e, m: f._objects["storage"].pop("wet-floor-sign"), "H-spill", "failed"),
     "spill not found": ("Someone mentioned a spill on floor 2.", {"spill_spots": {2: None}}, None,
                         "H-spill", "failed"),
-    "followup no order": (FOLLOW.format(319, "water bottle"), {}, None, "H-followup", "failed"),
+    "followup no order": (FOLLOW.format(319, "water bottle"), {}, None, "H-followup", "declined"),
     "named done": ("Mr Aas would like a pillow.", {"guests": {"Mr Aas": "room-318"}}, None, "H-named", "done"),
     "named unknown guest": ("Mr Nobody would like a pillow.", {"guests": {}}, None, "H-named", "failed"),
     "named dnd": ("Ms Kvam would like a pillow.", {"guests": {"Ms Kvam": "room-208"}, "dnd_rooms": {"room-208"}},
@@ -965,6 +965,8 @@ def test_every_hypothesis_run_logs_exactly_one_line(tmp_path, monkeypatch, case)
     assert isinstance(line["score_before"], int) and isinstance(line["score_after"], int)
     if status == "done":  # the delta covers the rewarded action (H-named: the delivery, not the ask)
         assert line["score_after"] > line["score_before"], line
+    elif status == "declined":  # the +5 lands on the declined report, after the hypothesis line
+        assert line["score_after"] == line["score_before"] == fake.score - 5, line
     else:
         assert line["score_after"] == line["score_before"] == fake.score, line
 
@@ -1011,9 +1013,9 @@ def test_follow_up_redelivers_a_failed_order_once(tmp_path):
     assert fake._requests["R-001"].completed and not fake.wrong_deliveries
     assert ex.ledger.get("R-001").status == "done"
     again = ex.run(next_task(ex, session, "R-003"))  # a second call about the same order
-    assert again.status == "failed" and again.note == "no order for phone-charger from 319 on record"
+    assert again.status == "declined" and "(R-001) was already delivered" in again.note
     assert len([e for e in calls(fake, "place") if e["ok"]]) == 1
-    assert fake.reports == {"R-001": "failed", "R-002": "failed", "R-003": "failed"} and not fake.false_done
+    assert fake.reports == {"R-001": "failed", "R-002": "failed", "R-003": "declined"} and not fake.false_done
     assert [d["request"] for d in hypotheses(session, "H-followup")] == ["R-002", "R-003"]
 
 

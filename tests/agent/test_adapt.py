@@ -936,3 +936,20 @@ def test_dnd_sign_that_goes_up_during_the_wait_is_respected(tmp_path):
     out = ex.run(task)
     assert out.status == "failed" and "Do Not Disturb" in out.note, out
     assert not _keycard_uses(fake) and not fake.unsafe
+
+
+def test_duplicate_request_is_reported_declined_never_done(tmp_path):
+    # Live (scout, seed 1): R-019, the same tray text as R-011 85 min later, reported done = -30 even
+    # though R-011's tray had been delivered. A duplicate is declined (0, never punished).
+    fake, session, ex = setup(tmp_path, requests=[
+        ("22:03:00", "R-001", "Bring the tray from the kitchen pass to 104."),
+        ("22:04:00", "R-002", "Bring the tray from the kitchen pass to 104."),
+    ])
+    first = next_task(ex, session, "R-001")
+    second = next_task(ex, session, "R-002")
+    ex.ledger.add(first)
+    ex.ledger.add(second)
+    assert ex.run(first).status == "done"
+    out = ex.run(second)
+    assert out.status == "declined", out
+    assert fake.reports["R-002"] == "declined" and not fake.false_done

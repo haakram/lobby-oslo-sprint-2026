@@ -6,7 +6,7 @@ import { CustomEase } from "gsap/CustomEase";
 import { useReducedMotion } from "motion/react";
 import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Badge, cx, RegenIcon } from "@/ui";
-import { floorsOf, placeLabel, roomNumber, type HotelMap } from "./hotelMap";
+import { floorsOf, placeLabel, roomNumber, type HotelGraph } from "./hotelMap";
 import { STATUS_LABEL, type RoomReport, type RoomStatus } from "./nightRooms";
 import { floorGeometry, labelPoint, pathData, percentOf, runPoints, TILE, type Frame, type Point } from "./planGeometry";
 
@@ -43,7 +43,7 @@ export type PlanPin = { node: string; label: string; /** The route step that end
 export type PlanTrace = { from: string; to: string; count: number };
 
 type Props = {
-  map: HotelMap;
+  map: HotelGraph;
   /** Accessible name of the whole plan. */
   label: string;
   statuses: ReadonlyMap<string, RoomReport>;
@@ -65,7 +65,7 @@ type Props = {
 
 type Run = { floor: number; nodes: string[] };
 
-function runsOf(map: HotelMap, path: string[]): Run[] {
+function runsOf(map: HotelGraph, path: string[]): Run[] {
   const runs: Run[] = [];
   for (const id of path) {
     const floor = map.nodes[id]?.floor;

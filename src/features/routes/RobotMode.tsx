@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useReducedMotion } from "motion/react";
 import { useId, useMemo, useRef, useState } from "react";
 import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, RegenIcon, Skeleton, Stat } from "@/ui";
-import { placeLabel, type HotelMap } from "./hotelMap";
+import { placeLabel, type HotelGraph } from "./hotelMap";
 import { HotelPlan, type PlanTrace } from "./HotelPlan";
 import { roomStatusAt, type RoomReport } from "./nightRooms";
 import { robotWalk, taskKindLabel, totalsByKind, type RobotTask } from "./robotWalk";
@@ -44,7 +44,7 @@ function Loading() {
 }
 
 /** Robot: where the robot walked tonight, the whole night or one task, and where the metres went. */
-export function RobotMode({ map, log }: { map: HotelMap; log: NightLog }) {
+export function RobotMode({ map, log }: { map: HotelGraph; log: NightLog }) {
   const reduced = useReducedMotion();
   const selectId = useId();
   const mapCard = useRef<HTMLDivElement>(null);

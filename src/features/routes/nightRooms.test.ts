@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseRunLog, parseRunValues } from "@/features/nightshift/runlog";
-import { guestRooms, hotelMap } from "./hotelMap";
+import { BASE_HOTEL } from "@/features/hotel";
+import { guestRooms } from "./hotelMap";
 import { cleaningPresets, nightSeconds, roomStatusAt } from "./nightRooms";
 
 const call = (clock: string) => ({ v: 1, type: "call", cmd: "status", ok: true, clock });
@@ -82,7 +83,7 @@ describe("cleaningPresets", () => {
   it("works on the demo night: every preset room is a guest room on the map, none of them Ikke forstyrr", () => {
     const text = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
     const { presets, doNotDisturb } = cleaningPresets(roomStatusAt(parseRunLog(text).lines));
-    const rooms = new Set(guestRooms(hotelMap()));
+    const rooms = new Set(guestRooms(BASE_HOTEL));
     const all = presets.flatMap((p) => p.rooms);
     expect(all.length).toBeGreaterThan(0);
     expect(all.every((r) => rooms.has(r))).toBe(true);

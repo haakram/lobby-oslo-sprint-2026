@@ -1,22 +1,23 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CleaningMode, type CleaningInitial } from "./CleaningMode";
-import { hotelMap, type HotelMap } from "./hotelMap";
+import { BASE_HOTEL } from "@/features/hotel";
+import type { HotelGraph } from "./hotelMap";
 import type { NightLog } from "./useNightLog";
 
 const LOG: NightLog = { status: "ready", lines: [], retry: () => {} };
-const seed1 = hotelMap();
+const seed1 = BASE_HOTEL;
 
 const initial = (rooms: string[], cart = true): CleaningInitial => ({ rooms, unknown: [], start: "laundry", cart });
 
 /** Seed 1 without the elevator on floor 3: floor 3 is reached by the stairs only. */
-const noLiftTo3: HotelMap = {
+const noLiftTo3: HotelGraph = {
   nodes: Object.fromEntries(Object.entries(seed1.nodes).filter(([id]) => id !== "elevator-3")),
   edges: seed1.edges.filter((e) => e.a !== "elevator-3" && e.b !== "elevator-3"),
 };
 
 /** Seed 1 plus a room 399 with no door to anywhere. */
-const island: HotelMap = { nodes: { ...seed1.nodes, "room-399": { floor: 3, kind: "room", x: 30, z: 30 } }, edges: seed1.edges };
+const island: HotelGraph = { nodes: { ...seed1.nodes, "room-399": { id: "room-399", floor: 3, kind: "room" as const, x: 30, z: 30 } }, edges: seed1.edges };
 
 describe("CleaningMode, no route", () => {
   it("says the room needs the stairs when the cart is the cause, and offers to switch the cart off", () => {

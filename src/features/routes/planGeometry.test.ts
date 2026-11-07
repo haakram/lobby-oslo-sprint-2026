@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { hotelMap } from "./hotelMap";
+import { BASE_HOTEL } from "@/features/hotel";
 import { floorFrame, floorGeometry, pathData, runPoints } from "./planGeometry";
 
-const map = hotelMap();
+const map = BASE_HOTEL;
 
 describe("floorGeometry", () => {
   it("puts each room's door on the corridor it sits beside", () => {

@@ -1,4 +1,4 @@
-import type { HotelMap } from "./hotelMap";
+import type { HotelGraph } from "./hotelMap";
 import type { RouteLeg, RouteMatrix } from "./types";
 
 // A line-by-line port of Track A's router (agent/routing.py, shortest_route): Dijkstra in sim
@@ -17,9 +17,9 @@ const DOOR_KINDS = new Set(["room", "service"]);
 type Hop = { to: string; seconds: number; metres: number };
 type Adjacency = Map<string, { to: string; metres: number; door: boolean; stairs: boolean }[]>;
 
-const adjacencyCache = new WeakMap<HotelMap, Adjacency>();
+const adjacencyCache = new WeakMap<HotelGraph, Adjacency>();
 
-function adjacency(map: HotelMap): Adjacency {
+function adjacency(map: HotelGraph): Adjacency {
   const known = adjacencyCache.get(map);
   if (known) return known;
   // Keyed per node like Hotel._adj: a repeated edge replaces the earlier one.
@@ -38,7 +38,7 @@ function adjacency(map: HotelMap): Adjacency {
   return adj;
 }
 
-function hops(map: HotelMap, node: string, cart: boolean): Hop[] {
+function hops(map: HotelGraph, node: string, cart: boolean): Hop[] {
   const out: Hop[] = [];
   for (const e of adjacency(map).get(node) ?? []) {
     if (e.stairs && cart) continue;
@@ -63,7 +63,7 @@ function hops(map: HotelMap, node: string, cart: boolean): Hop[] {
 export type HotelRoute = { seconds: number; metres: number; path: string[] };
 
 /** The quickest way from `src` to `dst`, or null when there is none. */
-export function shortestRoute(map: HotelMap, src: string, dst: string, { cart = false } = {}): HotelRoute | null {
+export function shortestRoute(map: HotelGraph, src: string, dst: string, { cart = false } = {}): HotelRoute | null {
   if (!map.nodes[src] || !map.nodes[dst]) return null;
   if (src === dst) return { seconds: 0, metres: 0, path: [src] };
   const dist = new Map<string, number>([[src, 0]]);
@@ -105,7 +105,7 @@ export function shortestRoute(map: HotelMap, src: string, dst: string, { cart = 
  * The route matrix the tour engine reads, for a start and its stops: a leg for every ordered pair
  * that has a route. A missing pair stays missing, so bestTour reports it instead of guessing.
  */
-export function hotelMatrix(map: HotelMap, start: string, stops: string[], { cart = false } = {}): RouteMatrix {
+export function hotelMatrix(map: HotelGraph, start: string, stops: string[], { cart = false } = {}): RouteMatrix {
   const places = [start, ...new Set(stops)].filter((id, i, all) => all.indexOf(id) === i);
   const legs: Record<string, RouteLeg> = {};
   for (const from of places) {

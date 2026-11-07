@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, EmptyState, ErrorState, RegenIcon } from "@/ui";
+import { Button, Card, EmptyState, ErrorState, RegenIcon, Skeleton } from "@/ui";
 import { CleaningControls } from "./CleaningControls";
 import { CleaningStops } from "./CleaningStops";
 import { planCleaning } from "./cleaningPlan";
-import { placeLabel, type HotelMap } from "./hotelMap";
+import { placeLabel, type HotelGraph } from "./hotelMap";
 import { HotelPlan } from "./HotelPlan";
 import { OffMapRooms } from "./OffMapRooms";
 import { cleaningPresets, roomStatusAt, type RoomPreset, type RoomReport } from "./nightRooms";
@@ -56,7 +56,7 @@ function NoRouteError({
 }
 
 /** Renhold: pick rooms (from the night or on the map), get the best round across floors. */
-export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightLog; initial: CleaningInitial }) {
+export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: NightLog; initial: CleaningInitial }) {
   const statuses = useMemo(() => (log.status === "ready" ? roomStatusAt(log.lines) : NO_STATUSES), [log.status, log.lines]);
   const { presets, doNotDisturb } = useMemo(() => cleaningPresets(statuses), [statuses]);
 
@@ -100,6 +100,8 @@ export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightL
   const suggested = mustClean?.rooms.length ? mustClean : occupied?.rooms.length ? occupied : null;
 
   const ok = plan && !("error" in plan) ? plan : null;
+  // The map is tonight's only once the log is in; route nothing on the stand-in map before that.
+  const waiting = log.status === "loading";
 
   return (
     <div className="flex flex-col gap-4 lg:gap-6">
@@ -131,6 +133,11 @@ export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightL
             }
           />
         </Card>
+      ) : waiting ? (
+        <Card className="flex flex-col gap-3 p-4 sm:p-5" aria-busy="true" aria-label="Henter nattens hotellkart">
+          <Skeleton className="h-10 w-2/3 max-w-lg" />
+          <Skeleton className="h-5 w-1/3 max-w-xs" />
+        </Card>
       ) : ok ? (
         <SavingBand plan={ok} />
       ) : plan && "error" in plan ? (
@@ -149,7 +156,7 @@ export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightL
         </Card>
       ) : null}
 
-      {offMap.length > 0 && <OffMapRooms rooms={offMap} statuses={statuses} onRemove={toggle} />}
+      {!waiting && offMap.length > 0 && <OffMapRooms rooms={offMap} statuses={statuses} onRemove={toggle} />}
 
       <div className="lg:order-first">
         <CleaningControls
@@ -173,37 +180,41 @@ export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightL
 
       <Card className="p-4 sm:p-5">
         <h2 className="sr-only">Hotellet</h2>
-        <HotelPlan
-          map={map}
-          label="Hotellkart med ruten"
-          statuses={statuses}
-          route={ok ? ok.legs.map((l) => l.path) : []}
-          pins={ok ? ok.tour.order.map((node, i) => ({ node, label: String(i + 1), step: i })) : []}
-          start={start}
-          selected={selected}
-          onToggleRoom={toggle}
-          drawToken={drawToken}
-          legend={
-            <li className="flex items-center gap-2">
-              <span aria-hidden="true" className="h-1 w-6 rounded-full bg-accent" />
-              Rute
-            </li>
-          }
-          footer={
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <p className="text-sm text-muted">Trykk på et rom for å legge det til eller ta det bort.</p>
-              {ok && (
-                <Button variant="secondary" onClick={redraw}>
-                  <RegenIcon name="refresh" size={20} />
-                  Tegn ruten igjen
-                </Button>
-              )}
-            </div>
-          }
-        />
+        {waiting ? (
+          <Skeleton className="aspect-[94/29] w-full" />
+        ) : (
+          <HotelPlan
+            map={map}
+            label="Hotellkart med ruten"
+            statuses={statuses}
+            route={ok ? ok.legs.map((l) => l.path) : []}
+            pins={ok ? ok.tour.order.map((node, i) => ({ node, label: String(i + 1), step: i })) : []}
+            start={start}
+            selected={selected}
+            onToggleRoom={toggle}
+            drawToken={drawToken}
+            legend={
+              <li className="flex items-center gap-2">
+                <span aria-hidden="true" className="h-1 w-6 rounded-full bg-accent" />
+                Rute
+              </li>
+            }
+            footer={
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <p className="text-sm text-muted">Trykk på et rom for å legge det til eller ta det bort.</p>
+                {ok && (
+                  <Button variant="secondary" onClick={redraw}>
+                    <RegenIcon name="refresh" size={20} />
+                    Tegn ruten igjen
+                  </Button>
+                )}
+              </div>
+            }
+          />
+        )}
       </Card>
 
-      {ok && (
+      {ok && !waiting && (
         <Card className="p-4 sm:p-5">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <div>

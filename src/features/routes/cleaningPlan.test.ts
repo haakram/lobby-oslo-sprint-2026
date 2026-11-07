@@ -1,9 +1,13 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { hotelForRun } from "@/features/hotel";
+import { parseRunLog } from "@/features/nightshift/runlog";
 import { planCleaning, minutesText } from "./cleaningPlan";
-import { hotelMap } from "./hotelMap";
+import { BASE_HOTEL } from "@/features/hotel";
 import { shortestRoute } from "./hotelRouter";
 
-const map = hotelMap();
+const map = BASE_HOTEL;
 const metres = (a: string, b: string, cart: boolean) => shortestRoute(map, a, b, { cart })!.metres;
 
 describe("planCleaning", () => {
@@ -43,12 +47,26 @@ describe("planCleaning", () => {
   });
 
   it("reports a room the map has no way to", () => {
-    const island = { nodes: { ...map.nodes, "room-999": { floor: 1, kind: "room", x: 0, z: 0 } }, edges: map.edges };
+    const island = { nodes: { ...map.nodes, "room-999": { id: "room-999", floor: 1, kind: "room" as const, x: 0, z: 0 } }, edges: map.edges };
     expect(planCleaning(island, { start: "laundry", rooms: ["room-999"], cart: false })).toEqual({
       error: "no-route",
       from: "laundry",
       to: "room-999",
     });
+  });
+});
+
+describe("planCleaning on the seed-5 demo night's map", () => {
+  it("routes 201, 206 and 327 (a room only seed 5 has), with the cart, never by the stairs", () => {
+    const demo = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
+    const seed5 = hotelForRun(demo);
+    expect(seed5.seed).toBe(5);
+    const plan = planCleaning(seed5, { start: "laundry", rooms: ["room-201", "room-206", "room-327"], cart: true });
+    if (!plan || "error" in plan) throw new Error("expected a plan");
+    expect(new Set(plan.tour.order)).toEqual(new Set(["room-201", "room-206", "room-327"]));
+    expect(plan.tour.path.some((id) => id.startsWith("stairwell-"))).toBe(false);
+    expect(plan.tour.path).toContain("corridor-3b"); // 327's corridor tonight
+    expect(plan.elevatorRides).toBeGreaterThanOrEqual(2);
   });
 });
 

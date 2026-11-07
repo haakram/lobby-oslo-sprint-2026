@@ -1,4 +1,4 @@
-import type { HotelMap } from "./hotelMap";
+import type { HotelGraph } from "./hotelMap";
 
 // How the floor plan is drawn from the routing graph: corridors are the edges between open nodes
 // (corridors, hubs, elevators, stairs), every room and service room gets a door on the nearest
@@ -12,10 +12,10 @@ export const TILE = 2.8;
 const PAD = 2.4;
 const DOOR_KINDS = new Set(["room", "service"]);
 
-const isDoorKind = (map: HotelMap, id: string) => DOOR_KINDS.has(map.nodes[id]?.kind ?? "");
+const isDoorKind = (map: HotelGraph, id: string) => DOOR_KINDS.has(map.nodes[id]?.kind ?? "");
 
 /** The floor's bounds: room around the outermost nodes, and every extra point (labels) inside. */
-export function floorFrame(map: HotelMap, floor: number, extra: Point[] = []): Frame {
+export function floorFrame(map: HotelGraph, floor: number, extra: Point[] = []): Frame {
   const nodes = Object.values(map.nodes).filter((n) => n.floor === floor);
   const minX = Math.min(...nodes.map((n) => n.x - PAD), ...extra.map((p) => p.x));
   const minZ = Math.min(...nodes.map((n) => n.z - PAD), ...extra.map((p) => p.z));
@@ -34,7 +34,7 @@ export function labelPoint(centre: Point, door: Point): Point {
 
 type Segment = { a: string; b: string };
 
-function openSegments(map: HotelMap, floor: number): Segment[] {
+function openSegments(map: HotelGraph, floor: number): Segment[] {
   return map.edges
     .filter((e) => !e.stairs && !isDoorKind(map, e.a) && !isDoorKind(map, e.b))
     .filter((e) => map.nodes[e.a]?.floor === floor && map.nodes[e.b]?.floor === floor)
@@ -59,13 +59,13 @@ export type FloorGeometry = {
   doors: Map<string, Point>;
 };
 
-const cache = new WeakMap<HotelMap, Map<number, FloorGeometry>>();
+const cache = new WeakMap<HotelGraph, Map<number, FloorGeometry>>();
 
 /**
  * A room's door is on a corridor that touches the node it connects to: preferably one it sits
  * beside (its foot falls inside the corridor), else the corridor's straight continuation.
  */
-export function floorGeometry(map: HotelMap, floor: number): FloorGeometry {
+export function floorGeometry(map: HotelGraph, floor: number): FloorGeometry {
   const byFloor = cache.get(map) ?? new Map<number, FloorGeometry>();
   cache.set(map, byFloor);
   const known = byFloor.get(floor);
@@ -128,7 +128,7 @@ const collinear = (p: Point, q: Point, s: Point) => Math.abs((q.x - p.x) * (s.z 
  * door; a corridor point the walk only passes to come straight back (or passes in a straight
  * line) is dropped, so the line runs along the corridor to the door and turns in.
  */
-export function runPoints(map: HotelMap, nodes: string[]): Point[] {
+export function runPoints(map: HotelGraph, nodes: string[]): Point[] {
   if (nodes.length === 0) return [];
   const floor = map.nodes[nodes[0]].floor;
   const { doors } = floorGeometry(map, floor);

@@ -4,7 +4,7 @@ import { useId, useMemo, useState, type KeyboardEvent } from "react";
 import { usePicklist } from "@/features/picklist/PicklistProvider";
 import { cx, RegenIcon, type RegenName } from "@/ui";
 import { CleaningMode, type CleaningInitial } from "./CleaningMode";
-import { hotelMap } from "./hotelMap";
+import { useHotelMap } from "@/features/hotel";
 import { PicklistMode } from "./PicklistMode";
 import { parseCart, parseMode, parseRoomQuery, parseStart, type RouteMode } from "./query";
 import { RobotMode } from "./RobotMode";
@@ -25,7 +25,6 @@ const MODES: { id: RouteMode; label: string; icon: RegenName; intro: string }[] 
  * shows where the robot walked tonight, Plukkliste keeps the pick-list route Øyne and Stemme feed.
  */
 export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; matrix?: RouteMatrix }) {
-  const map = hotelMap();
   const baseId = useId();
   const { skus } = usePicklist();
   const sku = typeof params.sku === "string" ? params.sku : undefined;
@@ -41,6 +40,9 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
   );
   const [opened, setOpened] = useState<ReadonlySet<RouteMode>>(() => new Set([mode]));
   const log = useNightLog("/runs/demo.jsonl", opened.has("renhold") || opened.has("robot"));
+  // Tonight's hotel: the seed-1 base reshaped by the run log (seed 5 has rooms 321–334 on floor 3).
+  // Until the log is in, or if it can't be read, it is the seed-1 base.
+  const map = useHotelMap(log.status === "ready" ? log.lines : null);
 
   const choose = (next: RouteMode) => {
     setMode(next);

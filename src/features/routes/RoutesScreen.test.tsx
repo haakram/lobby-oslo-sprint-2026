@@ -1,9 +1,12 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useEffect, type ReactNode } from "react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PicklistProvider, usePicklist } from "@/features/picklist/PicklistProvider";
 import { planCleaning } from "./cleaningPlan";
-import { hotelMap } from "./hotelMap";
+import { hotelForRun } from "@/features/hotel";
+import { parseRunLog } from "@/features/nightshift/runlog";
 import { loadRoutes } from "./loadRoutes";
 import { RoutesScreen, type RouteParams } from "./RoutesScreen";
 
@@ -23,13 +26,13 @@ function renderWith(skus: string[], screenElement: ReactNode = <RoutesScreen par
   );
 }
 
-// A short night: three rooms to clean (one not on the map), one with guests, one Do Not Disturb, one task walked.
+// A short night: three rooms to clean (one the map cannot place), one with guests, one Do Not Disturb, one task walked.
 const NIGHT = [
   { v: 1, type: "state", clock: "22:00:00", location: "charging-dock", score: 0 },
   { v: 1, type: "decision", kind: "room_status", data: { room: "room-214", status: "ma_vaskes", source: "room_check" } },
   { v: 1, type: "decision", kind: "room_status", data: { room: "room-201", status: "ma_vaskes", source: "room_check" } },
-  // Seed 5 has a room 327; the seed-1 map does not.
-  { v: 1, type: "decision", kind: "room_status", data: { room: "room-327", status: "ma_vaskes", source: "room_check" } },
+  // A room the night names but never located: tonight's map cannot place it.
+  { v: 1, type: "decision", kind: "room_status", data: { room: "room-399", status: "ma_vaskes", source: "room_check" } },
   { v: 1, type: "decision", kind: "room_status", data: { room: "room-319", status: "opptatt", source: "knock" } },
   { v: 1, type: "decision", kind: "room_status", data: { room: "room-208", status: "ikke_forstyrr", source: "door_sign" } },
   { v: 1, type: "decision", kind: "task_start", data: { request: "R-001", kind: "amenity", room: "room-104" } },
@@ -63,53 +66,53 @@ describe("RoutesScreen, Renhold", () => {
     expect(screen.getByRole("heading", { name: "Ingen rom valgt" })).toBeInTheDocument();
     expect(screen.getByText("Velg rom på kartet eller hent rommene som må vaskes.")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/runs/demo.jsonl", expect.anything());
-    // The night's log names three rooms to clean; room 327 is not on the map, so it gets a row of its own.
+    // The night's log names three rooms to clean; room 399 is not on the map, so it gets a row of its own.
     fireEvent.click(await screen.findByRole("button", { name: /Hent rommene som må vaskes/ }));
     const stops = within(screen.getByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem");
     expect(stops).toHaveLength(2);
     expect(screen.getByRole("region", { name: "Rutetall" })).toBeInTheDocument();
     const apart = screen.getByRole("region", { name: "Rom som ikke er med i ruten" });
-    expect(apart).toHaveTextContent("Rom 327 finnes ikke på kartet for i natt — besøk det manuelt");
+    expect(apart).toHaveTextContent("Rom 399 finnes ikke på kartet for i natt — besøk det manuelt");
     expect(screen.queryByText("Ingen rute funnet")).not.toBeInTheDocument();
   });
 
-  it("loads the rooms from ?rom= and draws their route", () => {
+  it("loads the rooms from ?rom= and draws their route", async () => {
     renderRoutes({ rom: "room-201,room-214" });
-    const list = screen.getByRole("list", { name: "Rekkefølge" });
+    const list = await screen.findByRole("list", { name: "Rekkefølge" });
     expect(within(list).getByText("Rom 201")).toBeInTheDocument();
     expect(within(list).getByText("Rom 214")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Rom 201/ })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("routes the rooms on the map and lists the rest apart, each with a way to remove it", () => {
-    renderRoutes({ rom: "201,327,206" });
-    expect(within(screen.getByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem")).toHaveLength(2);
+  it("routes the rooms on the map and lists the rest apart, each with a way to remove it", async () => {
+    renderRoutes({ rom: "201,399,206" });
+    expect(within(await screen.findByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem")).toHaveLength(2);
     const apart = screen.getByRole("region", { name: "Rom som ikke er med i ruten" });
     expect(apart).toHaveTextContent("1 rom er ikke med i ruten");
-    expect(apart).toHaveTextContent("Rom 327 finnes ikke på kartet for i natt — besøk det manuelt");
-    fireEvent.click(within(apart).getByRole("button", { name: "Fjern rom 327" }));
+    expect(apart).toHaveTextContent("Rom 399 finnes ikke på kartet for i natt — besøk det manuelt");
+    fireEvent.click(within(apart).getByRole("button", { name: "Fjern rom 399" }));
     expect(screen.queryByRole("region", { name: "Rom som ikke er med i ruten" })).not.toBeInTheDocument();
   });
 
-  it("shows only the rows apart when no picked room is on the map", () => {
-    renderRoutes({ rom: "327" });
-    expect(screen.getByRole("region", { name: "Rom som ikke er med i ruten" })).toBeInTheDocument();
+  it("shows only the rows apart when no picked room is on the map", async () => {
+    renderRoutes({ rom: "399" });
+    expect(await screen.findByRole("region", { name: "Rom som ikke er med i ruten" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Rekkefølge" })).not.toBeInTheDocument();
   });
 
-  it("says what in the link is not a room number", () => {
+  it("says what in the link is not a room number", async () => {
     renderRoutes({ rom: "201,laundry" });
     expect(screen.getByRole("status")).toHaveTextContent("Lenken hadde noe som ikke er et romnummer: laundry");
-    expect(within(screen.getByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(await screen.findByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem")).toHaveLength(1);
   });
 
-  it("shows the saving against the order given, with the best route's metres", () => {
+  it("shows the saving against the order given, with the best route's metres", async () => {
     const rooms = ["room-319", "room-104", "room-201", "room-317"];
-    const plan = planCleaning(hotelMap(), { start: "laundry", rooms, cart: true });
+    const plan = planCleaning(hotelForRun(parseRunLog(NIGHT).lines), { start: "laundry", rooms, cart: true });
     if (!plan || "error" in plan) throw new Error("expected a plan");
     renderRoutes({ rom: rooms.join(",") });
-    const band = screen.getByRole("region", { name: "Rutetall" });
+    const band = await screen.findByRole("region", { name: "Rutetall" });
     expect(band).toHaveTextContent(`${plan.saved.metres} m spart · ${plan.saved.percent} % kortere`);
     expect(within(band).getByText(String(Math.round(plan.tour.metres)))).toBeInTheDocument();
     expect(within(band).getByText(String(plan.elevatorRides))).toBeInTheDocument();
@@ -125,8 +128,9 @@ describe("RoutesScreen, Renhold", () => {
     expect(within(list).getByText("Rom 319")).toBeInTheDocument();
   });
 
-  it("switches the cart off and the start point", () => {
+  it("switches the cart off and the start point", async () => {
     renderRoutes({ rom: "room-201", start: "front-desk", vogn: "nei" });
+    await screen.findByRole("list", { name: "Rekkefølge" });
     expect(screen.getByRole("switch", { name: "Vogn" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("radio", { name: "Resepsjon" })).toBeChecked();
     fireEvent.click(screen.getByRole("switch", { name: "Vogn" }));
@@ -146,6 +150,22 @@ describe("RoutesScreen, Renhold", () => {
   it("flags a room with Ikke forstyrr", async () => {
     renderRoutes({ rom: "room-208" });
     expect(await screen.findByText(/Bank på før du går inn/)).toBeInTheDocument();
+  });
+});
+
+describe("RoutesScreen, Renhold on the seed-5 demo night", () => {
+  it("routes all three rooms to clean, room 327 included, on tonight's map", async () => {
+    const demo = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+    expect(hotelForRun(parseRunLog(demo).lines).seed).toBe(5);
+    fetchMock.mockImplementation(async () => new Response(demo, { status: 200 }));
+    renderRoutes({});
+    fireEvent.click(await screen.findByRole("button", { name: /Hent rommene som må vaskes/ }));
+    const list = screen.getByRole("list", { name: "Rekkefølge" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+    for (const room of ["Rom 201", "Rom 206", "Rom 327"]) expect(within(list).getByText(room)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Rom som ikke er med i ruten" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Rom 327/ })).toHaveAttribute("aria-pressed", "true");
   });
 });
 

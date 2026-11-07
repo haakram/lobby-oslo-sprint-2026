@@ -1,40 +1,10 @@
-import { z } from "zod";
-import raw from "@/features/hotel/hotel_seed1.json";
+import type { HotelMap } from "@/features/hotel";
 
-// The hotel the night-shift agent routes on (agent/data/hotel_seed1.json, copied for the app).
-// Coordinates are metres on the floor plan; z grows towards the bottom of the drawing.
+// Ruter routes and draws on the night's hotel (`useHotelMap(lines)` from @/features/hotel, the same
+// graph the agent routes on, reshaped by the run log). These helpers need only its nodes and edges.
 
-const HotelNodeSchema = z.object({
-  floor: z.number().int(),
-  kind: z.string().min(1),
-  x: z.number(),
-  z: z.number(),
-});
-
-const HotelEdgeSchema = z.object({
-  a: z.string(),
-  b: z.string(),
-  m: z.number().nonnegative(),
-  door: z.boolean().optional(),
-  stairs: z.boolean().optional(),
-});
-
-export const HotelMapSchema = z.object({
-  nodes: z.record(z.string(), HotelNodeSchema),
-  edges: z.array(HotelEdgeSchema),
-});
-
-export type HotelNode = z.infer<typeof HotelNodeSchema>;
-export type HotelEdge = z.infer<typeof HotelEdgeSchema>;
-export type HotelMap = z.infer<typeof HotelMapSchema>;
-
-let cached: HotelMap | null = null;
-
-/** The hotel map, validated once. Throws if the bundled file is broken (a build error, not a user state). */
-export function hotelMap(): HotelMap {
-  cached ??= HotelMapSchema.parse(raw);
-  return cached;
-}
+/** The part of the hotel map the router and the floor plan read. */
+export type HotelGraph = Pick<HotelMap, "nodes" | "edges">;
 
 const PLACE: Record<string, string> = {
   laundry: "Vaskeri",
@@ -66,7 +36,7 @@ export function placeLabel(id: string): string {
 }
 
 /** Guest rooms, in room-number order. */
-export function guestRooms(map: HotelMap): string[] {
+export function guestRooms(map: HotelGraph): string[] {
   return Object.keys(map.nodes)
     .filter((id) => map.nodes[id].kind === "room")
     .sort(byRoomNumber);
@@ -79,6 +49,6 @@ export function byRoomNumber(a: string, b: string): number {
   return na === nb ? a.localeCompare(b) : na - nb;
 }
 
-export function floorsOf(map: HotelMap): number[] {
+export function floorsOf(map: HotelGraph): number[] {
   return [...new Set(Object.values(map.nodes).map((n) => n.floor))].sort((a, b) => a - b);
 }

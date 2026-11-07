@@ -1,5 +1,5 @@
 import type { RunLine } from "@/features/nightshift/runlog";
-import type { HotelMap } from "./hotelMap";
+import type { HotelGraph } from "./hotelMap";
 import { nightSeconds } from "./nightRooms";
 
 // Where the robot actually went tonight, from run log v1: every successful `move` call, cut into
@@ -63,7 +63,7 @@ function arrivedAt(args: unknown, result: unknown): string | null {
   return str(r?.at) ?? str(rec(r?.outcome)?.at) ?? str(rec(args)?.to);
 }
 
-function edgeMetres(map: HotelMap, a: string, b: string): number {
+function edgeMetres(map: HotelGraph, a: string, b: string): number {
   const edge = map.edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
   return edge?.m ?? 0;
 }
@@ -74,7 +74,7 @@ function minutesBetween(start: string | null, end: string | null): number | null
   return a === null || b === null || b < a ? null : Math.round((b - a) / 60);
 }
 
-export function robotWalk(lines: readonly RunLine[], map: HotelMap): RobotNight {
+export function robotWalk(lines: readonly RunLine[], map: HotelGraph): RobotNight {
   const moves: RobotMove[] = [];
   const tasks: RobotTask[] = [];
   const open = new Map<string, RobotTask>();

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import parity from "./fixtures/router_parity.json";
-import { hotelMap } from "./hotelMap";
+import { BASE_HOTEL } from "@/features/hotel";
 import { hotelMatrix, shortestRoute } from "./hotelRouter";
 import { bestTour } from "./tour";
 
-const map = hotelMap();
+const map = BASE_HOTEL;
 
 type ParityRoute = { from: string; to: string; cart: boolean; seconds: number; path: string[] };
 
@@ -45,7 +45,7 @@ describe("shortestRoute", () => {
   });
 
   it("returns null when the map has no way there", () => {
-    const island = { nodes: { ...map.nodes, "room-999": { floor: 1, kind: "room", x: 0, z: 0 } }, edges: map.edges };
+    const island = { nodes: { ...map.nodes, "room-999": { id: "room-999", floor: 1, kind: "room" as const, x: 0, z: 0 } }, edges: map.edges };
     expect(shortestRoute(island, "laundry", "room-999")).toBeNull();
   });
 });
@@ -62,7 +62,7 @@ describe("hotelMatrix", () => {
   });
 
   it("leaves out a pair with no route, so the tour engine reports it", () => {
-    const island = { nodes: { ...map.nodes, "room-999": { floor: 1, kind: "room", x: 0, z: 0 } }, edges: map.edges };
+    const island = { nodes: { ...map.nodes, "room-999": { id: "room-999", floor: 1, kind: "room" as const, x: 0, z: 0 } }, edges: map.edges };
     const m = hotelMatrix(island, "laundry", ["room-999"]);
     expect(bestTour(m, ["room-999"])).toEqual({ error: "no-route", from: "laundry", to: "room-999" });
   });

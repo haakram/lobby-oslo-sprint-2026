@@ -1,6 +1,6 @@
 import { Badge, type BadgeTone, Button } from "@/ui";
 import { minutesText } from "./cleaningPlan";
-import { placeLabel, type HotelMap } from "./hotelMap";
+import { placeLabel, type HotelGraph } from "./hotelMap";
 import { STATUS_LABEL, type RoomReport, type RoomStatus } from "./nightRooms";
 import type { TourLeg } from "./types";
 
@@ -12,7 +12,7 @@ export const STATUS_BADGE: Record<RoomStatus, BadgeTone> = {
   ikke_forstyrr: "warning",
 };
 
-function via(map: HotelMap, leg: TourLeg): string {
+function via(map: HotelGraph, leg: TourLeg): string {
   const kinds = new Set(leg.path.map((id) => map.nodes[id]?.kind));
   if (kinds.has("elevator")) return " · heis";
   if (kinds.has("stairwell")) return " · trapp";
@@ -28,7 +28,7 @@ export function CleaningStops({
   statuses,
   onRemove,
 }: {
-  map: HotelMap;
+  map: HotelGraph;
   start: string;
   order: string[];
   legs: TourLeg[];

@@ -1,4 +1,4 @@
-import type { HotelMap } from "./hotelMap";
+import type { HotelGraph } from "./hotelMap";
 import { hotelMatrix } from "./hotelRouter";
 import { bestTour, elevatorRides, listOrderMetres, savings, tourLegs } from "./tour";
 import type { NoRoute, RouteMatrix, Tour, TourLeg } from "./types";
@@ -18,7 +18,7 @@ export type CleaningPlan = {
  * rooms in the order given. Null for no rooms; a NoRoute when the map has no way to one of them.
  */
 export function planCleaning(
-  map: HotelMap,
+  map: HotelGraph,
   { start, rooms, cart }: { start: string; rooms: string[]; cart: boolean },
 ): CleaningPlan | NoRoute | null {
   if (rooms.length === 0) return null;

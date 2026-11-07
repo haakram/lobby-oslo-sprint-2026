@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseRunLog, parseRunValues } from "@/features/nightshift/runlog";
-import { hotelMap } from "./hotelMap";
+import { BASE_HOTEL } from "@/features/hotel";
 import { robotWalk, totalsByKind } from "./robotWalk";
 
-const map = hotelMap();
+const map = BASE_HOTEL;
 
 const state = (clock: string, location: string) => ({ v: 1, type: "state", clock, location, score: 0 });
 const move = (clock: string, to: string, result: unknown, ok = true) => ({

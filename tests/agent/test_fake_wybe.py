@@ -1054,3 +1054,27 @@ def test_hotel_override_changes_metres_and_stock():
     assert sim("move", to="lobby")["clock"] == "22:00:06"
     sim.walk("corridor-1a", "corridor-1b", "laundry")
     assert "water-bottle x8" in sim("look")["result"]["objects"]
+
+
+# --- variant 20: the manager's "Skip R-NNN" reaches the inbox only while the request is unreported ---
+
+
+def test_skip_is_sent_only_while_its_request_is_unreported():
+    fake = FakeWybe(
+        requests=[("22:03:30", "R-001", "104 wants a towel."), ("22:03:30", "R-002", "106 wants a pillow.")],
+        skips=[("22:15:00", "skip", "Skip R-001, 104 checked out. Don't bother with it."),
+               ("22:16:00", "skip", "Skip R-002, 106 checked out. Don't bother with it.")],
+    )
+    sim = Sim(fake)
+    sim.start()
+    sim.wait_for_request()
+    assert [m.get("request") for m in sim("inbox")["result"]["messages"]] == [None, "R-001", "R-002"]
+    sim("report", request="R-001", outcome="failed", note="no towel")  # reported before its skip clock
+    woke = sim.wait_for_request()  # the dropped skip does not wake the dock; R-002's does
+    assert woke["clock"] == "22:16:00"
+    msgs = sim("inbox")["result"]["messages"]
+    assert [(m["request"], m["text"][:10]) for m in msgs] == [("R-002", "Skip R-002")]
+    assert not fake._requests["R-001"].skipped and fake._requests["R-002"].skipped
+    before = sim.score()
+    assert sim("report", request="R-002", outcome="cancelled", note="checked out")["ok"]
+    assert sim.score() == before + 5  # [obs] scout seed 4 R-019

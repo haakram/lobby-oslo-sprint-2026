@@ -10,6 +10,7 @@ import inspect
 import json
 import math
 import random
+import re
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -178,6 +179,16 @@ _FOLLOW = "Front desk passed on a call from {}: the guest says the {} they order
 _BAGS = "Take the bags at the desk up to {}. The room is empty, the guest checks in later."
 _WET_JITTER_S = 15 * 60  # [hyp] the five spots keep their places; their clocks move +-15 min
 _PEOPLE_JITTER_S = 20 * 60
+# The manager's "Skip R-NNN, <room> checked out. Don't bother with it." (the fake sends it only while
+# the request is unreported). Seed 1: the five skips the scout's slow seed-1 runs saw, at their clocks.
+SEED1_SKIPS = [("22:57:58", "R-002", "317"), ("01:42:32", "R-027", "319"),  # [obs]
+               ("03:22:24", "R-039", "206"), ("03:46:48", "R-040", "211"), ("04:54:02", "R-050", "204")]
+# Skips per night: the most any live run of seeds 1-12 saw ([obs] a lower bound: a request served in
+# time never shows its skip), one drawn per generated seed.
+_SKIPS_PER_NIGHT = [5, 0, 1, 1, 3, 1, 0, 0, 2, 3, 0, 0]
+_SKIP_DELAY_S = (8 * 60 + 23, 29 * 60 + 24)  # [obs] 16 live skips: 8:23 to 29:24 after the request
+_NO_SKIP = ("Front desk passed on", "Complaint about noise")  # [obs] none of the 16 was either kind
+SKIP_TEXT = "Skip {}, {} checked out. Don't bother with it."  # [obs] "that one" when there is no room
 
 # [obs] Practice seed 2 (live map check): the same floor-1 topology and names, other metres and shelves.
 SEED2_FLOOR1_METRES = {
@@ -253,6 +264,24 @@ def _arrivals(rng: random.Random, end_s: int) -> list[int]:
     return [t for t in times if t < end_s - 120]
 
 
+def skip_specs(seed: int, requests: list[tuple[str, str, str]], end_s: int) -> list[tuple[str, str, str]]:
+    """The night's "Skip R-NNN" messages as request specs. Seed 1: the observed five. Other seeds: a
+    count from _SKIPS_PER_NIGHT, on requests other than follow-ups and noise ([hyp] picked uniformly),
+    8-29 min after each. Own random stream: the night's requests are the same with or without skips."""
+    if seed == 1:
+        return [(clock, "skip", SKIP_TEXT.format(rid, room)) for clock, rid, room in SEED1_SKIPS]
+    rng = random.Random(seed * 6151 + 3)
+    want = rng.choice(_SKIPS_PER_NIGHT)
+    pool = [r for r in requests if not r[2].startswith(_NO_SKIP)
+            and clock_to_seconds(r[0]) + _SKIP_DELAY_S[1] < end_s]
+    out = []
+    for clock, rid, text in sorted(rng.sample(pool, min(want, len(pool))), key=lambda r: r[1]):
+        room = m.group(1) if (m := re.search(r"\b(\d{3})\b", text)) else "that one"
+        at = clock_to_seconds(clock) + rng.randint(*_SKIP_DELAY_S)
+        out.append((_hms(at), "skip", SKIP_TEXT.format(rid, room)))
+    return out
+
+
 def offline_scenario(seed: int, end_clock: str = OFFLINE_END) -> dict:
     """FakeWybe kwargs for one night. Seed 1 is the live night replayed exactly; other seeds are
     generated to its measured rate, burstiness, kind mix by hour, room concentration (the DND rooms take
@@ -264,6 +293,7 @@ def offline_scenario(seed: int, end_clock: str = OFFLINE_END) -> dict:
             "wet": set(), "hidden": dict(DEFAULT_HIDDEN), "guests": dict(DEFAULT_GUESTS),
             "spill_spots": dict(DEFAULT_SPILL_SPOTS), "wet_spots": list(DEFAULT_WET_SPOTS),
             "people_events": list(DEFAULT_PEOPLE), "end_clock": end_clock, "hotel": None,
+            "skips": skip_specs(1, LIVE_REQUESTS, clock_to_seconds(end_clock)),
         }
     rng = random.Random(seed * 7919 + 13)
     end_s = clock_to_seconds(end_clock)
@@ -359,6 +389,7 @@ def offline_scenario(seed: int, end_clock: str = OFFLINE_END) -> dict:
         "people_events": people,
         "end_clock": end_clock,
         "hotel": hotel_for_seed(seed, rng),
+        "skips": skip_specs(seed, requests, end_s),  # own random stream: after everything else
     }
 
 

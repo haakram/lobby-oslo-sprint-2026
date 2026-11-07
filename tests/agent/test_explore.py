@@ -8,6 +8,7 @@ executor still believes `hotel_seed1.json`.
 import json
 
 from agent.agent import run_shift
+from agent.executor import ActionFailed
 from agent.tasks import Kind, Task, parse_request
 from agent.world import DEFAULT_MAP
 from tests.agent.test_adapt import looked_places
@@ -88,12 +89,62 @@ def test_a_room_that_does_not_exist_still_fails_and_the_sweep_runs_once(tmp_path
     assert fake.reports == {"R-001": "failed", "R-002": "failed"} and not fake.false_done
 
 
-def test_a_room_on_a_floor_the_hotel_does_not_have_fails_without_a_trip(tmp_path):
-    fake, _session, ex, task = solo(tmp_path, "999 wants a towel.", hotel=renumbered_floor3())
+def test_a_room_on_a_floor_the_hotel_does_not_have_fails_after_one_refused_lift_call(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", "999 wants a towel."),
+                                                  ("22:01:00", "R-002", "998 wants a towel.")],
+                              hotel=renumbered_floor3())
+    tasks = tasks_from_inbox(ex, session, {"R-001", "R-002"})
     since = len(fake.log)  # after the first idle time's survey
-    out = ex.run(task)
+    out = ex.run(tasks["R-001"])
     assert out.status == "failed" and out.note == "unknown room room-999", out
-    assert not calls(fake, "move", since) and not calls(fake, "call_elevator", since)
+    lifts = calls(fake, "call_elevator", since)
+    assert [(c["args"], c["ok"]) for c in lifts] == [({"floor": 9}, False)]  # one bounded try
+    assert ex.state.location == "elevator-1" and not calls(fake, "place", since)
+    since = len(fake.log)
+    out = ex.run(tasks["R-002"])
+    assert out.status == "failed" and out.note == "unknown room room-998", out
+    assert [e["cmd"] for e in fake.log[since:]] == ["report"]  # floor 9 refused once: closed tonight
+
+
+def with_floor4(data: dict) -> dict:
+    """A fourth floor the starting map knows nothing about: elevator-4 - corridor-4a - room-401."""
+    data["nodes"].update({"elevator-4": {"floor": 4, "kind": "elevator", "x": 0.0, "z": 0.0},
+                          "corridor-4a": {"floor": 4, "kind": "corridor", "x": 0.0, "z": 0.0},
+                          "room-401": {"floor": 4, "kind": "room", "x": 0.0, "z": 0.0}})
+    data["edges"] += [{"a": "elevator-4", "b": "corridor-4a", "m": 6},
+                      {"a": "corridor-4a", "b": "room-401", "m": 4, "door": True}]
+    return data
+
+
+def test_a_room_on_a_floor_the_map_does_not_have_is_reached_by_the_lift(tmp_path):
+    fake, session, ex, task = solo(tmp_path, "401 wants a towel.", hotel=with_floor4(renumbered_floor3()))
+    assert not any(v["floor"] == 4 for v in ex.hotel.nodes.values())
+    out = ex.run(task)
+    assert out.status == "done", out
+    assert fake.reports == {"R-001": "done"} and not fake.false_done and not fake.unsafe
+    assert any(c["args"] == {"floor": 4} and c["ok"] for c in calls(fake, "call_elevator"))
+    explored = decisions(session, "floor_explored")
+    assert explored[0]["found"] is True and explored[0]["looked"] == ["elevator-4", "corridor-4a"]
+    assert ex.hotel.room_corridor("room-401") == "corridor-4a"
+
+
+def test_a_corridor_closed_on_the_first_call_is_tried_again_on_the_next(tmp_path):
+    """A cleaning crew closes 3b for a while: the floor must not count as swept for the night."""
+    fake, _session, ex = setup(tmp_path, requests=[], hotel=renumbered_floor3())
+    ex.refresh()
+    real_go, closed = ex.go, {"corridor-3b"}
+
+    def go(dst, **kw):
+        if dst in closed:
+            raise ActionFailed(f"could not reach {dst}: Closed off: a cleaning crew has blocked that corridor.")
+        return real_go(dst, **kw)
+
+    ex.go = go
+    assert ex.explore_floor(3, "room-326") is False
+    assert "corridor-3b" not in floor3_looks(fake)
+    closed.clear()  # the crew leaves
+    assert ex.explore_floor(3, "room-326") is True
+    assert "corridor-3b" in floor3_looks(fake) and ex.hotel.room_corridor("room-326") == "corridor-3b"
 
 
 def test_explore_floor_is_bounded_per_call(tmp_path):
@@ -119,37 +170,58 @@ def test_explore_floor_with_a_stale_orphan_room(tmp_path):
 # --- agent.py: a Brain room check on an unknown room is explored before it is refused ---------------
 
 
+class CheckingBrain:
+    """A Brain that calls every text a room check of `room`."""
+
+    enabled = True
+
+    def __init__(self, room: str):
+        self.room = room
+
+    def classify(self, rid, text, arrived):
+        return Task(rid, Kind.ROOM_CHECK, text, arrived, room=self.room)
+
+
+# The agent's own parser leaves "check on" without empty/tidy/occupied to the Brain; the fake
+# reads it as a room check of 326, so it can judge the keycard look inside.
+CHECK_326 = "Please check on 326, the guest has gone."
+
+
 def test_brain_room_check_on_an_unexplored_room_is_explored_not_refused(tmp_path):
-    # The agent's own parser leaves "check on" without empty/tidy/occupied to the Brain; the fake
-    # reads it as a room check of 326, so it can judge the keycard look inside.
-    fake = FakeWybe(requests=[("22:03:30", "R-001", "Please check on 326, the guest has gone.")],
-                    absent_rooms={"room-326"}, hotel=renumbered_floor3())
-
-    class CheckingBrain:
-        enabled = True
-
-        def classify(self, rid, text, arrived):
-            return Task(rid, Kind.ROOM_CHECK, text, arrived, room="326")
-
+    fake = FakeWybe(requests=[("22:03:30", "R-001", CHECK_326)], absent_rooms={"room-326"},
+                    hotel=renumbered_floor3())
     result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00",
-                       brain=CheckingBrain())
+                       brain=CheckingBrain("326"))
     assert not _decisions(tmp_path, result, "brain_rejected")
     assert {d["request"] for d in _decisions(tmp_path, result, "brain_classified")} == {"R-001"}
     assert fake.reports == {"R-001": "done"}, fake.reports
     assert not fake.unsafe and not fake.false_done
 
 
+def test_brain_room_check_on_an_unknown_room_makes_no_game_call_in_the_inbox_read(tmp_path):
+    """The inbox hands each message over once: the read must not walk (an error would lose the
+    batch). The unknown room is accepted into pending; the task explores when it runs."""
+    from agent.agent import _read_inbox
+
+    fake, _session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", CHECK_326)],
+                               absent_rooms={"room-326"}, hotel=renumbered_floor3())
+    _session.cmd("inbox")  # the welcome message, so the wait below is for R-001 itself
+    while not ex._request_waiting():
+        ex.wait_for_request()
+    since, pending = len(fake.log), []
+    _read_inbox(ex, CheckingBrain("326"), set(), pending)
+    assert [e["cmd"] for e in fake.log[since:]] == ["inbox"]
+    assert [(t.request, t.kind, t.room) for t in pending] == [("R-001", Kind.ROOM_CHECK, "room-326")]
+    out = ex.run(pending[0])
+    assert out.status == "done", out
+    assert fake.reports == {"R-001": "done"} and not fake.unsafe and not fake.false_done
+    assert decisions(_session, "floor_explored")[0]["found"] is True
+
+
 def test_brain_room_check_on_a_room_the_hotel_cannot_have_is_still_refused(tmp_path):
     fake = FakeWybe(requests=[("22:03:30", "R-001", "Have a quick peek at 999 please, the guest left.")])
-
-    class CheckingBrain:
-        enabled = True
-
-        def classify(self, rid, text, arrived):
-            return Task(rid, Kind.ROOM_CHECK, text, arrived, room="999")
-
     result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:30:00",
-                       brain=CheckingBrain())
+                       brain=CheckingBrain("999"))
     assert fake.reports == {"R-001": "failed"}
     assert {d["request"] for d in _decisions(tmp_path, result, "brain_rejected")} == {"R-001"}
     assert not calls(fake, "call_elevator")

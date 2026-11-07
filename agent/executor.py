@@ -72,13 +72,19 @@ DOCK_LEARN_S = 120  # the dock is learnt only from a first status this close to 
 @dataclass
 class Outcome:
     request: str
-    status: Literal["done", "failed", "skipped"]
+    status: Literal["done", "failed", "declined", "skipped"]
     points: int
     note: str
 
 
 class ActionFailed(Exception):
     """A step could not be carried out; the message is the reason given to the night manager."""
+
+
+class Declined(ActionFailed):
+    """The request is turned down for a true reason and reported `declined` (the server's third
+    outcome besides done/failed; the fourth is cancelled). Live (scout, 5 of 5): a follow-up claim
+    with no order on record reported declined scores +5; the same as failed scores 0, and as done -20."""
 
 
 class _Replan:
@@ -1139,6 +1145,8 @@ class Executor:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):
             raise
+        except Declined as exc:
+            return self._finish(task, "declined", str(exc), start)
         except ActionFailed as exc:
             return self._finish(task, "failed", str(exc), start)
         except Exception as exc:  # noqa: BLE001 - an odd reply must not crash the shift

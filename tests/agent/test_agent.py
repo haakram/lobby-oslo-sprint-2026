@@ -534,9 +534,10 @@ def test_manager_skip_drops_the_queued_request(tmp_path):
         ("22:03:32", "R-002", "106 wants a pillow."),
     ])
     result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00")
-    assert "R-001" not in fake.reports
+    assert fake.reports["R-001"] == "cancelled"  # live seed 4 R-019: +5 for the cancelled report
     assert "R-002" in fake.reports
     assert not any(e["cmd"] == "place" and (e["args"] or {}).get("where") == "room-104" for e in fake.log)
     skipped = _decisions(tmp_path, result, "request_skipped")
     assert [d["request"] for d in skipped] == ["R-001"] and skipped[0]["was_queued"] is True
+    assert skipped[0]["reported"] is True
     assert result["requests_served"] == 1

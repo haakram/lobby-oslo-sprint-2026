@@ -189,6 +189,8 @@ GROWTH_PER_HOUR = 0.075  # [obs] the same delivery is worth ~7.5 % more per hour
 WAIT_DECAY_PER_MIN = 0.6  # [obs] fitted; anything in 0-1 fits the 1-5 min waits seen (§ 4 suggests 0.5)
 MIN_POINTS = 5
 VERIFIED_BONUS = 5  # [obs] 20 of 20 verified "done" reports; none for room checks
+JUDGEMENT_BONUS = 5  # [obs] scout: declined on a false follow-up, cancelled on a skipped request
+OUTCOMES = ("done", "failed", "declined", "cancelled")  # [obs] the server's own list
 FALSE_DONE = -35  # [obs] 4 of 4 (all bags); never seen on another kind, applied everywhere
 WRONG_ITEM = -10  # [hyp] a non-matching item into a room with an open request (never observed live)
 DND_KNOCK = 0  # [obs] 6 knocks on the DND door 208 cost nothing (R-023's -30 was two slips)
@@ -828,7 +830,17 @@ class FakeWybe:
             return False, f"No request called '{rid}'."
         if rid in self.reports:
             return False, f"{rid} is already reported."
+        if outcome not in OUTCOMES:
+            return False, "Outcome should be done, failed, declined or cancelled."  # [obs] scout probe 1
         self.reports[rid] = outcome
+        if outcome == "declined":  # [obs] scout: +5 for a follow-up with no order (5 of 5); 0 on a DND room
+            if req.kind == "followup" and not self._has_order(req):
+                self.score += JUDGEMENT_BONUS
+            return True, "Noted."
+        if outcome == "cancelled":  # [obs] scout seed 4 R-019: +5 after the manager's "Skip R-NNN"
+            if req.skipped:
+                self.score += JUDGEMENT_BONUS
+            return True, "Noted."
         if outcome != "done":
             return True, "Noted."
         if req.kind == "room_check" and req.checked and not req.completed:
@@ -1112,6 +1124,11 @@ class FakeWybe:
             return True, f"Placed {item} here." if target == self._location else f"Placed {item} in {target}."
         self._judge_delivery(target, item)
         return True, f"Placed {item} inside {target}."
+
+    def _has_order(self, claim: _Request) -> bool:
+        """An earlier carried-item request for the claim's room and item (true follow-up)."""
+        return any(r.rid != claim.rid and r.kind in ("amenity", "tray", "lost_item") and r.room == claim.room
+                   and r.item == claim.item and r.due_s <= claim.due_s for r in self._requests.values())
 
     def _judge_delivery(self, room: str, item: str) -> None:
         open_reqs = self._open_requests(room)

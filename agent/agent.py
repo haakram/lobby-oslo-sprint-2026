@@ -218,7 +218,12 @@ def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]
         pending.remove(task)
     seen.add(rid)
     ex.ledger.set_status(rid, "skipped")
-    ex.log("request_skipped", request=rid, text=text[:120], was_queued=bool(dropped))
+    # Live (scout, seed 4 R-019): reporting the skipped request `cancelled` scores +5; a request
+    # already reported is refused ("already reported"), which costs nothing.
+    reply = ex.cmd("report", request=rid, outcome="cancelled",
+                   note="Skipped as instructed: the guest checked out.")
+    ex.log("request_skipped", request=rid, text=text[:120], was_queued=bool(dropped),
+           reported=reply.ok, reply=str(reply.result)[:80])
 
 
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:

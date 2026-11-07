@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from agent.client import ShiftEnded, WybeError
-from agent.executor import ActionFailed, Executor
+from agent.executor import ActionFailed, Declined, Executor
 from agent.flows import HANDLERS as BASE_HANDLERS
 from agent.flows import Result, _ask_room, _corridor, _door_sign, _knock, _open_with_keycard, _rose
 from agent.routing import NoRoute, best_tour
@@ -362,10 +362,13 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
             ex.log("probe", name="followup_ask", request=task.request, reply=str(answer.result)[:300])
         except ActionFailed as exc:
             ex.log("probe", name="followup_ask", request=task.request, reply=f"failed: {exc}"[:200])
-    if orig is None or orig.status == "done":
-        why = "no order on record" if orig is None else f"{orig.request} was already done"
-        h.log(f"delivered nothing: {why}", h.before, ex.score_now(), original=orig.request if orig else None)
-        raise ActionFailed(f"no order for {item} from {num} on record")
+    if orig is None:  # a false claim: declined with the reason scores +5 live (failed 0, done -20)
+        h.log("delivered nothing: no order on record", h.before, ex.score_now(), original=None)
+        raise Declined(f"No {item} order from {num} on record tonight; nothing was ordered.")
+    if orig.status == "done":
+        h.log(f"delivered nothing: {orig.request} was already done", h.before, ex.score_now(),
+              original=orig.request)
+        raise ActionFailed(f"no order for {item} from {num} on record ({orig.request} was already done)")
     queued = next((t for t in ex.queue if t.request == orig.request), None)
     if queued is not None:  # still waiting: do it now, under its own id
         ex.queue.remove(queued)

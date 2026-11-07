@@ -1,0 +1,120 @@
+/* Labels the 3D scene places in the DOM (CSS2DRenderer). Tokens only; no colour of their own. */
+
+.h3d-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.h3d-labels > div {
+  pointer-events: none;
+}
+
+.h3d-room,
+.h3d-place,
+.h3d-floor {
+  white-space: nowrap;
+  transition: opacity 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.h3d-room {
+  font-family: var(--font-martian), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: color-mix(in oklab, var(--bg) 72%, transparent);
+  padding: 3px 5px;
+  border-radius: 4px;
+}
+
+.h3d-place {
+  font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--muted);
+  background: color-mix(in oklab, var(--bg) 60%, transparent);
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.h3d-place-shaft {
+  color: var(--text);
+}
+
+.h3d-floor {
+  font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+}
+
+.h3d-room[data-dim],
+.h3d-place[data-dim],
+.h3d-floor[data-dim] {
+  opacity: 0;
+}
+
+.h3d-robot {
+  font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--on-accent);
+  background: var(--accent);
+  padding: 6px 10px;
+  border-radius: 6px;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.h3d-robot > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.h3d-robot:empty {
+  display: none;
+}
+
+.h3d-robot-task:empty {
+  display: none;
+}
+
+.h3d-robot-carry {
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 2px;
+  opacity: 0.85;
+}
+
+.h3d-labels[data-compact] .h3d-room {
+  font-size: 10px;
+  padding: 2px 4px;
+}
+
+.h3d-labels[data-compact] .h3d-place {
+  font-size: 10px;
+}
+
+.h3d-labels[data-compact] .h3d-robot {
+  font-size: 12px;
+  padding: 4px 8px;
+  max-width: 220px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .h3d-room,
+  .h3d-place,
+  .h3d-floor {
+    transition: none;
+  }
+}

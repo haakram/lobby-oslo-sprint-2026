@@ -52,9 +52,12 @@ _NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
 
 _PREFIX = re.compile(r"^\s*R-\d+\s*:\s*", re.IGNORECASE)
 _ROOM = re.compile(r"(?<!\d)(\d{3})(?!\d)")
-_COUNT = re.compile(r"\b(one|two|three|four|five|[1-9])\b(?!\d)", re.IGNORECASE)
 _ITEM_RE = re.compile(
     r"\b(" + "|".join(re.escape(k) for k in sorted(ITEM_ALIASES, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+_COUNT = re.compile(
+    r"\b(one|two|three|four|five|[1-9])\s+(?:[a-z]+\s+)?" + _ITEM_RE.pattern,
     re.IGNORECASE,
 )
 _LOST = re.compile(r"\blost\b", re.IGNORECASE)
@@ -74,16 +77,20 @@ _HINT = re.compile(
 _GUEST = re.compile(r"^((?:Mr|Mrs|Ms|Mx|Miss|Dr)\.?\s+[A-Z][\w'-]*)")
 
 
+_DEST = re.compile(r"\b(?:to|for|in|room)\s+(?:room\s+)?(\d{3})(?!\d)", re.IGNORECASE)
+
+
 def _room(text: str) -> str | None:
-    m = _ROOM.search(text)
-    return f"room-{m.group(1)}" if m else None
+    found = _DEST.findall(text) or _ROOM.findall(text)
+    return f"room-{found[-1]}" if found else None
 
 
 def _count(text: str) -> int:
-    for m in _COUNT.finditer(text):
-        w = m.group(1).lower()
-        return _NUMBER_WORDS.get(w) or int(w)
-    return 1
+    m = _COUNT.search(text)
+    if not m:
+        return 1
+    w = m.group(1).lower()
+    return _NUMBER_WORDS.get(w) or int(w)
 
 
 def _item(text: str) -> str | None:
@@ -95,6 +102,10 @@ def parse_request(request_id: str, text: str, arrived: str) -> Task:
     body = _PREFIX.sub("", text or "").strip()
     base = {"request": request_id, "text": body, "arrived": arrived}
     room = _room(body)
+
+    m = _MESSAGE.match(body)
+    if m:
+        return Task(kind=Kind.MESSAGE, room=f"room-{m.group(1)}", message=m.group(2), **base)
 
     if _LOST.search(body):
         after = body[_LOST.search(body).end():]
@@ -109,9 +120,6 @@ def parse_request(request_id: str, text: str, arrived: str) -> Task:
             )
     if _TRAY.search(body) and room:
         return Task(kind=Kind.TRAY, room=room, item=f"tray-{room[5:]}", **base)
-    m = _MESSAGE.match(body)
-    if m:
-        return Task(kind=Kind.MESSAGE, room=f"room-{m.group(1)}", message=m.group(2), **base)
     if room and _CHECK.search(body) and _CHECK_VERB.search(body):
         return Task(kind=Kind.ROOM_CHECK, room=room, **base)
     item = _item(body)

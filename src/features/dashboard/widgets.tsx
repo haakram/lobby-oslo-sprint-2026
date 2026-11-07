@@ -86,7 +86,7 @@ function NightMissing({ status }: { status: RunStatus }) {
   if (status === "loading") return <Rows count={3} />;
   return (
     <p className="mt-3 text-sm text-muted">
-      {status === "error" ? "Ikke lastet: natteloggen svarte ikke. Prøv igjen øverst på siden." : "Ingen natt å vise ennå."}
+      {status === "error" ? "Ikke lastet: natteloggen svarte ikke. Trykk Prøv igjen lenger opp på siden." : "Ingen natt å vise ennå."}
     </p>
   );
 }

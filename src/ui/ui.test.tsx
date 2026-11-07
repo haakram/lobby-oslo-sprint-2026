@@ -176,7 +176,7 @@ describe("Sheet", () => {
   it("can paint itself on the dark surface (the phone's Meny)", () => {
     render(
       <Sheet open onClose={() => {}} title="Meny" surface="dark">
-        <a href="/">Oversikt</a>
+        <button type="button">Oversikt</button>
       </Sheet>,
     );
     expect(screen.getByRole("dialog", { name: "Meny" })).toHaveAttribute("data-surface", "dark");

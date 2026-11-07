@@ -31,6 +31,8 @@ export function Stat({
   const alert = tone === "warning" || tone === "danger" ? ALERT[tone] : null;
   return (
     <div className={cx("flex min-w-0 flex-col gap-1", className)}>
+      {/* Read first ("Kritisk: 28 … Åpne arbeidsordre"); kept out of the value so the value stays the figure. */}
+      {alert && <span className="sr-only">{alert.word}</span>}
       <span
         className={cx(
           "font-mono font-medium tabular-nums",
@@ -41,12 +43,7 @@ export function Stat({
           tone === "danger" && "text-danger",
         )}
       >
-        {alert && (
-          <>
-            <RegenIcon name={alert.icon} size={size === "lg" ? 20 : 16} strokeWidth={2} className="mr-1.5 inline-block align-[-0.1em]" />
-            <span className="sr-only">{alert.word}</span>
-          </>
-        )}
+        {alert && <RegenIcon name={alert.icon} size={size === "lg" ? 20 : 16} strokeWidth={2} className="mr-1.5 inline-block align-[-0.1em]" />}
         <span className="whitespace-nowrap">{value}</span>
         {unit && <span className="ml-1.5 font-sans text-sm font-medium text-muted">{unit}</span>}
       </span>

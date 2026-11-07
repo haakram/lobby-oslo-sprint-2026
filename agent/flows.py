@@ -112,6 +112,41 @@ def _door_sign(ex: Executor, room: str) -> bool:
     return False
 
 
+STAFF_WHO = ("clerk", "maintenance", "housekeeping")
+KEYCARD_WAIT_S = 60  # one `scan` costs this much sim time: the cheapest safe wait
+SOMEONE_NEAR = "someone nearby; did not open"
+
+
+def _strangers(look: dict) -> list[str]:
+    """Who in a look is not staff (staff: clerk / maintenance / housekeeping)."""
+    out = []
+    for p in look.get("people") or []:
+        if not isinstance(p, dict):
+            continue
+        who, role = str(p.get("who") or "").lower(), str(p.get("role") or "").lower()
+        if who in STAFF_WHO or any(r in role for r in STAFF_WHO):
+            continue
+        out.append(" ".join(str(p.get(k)) for k in ("name", "state", "role", "who") if p.get(k)) or "someone")
+    return out
+
+
+def _open_with_keycard(ex: Executor, room: str):
+    """The one keycard `use` for every flow. A fresh look at this place first: a non-staff person
+    here, or a recent "let me in" plea here, withholds the card (a man slipped into a room the robot
+    opened: -80). Wait once, look again; still someone: fail without using the keycard."""
+    look = ex.look()  # a real look, never a reused one
+    who = _strangers(look)
+    plea = ex.pleaded_here()
+    if who or plea:
+        ex.log("keycard_withheld", room=room, who=who or ["a person who asked to be let in"])
+        ex.cmd("scan")  # wait once, 60 s
+        who = _strangers(ex.look())
+        if who:
+            ex.log("keycard_withheld", room=room, who=who, final=True)
+            raise ActionFailed(f"{SOMEONE_NEAR} ({room})")
+    return ex.cmd("use", item="keycard", on=room)
+
+
 def _knock(ex: Executor, room: str) -> str:
     """'dnd' | 'no_answer' | 'open'. Looks at the door first: a DND door is never knocked on."""
     if _door_sign(ex, room):
@@ -228,7 +263,7 @@ def room_check(ex: Executor, task: Task) -> Result:
         ex.go(corridor)
         if _door_sign(ex, room):  # the trip took time: a sign may have gone up meanwhile
             raise ActionFailed(f"Do Not Disturb sign on {room} when back with the keycard; did not enter")
-    reply = ex.cmd("use", item="keycard", on=room)
+    reply = _open_with_keycard(ex, room)
     if not reply.ok:
         raise ActionFailed(f"keycard did not open {room}: {reply.result}")
     reply = ex.move(room)

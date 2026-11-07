@@ -17,7 +17,7 @@ from dataclasses import replace
 from agent.client import ShiftEnded, WybeError
 from agent.executor import ActionFailed, Executor
 from agent.flows import HANDLERS as BASE_HANDLERS
-from agent.flows import Result, _ask_room, _corridor, _door_sign, _knock, _rose
+from agent.flows import Result, _ask_room, _corridor, _door_sign, _knock, _open_with_keycard, _rose
 from agent.routing import NoRoute, best_tour
 from agent.tasks import Kind, Task
 
@@ -150,7 +150,7 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
     ex.go(corridor)
     if _door_sign(ex, room):
         raise ActionFailed(f"Do Not Disturb sign on {room}; did not open it (kept {name})")
-    opened = ex.cmd("use", item="keycard", on=room)
+    opened = _open_with_keycard(ex, room)
     if not opened.ok:
         raise ActionFailed(f"keycard did not open {room}: {opened.result}")
     mid = ex.score_now()

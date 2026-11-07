@@ -1135,7 +1135,12 @@ def test_scan_count_stays_bounded_when_the_item_is_nowhere(tmp_path):
     fake, _session, ex, task = solo(tmp_path, text, hidden={})
     ex.max_scans = 2
     ex.run(task)
-    assert 3 + 3 <= len(scan_places(fake)) <= 9
+    assert 3 + 3 <= len(scan_places(fake)) <= 12  # alone: the whole ground floor
+    fake2, _session2, ex2, task2 = solo(tmp_path / "queued", text, hidden={})
+    ex2.max_scans = 2
+    ex2.queue.append(parse_request("R-009", "319 wants a pillow.", "22:30:00"))  # others waiting
+    ex2.run(task2)
+    assert 3 + 3 <= len(scan_places(fake2)) <= 9
 
 
 def test_lost_toy_hinted_at_the_bar_is_found_when_its_number_is_this_request(tmp_path):

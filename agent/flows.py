@@ -23,11 +23,14 @@ Result = tuple[str, Callable[[], None] | None]
 
 DND = "do not disturb"
 OCCUPIED_NOTE = "occupied: guest answered; did not enter"
-MAX_SCANS_BOUND = 9
+MAX_SCANS_BOUND = 9  # with other requests waiting; alone, the whole ground floor (MAX_SCANS_IDLE)
+MAX_SCANS_IDLE = 12
 # Where lost things turned up in 5 live nights: lobby-bar 5, corridor-1b 4, corridor-1a 3,
 # kitchen-pass 3, front-desk 2, lobby 2; never the dock, the elevator, laundry, storage, stairs.
+# Batch 4 added laundry (toy-2, toy-3, wallet-4): the whole ground floor is swept when nothing
+# else waits, the likeliest places first.
 SECONDARY_SCANS = ("lobby-bar", "corridor-1b", "corridor-1a", "front-desk", "lobby", "kitchen-pass",
-                   "corridor-1c")
+                   "corridor-1c", "laundry", "storage", "staff-room")
 FLOOR_WORDS = {"ground": 1, "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3}
 GENERIC_PARTS = {"corridor", "room", "floor"}
 HINT_WORDS = {"counter": "front-desk", "counters": "front-desk", "reception": "front-desk",
@@ -524,7 +527,8 @@ def _find(ex: Executor, item: str, hint: str | None, request: str | None = None)
     nearby = [e.b for p in primary for e in ex.hotel.neighbors(p)
               if ex.hotel.nodes.get(e.b, {}).get("kind") == "corridor" and e.b not in primary]
     likely = [n for n in dict.fromkeys(nearby + list(SECONDARY_SCANS)) if n in secondary]
-    cap = min(MAX_SCANS_BOUND, max(ex.max_scans, len(primary) + len(likely)))
+    bound = MAX_SCANS_BOUND if ex.queue else MAX_SCANS_IDLE  # a long search must not hold up others
+    cap = min(bound, max(ex.max_scans, len(primary) + len(likely)))
     rest = [n for n in secondary if n not in likely]
     for group in (primary, likely, rest):
         try:

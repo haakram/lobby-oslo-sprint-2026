@@ -77,7 +77,7 @@ export const MODULES: readonly HotelModule[] = [
   { id: "hotell3d", name: "3D-kart", hint: "Gå rundt i hotellet og følg roboten", icon: "cube", route: "/hotell", group: "roboten", roles: ["robot"], pinned: true, widget: true, data: "run-log" },
   { id: "natteskift", name: "Natteskift", hint: "Robotens natt, steg for steg", icon: "moon", route: "/natteskift", group: "roboten", roles: ["robot"], data: "run-log" },
   { id: "oyne", name: "Robotens øyne", short: "Øyne", hint: "Det roboten ser og kjenner igjen", icon: "eye", route: "/oyne", group: "roboten", roles: ["robot"], data: "none" },
-  { id: "stemme", name: "Snakk gjennom roboten", short: "Stemme", hint: "Roboten oversetter mellom deg og gjesten", icon: "mic", route: "/stemme", group: "roboten", roles: ["robot"], data: "none" },
+  { id: "stemme", name: "Snakk gjennom roboten", short: "Stemme", hint: "Snakk med roboten på ditt eget språk", icon: "mic", route: "/stemme", group: "roboten", roles: ["robot"], data: "none" },
   // Resepsjon
   { id: "resepsjon", name: "Resepsjon", hint: "Telefonen, bookinger og beskjeder", icon: "phone", route: "/resepsjon", group: "resepsjon", roles: ["receptionist"], widget: true, data: "reception" },
 ];

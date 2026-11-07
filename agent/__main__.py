@@ -6,17 +6,23 @@ import argparse
 import sys
 import threading
 from collections.abc import Callable
+from datetime import datetime
 
 from agent import agent as shift
 from agent.brain import Brain, CostGuard
 from agent.client import WybeClient
 from agent.config import Settings, load_settings
-from agent.guard import FinalModeLocked, check_mode
+from agent.guard import OSLO, FinalModeLocked, check_mode
 
 FINAL_SHIFTS = 10
 FINAL_REAL_TIME_S = 44 * 60
 
 ClientFactory = Callable[..., WybeClient]
+
+
+def _now() -> datetime:
+    """The clock the final's guard sees; tests patch this so they never depend on the real date."""
+    return datetime.now(OSLO)
 
 
 def _brain(settings: Settings) -> Brain:
@@ -37,7 +43,7 @@ def cmd_run(args, settings: Settings, factory: ClientFactory) -> int:
 
 def cmd_final(args, settings: Settings, factory: ClientFactory) -> int:
     try:
-        check_mode("final", armed=settings.final_armed)
+        check_mode("final", armed=settings.final_armed, now=_now())
     except FinalModeLocked as exc:
         print(f"final is locked: {exc}", file=sys.stderr)
         return 2

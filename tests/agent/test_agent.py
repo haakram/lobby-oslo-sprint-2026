@@ -230,6 +230,12 @@ def test_final_returns_nonzero_when_every_shift_crashes(tmp_path, monkeypatch, c
 
 
 def test_final_armed_but_outside_window_is_refused(tmp_path, monkeypatch, capsys):
+    from datetime import datetime
+
+    import agent.__main__ as cli
+    from agent.guard import OSLO
+
+    monkeypatch.setattr(cli, "_now", lambda: datetime(2026, 11, 7, 15, 0, tzinfo=OSLO))
     monkeypatch.setenv("FINAL_ARMED", "1")
     monkeypatch.chdir(tmp_path)
     calls = []

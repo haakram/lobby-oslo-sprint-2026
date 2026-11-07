@@ -60,7 +60,7 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
 
   const intro = MODES.find((m) => m.id === mode)?.intro;
   // The pick list is the robot's restocking route; its tab shows only while a list is in use (UX audit, Ruter 4).
-  const shown = MODES.filter((m) => m.id !== "plukk" || mode === "plukk" || skus.length > 0 || Boolean(sku));
+  const shown = MODES.filter((m) => m.id !== "plukk" || opened.has("plukk") || skus.length > 0 || Boolean(sku));
 
   return (
     <main className="flex-1 px-4 pt-6 pb-12 sm:px-6 lg:px-10 lg:pt-10">

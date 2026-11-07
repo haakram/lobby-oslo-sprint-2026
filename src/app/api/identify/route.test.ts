@@ -53,7 +53,7 @@ describe("POST /api/identify", () => {
     });
     const res = await call({ image: jpeg() });
     expect(res.status).toBe(429);
-    expect((await res.json()).error).toMatch(/budsjett/i);
+    expect((await res.json()).error).toBe("Dagens kvote for gjenkjenning er brukt opp.");
   });
 
   it("answers 502 without leaking the model error", async () => {

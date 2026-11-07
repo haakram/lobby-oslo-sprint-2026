@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     return json(result, 200);
   } catch (error) {
     if (error instanceof BudgetExceeded) {
-      return json({ error: "Claude-budsjettet er brukt opp. Prøv igjen senere." }, 429);
+      return json({ error: "Dagens kvote for gjenkjenning er brukt opp." }, 429);
     }
     // Log only the error type: never the message, which could carry request details.
     console.error("identify failed:", error instanceof Error ? error.name : "unknown");

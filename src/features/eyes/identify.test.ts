@@ -55,6 +55,13 @@ describe("identifyProduct", () => {
     ).rejects.toBeInstanceOf(IdentifyRefused);
   });
 
+  it("throws when the model returns no structured output", async () => {
+    const { client } = fakeClient({ parsed_output: null });
+    await expect(
+      identifyProduct("AAAA", "image/jpeg", { client, meter: createSpendMeter(5) }),
+    ).rejects.toThrow(/no structured answer/);
+  });
+
   it("records usage on the meter", async () => {
     const { client } = fakeClient({
       parsed_output: found("FT-1001"),

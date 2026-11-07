@@ -42,7 +42,7 @@ function ReceptionSession() {
   return (
     <main data-surface="light" className="flex-1 bg-bg px-4 pt-6 pb-12 text-text sm:px-6 lg:px-10 lg:pt-10">
       <header>
-        <h1 className="font-display text-2xl font-medium tracking-[-0.01em] sm:text-3xl">Resepsjon</h1>
+        <h1 className="text-2xl font-bold tracking-[-0.02em] sm:text-3xl sm:tracking-[-0.03em]">Resepsjon</h1>
         <p className="mt-2 max-w-[56ch] text-base text-muted">
           AI-resepsjonisten tar telefonen døgnet rundt, på gjestens språk. Bookinger og beskjeder venter her
           til du bekrefter dem.

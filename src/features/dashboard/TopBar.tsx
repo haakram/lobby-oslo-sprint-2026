@@ -67,7 +67,7 @@ export function TopBar({
             {loading ? (
               <Skeleton className="h-8 w-20" />
             ) : (
-              <span className="font-display text-xl leading-none font-medium whitespace-nowrap tabular-nums" aria-label="Skiftklokke">
+              <span className="font-mono text-xl leading-none font-medium whitespace-nowrap tabular-nums" aria-label="Skiftklokke">
                 {hhmm(robot?.clock)}
               </span>
             )}

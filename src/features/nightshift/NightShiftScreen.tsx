@@ -43,7 +43,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   );
 
   return (
-    <main className="flex-1">
+    <main data-surface="dark" className="flex-1 bg-bg text-text">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 py-6 sm:px-6 lg:gap-10 lg:px-10 lg:py-10">
         <PageHeader
           title="Natteskift"

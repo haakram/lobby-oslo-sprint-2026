@@ -5,22 +5,22 @@ export type ButtonVariant = "primary" | "secondary" | "ghost";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANT: Record<ButtonVariant, string> = {
-  // The one main action on a screen: the signature fill with ink text.
-  primary: "bg-accent text-on-accent hover:brightness-95",
+  // The one main action on a screen: safety orange, ink text.
+  primary: "bg-accent text-on-accent hover:brightness-105 active:brightness-95",
   secondary: "bg-surface text-text border border-line-strong hover:bg-sunken",
   ghost: "text-text hover:bg-sunken",
 };
 
 const SIZE: Record<ButtonSize, string> = {
-  sm: "min-h-9 px-3 text-sm pointer-coarse:min-h-11",
-  md: "min-h-11 px-4 text-base",
-  lg: "min-h-13 px-6 text-base",
+  sm: "min-h-10 px-3 text-sm pointer-coarse:min-h-11",
+  md: "min-h-12 px-4 text-base",
+  lg: "min-h-14 px-6 text-lg",
 };
 
 /** Classes for anything that should look like a button, e.g. a next/link. */
 export function buttonClasses(variant: ButtonVariant = "primary", size: ButtonSize = "md"): string {
   return cx(
-    "relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-sm font-semibold whitespace-nowrap",
+    "relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-md font-semibold whitespace-nowrap",
     "transition-[background-color,filter,opacity,transform] duration-[120ms] ease-standard active:scale-[0.97]",
     "disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
     VARIANT[variant],

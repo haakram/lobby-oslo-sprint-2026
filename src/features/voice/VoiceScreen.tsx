@@ -89,7 +89,7 @@ function VoiceSession() {
   return (
     <main className="flex-1 bg-bg px-4 pt-6 pb-12 sm:px-6 lg:px-10 lg:pt-10">
       <header>
-        <h1 className="font-display text-2xl font-medium tracking-[-0.01em] sm:text-3xl">Snakk gjennom roboten</h1>
+        <h1 className="text-2xl font-bold tracking-[-0.02em] sm:text-3xl sm:tracking-[-0.03em]">Snakk gjennom roboten</h1>
         <p className="mt-2 max-w-[56ch] text-base text-muted">
           Si det på ditt språk; roboten sier det høyt til gjesten på deres, og tar imot svaret.
         </p>

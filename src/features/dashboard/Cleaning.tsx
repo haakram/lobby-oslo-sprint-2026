@@ -42,7 +42,7 @@ export function Cleaning({ rooms, className }: { rooms: RoomView[] | null; class
         ) : (
           <div className="mt-3 flex flex-col gap-4">
             <p className="text-base">
-              <span className="font-display text-2xl font-medium tabular-nums">{dirty.length}</span>{" "}
+              <span className="font-mono text-2xl font-medium tabular-nums">{dirty.length}</span>{" "}
               rom må vaskes
             </p>
             <ul aria-label="Rom som må vaskes" className="flex flex-wrap gap-2">

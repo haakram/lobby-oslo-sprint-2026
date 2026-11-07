@@ -42,7 +42,7 @@ export function NowBand({
 
   return (
     <section aria-labelledby="now-heading" data-enter className={className}>
-      <h1 id="now-heading" className="font-display text-xl font-medium tracking-[-0.01em]">
+      <h1 id="now-heading" className="text-2xl font-bold tracking-[-0.02em]">
         Oversikt
       </h1>
       <ul className="mt-3 flex flex-col divide-y divide-line rounded-md bg-surface">

@@ -2,81 +2,81 @@
 
 /*
  * Lobby design tokens (DESIGN.md is the source of truth).
- * Two surfaces: Natt (the root; the hotel and the robot) and Dag (paper; the receptionist's desk).
- * A subtree switches surface with data-surface="light" | "dark"; every utility below reads these
- * variables, so components never pick a colour themselves. The 3D scene reads the same variables.
+ * Two surfaces: light (concrete) for working screens; dark (night steel) for the nav, the top bar,
+ * the 3D hotel, the camera and the night shift.
+ * A subtree switches surface with data-surface="dark"; every utility below
+ * reads these variables, so components never pick a colour themselves.
  */
 :root,
-[data-surface="dark"] {
-  color-scheme: dark;
-  --bg: #16120f;
-  --surface: #211b17;
-  --sunken: #2b231e;
-  --line: #3a3029;
-  --line-strong: #7d7062;
-  --text: #f3ecdf;
-  --muted: #b5a897;
-  --accent: #a9c4f5;
-  --on-accent: #16120f;
-  --accent-text: #a9c4f5;
-  --accent-soft: #253246;
-  --success: #4cc27a;
-  --success-soft: #1f3a2a;
-  --warning: #f0b43c;
-  --warning-soft: #3f3118;
-  --danger: #ff7666;
-  --danger-soft: #45241f;
-  --focus: #f3ecdf;
-  --scrim: rgb(8 6 4 / 0.64);
-}
-
 [data-surface="light"] {
   color-scheme: light;
-  --bg: #e9e1d2;
-  --surface: #f7f2e8;
-  --sunken: #efe8db;
-  --line: #d9d0c0;
-  --line-strong: #857868;
-  --text: #1c1612;
-  --muted: #5b5247;
-  --accent: #1f4f9a;
-  --on-accent: #f7f2e8;
-  --accent-text: #1f4f9a;
-  --accent-soft: #dde6f5;
+  --bg: #e9ecee;
+  --surface: #ffffff;
+  --sunken: #f3f5f6;
+  --line: #d3d9dd;
+  --line-strong: #7a858d;
+  --text: #161c21;
+  --muted: #4f5a63;
+  --accent: #ff6a13;
+  --on-accent: #161c21;
+  --accent-text: #b03e00;
+  --accent-soft: #ffe6d6;
   --success: #1b7340;
-  --success-soft: #dfeee4;
+  --success-soft: #e2f1e7;
   --warning: #8a5800;
-  --warning-soft: #f6e9cf;
+  --warning-soft: #fbefd6;
   --danger: #be2418;
-  --danger-soft: #f6ddd8;
-  --focus: #1c1612;
-  --scrim: rgb(28 22 18 / 0.48);
+  --danger-soft: #fbe4e1;
+  --focus: #161c21;
+  --scrim: rgb(22 28 33 / 0.48);
+}
+
+[data-surface="dark"] {
+  color-scheme: dark;
+  --bg: #121c24;
+  --surface: #1a2630;
+  --sunken: #22313d;
+  --line: #2e3e4a;
+  --line-strong: #6a7c89;
+  --text: #e8edf0;
+  --muted: #9aaab5;
+  --accent: #ff7a2b;
+  --on-accent: #121c24;
+  --accent-text: #ff9a5c;
+  --accent-soft: #3f2616;
+  --success: #4cc27a;
+  --success-soft: #1c3a2a;
+  --warning: #f0b43c;
+  --warning-soft: #3d3118;
+  --danger: #ff7666;
+  --danger-soft: #40221f;
+  --focus: #e8edf0;
+  --scrim: rgb(6 10 14 / 0.64);
 }
 
 @theme {
   --color-*: initial;
   --radius-*: initial;
-  --shadow-*: initial;
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 8px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
   --radius-full: 9999px;
 
-  --text-xs: 13px;
+  --text-xs: 12px;
   --text-xs--line-height: 16px;
   --text-sm: 14px;
   --text-sm--line-height: 20px;
   --text-base: 16px;
   --text-base--line-height: 24px;
-  --text-lg: 18px;
-  --text-lg--line-height: 24px;
-  --text-xl: 28px;
-  --text-xl--line-height: 32px;
-  --text-2xl: 40px;
-  --text-2xl--line-height: 44px;
-  --text-3xl: 56px;
-  --text-3xl--line-height: 60px;
+  --text-lg: 20px;
+  --text-lg--line-height: 28px;
+  --text-xl: 24px;
+  --text-xl--line-height: 30px;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 38px;
+  --text-3xl: 48px;
+  --text-3xl--line-height: 52px;
   --text-display: 72px;
   --text-display--line-height: 72px;
 
@@ -137,7 +137,6 @@
   --color-scrim: var(--scrim);
 
   --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-bodoni), "Bodoni Moda", "Bodoni 72", Didot, Georgia, serif;
   --font-mono: var(--font-martian), ui-monospace, monospace;
 }
 
@@ -153,10 +152,6 @@
   }
   [data-surface] {
     color: var(--text);
-  }
-  .font-display {
-    font-optical-sizing: auto;
-    font-feature-settings: "lnum" 1;
   }
   :focus-visible {
     outline: 2px solid var(--focus);

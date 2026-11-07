@@ -68,7 +68,7 @@ export function RoomBoard({
                 className="grid grid-cols-[3rem_minmax(0,1fr)] gap-x-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[4rem_minmax(0,1fr)]"
               >
                 <h3 id={`floor-${floor}`} className="flex flex-col pt-1 leading-none">
-                  <span className="font-display text-2xl font-medium tabular-nums">{floor}</span>
+                  <span className="font-mono text-2xl font-medium tabular-nums">{floor}</span>
                   <span className="mt-1 text-xs text-muted">etasje</span>
                 </h3>
                 <ul className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-1.5">
@@ -128,7 +128,7 @@ function RoomTile({ room, clock, onOpen }: { room: RoomView; clock: string | nul
           )}
         </span>
         <span>
-          <span className="block font-display text-[22px] leading-none font-semibold tabular-nums">{room.number}</span>
+          <span className="block font-mono text-lg leading-none font-medium tabular-nums">{room.number}</span>
           <span className={cx("mt-1 block truncate text-sm leading-5", look.loud ? "font-semibold" : "font-medium", look.word_class)}>{look.word}</span>
         </span>
       </span>

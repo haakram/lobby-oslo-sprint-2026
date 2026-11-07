@@ -55,10 +55,10 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
   }, [ready, setT]);
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col lg:h-dvh">
+    <main data-surface="dark" className="flex min-h-0 flex-1 flex-col bg-bg text-text lg:h-dvh">
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-line px-4 py-2 sm:px-6 lg:px-6">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="font-display text-xl font-medium tracking-[-0.01em]">3D-kart</h1>
+          <h1 className="text-xl font-bold tracking-[-0.02em]">3D-kart</h1>
           <span className="hidden text-sm text-muted sm:inline">Gå rundt i hotellet og følg roboten.</span>
           <SourceBadge source={source} live={replay.live} playing={replay.playing} ready={ready} />
         </div>

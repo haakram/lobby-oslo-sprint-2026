@@ -54,7 +54,7 @@ function Rail({ groups, pathname }: { groups: NavGroup[]; pathname: string }) {
       className="sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-surface text-text lg:flex"
     >
       <Link href="/" className="flex flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
-        <span className="font-display text-xl font-medium leading-none tracking-[-0.01em]">Lobby</span>
+        <span className="text-xl font-bold leading-none tracking-[-0.02em]">Lobby</span>
         <span className="mt-1.5 text-xs text-muted">{HOTEL_NAME}</span>
       </Link>
 

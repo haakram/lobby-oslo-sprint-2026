@@ -49,8 +49,10 @@ For a new teammate. ShirazIQ was invited on 2026-11-07.
 
    That turns on the git hooks, creates `.env`, and installs the team's Claude Code plugins
    (superpowers, frontend-design, chrome-devtools-mcp, diagram-design).
-4. **Keys:** get them from Hamad in a private message and paste them into `.env`. Never commit them,
-   never post them in a channel.
+4. **Keys** (Wybe, Anthropic, ElevenLabs) never go through GitHub. Hamad runs
+   `./scripts/secrets.sh copy` and sends you the result privately (AirDrop, or a one-time
+   password-manager share). You copy what arrived and run `./scripts/secrets.sh paste`: it writes
+   them into `.env` and clears the clipboard. Check with `./scripts/secrets.sh status`.
 5. **Start Claude Code in the folder** (`claude` in the terminal, or the VS Code extension). Approve
    the Playwright and Context7 servers when it asks. Then paste the **next-chat prompt** from the
    newest file in `docs/sessions/`, or type **`/kickoff`**.
@@ -106,6 +108,9 @@ enough that two people and their subagents can build in parallel.
       `POST https://nightshift.wybe.me/`, `Authorization: Bearer <key>`, body
       `{"cmd":"<command>","args":{…}}`. Pre-shift commands: help, whoami, start_shift, shifts,
       leaderboard. [owner: Hamad]
+- [x] Anthropic key in `.env`; ElevenLabs connected through its CLI (key in `.env.local`). Keys reach
+      teammates only through `scripts/secrets.sh`; a guard in the pre-commit hook and `check.sh`
+      blocks this machine's own key values from any commit (tested with fake keys). [owner: Hamad]
 - [ ] **Wybe API recon** (a subagent is running it, practice shifts only, never `mode: "final"`):
       every command with its arguments and replies, the task types, the hotel map (floors, rooms,
       lifts), what counts as done, what costs points, and the timing (20 s per action). Written to

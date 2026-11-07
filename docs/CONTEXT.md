@@ -270,8 +270,8 @@ Holio what they reward.
 
 - **Team name: Fettero.** Team photo due Sat 12:00.
 - Where we talk: TBD
-- Where the shared secrets live: sent privately from Hamad to each teammate, pasted into `.env`.
-  Never in a channel, the repo or a screenshot.
+- Where the shared secrets live: Hamad's `.env` / `.env.local`, sent privately with
+  `scripts/secrets.sh` (OPERATIONS § 4). Never in a channel, the repo or a screenshot.
 
 ## 10. Resources and constraints
 

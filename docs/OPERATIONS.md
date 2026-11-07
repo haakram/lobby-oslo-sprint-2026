@@ -45,9 +45,22 @@ normal work, and branch protection still applies on GitHub.
 
 ## 4. Environment variables and secrets
 
-- `.env.example` is committed and lists every variable with a blank value. `.env` is gitignored.
-- Real values are shared through the team's secret store (`CONTEXT.md` § 9). Never in the repo, an
-  issue, a PR, a chat log or a screenshot.
+- `.env.example` is committed and lists every variable (secrets blank). `.env` and `.env.local` are
+  gitignored. The ElevenLabs CLI (`onboard connect`) writes `ELEVENLABS_API_KEY` to `.env.local`;
+  everything else lives in `.env`. Code loads `.env`, then `.env.local`.
+- **Keys never go through GitHub.** Hamad sends them privately: `./scripts/secrets.sh copy` puts
+  them on the clipboard without showing them; send that by AirDrop or a one-time password-manager
+  share; the teammate copies what arrived and runs `./scripts/secrets.sh paste`, which writes them
+  into `.env` and clears the clipboard. `./scripts/secrets.sh status` shows which are set (names
+  only). Never in the repo, an issue, a PR, a channel, a chat log or a screenshot.
+- **What stops a key reaching GitHub**, layer by layer: `.gitignore` (env files, `temp/`); the
+  pre-commit hook (refuses env files, runs gitleaks, and compares the staged changes with this
+  machine's own key values, which matters for formats gitleaks doesn't know, like the Wybe key);
+  `check.sh` (the same comparison over the whole history, plus gitleaks); CI's full-history gitleaks
+  job; and the repo is private. GitHub's own push protection isn't available for private repos on
+  the free plan, which is why the local layers matter. Tested 2026-11-07 with fake keys.
+- **Shared Anthropic key, shared budget:** both of us use one key, so set a USD 30 spend limit on it
+  in the Anthropic Console as well. Our code's cost guard can't see the other person's spend.
 - **Adding a variable:** add it to `.env.example` and `ARCHITECTURE.md` § 4.4 in the same PR; tell the
   team to update their `.env`.
 - **A key leaked into git:** rotate it at the provider first, then remove it from the code. Deleting

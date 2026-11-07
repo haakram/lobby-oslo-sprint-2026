@@ -46,6 +46,36 @@ else
   skip "secrets" "gitleaks not installed (brew install gitleaks)"
 fi
 
+# 1b. This machine's own keys (from .env / .env.local) in no commit at all, whatever their format.
+#     gitleaks knows the common formats; this catches ours too (e.g. the Wybe key). Values never printed.
+if [ "$CI_MODE" = 1 ]; then
+  skip "own keys not in git" "CI has no .env"
+elif ! git rev-parse --verify -q HEAD > /dev/null 2>&1; then
+  skip "own keys not in git" "no commits yet"
+else
+  found=""
+  checked=0
+  history=$(git log --all -p --no-color 2> /dev/null)
+  for f in .env .env.local; do
+    [ -f "$f" ] || continue
+    while IFS= read -r line; do
+      name=${line%%=*}
+      value=$(printf '%s' "${line#*=}" | sed -E "s/^[\"' ]+|[\"' ]+$//g" | tr -d '\r')
+      [ ${#value} -ge 8 ] || continue
+      checked=$((checked + 1))
+      # A here-string, not a pipe: with pipefail, `printf | grep -q` reports a match as a failure
+      # (grep stops early, printf gets SIGPIPE).
+      if grep -qF -- "$value" <<< "$history"; then found="$found $name"; fi
+    done < <(grep -E '^[A-Za-z_][A-Za-z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Za-z0-9_]*=' "$f" || true)
+  done
+  if [ -n "$found" ]; then
+    printf '\nkeys found in git history (rotate them at the provider now):%s\n' "$found"
+    record "FAIL" "own keys not in git"
+  else
+    record "PASS" "own keys not in git ($checked checked)"
+  fi
+fi
+
 # 2. The docs CLAUDE.md's reading order depends on.
 missing=""
 for f in CLAUDE.md AGENTS.md MEMORY.md README.md CONTRIBUTING.md .env.example \

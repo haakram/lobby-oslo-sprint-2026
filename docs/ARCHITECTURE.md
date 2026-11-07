@@ -71,7 +71,7 @@ TBD — where they live (one file or folder) and their names.
 
 ### 4.4 Environment variables
 
-Every variable in `.env.example`, with what reads it. Added (blank) to `.env.example` and here in the
+Every variable in `.env.example`, with what reads it. Keys reach teammates only through `scripts/secrets.sh` (OPERATIONS § 4), never GitHub. Added (blank) to `.env.example` and here in the
 same PR that first reads it.
 
 | Name | Read by | Secret? | Real value lives in |
@@ -80,7 +80,7 @@ same PR that first reads it.
 | `WYBE_NIGHTSHIFT_KEY` | Track A agent | **yes**: one team, one key | Hamad's `.env`, sent privately |
 | `ANTHROPIC_API_KEY` | Track A agent, Track B server | **yes** | Hamad's `.env`, sent privately |
 | `ANTHROPIC_BUDGET_USD` | everything that calls Claude | no (default 30) | `.env.example` |
-| `ELEVENLABS_API_KEY` | Track B server | **yes** | each person's ElevenLabs account (free Creator code on Discord) |
+| `ELEVENLABS_API_KEY` | Track B server | **yes** | Hamad's `.env.local` (written by the ElevenLabs CLI), sent privately |
 
 ## 5. External services
 

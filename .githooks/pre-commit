@@ -30,3 +30,20 @@ if command -v gitleaks > /dev/null 2>&1; then
 else
   echo "! gitleaks not installed: staged changes were not scanned for secrets (brew install gitleaks)" >&2
 fi
+
+# 4. None of this machine's own keys in the staged changes, whatever their format. gitleaks knows the
+#    common key formats; a custom one like the Wybe key could slip past it. Values are never printed.
+staged_diff=$(git diff --cached -U0 --no-color)
+for f in .env .env.local; do
+  [ -f "$f" ] || continue
+  while IFS= read -r line; do
+    name=${line%%=*}
+    value=$(printf '%s' "${line#*=}" | sed -E "s/^[\"' ]+|[\"' ]+$//g" | tr -d '\r')
+    [ ${#value} -ge 8 ] || continue
+    # A here-string, not a pipe: with pipefail, `git diff | grep -q` can report a match as a failure.
+    if grep -qF -- "$value" <<< "$staged_diff"; then
+      echo "✗ The value of $name (from $f) is in the staged changes. Remove it: keys live only in $f." >&2
+      exit 1
+    fi
+  done < <(grep -E '^[A-Za-z_][A-Za-z0-9_]*(KEY|TOKEN|SECRET|PASSWORD)[A-Za-z0-9_]*=' "$f" || true)
+done

@@ -20,15 +20,29 @@ export function Sheet({
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
 
+  // Callers pass inline handlers; keep the latest in a ref so the open effect
+  // below runs once per open, not on every parent render.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!open) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     panel.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
     };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+      opener?.focus();
+    };
+  }, [open]);
 
   return (
     <AnimatePresence>

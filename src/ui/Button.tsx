@@ -55,7 +55,7 @@ export function Button({
       {children}
       {loading && (
         <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden">
-          <span className="block h-full w-2/5 animate-progress bg-current opacity-70" />
+          <span className="block h-full w-2/5 animate-progress bg-current opacity-70 motion-reduce:w-full motion-reduce:animate-none motion-reduce:opacity-40" />
         </span>
       )}
     </button>

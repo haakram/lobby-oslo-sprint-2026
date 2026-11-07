@@ -295,10 +295,29 @@ def seconds_to_clock(s: int) -> str:
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
-def points_for(kind: str, hours_into_night: float, wait_min: float) -> int:
-    """The fitted reward for completing `kind` h hours after 22:00, wait_min after it was asked."""
+def points_for(kind: str, hours_into_night: float, wait_min: float, scoring: dict | None = None) -> int:
+    """The fitted reward for completing `kind` h hours after 22:00, wait_min after it was asked.
+    `scoring` (replaybed's per-kind fit: growth_per_hour, min_points, kinds[kind] = base, decay)
+    replaces the seed-1 constants."""
+    if scoring and kind in scoring.get("kinds", {}) and scoring["kinds"][kind].get("base"):
+        k = scoring["kinds"][kind]
+        gain = round(k["base"] * (1 + scoring.get("growth_per_hour", GROWTH_PER_HOUR) * hours_into_night)
+                     - k.get("decay", WAIT_DECAY_PER_MIN) * wait_min)
+        return max(scoring.get("min_points", MIN_POINTS), gain)
     gain = round(BASE_POINTS[kind] * (1 + GROWTH_PER_HOUR * hours_into_night) - WAIT_DECAY_PER_MIN * wait_min)
     return max(MIN_POINTS, gain)
+
+
+# [obs] live: a false "done" costs the kind's own penalty (amenity -20, follow-up -20, tray -30, spill -30,
+# bags -35, lost item -40); kinds never seen keep FALSE_DONE.
+FALSE_DONE_BY_KIND = {"amenity": -20, "followup": -20, "tray": -30, "spill": -30, "bags": -35, "lost_item": -40}
+STRANDED = -200  # [obs] two live nights: "The battery is dead ... Shift over."
+CLOSED_OFF = "Closed off: a cleaning crew has blocked that corridor."  # [obs] move refused
+BLOCKED_EXIT = "closed off for cleaning"  # [obs] look's exit flag
+LOCKED_ROOM = "Locked. Guests can open it, staff have keycards."  # [obs] move into a locked room
+CREEP_NOTICE = "The robot creeps carefully over a wet floor."  # [obs]
+SLIP_NOTICE = "The robot slipped on a wet floor."  # [obs]
+ROOM_UNTIDY = "Nobody is here. The bed is unmade and there are towels on the floor."  # [obs]
 
 
 def _base_item(item: str) -> str:
@@ -324,6 +343,8 @@ class _Request:
     source: str | None = None  # noise: the room the noise comes from
     dup_of: str | None = None  # [hyp] a repeat of an earlier request (same text and room)
     skipped: bool = False  # [obs] after "Skip R-NNN" it scores 0, done or not (live seed 4 R-019)
+    sender: str = "night manager"  # [obs] "front desk (forwarded call)" relays a guest's countermand
+    spot: str | None = None  # spill: the wet patch this request is about (live: one new patch per request)
 
 
 def _item_in(text: str) -> str | None:
@@ -421,8 +442,20 @@ class FakeWybe:
         spill_spots: dict[int, str | None] | None = None,
         wet_spots: list[tuple[str, str]] | None = None,
         people_events: list[tuple[str, str, str]] | None = None,
+        untidy_rooms: set[str] | None = None,
+        blocked_edges: list[tuple] | None = None,
+        elevator_rooms: dict[int, str] | None = None,
+        live_names: bool = False,
+        scoring: dict | None = None,
     ):
-        """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`."""
+        """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`.
+
+        Replay extras (agent/replaybed.py): `spill_spots` may be keyed by request id ("R-015" -> its
+        own new patch) instead of floor; `blocked_edges` = (a, b, from_clock, to_clock | None) corridors
+        closed off for cleaning; `untidy_rooms` describe themselves unmade; `elevator_rooms` floor -> the
+        room the clerk calls "next to the elevator"; `live_names` spawns objects named as the live server
+        does (luggage-212, luggage-212-28, tray-203-5, toy-2) and a tray per tray request; `scoring` is a
+        per-kind reward fit (see `points_for`)."""
         data = hotel if hotel is not None else json.loads(Path(hotel_path or DEFAULT_MAP).read_text())
         self._nodes: dict[str, dict] = data["nodes"]
         self._adj: dict[str, dict[str, dict]] = {}
@@ -451,6 +484,12 @@ class FakeWybe:
         self._spill_spots = dict(DEFAULT_SPILL_SPOTS if spill_spots is None else spill_spots)
         self._wet_spots0 = list(DEFAULT_WET_SPOTS if wet_spots is None else wet_spots)
         self._people0 = list(DEFAULT_PEOPLE if people_events is None else people_events)
+        self._untidy = set(untidy_rooms or ())
+        self._blocked0 = [(a, b, clock_to_seconds(start), clock_to_seconds(end) if end else None)
+                          for a, b, start, end in (blocked_edges or [])]
+        self._elevator_rooms = dict(elevator_rooms or {})
+        self.live_names = live_names
+        self.scoring = scoring
         self._lock = threading.Lock()
 
         self.log: list[dict] = []

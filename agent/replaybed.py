@@ -115,6 +115,7 @@ class Night:
     agent_played: bool = False  # the agent ran tasks (not a hand-driven probe)
     scores: dict = field(default_factory=dict)  # clock -> score, every status reply (for partial nights)
     final_score: int | None = None  # the score in the server's shift_over reply
+    live_errors: int = 0  # tasks the live agent lost to an internal error (e.g. code edited mid-run)
 
 
 def find_logs(extra: list[str] | None = None) -> dict[str, list[str]]:
@@ -179,6 +180,8 @@ def load_night(shift: str, paths: list[str]) -> Night:
                     night.final_score = r["score"]  # stranded -200 never reached the agent's state)
         elif t == "decision" and e.get("kind") in ("task_start", "task_done"):
             night.agent_played = True
+        if t == "decision" and "internal error" in str((e.get("data") or {}).get("note", "")):
+            night.live_errors += 1
         elif t == "end":
             night.ended = str(e.get("reason", "")).startswith("server ended")
             night.reason = str(e.get("reason", ""))
@@ -290,6 +293,8 @@ class Scenario:
     live: dict = field(default_factory=dict)
     visible: dict[str, list] = field(default_factory=dict)  # item -> [place, clock]; listed by look
     dnd_windows: dict[str, list] = field(default_factory=dict)  # room -> [from | None, to | None]: a sign put up later
+    assumed: dict[str, list] = field(default_factory=dict)  # "lost" items, "spill"/"elevator" requests, "noise" rooms
+    # this night never saw (merge_siblings fills them from other nights of the same seed)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=1, sort_keys=True)
@@ -373,6 +378,7 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # one
     for rooms in seed1_rooms.values():
         rooms.sort()
 
+    assumed: dict[str, list] = {"lost": [], "spill": [], "elevator": [], "noise": []}
     # pass 1: walk the log
     messages: dict[tuple[str, str], list] = {}  # (rid, text) -> [clock, rid, text, sender]
     order: list[tuple[str, str]] = []
@@ -704,6 +710,7 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # one
             hidden[name] = [place, clock]
             why = "the hint" if place == hint else f"not the hint {hint}: scanned there in vain"
             flags.append(f"{rid} {name}: never seen; hidden at {place} ({why})")
+            assumed["lost"].append(name)
     for item, (how, p, c) in first_seen.items():
         if item not in hidden and item not in visible:
             (visible if how == "look" else hidden)[item] = [p, START_CLOCK]
@@ -736,8 +743,10 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # one
             if free:
                 spot = free[0]
                 flags.append(f"{rid} spill on floor {floor}: its spot was never seen; {spot} assumed")
+                assumed["spill"].append(rid)
             else:  # every place on the floor was seen dry: no new patch the robot could have found
                 flags.append(f"{rid} spill on floor {floor}: every place on the floor was seen dry after it; no patch")
+                assumed["spill"].append(rid)
                 spill_spots[rid] = None
                 continue
         spill_spots[rid] = spot
@@ -775,6 +784,7 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # one
             noise_sources[room] = min(later)[1]
         else:
             flags.append(f"{rid} noise near {room}: the noisy room was never seen; the fake's default (next room) used")
+            assumed["noise"].append(room)
 
     # the room "next to the elevator" is per request [obs]: the clerk's or the manager's answer for that
     # request, else the room a delivery for it scored in; a room where its delivery lost points is not it
@@ -797,6 +807,7 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # one
         options = [room for room in by_floor.get(floor, []) if room not in bad] + \
             [room for room in room_slots[f"corridor-{floor}a"] if room not in bad]
         elevator[rid] = options[0]
+        assumed["elevator"].append(rid)
         flags.append(f"{rid} next to the elevator on floor {floor}: never answered; {options[0]} assumed"
                      + (f" (not {', '.join(sorted(bad))}: a delivery there lost points)" if bad else ""))
     for floor in (1, 2, 3):
@@ -810,13 +821,88 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # one
         wet_spots=wet_spots, spill_spots=spill_spots, blocked=blocked, people=people_list,
         noise_sources=noise_sources,
         elevator_rooms={**{str(k): v for k, v in sorted(elev_rooms.items())}, **dict(sorted(elevator.items()))},
-        end_clock=end_clock, flags=flags, visible=visible, dnd_windows=dnd_windows,
+        end_clock=end_clock, flags=flags, visible=visible, dnd_windows=dnd_windows, assumed=assumed,
         live={"score": night.live_score, "served": night.live_served, "calls": night.calls,
               "last_clock": night.last_clock, "ended": night.ended, "reason": night.reason,
               "requests": night.requests, "agent_played": night.agent_played,
               "reports": {rid: list(v) for rid, v in reports.items()},
               "wrong_deliveries": sum(d < 0 for *_, d in deliveries)},
     )
+
+
+def merge_siblings(scenario: Scenario, siblings: list[Scenario]) -> Scenario:
+    """Fill what this night never saw from other real nights of the same seed: the server's world is the
+    same for a seed (identical requests, rooms and items; two reruns of one agent on seeds 10 and 16 scored
+    exactly the same). Lost items, spill patches, elevator-adjacent rooms, noisy rooms and guests only
+    seen on another night are taken from it; requests that night read near 06:00 are added."""
+    import copy
+
+    sc = copy.deepcopy(scenario)
+    others = [o for o in siblings if o.seed == sc.seed and o.shift != sc.shift]
+    if not others:
+        return sc
+    taken: list[str] = []
+    for name in list(sc.assumed.get("lost", [])):
+        for o in others:
+            src = o.visible if name in o.visible else o.hidden if name in o.hidden else None
+            if src is None or name in o.assumed.get("lost", []):
+                continue
+            clock = (sc.hidden.pop(name, None) or sc.visible.pop(name, None) or [None, START_CLOCK])[1]
+            (sc.visible if src is o.visible else sc.hidden)[name] = [src[name][0], clock]
+            sc.assumed["lost"].remove(name)
+            taken.append(f"{name} at {src[name][0]}")
+            break
+    for rid in list(sc.assumed.get("spill", [])):
+        for o in others:
+            if rid in o.assumed.get("spill", []) or not o.spill_spots.get(rid):
+                continue
+            sc.spill_spots[rid] = o.spill_spots[rid]
+            sc.assumed["spill"].remove(rid)
+            taken.append(f"{rid} spill at {o.spill_spots[rid]}")
+            break
+    for rid in list(sc.assumed.get("elevator", [])):
+        for o in others:
+            if rid in o.elevator_rooms and rid not in o.assumed.get("elevator", []):
+                sc.elevator_rooms[rid] = o.elevator_rooms[rid]
+                sc.assumed["elevator"].remove(rid)
+                taken.append(f"{rid} -> {o.elevator_rooms[rid]}")
+                break
+    for o in others:
+        for room, source in o.noise_sources.items():
+            if room not in sc.noise_sources:
+                sc.noise_sources[room] = source
+                taken.append(f"noise {room} <- {source}")
+        for name, room in o.guests.items():
+            sc.guests.setdefault(name, room)
+        have = {r[1] for r in sc.requests if r[3] == MANAGER and not _SKIP.match(r[2])}
+        for r in o.requests:
+            if r[3] == MANAGER and not _SKIP.match(r[2]) and r[1] not in have:
+                sc.requests.append(list(r))
+                have.add(r[1])
+                taken.append(f"{r[1]} (read at {r[0]} on {o.shift[:12]})")
+    sc.requests.sort(key=lambda r: (clock_to_seconds(r[0]), r[1]))
+    if taken:
+        sc.flags.append(f"from other nights of seed {sc.seed}: " + "; ".join(taken))
+    return sc
+
+
+def reconstruct_all(nights: list[Night], *, siblings: list[Night] | None = None, merge: bool = True) -> list[Scenario]:
+    """`reconstruct` every night; with `merge`, gaps are filled from `siblings` (default: every full live
+    night) of the same seed."""
+    cache: dict[str, Scenario] = {}
+
+    def get(n: Night) -> Scenario:
+        if n.shift not in cache:
+            cache[n.shift] = reconstruct(n)
+        return cache[n.shift]
+
+    out = [get(n) for n in nights]
+    if not merge:
+        return out
+    pool = siblings if siblings is not None else select_nights()
+    seeds = {n.seed for n in nights}
+    sib = [get(n) for n in pool if n.seed in seeds]
+    return [merge_siblings(sc, sib) for sc in out]
 
 
 # --- scoring fit -------------------------------------------------------------------------------------------
@@ -1116,10 +1202,16 @@ class BenchRow:
 
 def replay_bench(nights: list[Night], *, code_dir: Path | None = None, vs_dir: Path | None = None,
                  fidelity: bool = False, code_cache: Path | None = None, parallel: int = 4,
-                 scoring: dict | None = None, runs_dir: Path | None = None) -> list[BenchRow]:
-    """Every night reconstructed, then replayed by `code_dir` (default this checkout) and, with
-    `vs_dir`, by a second checkout; with `fidelity`, each by the commit that played it live."""
-    rows = [BenchRow(n, reconstruct(n), None) for n in nights]
+                 scoring: dict | None = None, runs_dir: Path | None = None, merge: bool = True,
+                 siblings: list[Night] | None = None) -> list[BenchRow]:
+    """Every night reconstructed (gaps filled from other nights of its seed unless `merge` is off), then
+    replayed by `code_dir` (default this checkout) and, with `vs_dir`, by a second checkout; with
+    `fidelity`, each by the commit that played it live."""
+    scenarios = reconstruct_all(nights, siblings=siblings, merge=merge)
+    rows = [BenchRow(n, sc, None) for n, sc in zip(nights, scenarios, strict=True)]
+    for row in rows:
+        if row.night.live_errors:
+            row.note = f"live run had {row.night.live_errors} internal errors"
     jobs: list[tuple[BenchRow, str, Path, dict | None]] = []
     for row in rows:
         if fidelity:

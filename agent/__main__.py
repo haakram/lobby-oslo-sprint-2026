@@ -273,7 +273,7 @@ def cmd_replaybench(args, settings: Settings, factory: ClientFactory) -> int:
         nights, code_dir=Path(args.code).resolve() if args.code else None,
         vs_dir=Path(args.vs).resolve() if args.vs else None, fidelity=args.fidelity,
         code_cache=Path(args.code_cache) if args.code_cache else None, parallel=args.parallel, scoring=scoring,
-        runs_dir=Path(args.runs_dir) if args.runs_dir else None,
+        runs_dir=Path(args.runs_dir) if args.runs_dir else None, merge=not args.no_merge,
     )
     print(replaybed.bench_table(rows, show_flags=args.flags))
     return 0
@@ -330,6 +330,7 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--scoring", default=None, help="per-kind reward fit (default agent/data/replay_scoring.json)")
     p.add_argument("--fit", action="store_true", help="refit the reward on every full live night first and save it")
     p.add_argument("--flags", action="store_true", help="list what each reconstruction had to assume")
+    p.add_argument("--no-merge", action="store_true", help="do not fill a night's gaps from other nights of its seed")
     p.add_argument("--runs-dir", default=None, help="where the replays' run logs go (default temp/replay_runs)")
     p.set_defaults(fn=cmd_replaybench)
     args = ap.parse_args(argv)

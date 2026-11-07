@@ -353,3 +353,17 @@ def test_replaybench_replays_a_night_and_prints_live_replay_and_delta(tmp_path, 
 
 def test_replaybench_with_no_night_found_fails(tmp_path, capsys):
     assert main(["replaybench", "--logs", str(tmp_path / "nothing")]) == 1
+
+
+def test_gaps_are_filled_from_another_night_of_the_same_seed(tmp_path):
+    # this night never found the first wallet (no scan), and its hint points at the laundry
+    blind = [x for x in fixture_night() if x.get("cmd") != "scan"]
+    text = json.dumps(blind).replace("lost a wallet, maybe the lobby.", "lost a wallet, maybe the laundry.")
+    other = "w2-fixture000000000000000000000002"
+    a = rb.reconstruct(rb.load_night(SHIFT, [str(write_log(tmp_path / "a", json.loads(text)))]))
+    b = rb.reconstruct(rb.load_night(other, [str(write_log(tmp_path / "b", fixture_night(other), other))]))
+    assert "wallet" in a.assumed["lost"] and a.hidden["wallet"][0] == "laundry"
+    merged = rb.merge_siblings(a, [a, b])
+    assert merged.hidden["wallet"] == ["lobby", a.hidden["wallet"][1]] and "wallet" not in merged.assumed["lost"]
+    assert any("from other nights of seed 7" in f for f in merged.flags)
+    assert rb.merge_siblings(a, [a]).hidden == a.hidden  # nothing to learn from itself

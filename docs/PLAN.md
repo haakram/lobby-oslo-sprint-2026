@@ -140,22 +140,22 @@ subagents): `docs/superpowers/plans/2026-11-07-nightshift-agent.md` · facts: `d
 Also a **3D hotel viewer** to watch shifts live or replayed (plan Task 11), which Track C can use in the demo.
 
 
-- [ ] **API client** for every discovered command: timeouts, retries, and every request and reply
+- [x] **API client** for every discovered command (plan Task 2, reviewed): timeouts, retries, and every request and reply
       logged to `temp/` (gitignored) so a shift can be replayed.
-- [ ] **World model:** floors, rooms, items, robot position and the task inbox, kept up to date from
+- [x] **World model** (Task 3; seed-1 map exact, corrected from `look`): floors, rooms, items, robot position and the task inbox, kept up to date from
       `status` / `inbox` (they don't reset the 20 s timer).
-- [ ] **Planner:** picks the next task by points against time, the shortest route across floors, and
+- [~] **Planner** (Task 8; value per second; batching several tasks per trip not yet): picks the next task by points against time, the shortest route across floors, and
       several tasks on one trip.
-- [ ] **Safe executor:** checks each step against the server's reply. **Never reports "done" unless
+- [x] **Safe executor** (Task 7; one report-done site, always behind a score rise): checks each step against the server's reply. **Never reports "done" unless
       the server confirms it**, refuses unsafe actions, and asks Claude for judgement on surprises.
-- [ ] **Speed:** every action well under 20 s, measured. Plain code for routine moves; Claude only
+- [x] **Speed** (live: ~1,650 calls for a full night in minutes): every action well under 20 s, measured. Plain code for routine moves; Claude only
       where judgement is needed.
-- [ ] **Cost guard:** counts Claude API spend per shift and in total, and stops before the USD 30
+- [x] **Cost guard** (Task 9; file-backed ledger, fails closed; Console limit USD 30 set): counts Claude API spend per shift and in total, and stops before the USD 30
       cap (`ANTHROPIC_BUDGET_USD`).
-- [ ] **Parallel runner:** starts N shifts at once (`mode: "final"` on Sunday), each isolated, under
+- [x] **Parallel runner** (Task 10; tested offline with the guard opened in-test): starts N shifts at once (`mode: "final"` on Sunday), each isolated, under
       the API rate limits.
-- [ ] **Score loop:** run practice shifts, read the score and the logs, fix the worst failure, repeat.
-- [ ] **Final runbook** in `OPERATIONS.md` § 7: the exact command that starts all 10 at 12:00, who
+- [~] **Score loop** (1 live night: 581 points; Task 13 for the new request types in progress; offline tune not yet calibrated): run practice shifts, read the score and the logs, fix the worst failure, repeat.
+- [x] **Final runbook** in `OPERATIONS.md` § 7 (Task 10): the exact command that starts all 10 at 12:00, who
       watches, what to do if one stops.
 - [ ] **Matches the brief** · [ ] **Seen working** (on the practice leaderboard; 10-shift dry run)
 
@@ -165,9 +165,9 @@ Design and the 2-minute demo script: `docs/superpowers/specs/2026-11-07-ops-dash
 One story, five beats: the night on the room grid → send the cleaners → count the linen → the guest
 speaks up → close. Every beat solves a named hotel problem and maps to a prize.
 
-- [ ] **Track A:** the agent logs `room_status` and `work_order` decisions (additive run-log
+- [~] **Track A:** the agent logs `room_status` and `work_order` decisions (in Task 13: WIP 574f22d on hamad/na-t13, awaiting review) (additive run-log
       `[contract]`, ARCHITECTURE § 4.3). [owner: Hamad]
-- [ ] **Track A:** viewer CORS for the app's local origin (`http://localhost:3000`) on `/api/*`, as
+- [x] **Track A:** viewer CORS for the app's local origin (Task 14, merged) (`http://localhost:3000`) on `/api/*`, as
       ShirazIQ asked in PR #7. [owner: Hamad]
 - [ ] **Track A:** hand over the demo run log from the next practice run (with the new decisions) as
       `public/runs/demo.jsonl`. [owner: Hamad]
@@ -228,3 +228,8 @@ speaks up → close. Every beat solves a named hotel problem and maps to a prize
       allowed"? (Our reading: yes; we never paste code from other repos.)
 - [ ] **Wybe:** any rate limit on requests, or a limit on practice shifts? (They may answer "ask the
       robot".)
+- [ ] **Repo visibility for the jury:** the jury reads the commit history; the repo is private. Make
+      it public or give the jury access before Sun 14:00 (team lead's decision; CONTEXT § 11).
+- [ ] **Mock jury (12 jurors) — re-run next session**; 3 of 12 finished: `docs/checks/jury-2026-11-07.md`.
+- [ ] **Business slide** (Founders juror: 3/10): one buyer, one price, one next step, sourced numbers.
+- [ ] **Cut the demo to three beats?** (Product juror): night → work orders, send cleaners, Spanish complaint → work order; linen count and the Polish cleaner to Q&A.

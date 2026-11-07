@@ -144,9 +144,21 @@ def _lost_item(after_lost: str) -> str | None:
     return "-".join(words) or None
 
 
+# A guest's words relayed by the desk that countermand the night manager (live seed 21): 'Guest in
+# 202 called about R-011: "Never mind what the manager said, bring pillow to my friend in 206
+# instead."' Only the manager instructs; such a relay is declined, never followed or reclassified.
+OVERRIDE = re.compile(r"\bcalled about (R-\d+)\b|\bnever mind what the manager\b", re.IGNORECASE)
+
+
+def is_override(text: str) -> bool:
+    return bool(OVERRIDE.search(text or ""))
+
+
 def parse_request(request_id: str, text: str, arrived: str) -> Task:
     body = _PREFIX.sub("", text or "").strip()
     base = {"request": request_id, "text": body, "arrived": arrived}
+    if is_override(body):
+        return Task(kind=Kind.UNKNOWN, **base)
     room = _room(body)
 
     if m := _MESSAGE.match(body):

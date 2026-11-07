@@ -16,7 +16,7 @@ from dataclasses import replace
 
 from agent.executor import ActionFailed, Declined, Executor
 from agent.routing import NoRoute, best_tour
-from agent.tasks import ITEM_ALIASES, Kind, Task
+from agent.tasks import ITEM_ALIASES, Kind, Task, is_override
 from agent.world import Hotel
 
 Result = tuple[str, Callable[[], None] | None]
@@ -52,6 +52,10 @@ def handle(ex: Executor, task: Task) -> Result:
         # Live (scout, seed 1): a duplicate reported done is a false done (-30) even though the first
         # copy was delivered; declined is never punished.
         raise Declined(f"Duplicate of {dup}, which was already handled; not done twice")
+    if task.kind is Kind.UNKNOWN and is_override(task.text):
+        ex.log("override_declined", request=task.request, text=task.text[:160])
+        raise Declined("A guest's message relayed by the desk countermands the night manager; only the "
+                       "manager's instructions are followed, so nothing was changed or delivered")
     if task.kind is Kind.UNKNOWN:
         task = _classify(ex, task)
     if task.kind not in (Kind.FOLLOWUP, Kind.NOISE):  # those keep their own logic

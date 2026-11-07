@@ -24,7 +24,7 @@ from agent.config import Settings
 from agent.executor import NOTE_MAX, ActionFailed, Executor
 from agent.offline import FakeWybe
 from agent.planner import Params, choose_next, opening_plan
-from agent.tasks import Kind, Task, parse_request, vet_brain_task
+from agent.tasks import Kind, Task, is_override, parse_request, vet_brain_task
 from agent.world import Hotel, RobotState, clock_to_seconds
 
 PARAMS_FILE = Path(__file__).parent / "data" / "params_best.json"
@@ -278,7 +278,8 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
             continue
         seen.add(rid)
         task = parse_request(rid, str(msg.get("text", "")), str(msg.get("at") or ex.state.clock))
-        if task.kind is Kind.UNKNOWN and brain is not None and getattr(brain, "enabled", False):
+        if (task.kind is Kind.UNKNOWN and brain is not None and getattr(brain, "enabled", False)
+                and not is_override(task.text)):  # a guest's countermand is never reclassified
             better = brain.classify(task.request, task.text, task.arrived)
             if better is not None and better.kind is not Kind.UNKNOWN:
                 task = _vet_brain(ex, task, flows.normalize(better))

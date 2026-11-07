@@ -44,7 +44,7 @@ def handle(ex: Executor, task: Task) -> Result:
     from agent import flows_extra  # the Task 13 kinds; that module imports the shared steps here
 
     if dup := ex.ledger.duplicate_of(task):
-        score = ex.score_now()
+        score = ex.score_known()  # log fields only: no status call
         flows_extra.hyp(ex, "H-duplicate", task, f"not redone: same text and room as {dup}", score, score)
         raise ActionFailed(f"duplicate of {dup}")
     if task.kind is Kind.UNKNOWN:
@@ -222,7 +222,7 @@ def _leave_at_door(ex: Executor, room: str, item: str, count: int) -> Result:
     """Experiment dnd_leave: a Do Not Disturb room's order is set down in the corridor at the
     door (never a knock, never a keycard) and reported done with that note. A rise on the place
     is proof as usual; without one the report's reply settles the experiment."""
-    before = ex.score_now()
+    before = ex.score_before()
     for placed in range(count):
         reply = ex.cmd("place", item=item)
         if not reply.ok:
@@ -244,7 +244,7 @@ def _deliver(ex: Executor, room: str, item: str, count: int = 1) -> Result:
             _at_open_door(ex, room)
     else:
         _at_open_door(ex, room)
-    before = ex.score_now()
+    before = ex.score_before()
     count = max(1, count)
     for placed in range(count):
         reply = ex.cmd("place", item=item, where=room)
@@ -339,6 +339,17 @@ def pick_for_others(ex: Executor, task: Task, kind: Kind, names: Callable[[Task]
             ex.log("picked_for_later", request=other.request, item=here, during=task.request)
 
 
+def _others_waiting(ex: Executor, task: Task, kind: Kind) -> bool:
+    """Another pending task of `kind` that pick_for_others could serve from here (room known, no
+    DND seen lately) while the cart has room: only then is the look at the objects here worth it."""
+    from agent.flows_extra import CART_SLOTS
+
+    if len(ex.state.cart or []) >= CART_SLOTS - 1:
+        return False
+    return any(o.kind is kind and o.request != task.request and o.room
+               and not ex.ledger.dnd_seen(o.room, ex.state.clock, DND_MEMORY_S) for o in ex.queue)
+
+
 def _tray(ex: Executor, task: Task) -> Result:
     _corridor(ex, task.room)
     _refuse_known_dnd(ex, task.room, task.request)
@@ -353,6 +364,8 @@ def _tray(ex: Executor, task: Task) -> Result:
         ok, text = ex.pick(item)
         from agent.flows_extra import find_object, objects_here
 
+        if ok and not _others_waiting(ex, task, Kind.TRAY):
+            return _deliver(ex, task.room, item)  # nothing to look for here: no look (5 s, a call)
         objects = objects_here(ex.fresh_look())
         if not ok:
             # A second tray for the same room carries a suffix (live: tray-104-7, like luggage).
@@ -374,7 +387,7 @@ def _tray(ex: Executor, task: Task) -> Result:
 def message(ex: Executor, task: Task) -> Result:
     _refuse_known_dnd(ex, task.room, task.request)
     _at_open_door(ex, task.room)
-    before = ex.score_now()
+    before = ex.score_before()
     body = (task.message or task.text).strip().rstrip(".!")
     # The message words are what the guest must hear; the full request text is a cheap retry.
     for text in dict.fromkeys([f"Good evening. A message for you: {body}.", task.text]):

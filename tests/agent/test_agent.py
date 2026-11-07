@@ -349,9 +349,9 @@ def test_offline_full_night_fits_the_final_call_budget_on_the_17_request_script(
     assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
 
 
-# Task 24 / 2: the calibrated seed-1 night (the 68 live requests, the default fake) is still over the
-# budget (integration review: 1409 calls). The ratchet stops it creeping up; the strict xfail keeps the
-# gap visible and turns into a failure (to be flipped) the day the night fits.
+# Task 24 / 2: the calibrated seed-1 night (the 68 live requests, the default fake) was over the
+# budget (integration review: 1409 calls). Variant 15 (fewer status calls, docks and wet looks) made
+# it fit; the ratchet stops it creeping up, the budget test keeps it under the final's cap.
 CALIBRATED_NIGHT_RATCHET = 1500  # +70: the stale-look rule before corridor steps
 
 
@@ -370,7 +370,6 @@ def test_calibrated_seed1_night_calls_stay_under_the_ratchet(calibrated_night):
     assert len(fake.log) <= CALIBRATED_NIGHT_RATCHET, len(fake.log)
 
 
-@pytest.mark.xfail(strict=True, reason="the calibrated seed-1 night is still over the final's call budget")
 def test_calibrated_seed1_night_fits_the_final_call_budget(calibrated_night):
     fake, _ = calibrated_night
     assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
@@ -383,8 +382,10 @@ def test_loop_reads_the_inbox_only_when_a_message_is_waiting(tmp_path):
     inbox_calls = sum(1 for e in fake.log if e["cmd"] == "inbox")
     assert delivered >= 6  # the welcome and R-001..R-005
     assert inbox_calls <= delivered + 1, (inbox_calls, delivered)
-    cmds = [e["cmd"] for e in fake.log]
-    assert "inbox" not in {b for a, b in pairwise(cmds) if a == "scan"}  # not read after idle scans
+    # an idle scan is followed by an inbox read only when its own reply brought the inbox event
+    for a, b in pairwise(fake.log):
+        if a["cmd"] == "scan" and b["cmd"] == "inbox":
+            assert any(ev["type"] == "inbox" for ev in a["events"]), a
 
 
 # --- Task 18 / I1: a Brain room check never reaches a keycard on a noise text or an unknown room ------

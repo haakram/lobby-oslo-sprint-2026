@@ -350,6 +350,7 @@ def run_shift(
                     "requests_served": None, "reason": ""}
     pending: list[Task] = []
     ex.queue = pending  # the same list: a follow-up that runs its original removes it here
+    ex.read_inbox = lambda: _read_inbox(ex, brain, seen, pending)
     seen: set[str] = set()
     retried: set[str] = set()  # tasks put back once after a mid-task server error
     errors = 0

@@ -64,10 +64,16 @@ PERSON_MEMORY_S = 600  # the same person event within 10 sim-minutes of hearing 
 GO_ATTEMPTS = 24  # route tries per go(): each first-visit look may change the map and replan
 BATTERY_LOW = 25.0  # below this a trip waits for a charge ...
 BATTERY_OK = 60.0  # ... up to this (or until a request arrives)
-BATTERY_CRITICAL = 10.0  # below this the charge goes ahead even while work waits
+BATTERY_CRITICAL = 15.0  # below this the charge goes ahead even while work waits (a forced block)
 DRAIN_PER_MIN = 0.9  # [obs] active battery drain, % per sim minute (413 live intervals)
 DOCK_MARGIN = 5.0  # % kept on top of what the way to the dock drains
-CHARGE_ROUNDS = 10
+CHARGE_ROUNDS = 20  # docks per charge: a forced block chains short docks, each woken by a message
+# A forced charge is a block: dock, read the inbox when a message wakes it (0 s), dock again, up to
+# this target. Live seed 16 ran ~20 forced cycles after 03:21, each a walk to the dock that the next
+# message woke after ~3 min: +2.1 % per 4.6 min, the walk eating ~40 % of what the dock gave.
+CHARGE_TARGET_FORCED = 40.0
+CHARGE_TARGET_MIN = 20.0  # ... shrinking toward 06:00 (10 + 0.4 x minutes left), never under this
+NIGHT_END = "06:00:00"  # the server ends the shift here
 DOCK_RETRY_S = 600  # a dock found out of reach from a place is not tried from there for 10 sim-min
 MOVE_REFUSALS_MAX = 3  # the same move refused this many times in a row: given up, its edge dropped
 SHIFT_START = "22:00:00"  # the shift's start clock when the session does not report one
@@ -121,6 +127,8 @@ class Executor:
         self.inbox_waiting = False  # an inbox event was seen; the shift loop clears it
         self.ledger = Ledger()  # every request of the shift (follow-ups, duplicates)
         self.queue: list[Task] = []  # the shift loop's pending tasks (a follow-up may run one early)
+        self.read_inbox: Callable[[], None] | None = None
+        self.current: Task | None = None  # the task being run: work waiting, like the queue
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
         self._logged: dict | None = None
         self._tentative: set[frozenset[str]] = set()
@@ -1038,15 +1046,34 @@ class Executor:
         return seconds / 60 * DRAIN_PER_MIN + DOCK_MARGIN
 
     def _work_waiting(self) -> bool:
-        return self.inbox_waiting or bool(self.queue)
+        return self.inbox_waiting or bool(self.queue) or self.current is not None
+
+    def _inbox_now(self) -> None:
+        """Read the inbox now: the shift loop's hook (it queues the requests), else a bare read."""
+        if self.read_inbox is not None:
+            self.read_inbox()
+        else:
+            self.cmd("inbox")
+            self.inbox_waiting = False
+
+    def _block_target(self) -> float:
+        """A forced block's target: CHARGE_TARGET_FORCED, shrinking toward 06:00 (10 + 0.4 x the
+        minutes left, never under CHARGE_TARGET_MIN): a 25 % charge 20 minutes before the end is
+        wasted."""
+        now = self._now_s()
+        if now is None:
+            return CHARGE_TARGET_FORCED
+        left = max(0.0, (clock_to_seconds(NIGHT_END) - now) / 60)
+        return max(CHARGE_TARGET_MIN, min(CHARGE_TARGET_FORCED, 10 + 0.4 * left))
 
     def ensure_battery(self, low: float = BATTERY_LOW, enough: float = BATTERY_OK) -> bool:
         """Charge at the dock below `low` %, or below what the way to the dock drains plus a margin
         (a far dock is headed for earlier), up to `enough` % (or until a request wakes the robot,
-        or the dock refuses). Not while work waits (a message, or a queued task: no 40-minute
-        charge in front of it) unless the battery is below BATTERY_CRITICAL or that reserve: a
-        flat battery loses the rest of the night. True when a charge was attempted. Never raises
-        except ShiftEnded and Ctrl-C: the loop calls it before every choice."""
+        or the dock refuses). Not while work waits (a message, a queued task or the running one: no
+        40-minute charge in front of it) unless the battery is below BATTERY_CRITICAL or that
+        reserve: a flat battery loses the rest of the night. That forced charge is a block of
+        chained docks up to _block_target(), the inbox read between them. True when a charge was
+        attempted. Never raises except ShiftEnded and Ctrl-C: the loop calls it before every choice."""
         try:
             return self._charge(low, enough)
         except ShiftEnded:
@@ -1066,19 +1093,35 @@ class Executor:
             return False
         forced = battery < max(BATTERY_CRITICAL, reserve)
         if not forced and self._work_waiting():
-            self.log("charge_deferred", battery=battery, queued=len(self.queue), inbox=self.inbox_waiting)
+            self.log("charge_deferred", battery=battery, queued=len(self.queue), inbox=self.inbox_waiting,
+                     running=self.current.request if self.current is not None else None)
             return False
+        # A far dock (forced by its reserve) is charged for at least that reserve.
+        target = max(self._block_target(), min(reserve, 100.0)) if forced else enough
         self.log("battery_low", battery=battery, at=self.state.location, dock=dock,
-                 reserve=round(reserve, 1), forced=forced)
+                 reserve=round(reserve, 1), forced=forced, target=round(target, 1))
+        self._charge_block(target, forced=forced)
+        return True
+
+    def _charge_block(self, target: float, *, forced: bool) -> None:
+        """Walk to the dock and dock until `target` %, the dock refuses (full) or CHARGE_ROUNDS.
+        Forced: never a dock with a message unread (it returns at once, "Docked for 0 min"): the
+        inbox is read first, and after every wake-up, then the robot docks again at once, with no
+        walk and no task in between. Not forced: a wake-up (or a message on the way) ends the charge,
+        the request goes first. One `charge_block` decision line per block."""
+        start_battery, start_s = self._battery(), self._now_s()
+        woken = 0
         for _ in range(CHARGE_ROUNDS):
             battery = self._battery()
-            if battery is None or battery >= enough:
+            if battery is None or battery >= target:
                 break
             dock = self.hotel.special.get("dock", "charging-dock")
             if not self._reach_dock(dock):
                 self.log("charge_failed", reason=f"could not reach {dock}")
                 break
-            if not forced and self._work_waiting():
+            if forced and self.inbox_waiting:
+                self._inbox_now()  # a message came on the way: queued, and the dock still charges
+            elif not forced and self._work_waiting():
                 break  # a request came in on the way: it goes first
             reply = self.cmd("dock")
             self.state.docked = reply.ok
@@ -1086,10 +1129,21 @@ class Executor:
                 continue  # dock again, at the map's dock
             text = str(reply.result).lower()
             self.refresh()
-            if not reply.ok or self.inbox_waiting or "woke" in text or "message" in text:
+            if not reply.ok:
                 break
+            if not (self.inbox_waiting or "woke" in text or "message" in text):
+                continue
+            woken += 1
+            if not forced:
+                break
+            self._inbox_now()
+            self.log("charge_woken", battery=self.state.battery, queued=len(self.queue))
         self.log("charged", battery=self.state.battery, woken=self.inbox_waiting)
-        return True
+        end_s = self._now_s()
+        minutes = (end_s - start_s) / 60 if end_s is not None and start_s is not None else None
+        self.log("charge_block", **{"from": start_battery}, to=self._battery(),
+                 minutes=None if minutes is None else round(minutes, 1), queued=len(self.queue),
+                 woken=woken, forced=forced, target=round(target, 1))
 
     # --- waiting -------------------------------------------------------------------------------
 
@@ -1167,6 +1221,7 @@ class Executor:
         # before and after their last action (that is what verifies a "done"), so `points` comes
         # from the scores they observed. The report's own bonus lands on the next refresh.
         start = self.state.score
+        self.current = task  # work waiting: no charge but a forced one starts during the flow
         try:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):
@@ -1181,6 +1236,8 @@ class Executor:
             self.log("executor_error", request=task.request, error=type(exc).__name__,
                      message=str(exc)[:300], where=where)
             return self._finish(task, "failed", f"internal error ({type(exc).__name__})", start)
+        finally:
+            self.current = None
         outcome = self._finish(task, "done", note, start)
         if after:  # the report is in: a hiccup here must not lose the outcome (or redo the task)
             try:

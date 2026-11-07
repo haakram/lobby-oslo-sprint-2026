@@ -351,8 +351,10 @@ def test_ensure_battery_stops_when_a_request_wakes_the_robot(tmp_path):
 
 
 def test_low_battery_is_charged_before_a_trip(tmp_path):
+    # Under BATTERY_CRITICAL (15 %): the running task counts as work waiting, so only a forced
+    # charge starts inside a task (at 20 % it waits for the loop: test_no_charge_is_started_while_a_task_runs).
     fake, _session, ex, task = solo(tmp_path, "104 wants a towel.")
-    fake.battery = ex.state.battery = 20  # what the loop's refresh before a task reads
+    fake.battery = ex.state.battery = 12  # what the loop's refresh before a task reads
     since = len(fake.log)
     out = ex.run(task)
     assert out.status == "done", out

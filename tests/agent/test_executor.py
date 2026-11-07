@@ -1334,3 +1334,204 @@ def test_the_wet_look_window_is_45_min_when_busy_and_10_min_when_not(tmp_path):
     assert stale("23:50:00", queue=queued)  # 50 min > 45 min
     del ex._look_clock[here]  # never looked at: looked at before the first step in, busy or not
     assert stale("23:20:00", queue=queued, battery=20.0)
+
+
+# --- late-night capacity Task 3: a forced charge is a block of chained docks -----------------------
+
+
+def _every(minutes, start="22:02:00", n=20, text="104 wants a towel."):
+    """A request every `minutes` sim-minutes from `start` (the rush: one per 2-4 min live)."""
+    from agent.offline import seconds_to_clock
+    from agent.world import clock_to_seconds
+
+    t0 = clock_to_seconds(start)
+    return [(seconds_to_clock(t0 + i * minutes * 60), f"R-{i + 1:03d}", text) for i in range(n)]
+
+
+def _inbox_hook(ex):
+    """What run_shift's inbox hook does, minus the Brain: read, clear the flag, queue each request.
+    Returns the list of message counts per read."""
+    reads = []
+
+    def read():
+        msgs = ex.cmd("inbox").result.get("messages") or []
+        ex.inbox_waiting = False
+        reads.append(len(msgs))
+        for m in msgs:
+            if isinstance(m.get("request"), str):
+                ex.queue.append(parse_request(m["request"], m["text"], m["at"]))
+
+    ex.read_inbox = read
+    return reads
+
+
+def _unread_at_docks(fake):
+    """The fake's unread count at each dock command (a dock with a message unread returns at once)."""
+    seen = []
+    real = fake._cmd_dock
+
+    def dock(args):
+        seen.append(len(fake._unread))
+        return real(args)
+
+    fake._cmd_dock = dock
+    return seen
+
+
+def test_forced_charge_docks_again_after_each_wake_until_the_target(tmp_path):
+    from agent.executor import CHARGE_TARGET_FORCED
+
+    fake, session, ex = setup(tmp_path, requests=_every(2))
+    reads = _inbox_hook(ex)
+    ex.read_inbox()  # the welcome message
+    unread = _unread_at_docks(fake)
+    fake.battery = 10
+    ex.refresh()
+    assert ex.ensure_battery() is True
+    docks = calls(fake, "dock")
+    assert ex.state.battery >= CHARGE_TARGET_FORCED and ex.state.location == "charging-dock"
+    assert len(docks) >= 12, len(docks)  # +30 % at 1 %/min, woken every 2 min: one walk, many docks
+    assert unread == [0] * len(docks)  # never a dock with a message unread (it would return at once)
+    assert len(reads) == 1 + len(docks)  # the inbox read after every wake
+    assert [t.request for t in ex.queue] == [f"R-{i:03d}" for i in range(1, len(ex.queue) + 1)]
+    woken = decisions(session, "charge_woken")
+    assert len(woken) == len(docks) and woken[-1]["queued"] == len(ex.queue)
+    assert all(isinstance(w["battery"], int | float) for w in woken)
+    [block] = decisions(session, "charge_block")
+    assert block["forced"] is True and block["target"] == CHARGE_TARGET_FORCED
+    assert block["from"] == 10 and block["to"] == ex.state.battery
+    assert block["woken"] == len(docks) and block["queued"] == len(ex.queue)
+    assert 28 <= block["minutes"] <= 34, block
+
+
+def test_message_on_the_way_to_a_forced_charge_is_read_before_the_dock(tmp_path):
+    # Task 1 review: the message came on the walk, the dock returned "0 min", the charge ended and
+    # the loop ran a task at 9 % (offline seed 6 at scale 1.3 bottomed at 0.7 %).
+    from agent.executor import CHARGE_TARGET_FORCED
+
+    fake, _session, ex = setup(tmp_path, requests=[("22:00:50", "R-001", "104 wants a towel.")])
+    _inbox_hook(ex)
+    ex.read_inbox()
+    ex._looked.update(ex.hotel.nodes)  # no first-visit looks: only the walks spend time
+    ex.go("storage")  # 35 m: here at 22:00:35
+    unread = _unread_at_docks(fake)
+    fake.battery = 10
+    ex.refresh()
+    assert ex.ensure_battery() is True  # the walk back (35 s) brings R-001's inbox event
+    docks = calls(fake, "dock")
+    assert docks and unread == [0] * len(docks)
+    assert not any("0 min" in str(d["result"]) for d in docks), docks
+    assert [t.request for t in ex.queue] == ["R-001"]  # read through the hook: queued, not lost
+    assert ex.state.battery >= CHARGE_TARGET_FORCED
+
+
+def test_forced_charge_without_a_hook_reads_the_inbox_itself(tmp_path):
+    fake, _session, ex = setup(tmp_path, requests=_every(2, n=8))
+    ex.cmd("inbox")
+    unread = _unread_at_docks(fake)
+    fake.battery = 10
+    ex.refresh()
+    assert ex.read_inbox is None and ex.ensure_battery() is True
+    docks = calls(fake, "dock")
+    assert len(docks) >= 8 and unread == [0] * len(docks)
+    assert not ex.inbox_waiting and ex.state.battery >= 40
+
+
+def test_non_forced_charge_still_stops_on_the_first_wake(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=_every(2))
+    reads = _inbox_hook(ex)
+    ex.read_inbox()
+    fake.battery = 20  # under 25 %, over BATTERY_CRITICAL: the request goes first
+    ex.refresh()
+    assert ex.ensure_battery() is True
+    assert len(calls(fake, "dock")) == 1 and ex.inbox_waiting  # left for the loop to read
+    assert reads == [1] and not ex.queue
+    [block] = decisions(session, "charge_block")
+    assert block["forced"] is False and block["woken"] == 1 and block["queued"] == 0
+    assert not decisions(session, "charge_woken")
+
+
+def test_the_forced_block_target_shrinks_toward_six(tmp_path):
+    from agent.executor import CHARGE_TARGET_FORCED, CHARGE_TARGET_MIN
+
+    _, _session, ex = setup(tmp_path, rids=set())
+    assert (CHARGE_TARGET_FORCED, CHARGE_TARGET_MIN) == (40.0, 20.0)
+
+    def target(clock):
+        ex.state.clock = clock
+        return ex._block_target()
+
+    assert target("23:00:00") == 40.0
+    assert target("03:00:00") == 40.0  # 10 + 0.4 x 180 = 82: capped at 40
+    assert target("04:45:00") == 40.0  # 10 + 0.4 x 75
+    assert target("05:00:00") == 34.0  # 10 + 0.4 x 60
+    assert target("05:30:00") == 22.0
+    assert target("05:40:00") == 20.0  # 18: never under CHARGE_TARGET_MIN
+    assert target("05:59:00") == 20.0
+
+
+def test_battery_critical_is_15_and_rounds_20(tmp_path):
+    from agent.executor import BATTERY_CRITICAL, CHARGE_ROUNDS
+
+    assert (BATTERY_CRITICAL, CHARGE_ROUNDS) == (15.0, 20)
+    fake, _session, ex = setup(tmp_path, requests=[])
+    ex.cmd("inbox")
+    ex.go("lobby")
+    fake.battery = 14
+    ex.refresh()
+    ex.queue.append(parse_request("R-009", "104 wants a towel.", "22:01:00"))
+    assert ex.ensure_battery() is True  # under 15 %: charges even with work waiting
+    assert calls(fake, "dock") and ex.state.location == "charging-dock"
+
+
+def test_no_charge_is_started_while_a_task_runs(tmp_path):
+    fake, session, ex, task = solo(tmp_path, "104 wants a towel.")
+    fake.battery = ex.state.battery = 20  # under 25 %, but the running task is work waiting
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status == "done", out
+    assert not calls(fake, "dock", since=since)
+    deferred = decisions(session, "charge_deferred")
+    assert deferred and deferred[-1]["running"] == "R-001"
+    assert ex.current is None  # cleared once the task is over
+
+
+def test_current_is_cleared_when_the_flow_raises(tmp_path, monkeypatch):
+    from agent import flows
+
+    _fake, _session, ex, task = solo(tmp_path, "104 wants a towel.")
+    seen = []
+
+    def boom(ex_, task_):
+        seen.append(ex_.current)
+        raise RuntimeError("odd")
+
+    monkeypatch.setattr(flows, "handle", boom)
+    out = ex.run(task)
+    assert out.status == "failed" and seen == [task] and ex.current is None
+
+
+def test_run_shift_wires_the_inbox_hook_into_the_forced_block(tmp_path):
+    from agent.agent import run_shift
+    from agent.planner import Params
+
+    fake = FakeWybe(requests=_every(3, start="22:03:00", n=12))
+    unread = _unread_at_docks(fake)
+
+    def handler(request):
+        reply = fake.handler(request)
+        if json.loads(request.content).get("cmd") == "start_shift":
+            fake.battery = 9  # the shift starts nearly flat
+        return reply
+
+    client = WybeClient(settings(tmp_path), transport=httpx.MockTransport(handler), sleep=lambda s: None)
+    result = run_shift(client, seed=1, params=Params(use_cart=False), sim_end="23:30:00")
+    lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
+    kinds = [x["kind"] for x in lines if x["type"] == "decision"]
+    assert "charge_woken" in kinds and "charge_block" in kinds
+    first_block = kinds.index("charge_block")
+    assert kinds[:first_block].count("request") >= 5  # the requests were read and queued in the block
+    assert "task_start" not in kinds[:first_block]  # no task at 9 %
+    docks = calls(fake, "dock")
+    assert unread == [0] * len(docks)
+    assert not fake.false_done and not fake.unsafe

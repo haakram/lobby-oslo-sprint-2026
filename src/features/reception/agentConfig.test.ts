@@ -54,6 +54,20 @@ describe("reception prompt", () => {
     }
   });
 
+  it("hangs up after one goodbye, and after one warning to an abusive caller", () => {
+    expect(prompt).toMatch(/say one short goodbye and call end_call in the same\s+turn/);
+    expect(prompt).toMatch(/Never say goodbye twice/);
+    expect(prompt).toMatch(/At the next insult, say a short goodbye and call end_call at once/);
+    const endCall = client.conversationConfig.agent.prompt.builtInTools.endCall;
+    expect(endCall.description).toMatch(/right after your goodbye/);
+  });
+
+  it("keeps answers short and haggles slowly", () => {
+    expect(prompt).toMatch(/one or two sentences/);
+    expect(prompt).toMatch(/Do not give in quickly/);
+    expect(prompt).toMatch(/never two steps in one answer/);
+  });
+
   it("haggles only in the tool's steps, never to a price the guest names", () => {
     expect(prompt).toContain("get_counter_offer");
     expect(prompt).toMatch(/a price they name never sets yours/);

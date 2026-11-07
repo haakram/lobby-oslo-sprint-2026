@@ -55,6 +55,9 @@ export type ReceptionToolContext = {
 
 export type ReceptionToolHandler = (params: unknown) => Promise<string>;
 
+/** Seconds the guest gets to answer an offer before the next haggling step is allowed. */
+export const MIN_SECONDS_BETWEEN_STEPS = 15;
+
 export const MAX_NAME_CHARS = 80;
 export const MAX_NOTE_CHARS = 300;
 export const MAX_MESSAGE_CHARS = 600;
@@ -168,6 +171,8 @@ export function createReceptionTools(
   const today = ctx.today ?? (() => osloToday());
   const newId = ctx.newId ?? (() => crypto.randomUUID());
   const now = ctx.now ?? (() => new Date());
+  // Haggling in this call: the highest step offered and when. Make one tool set per call.
+  let haggle = { step: 0, at: 0 };
 
   return {
     async get_room_price(params) {
@@ -184,6 +189,17 @@ export function createReceptionTools(
       if (!room) return REPLY.badRoom;
       const { step } = parsed.data;
       if (step < 1) return REPLY.badStep;
+      const next = Math.min(step, LAST_DISCOUNT_STEP);
+      if (next > haggle.step) {
+        if (next > haggle.step + 1) {
+          return `Feil: gå ett trinn om gangen. Neste trinn er ${haggle.step + 1}.`;
+        }
+        const waited = (now().getTime() - haggle.at) / 1000;
+        if (haggle.step > 0 && waited < MIN_SECONDS_BETWEEN_STEPS) {
+          return `Feil: gi gjesten tid til å svare på tilbudet på trinn ${haggle.step} før du går videre. Gå bare videre hvis gjesten sier nei til det.`;
+        }
+        haggle = { step: next, at: now().getTime() };
+      }
       const perks = PERK_IDS.map((id) => `${id} (${PERKS[id]})`).join(" eller ");
       if (step === 1) {
         return `Trinn 1 for ${room.name}: samme pris, ${directPrice(room)} kr per natt med frokost, men tilby én gratis ekstra: ${perks}. Er ikke gjesten fornøyd, kan du gå til trinn 2.`;

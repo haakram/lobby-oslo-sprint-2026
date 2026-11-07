@@ -249,15 +249,8 @@ export function EyesScreen() {
           <ErrorState
             title={sheetError.title}
             body={sheetError.quota ? QUOTA_BODY : RETRY_BODY}
-            action={
-              sheetError.quota ? (
-                <Button variant="secondary" onClick={close}>
-                  Lukk
-                </Button>
-              ) : (
-                <Button onClick={retry}>Prøv igjen</Button>
-              )
-            }
+            // Out of quota there is nothing to retry; the sheet's own Lukk closes it.
+            action={sheetError.quota ? undefined : <Button onClick={retry}>Prøv igjen</Button>}
           />
         ) : (
           <CardSkeleton image={sheet?.image ?? null} />

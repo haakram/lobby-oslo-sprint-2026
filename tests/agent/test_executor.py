@@ -1226,3 +1226,35 @@ def test_two_unowned_candidates_away_from_the_hint_deliver_none(tmp_path):
     out = ex.run(task)
     assert out.status == "failed", out
     assert not _placed(fake) and not fake.wrong_deliveries
+
+
+def test_a_failed_delivery_does_not_mark_the_item_delivered(tmp_path):
+    text = "Guest in 208 lost a wallet, maybe the kitchen pass."
+    fake, _session, ex, t1 = solo(tmp_path, text, hidden={"wallet": "kitchen-pass"})
+    out = ex.run(t1)  # room 208 has a DND sign: nothing is delivered
+    assert out.status != "done" and not _placed(fake), out
+    assert "wallet" not in getattr(ex, "lost_delivered", set())
+    from agent import flows
+
+    assert flows._verdict(ex, "R-001", "wallet") == "match"  # still free to reach its owner
+
+
+def test_item_numbered_past_the_known_requests_is_not_taken_when_others_exist(tmp_path):
+    # one lost-glasses request seen (R-001); glasses-3 lies there with glasses-2: a request was missed
+    text = "Guest in 317 lost glasses, maybe the ground floor corridor."
+    fake, ex, (t1,) = _lost_shift(tmp_path, [text], {"glasses-2": "corridor-1a", "glasses-3": "corridor-1a"})
+    out = ex.run(t1)
+    assert out.status != "done" and not _placed(fake), out
+
+
+def test_ambiguity_stops_the_search_at_once(tmp_path):
+    from agent import flows
+    from agent.executor import ActionFailed
+
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, _task = solo(tmp_path, text,
+                                    hidden={"wallet-3": "corridor-1a", "wallet-4": "corridor-1a"})
+    ex.found.update({"wallet-3": "corridor-1a", "wallet-4": "corridor-1a"})
+    with pytest.raises(ActionFailed, match="did not guess"):  # request unknown to the ledger: both free
+        flows._find(ex, "wallet", "ground floor corridor", None)
+    assert not calls(fake, "scan") and not calls(fake, "pick")

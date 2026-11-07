@@ -1,152 +1,118 @@
 "use client";
 
-import Link from "next/link";
-import { useLayoutEffect, useMemo, type ReactNode } from "react";
-import { productBySku, type Product } from "@/features/catalog/products";
+import { useId, useMemo, useState, type KeyboardEvent } from "react";
 import { usePicklist } from "@/features/picklist/PicklistProvider";
-import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, RouteIcon } from "@/ui";
-import { FloorMap } from "./FloorMap";
-import { loadRoutes, type LoadedRoutes } from "./loadRoutes";
-import { RouteStats } from "./RouteStats";
-import { ProductRow, StopList } from "./StopList";
-import { bestTour, listOrderMetres, savings, tourLegs } from "./tour";
+import { cx, RegenIcon, type RegenName } from "@/ui";
+import { CleaningMode, type CleaningInitial } from "./CleaningMode";
+import { guestRooms, hotelMap } from "./hotelMap";
+import { PicklistMode } from "./PicklistMode";
+import { parseCart, parseMode, parseRoomQuery, parseStart, type RouteMode } from "./query";
+import { RobotMode } from "./RobotMode";
 import type { RouteMatrix } from "./types";
+import { useNightLog } from "./useNightLog";
+import { replaceQuery } from "./urlState";
 
-function Shell({ children }: { children: ReactNode }) {
-  return (
-    <main className="flex-1 px-4 pt-10 pb-12 sm:px-8 lg:px-12 lg:pt-16">
-      <header className="flex max-w-6xl flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-[-0.03em]">Ruter</h1>
-          <p className="mt-3 max-w-[48ch] text-lg text-muted">
-            Korteste vei til alle varene på plukklisten, fra start og tilbake.
-          </p>
-        </div>
-        {/* TODO(phase-2): drop the badge when the matrix comes from Track A's router (npm run routes). */}
-        <Badge>Testkart</Badge>
-      </header>
-      <div className="mt-8 max-w-6xl lg:mt-10">{children}</div>
-    </main>
+export type RouteParams = Partial<Record<"modus" | "rom" | "start" | "vogn" | "sku", string | string[]>>;
+
+const MODES: { id: RouteMode; label: string; icon: RegenName; intro: string }[] = [
+  { id: "renhold", label: "Renhold", icon: "route", intro: "Korteste runde for renholderne, på tvers av etasjer." },
+  { id: "robot", label: "Robot", icon: "agent", intro: "Veien roboten gikk i natt, og hvor metrene gikk." },
+  { id: "plukk", label: "Plukkliste", icon: "list-check", intro: "Korteste vei til alle varene på plukklisten, fra start og tilbake." },
+];
+
+/**
+ * Ruter: route planning for the hotel. Renhold (the main use) plans the cleaners' round, Robot
+ * shows where the robot walked tonight, Plukkliste keeps the pick-list route Øyne and Stemme feed.
+ */
+export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; matrix?: RouteMatrix }) {
+  const map = hotelMap();
+  const baseId = useId();
+  const { skus } = usePicklist();
+  const sku = typeof params.sku === "string" ? params.sku : undefined;
+
+  const initial = useMemo<CleaningInitial>(() => {
+    const { rooms, unknown } = parseRoomQuery(params.rom, new Set(guestRooms(map)));
+    return { rooms, unknown, start: parseStart(params.start), cart: parseCart(params.vogn) };
+  }, [map, params.rom, params.start, params.vogn]);
+
+  // An explicit ?modus= wins; ?sku= (Øyne's "Vis vei") or a pick list in progress opens the pick list.
+  const [mode, setMode] = useState<RouteMode>(
+    () => parseMode(params.modus) ?? (sku || (skus.length > 0 && initial.rooms.length === 0) ? "plukk" : "renhold"),
   );
-}
+  const [opened, setOpened] = useState<ReadonlySet<RouteMode>>(() => new Set([mode]));
+  const log = useNightLog("/runs/demo.jsonl", opened.has("renhold") || opened.has("robot"));
 
-/** Groups the pick list by shelf (first product decides the list order) and finds the best tour. */
-function plan(m: RouteMatrix, products: Product[]) {
-  const productsAt = new Map<string, Product[]>();
-  for (const p of products) productsAt.set(p.location, [...(productsAt.get(p.location) ?? []), p]);
-  const stops = [...productsAt.keys()];
-  const tour = bestTour(m, stops);
-  if ("error" in tour) return { ok: false as const, missing: tour };
-  const naive = listOrderMetres(m, stops);
-  return {
-    ok: true as const,
-    tour,
-    naive,
-    saved: savings(tour.metres, naive),
-    legs: tourLegs(m, tour.order),
-    productsAt,
+  const choose = (next: RouteMode) => {
+    setMode(next);
+    setOpened((seen) => new Set(seen).add(next));
+    replaceQuery({ modus: next });
   };
-}
 
-export function RoutesScreen({ addSku, matrix }: { addSku?: string; matrix?: RouteMatrix }) {
-  const { skus, add, remove, clear } = usePicklist();
-
-  // ?sku= from Øyne's "Vis vei". Layout effect: the route includes it before the first paint.
-  useLayoutEffect(() => {
-    if (addSku && productBySku(addSku)) add(addSku);
-  }, [addSku, add]);
-
-  const loaded: LoadedRoutes = useMemo(() => (matrix ? { ok: true, matrix } : loadRoutes()), [matrix]);
-  const products = useMemo(() => skus.map(productBySku).filter((p): p is Product => p !== undefined), [skus]);
-  const result = useMemo(
-    () => (loaded.ok && products.length > 0 ? plan(loaded.matrix, products) : null),
-    [loaded, products],
-  );
-
-  if (!loaded.ok) {
-    return (
-      <Shell>
-        <ErrorState
-          title="Rutekartet kunne ikke leses"
-          body="Kartfila er ugyldig. Last siden på nytt, og si fra til skiftleder hvis det skjer igjen."
-        />
-      </Shell>
-    );
+  function onTabKey(event: KeyboardEvent<HTMLButtonElement>) {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const at = MODES.findIndex((m) => m.id === mode);
+    const next = MODES[(at + step + MODES.length) % MODES.length].id;
+    choose(next);
+    document.getElementById(`${baseId}-tab-${next}`)?.focus();
   }
 
-  if (!result) {
-    return (
-      <Shell>
-        <EmptyState
-          icon={<RouteIcon className="size-8" />}
-          title="Plukklisten er tom"
-          body="Legg til varer fra Øyne."
-          action={
-            <Link href="/oyne" className={buttonClasses("primary")}>
-              Åpne Øyne
-            </Link>
-          }
-        />
-      </Shell>
-    );
-  }
-
-  const m = loaded.matrix;
-
-  if (!result.ok) {
-    const name = (id: string) =>
-      products.find((p) => p.location === id)?.locationLabel ?? m.nodes[id]?.label ?? id;
-    return (
-      <Shell>
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-          <ErrorState
-            title="Ingen rute funnet"
-            body={`Kartet har ingen vei fra ${name(result.missing.from)} til ${name(result.missing.to)}. Fjern varen fra plukklisten og prøv igjen.`}
-          />
-          <Card className="flex flex-col gap-2">
-            <h2 className="text-xl font-semibold tracking-tight">Plukkliste</h2>
-            {products.map((p) => (
-              <ProductRow key={p.sku} product={p} onRemove={remove} />
-            ))}
-          </Card>
-        </div>
-      </Shell>
-    );
-  }
+  const intro = MODES.find((m) => m.id === mode)?.intro;
 
   return (
-    <Shell>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-6">
-        <div className="flex min-w-0 flex-col gap-4 animate-rise">
-          <RouteStats
-            metres={result.tour.metres}
-            seconds={result.tour.seconds}
-            naiveMetres={result.naive}
-            saved={result.saved}
-          />
-          <Card className="p-4 sm:p-5">
-            <FloorMap matrix={m} legs={result.legs} order={result.tour.order} />
-          </Card>
-        </div>
-        <Card className="flex flex-col gap-5 animate-rise [animation-delay:60ms]">
-          <h2 className="text-xl font-semibold tracking-tight">Plukkrekkefølge</h2>
-          <StopList
-            matrix={m}
-            legs={result.legs}
-            order={result.tour.order}
-            productsAt={result.productsAt}
-            onRemove={remove}
-          />
-          <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-            <Link href="/oyne" className={buttonClasses("secondary")}>
-              Legg til flere varer
-            </Link>
-            <Button variant="ghost" onClick={clear}>
-              Tøm plukklisten
-            </Button>
+    <main className="flex-1 px-4 pt-8 pb-12 sm:px-8 lg:px-12 lg:pt-10">
+      <div className="mx-auto max-w-[100rem]">
+        <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-[-0.03em]">Ruter</h1>
+            <p className="mt-2 max-w-[52ch] text-lg text-muted">{intro}</p>
           </div>
-        </Card>
+          <div role="tablist" aria-label="Hva skal rutes" className="grid w-full grid-cols-3 gap-1 rounded-md bg-sunken p-1 sm:flex sm:w-auto">
+            {MODES.map((m) => {
+              const active = m.id === mode;
+              return (
+                <button
+                  key={m.id}
+                  id={`${baseId}-tab-${m.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  aria-controls={`${baseId}-panel-${m.id}`}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => choose(m.id)}
+                  onKeyDown={onTabKey}
+                  className={cx(
+                    "inline-flex min-h-12 items-center justify-center gap-2 rounded-md border px-3 text-base font-semibold sm:px-4",
+                    "transition-colors duration-150 ease-standard",
+                    active ? "border-line bg-surface text-text" : "border-transparent text-muted hover:text-text",
+                  )}
+                >
+                  <RegenIcon name={m.icon} size={20} className="hidden sm:block" />
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </header>
+
+        {MODES.map((m) =>
+          opened.has(m.id) ? (
+            <div
+              key={m.id}
+              id={`${baseId}-panel-${m.id}`}
+              role="tabpanel"
+              aria-labelledby={`${baseId}-tab-${m.id}`}
+              hidden={m.id !== mode}
+              className="mt-6"
+            >
+              {m.id === "renhold" && <CleaningMode map={map} log={log} initial={initial} />}
+              {m.id === "robot" && <RobotMode map={map} log={log} />}
+              {m.id === "plukk" && <PicklistMode addSku={sku} matrix={matrix} />}
+            </div>
+          ) : null,
+        )}
       </div>
-    </Shell>
+    </main>
   );
 }

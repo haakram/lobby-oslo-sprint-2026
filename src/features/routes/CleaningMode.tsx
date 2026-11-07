@@ -1,0 +1,176 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Button, Card, EmptyState, ErrorState, RegenIcon } from "@/ui";
+import { CleaningControls } from "./CleaningControls";
+import { CleaningStops } from "./CleaningStops";
+import { planCleaning } from "./cleaningPlan";
+import { placeLabel, type HotelMap } from "./hotelMap";
+import { HotelPlan } from "./HotelPlan";
+import { cleaningPresets, roomStatusAt, type RoomPreset, type RoomReport } from "./nightRooms";
+import type { CleaningStart } from "./query";
+import { SavingBand } from "./SavingBand";
+import type { NightLog } from "./useNightLog";
+import { replaceQuery } from "./urlState";
+
+export type CleaningInitial = { rooms: string[]; unknown: string[]; start: CleaningStart | null; cart: boolean | null };
+
+const NO_STATUSES: ReadonlyMap<string, RoomReport> = new Map();
+
+/** Renhold: pick rooms (from the night or on the map), get the best round across floors. */
+export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightLog; initial: CleaningInitial }) {
+  const statuses = useMemo(() => (log.status === "ready" ? roomStatusAt(log.lines) : NO_STATUSES), [log.status, log.lines]);
+  const { presets, doNotDisturb } = useMemo(() => cleaningPresets(statuses), [statuses]);
+
+  const [rooms, setRooms] = useState(initial.rooms);
+  const [start, setStart] = useState<CleaningStart>(initial.start ?? "laundry");
+  const [cart, setCart] = useState(initial.cart ?? true);
+  // Rooms from the link draw themselves on arrival; taps change the route without replaying it.
+  const [drawToken, setDrawToken] = useState(initial.rooms.length > 0 ? 1 : 0);
+  const redraw = () => setDrawToken((t) => t + 1);
+
+  const plan = useMemo(() => planCleaning(map, { start, rooms, cart }), [map, start, rooms, cart]);
+  const selected = useMemo(() => new Set(rooms), [rooms]);
+
+  const firstSync = useRef(true);
+  useEffect(() => {
+    if (firstSync.current) {
+      firstSync.current = false;
+      return;
+    }
+    replaceQuery({ rom: rooms.length ? rooms.join(",") : null, start, vogn: cart ? "1" : "0" });
+  }, [rooms, start, cart]);
+
+  const toggle = (room: string) =>
+    setRooms((current) => (current.includes(room) ? current.filter((r) => r !== room) : [...current, room]));
+  const load = (preset: RoomPreset) => {
+    setRooms(preset.rooms);
+    redraw();
+  };
+
+  const mustClean = presets.find((p) => p.id === "ma_vaskes");
+  const occupied = presets.find((p) => p.id === "opptatt");
+  const suggested = mustClean?.rooms.length ? mustClean : occupied?.rooms.length ? occupied : null;
+
+  const ok = plan && !("error" in plan) ? plan : null;
+
+  return (
+    <div className="flex flex-col gap-4 lg:gap-6">
+      {initial.unknown.length > 0 && (
+        <p role="status" className="rounded-md border-l-4 border-warning bg-warning-soft px-4 py-3 text-base text-warning">
+          Fant ikke {initial.unknown.join(", ")} i hotellkartet. De andre rommene fra lenken er med.
+        </p>
+      )}
+
+      {rooms.length === 0 ? (
+        <Card className="p-4 sm:p-5">
+          <EmptyState
+            title="Ingen rom valgt"
+            body="Velg rom på kartet eller hent rommene som må vaskes."
+            action={
+              log.status === "loading" ? (
+                <Button loading>Henter nattens romstatus</Button>
+              ) : suggested ? (
+                <div className="flex flex-col items-start gap-2">
+                  <Button onClick={() => load(suggested)}>
+                    {suggested.id === "ma_vaskes" ? "Hent rommene som må vaskes" : "Hent rommene med gjester i natt"}
+                    <span className="font-mono text-sm tabular-nums">{suggested.rooms.length}</span>
+                  </Button>
+                  {suggested.id !== "ma_vaskes" && (
+                    <p className="text-sm text-muted">Ingen rom står som Må vaskes etter natten.</p>
+                  )}
+                </div>
+              ) : undefined
+            }
+          />
+        </Card>
+      ) : ok ? (
+        <SavingBand plan={ok} />
+      ) : plan && "error" in plan ? (
+        <Card className="p-4 sm:p-5">
+          <ErrorState
+            title="Ingen rute funnet"
+            body={`Kartet har ingen vei fra ${placeLabel(plan.from)} til ${placeLabel(plan.to)}${cart ? " uten trapp" : ""}. Fjern rommet${cart ? " eller slå av vogn" : ""} og prøv igjen.`}
+          />
+        </Card>
+      ) : null}
+
+      <div className="lg:order-first">
+        <CleaningControls
+          start={start}
+          onStart={(s) => {
+            setStart(s);
+            redraw();
+          }}
+          cart={cart}
+          onCart={(on) => {
+            setCart(on);
+            redraw();
+          }}
+          logStatus={log.status}
+          presets={presets}
+          doNotDisturb={doNotDisturb}
+          onPreset={load}
+          onRetry={log.retry}
+        />
+      </div>
+
+      <Card className="p-4 sm:p-5">
+        <h2 className="sr-only">Hotellet</h2>
+        <HotelPlan
+          map={map}
+          label="Hotellkart med ruten"
+          statuses={statuses}
+          route={ok ? ok.legs.map((l) => l.path) : []}
+          pins={ok ? ok.tour.order.map((node, i) => ({ node, label: String(i + 1), step: i })) : []}
+          start={start}
+          selected={selected}
+          onToggleRoom={toggle}
+          drawToken={drawToken}
+          legend={
+            <li className="flex items-center gap-2">
+              <span aria-hidden="true" className="h-1 w-6 rounded-full bg-accent" />
+              Rute
+            </li>
+          }
+          footer={
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <p className="text-sm text-muted">Trykk på et rom for å legge det til eller ta det bort.</p>
+              {ok && (
+                <Button variant="secondary" onClick={redraw}>
+                  <RegenIcon name="refresh" size={20} />
+                  Tegn ruten igjen
+                </Button>
+              )}
+            </div>
+          }
+        />
+      </Card>
+
+      {ok && (
+        <Card className="p-4 sm:p-5">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Rekkefølge</h2>
+              <p className="text-sm text-muted">
+                Start og slutt: <span className="text-text">{placeLabel(start)}</span>
+                {cart ? " · med vogn" : ""}
+              </p>
+            </div>
+            <Button variant="ghost" onClick={() => setRooms([])}>
+              Fjern alle rom
+            </Button>
+          </div>
+          <CleaningStops
+            map={map}
+            start={start}
+            order={ok.tour.order}
+            legs={ok.legs}
+            statuses={statuses}
+            onRemove={toggle}
+          />
+        </Card>
+      )}
+    </div>
+  );
+}

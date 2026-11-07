@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Button, ErrorState, Sheet, Skeleton, cx } from "@/ui";
+import { Badge, Button, EmptyState, ErrorState, RegenIcon, Sheet, Skeleton, cx } from "@/ui";
 import { BoxOverlay, type BoxLabel } from "./BoxOverlay";
 import { cocoLabel, isProductClass } from "./cocoLabels";
 import { cropFrame } from "./cropFrame";
@@ -33,7 +33,7 @@ const QUOTA_BODY = "Les SKU-en på etiketten, eller spør skiftlederen.";
 
 /** Øyne: the live camera with boxes. Stable boxes are recognised on their own; tap for the card. */
 export function EyesScreen() {
-  const { video, status: cameraStatus, size: videoSize, retry: retryCamera } = useCamera();
+  const { video, status: cameraStatus, size: videoSize, start: startCamera, retry: retryCamera } = useCamera();
   const [sheet, setSheet] = useState<SheetContent | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [autoOn, setAutoOn] = useState(true);
@@ -122,7 +122,7 @@ export function EyesScreen() {
     void run(detector.boxes.find((box) => box.id === sheet?.boxId) ?? null);
   }, [detector.boxes, sheet, run]);
 
-  const problem = cameraStatus !== "starting" && cameraStatus !== "ready" ? cameraStatus : null;
+  const problem = cameraStatus !== "idle" && cameraStatus !== "starting" && cameraStatus !== "ready" ? cameraStatus : null;
   const ready = cameraStatus === "ready";
   const autoActive = autoOn && !quotaReached;
 
@@ -154,7 +154,12 @@ export function EyesScreen() {
         className={cx("absolute inset-0 size-full object-cover", !ready && "invisible")}
       />
 
-      {problem ? (
+      {cameraStatus === "idle" ? (
+        <>
+          <h1 className="px-4 pt-8 text-2xl font-bold tracking-[-0.02em] sm:px-6 lg:px-10 lg:pt-10">Robotens øyne</h1>
+          <CameraStart onStart={startCamera} />
+        </>
+      ) : problem ? (
         <>
           <h1 className="px-4 pt-8 text-2xl font-bold tracking-[-0.02em] sm:px-6 lg:px-10 lg:pt-10">Robotens øyne</h1>
           <PermissionState problem={problem} onRetry={retryCamera} />
@@ -257,6 +262,24 @@ export function EyesScreen() {
         )}
       </Sheet>
     </main>
+  );
+}
+
+/** Before the browser is asked: what the camera is for, and the one tap that asks. */
+function CameraStart({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="flex flex-1 items-center px-4 py-12 sm:px-8 lg:px-12">
+      <EmptyState
+        icon={<RegenIcon name="eye" size={32} />}
+        title="Se det roboten ser"
+        body="Roboten ser gjennom kameraet og kjenner igjen varer og omgivelser. Nettleseren spør om lov første gang."
+        action={
+          <Button size="lg" onClick={onStart}>
+            Slå på kameraet
+          </Button>
+        }
+      />
+    </div>
   );
 }
 

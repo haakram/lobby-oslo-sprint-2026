@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type CameraProblem = "denied" | "notfound" | "insecure" | "error";
-export type CameraStatus = "starting" | "ready" | CameraProblem;
+/** `idle`: the browser would ask for the camera, so the screen waits for a tap (a prompt answers a gesture). */
+export type CameraStatus = "idle" | "starting" | "ready" | CameraProblem;
 
 const REAR: MediaStreamConstraints = {
   audio: false,
@@ -18,6 +19,16 @@ function problemOf(error: unknown): CameraProblem {
   return "error";
 }
 
+/** What the browser would do if asked now; "unknown" where the Permissions API has no "camera" (Firefox, older Safari). */
+async function cameraPermission(): Promise<PermissionState | "unknown"> {
+  try {
+    const permission = await navigator.permissions?.query({ name: "camera" as PermissionName });
+    return permission?.state ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 async function openStream(): Promise<MediaStream> {
   try {
     return await navigator.mediaDevices.getUserMedia(REAR);
@@ -28,7 +39,11 @@ async function openStream(): Promise<MediaStream> {
   }
 }
 
-/** Streams the rear camera (any camera if there is none) into the returned `video` ref. */
+/**
+ * Streams the rear camera (any camera if there is none) into the returned `video` ref. Already allowed:
+ * it starts on its own. Not yet asked: `idle` until `start()` (a tap), so the screen opens calm instead of
+ * on a browser prompt. Blocked: `denied` straight away, without a request that can only fail.
+ */
 export function useCamera() {
   const video = useRef<HTMLVideoElement>(null);
   const [status, setStatus] = useState<CameraStatus>("starting");
@@ -44,6 +59,13 @@ export function useCamera() {
     async function start() {
       if (!window.isSecureContext) return setStatus("insecure");
       if (!navigator.mediaDevices?.getUserMedia) return setStatus("error");
+      // The first run only looks; every later run (start or retry, both a tap) asks the browser.
+      if (attempt === 0) {
+        const permission = await cameraPermission();
+        if (cancelled) return;
+        if (permission === "prompt") return setStatus("idle");
+        if (permission === "denied") return setStatus("denied");
+      }
       try {
         const opened = await openStream();
         // Cleaned up while the browser was still asking (StrictMode, navigating away, Retry):
@@ -75,10 +97,11 @@ export function useCamera() {
     };
   }, [attempt]);
 
-  const retry = useCallback(() => {
+  /** Asks the browser for the camera: the first start after `idle`, and every retry. */
+  const start = useCallback(() => {
     setStatus("starting");
     setAttempt((n) => n + 1);
   }, []);
 
-  return { video, status, size, retry };
+  return { video, status, size, start, retry: start };
 }

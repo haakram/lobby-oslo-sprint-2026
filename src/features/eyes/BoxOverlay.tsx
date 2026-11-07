@@ -1,24 +1,35 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { cx } from "@/ui";
+import { cx, RegenIcon } from "@/ui";
 import { LANDMARK_TTL_MS, type SeenLandmark } from "./sceneSchedule";
 import type { Box } from "./smoothBoxes";
 
 /**
- * `object`: a thing we never send (person, chair); `product`: product-like, not matched (yet);
- * `busy`: being identified; `known`: matched in the catalogue.
+ * `object`: a thing we never send (person, chair); `product`: product-like, not checked yet;
+ * `busy`: being identified; `missing`: checked, not in the catalogue; `known`: matched in the catalogue.
  */
-export type BoxLabel = { text: string; state: "object" | "product" | "busy" | "known" };
+export type BoxLabel = { text: string; state: "object" | "product" | "busy" | "missing" | "known" };
 
 const FALLBACK: BoxLabel = { text: "Gjenstand", state: "object" };
 
-const TONE: Record<BoxLabel["state"], { corner: string; tag: string }> = {
-  object: { corner: "border-muted", tag: "bg-sunken text-text" },
-  product: { corner: "border-accent", tag: "bg-accent text-on-accent" },
-  busy: { corner: "border-accent", tag: "bg-accent text-on-accent" },
-  known: { corner: "border-success", tag: "bg-success text-bg" },
+/**
+ * Each state says itself in words (and a tick for a match), so the colour is never the only signal
+ * (WCAG 1.4.1). The accent stays the robot's and the shutter's: no state is orange.
+ */
+const TONE: Record<BoxLabel["state"], { corner: string; tag: string; word: string | null; spoken: string | null }> = {
+  object: { corner: "border-muted", tag: "bg-sunken text-text", word: null, spoken: null },
+  product: { corner: "border-text", tag: "border border-line-strong bg-surface text-text", word: "trykk for å sjekke", spoken: "ikke sjekket" },
+  busy: { corner: "border-text", tag: "border border-line-strong bg-surface text-text", word: null, spoken: null },
+  missing: { corner: "border-warning", tag: "bg-warning-soft text-warning", word: "ikke i katalogen", spoken: "ikke i katalogen" },
+  known: { corner: "border-success", tag: "bg-success text-bg", word: null, spoken: "i katalogen" },
 };
+
+function spokenName(label: BoxLabel): string {
+  if (label.state === "object") return label.text;
+  const spoken = TONE[label.state].spoken;
+  return spoken ? `${label.text}, ${spoken}, vis kortet` : `${label.text}, vis kortet`;
+}
 
 /** Four corner brackets, like a scanner's viewfinder, instead of a full rectangle. */
 const CORNERS = [
@@ -109,7 +120,7 @@ export function BoxOverlay({
             key={box.id}
             type="button"
             onClick={() => onSelect(box)}
-            aria-label={label.state === "object" ? label.text : `${label.text}, vis kortet`}
+            aria-label={spokenName(label)}
             className="group absolute top-0 left-0 rounded-md transition-[transform,width,height] duration-150 ease-standard focus-visible:outline-offset-4"
             style={{
               transform: `translate3d(${left}px, ${top}px, 0)`,
@@ -141,7 +152,9 @@ export function BoxOverlay({
                 tone.tag,
               )}
             >
+              {label.state === "known" && <RegenIcon name="check" strokeWidth={2.5} className="mr-1 inline size-4 align-[-3px]" />}
               {label.text}
+              {tone.word && <span className="font-medium"> · {tone.word}</span>}
             </span>
           </button>
         );

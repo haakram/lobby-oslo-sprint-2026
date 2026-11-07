@@ -65,8 +65,8 @@ export function EyesScreen() {
       const result = results[box.id];
       if (busy[box.id]) next[box.id] = { text: "Gjenkjenner …", state: "busy" };
       else if (result?.product) next[box.id] = { text: result.product.name, state: "known" };
-      // Not in the catalogue: Claude's own name for it ("Kaffekopp"); the card says "Ikke i katalogen".
-      else if (result) next[box.id] = { text: result.name || cocoLabel(box.label), state: "product" };
+      // Not in the catalogue: Claude's own name for it ("Kaffekopp"); the tag and the card say "ikke i katalogen".
+      else if (result) next[box.id] = { text: result.name || cocoLabel(box.label), state: "missing" };
       else next[box.id] = { text: cocoLabel(box.label), state: isProductClass(box.label) ? "product" : "object" };
     }
     return next;

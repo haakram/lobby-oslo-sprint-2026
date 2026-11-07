@@ -66,7 +66,7 @@ export function EyesScreen() {
       if (busy[box.id]) next[box.id] = { text: "Gjenkjenner …", state: "busy" };
       else if (result?.product) next[box.id] = { text: result.product.name, state: "known" };
       // Not in the catalogue: Claude's own name for it ("Kaffekopp"); the card says "Ikke i katalogen".
-      else if (result) next[box.id] = { text: result.name, state: "product" };
+      else if (result) next[box.id] = { text: result.name || cocoLabel(box.label), state: "product" };
       else next[box.id] = { text: cocoLabel(box.label), state: isProductClass(box.label) ? "product" : "object" };
     }
     return next;
@@ -210,13 +210,9 @@ export function EyesScreen() {
               {hint}
             </p>
             {seenLabels.length > 0 && (
-              <p className="flex flex-wrap items-center gap-1.5 rounded-md bg-bg/75 px-3 py-1 text-sm backdrop-blur-sm">
-                <span className="text-muted">Ser:</span>
-                {seenLabels.map((label) => (
-                  <span key={label} className="rounded-sm border border-dashed border-text px-1.5 font-semibold">
-                    {label}
-                  </span>
-                ))}
+              <p className="rounded-md border border-dashed border-text bg-bg/75 px-3 py-1 text-sm backdrop-blur-sm">
+                <span className="text-muted">Ser: </span>
+                <span className="font-semibold">{seenLabels.join(" · ")}</span>
               </p>
             )}
             {quotaReached && (

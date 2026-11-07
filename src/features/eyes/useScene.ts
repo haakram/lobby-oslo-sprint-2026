@@ -53,10 +53,17 @@ export function useScene(
       });
       if (!scan || !element || element.readyState < 2) return;
 
+      // Crop before marking the scan as started: a throw here costs nothing and the next tick retries.
+      let image: string;
+      try {
+        image = cropFrame(element, null, SCAN_MAX_SIDE);
+      } catch {
+        return;
+      }
       book.lastScanAt = at;
       book.inFlight = true;
       const scanId = ++book.scans;
-      requestScene(cropFrame(element, null, SCAN_MAX_SIDE), controller.signal)
+      requestScene(image, controller.signal)
         .then((found) => {
           const seenAt = performance.now();
           const next = found.map((mark, index) => ({ ...mark, id: `${scanId}-${index}`, at: seenAt }));

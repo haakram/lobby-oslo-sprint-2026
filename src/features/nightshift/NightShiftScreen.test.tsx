@@ -27,6 +27,8 @@ function serveDemo() {
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
+  // jsdom has no scrolling; the room card asks to be scrolled into view.
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
 });
 
 afterEach(() => {
@@ -49,11 +51,11 @@ describe("NightShiftScreen, replay", () => {
     expect(screen.getByRole("button", { name: /Spill av/ })).toBeEnabled();
   });
 
-  it("hides the Live tab when no viewer URL is set, and links to the 3D hotel", async () => {
+  it("hides the Direkte source when no viewer URL is set, and links to the 3D hotel", async () => {
     serveDemo();
     render(<NightShiftScreen />);
     await screen.findByText("Ferdig");
-    expect(screen.queryByRole("tab", { name: "Live" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Direkte" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Åpne hotellet i 3D" })).toHaveAttribute("href", "/hotell");
   });
 
@@ -99,6 +101,40 @@ describe("NightShiftScreen, replay", () => {
     expect(screen.queryByRole("heading", { name: "Rom 319" })).not.toBeInTheDocument();
   });
 
+  it("lists exactly as many failed tasks as the figure counts, each with a 3D link", async () => {
+    serveDemo();
+    render(<NightShiftScreen />);
+    await screen.findByText("Ferdig");
+
+    const stats = screen.getByRole("group", { name: "Skiftet i tall" });
+    expect(within(stats).getAllByText(String(END.tasksFailed)).length).toBeGreaterThan(0);
+    const section = screen.getByRole("region", { name: /^Feilet/ });
+    expect(within(section).getByText(String(END.tasksFailed))).toBeInTheDocument();
+    const rows = END.tasksFailed === 0 ? [] : within(section).getAllByRole("listitem");
+    expect(rows).toHaveLength(END.tasksFailed);
+    for (const row of rows) expect(within(row).getByRole("link", { name: /^Vis i 3D-kartet kl\. / })).toBeInTheDocument();
+  });
+
+  it("opens the room's card right under the map, from the room list too, and scrolls it into view", async () => {
+    serveDemo();
+    const scrolled = vi.mocked(window.HTMLElement.prototype.scrollIntoView);
+    render(<NightShiftScreen />);
+    await screen.findByText("Ferdig");
+
+    const moment = screen.getByRole("region", { name: "Et øyeblikk av natten" });
+    fireEvent.change(within(moment).getByRole("combobox", { name: "Velg rom" }), { target: { value: "room-319" } });
+    const card = within(moment).getByRole("heading", { name: "Rom 319" }).closest("[data-room]")!;
+    expect(card).toHaveAttribute("data-room", "room-319");
+    // The card follows the map in the page, not the failures column far above it.
+    const map = within(moment).getByRole("figure", { name: "Hotellet som plantegning" });
+    expect(map.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(scrolled).toHaveBeenCalledWith({ block: "nearest", behavior: "smooth" });
+    expect(within(moment).getByRole("button", { name: /^Rom 319:/ })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.change(within(moment).getByRole("combobox", { name: "Velg rom" }), { target: { value: "" } });
+    expect(screen.queryByRole("heading", { name: "Rom 319" })).not.toBeInTheDocument();
+  });
+
   it("says what went wrong and retries when the recording can't be loaded", async () => {
     fetchMock.mockResolvedValueOnce(textResponse("", 500));
     render(<NightShiftScreen />);
@@ -121,11 +157,13 @@ describe("NightShiftScreen, replay", () => {
 describe("NightShiftScreen, live", () => {
   const VIEWER = "http://127.0.0.1:8765";
 
-  it("offers a Live tab when a viewer URL is set", async () => {
+  it("offers Direkte next to Opptak when a viewer URL is set", async () => {
     serveDemo();
     render(<NightShiftScreen viewerUrl={VIEWER} />);
     await screen.findByText("Ferdig");
-    expect(screen.getByRole("tab", { name: "Live" })).toBeInTheDocument();
+    const sources = screen.getByRole("group", { name: "Kilde" });
+    expect(within(sources).getByRole("button", { name: "Opptak" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(sources).getByRole("button", { name: "Direkte" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("follows the live shift from the viewer server", async () => {
@@ -145,7 +183,7 @@ describe("NightShiftScreen, live", () => {
     render(<NightShiftScreen viewerUrl={VIEWER} />);
     await screen.findByText("Ferdig");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Live" }));
+    fireEvent.click(screen.getByRole("button", { name: "Direkte" }));
     expect(await screen.findByText("Pågår")).toBeInTheDocument();
     const stats = screen.getByRole("group", { name: "Skiftet i tall" });
     expect(within(stats).getByText("16")).toBeInTheDocument();
@@ -161,7 +199,7 @@ describe("NightShiftScreen, live", () => {
     render(<NightShiftScreen viewerUrl={VIEWER} />);
     await screen.findByText("Ferdig");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Live" }));
+    fireEvent.click(screen.getByRole("button", { name: "Direkte" }));
     const alert = await screen.findByRole("alert");
     expect(within(alert).getByText("Fikk ikke kontakt med viewer-serveren")).toBeInTheDocument();
   });
@@ -176,7 +214,7 @@ describe("NightShiftScreen, live", () => {
     render(<NightShiftScreen viewerUrl={VIEWER} />);
     await screen.findByText("Ferdig");
 
-    fireEvent.click(screen.getByRole("tab", { name: "Live" }));
+    fireEvent.click(screen.getByRole("button", { name: "Direkte" }));
     expect(await screen.findByRole("heading", { name: "Ingen skift ennå" })).toBeInTheDocument();
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/api/run/"))).toBe(false));
   });

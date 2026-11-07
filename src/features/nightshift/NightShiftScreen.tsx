@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Hotel3D, StatusLegend } from "@/features/hotel3d/Hotel3D";
 import { PlaybackControls } from "@/features/hotel3d/PlaybackControls";
 import { EventFeed, RoomCard, TaskCard, WorkOrderList } from "@/features/hotel3d/ReplayPanels";
+import { RoomPicker } from "@/features/hotel3d/RoomPicker";
 import { type HotelReplay, itemName, placeName, type ReplaySource, roomNumber, simToClock, type Task, taskKindName, useHotelReplay } from "@/features/replay";
 import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, PageHeader, RegenIcon, Skeleton, Stat } from "@/ui";
 import { failures, forManagers } from "./eventFilter";
@@ -26,6 +27,18 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   const snapshot = replay.snapshot;
   const [room, setRoom] = useState<string | null>(null);
   const [technical, setTechnical] = useState(false);
+  const roomCard = useRef<HTMLDivElement>(null);
+  const scrollToRoom = useRef(false);
+  // The room's card opens right under the map it was chosen on, and comes into view.
+  const chooseRoom = useCallback((roomId: string | null) => {
+    scrollToRoom.current = roomId !== null;
+    setRoom(roomId);
+  }, []);
+  useEffect(() => {
+    if (!room || !scrollToRoom.current) return;
+    scrollToRoom.current = false;
+    roomCard.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [room]);
 
   const events = useMemo(() => {
     if (!replay.timeline || !snapshot) return [];
@@ -34,7 +47,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   }, [replay.timeline, snapshot, technical]);
 
   const failed = useMemo(
-    () => (replay.timeline && snapshot ? failures(replay.timeline.tasks, replay.timeline.events, snapshot.eventCount) : []),
+    () => (replay.timeline && snapshot ? failures(replay.timeline.tasks, replay.timeline.events, snapshot.eventCount, snapshot.t) : []),
     [replay.timeline, snapshot],
   );
   const open = useMemo(
@@ -114,7 +127,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
                         <li key={task.id} className="flex flex-col gap-1 px-4 py-3">
                           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                             <span className="font-semibold">{taskName(task)}</span>
-                            <span className="text-sm whitespace-nowrap text-muted tabular-nums">{clock.slice(0, 5)}</span>
+                            <span className="font-mono text-sm whitespace-nowrap text-muted tabular-nums">{clock.slice(0, 5)}</span>
                           </div>
                           {reason && <p className="text-sm text-danger">{reason}</p>}
                           {task.text && (
@@ -122,19 +135,19 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
                               «{task.text}»
                             </p>
                           )}
-                          <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted">
-                            <span className="font-mono">{task.id}</span>
-                            <Link href={`/hotell?t=${Math.round(task.start)}${task.room ? `&rom=${task.room}` : ""}`} className="font-semibold text-accent-text hover:underline">
-                              Vis i 3D-kartet kl. {simToClock(task.start, false)}
-                            </Link>
-                          </div>
+                          <span className="font-mono text-sm text-muted sm:text-xs">{task.id}</span>
+                          <Link
+                            href={`/hotell?t=${Math.round(task.start)}${task.room ? `&rom=${task.room}` : ""}`}
+                            className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent-text hover:underline"
+                          >
+                            Vis i 3D-kartet kl. {simToClock(task.start, false)}
+                          </Link>
                         </li>
                       ))}
                     </ol>
                   )}
                 </section>
 
-                {room && <RoomCard roomId={room} snapshot={snapshot} timeline={replay.timeline} onClose={() => setRoom(null)} />}
                 <WorkOrderList orders={snapshot.workOrders} />
               </div>
 
@@ -146,12 +159,12 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
                     </h2>
                     <span className="text-sm text-muted">siste først</span>
                   </div>
-                  <label className="flex min-h-9 cursor-pointer items-center gap-2 text-sm text-muted">
+                  <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-muted">
                     <input
                       type="checkbox"
                       checked={technical}
                       onChange={(event) => setTechnical(event.currentTarget.checked)}
-                      className="size-4 accent-accent"
+                      className="size-5 accent-accent"
                     />
                     Vis tekniske hendelser
                   </label>
@@ -162,15 +175,23 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
 
             <section aria-labelledby="moment-heading" className="flex flex-col gap-4 border-t border-line pt-8">
               <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <h2 id="moment-heading" className="text-lg font-semibold tracking-[-0.01em]">
-                    Et øyeblikk av natten
-                  </h2>
-                  <p className="mt-1 text-sm text-muted">Spol i natten og se hvor roboten var. Trykk på et rom for rommets natt.</p>
+                <div className="flex w-full flex-col gap-3 sm:w-auto">
+                  <div>
+                    <h2 id="moment-heading" className="text-lg font-semibold tracking-[-0.01em]">
+                      Et øyeblikk av natten
+                    </h2>
+                    <p className="mt-1 text-sm text-muted">Spol i natten og se hvor roboten var. Trykk på et rom, eller velg det, for rommets natt.</p>
+                  </div>
+                  <RoomPicker map={replay.timeline?.map} snapshot={snapshot} value={room} onChange={chooseRoom} className="sm:max-w-xs" />
                 </div>
                 <TaskCard snapshot={snapshot} finished={snapshot.finished} className="w-full lg:w-[380px]" />
               </div>
-              <Hotel3D replay={replay} variant="panel" selectedRoom={room} onSelectRoom={setRoom} />
+              <Hotel3D replay={replay} variant="panel" selectedRoom={room} onSelectRoom={chooseRoom} />
+              {room && (
+                <div ref={roomCard} className="scroll-mt-4">
+                  <RoomCard roomId={room} snapshot={snapshot} timeline={replay.timeline} onClose={() => setRoom(null)} />
+                </div>
+              )}
               <StatusLegend className="px-1 sm:hidden" />
               <Card>
                 <PlaybackControls replay={replay} compact />
@@ -208,19 +229,18 @@ function ShiftBadge({ replay }: { replay: HotelReplay }) {
 function Tabs({ source, onChange }: { source: ReplaySource; onChange: (source: ReplaySource) => void }) {
   const tabs: Array<{ id: ReplaySource; label: string }> = [
     { id: "demo", label: "Opptak" },
-    { id: "live", label: "Live" },
+    { id: "live", label: "Direkte" },
   ];
   return (
-    <div role="tablist" aria-label="Kilde" className="inline-flex gap-0.5 rounded-sm bg-sunken p-0.5">
+    <div role="group" aria-label="Kilde" className="inline-flex gap-0.5 rounded-sm bg-sunken p-0.5">
       {tabs.map(({ id, label }) => (
         <button
           key={id}
           type="button"
-          role="tab"
-          aria-selected={source === id}
+          aria-pressed={source === id}
           onClick={() => onChange(id)}
           className={cx(
-            "min-h-10 rounded-sm px-4 text-sm font-semibold transition-colors duration-[120ms] ease-standard",
+            "min-h-10 rounded-sm px-4 text-sm font-semibold transition-colors duration-[120ms] ease-standard pointer-coarse:min-h-11",
             source === id ? "bg-surface text-text" : "text-muted hover:text-text",
           )}
         >
@@ -244,25 +264,25 @@ function StatRow({ replay, open }: { replay: HotelReplay; open: number }) {
         <Stat label={low ? "Batteri · lavt" : "Batteri"} value={snapshot.battery === null ? "–" : Math.round(snapshot.battery)} unit={snapshot.battery === null ? undefined : "%"} tone={low ? "warning" : "default"} />
         <Stat label="Poeng" value={snapshot.score} />
       </div>
-      <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
-        <div className="flex gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-muted">
+        <dl className="flex gap-2">
           <dt>Roboten står ved</dt>
           <dd className="text-text">{placeName(snapshot.robot.node)}</dd>
-        </div>
+        </dl>
         <details className="group">
-          <summary className="cursor-pointer list-none hover:text-text">Teknisk</summary>
-          <div className="mt-1 flex flex-wrap gap-x-6">
+          <summary className="cursor-pointer py-3 hover:text-text">Teknisk</summary>
+          <div className="flex flex-wrap gap-x-6">
             <span>
-              Skift <span className="font-mono text-xs text-text">{replay.shift ?? "–"}</span>
+              Skift <span className="font-mono text-sm break-all text-text sm:text-xs">{replay.shift ?? "–"}</span>
             </span>
             {replay.seed !== null && (
               <span>
-                Seed <span className="font-mono text-xs text-text">{replay.seed}</span>
+                Seed <span className="font-mono text-sm text-text sm:text-xs">{replay.seed}</span>
               </span>
             )}
           </div>
         </details>
-      </dl>
+      </div>
     </section>
   );
 }

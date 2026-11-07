@@ -685,8 +685,8 @@ def test_follow_up_for_a_done_order_delivers_nothing(tmp_path):
     assert ex.run(next_task(ex, session, "R-001")).status == "done"
     places = len(calls(fake, "place"))
     out = ex.run(next_task(ex, session, "R-002"))
-    assert out.status == "failed" and "no order for phone-charger from 319 on record" in out.note
-    assert len(calls(fake, "place")) == places and fake.reports["R-002"] == "failed"
+    assert out.status == "declined" and "already delivered under R-001" in out.note
+    assert len(calls(fake, "place")) == places and fake.reports["R-002"] == "declined"
 
 
 def test_follow_up_runs_the_pending_original_first(tmp_path):
@@ -1011,9 +1011,9 @@ def test_follow_up_redelivers_a_failed_order_once(tmp_path):
     assert fake._requests["R-001"].completed and not fake.wrong_deliveries
     assert ex.ledger.get("R-001").status == "done"
     again = ex.run(next_task(ex, session, "R-003"))  # a second call about the same order
-    assert again.status == "failed" and again.note == "no order for phone-charger from 319 on record (R-001 was already done)"
+    assert again.status == "declined" and "already delivered under R-001" in again.note
     assert len([e for e in calls(fake, "place") if e["ok"]]) == 1
-    assert fake.reports == {"R-001": "failed", "R-002": "failed", "R-003": "failed"} and not fake.false_done
+    assert fake.reports == {"R-001": "failed", "R-002": "failed", "R-003": "declined"} and not fake.false_done
     assert [d["request"] for d in hypotheses(session, "H-followup")] == ["R-002", "R-003"]
 
 

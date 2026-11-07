@@ -312,7 +312,7 @@ def test_follow_up_and_its_order_are_delivered_once_through_the_loop(tmp_path):
                        params=Params(use_cart=False))
     placed = [e for e in fake.log if e["cmd"] == "place" and e["ok"]]
     assert [e["args"] for e in placed] == [{"item": "towel", "where": "room-104"}]
-    assert fake.reports == {"R-001": "done", "R-002": "failed"}
+    assert fake.reports == {"R-001": "done", "R-002": "declined"}  # live: +5 for the declined second call
     assert not fake.false_done and not fake.wrong_deliveries
     assert _decisions(tmp_path, result, "hypothesis")
     assert result["requests_served"] == 1  # R-001, also when the follow-up ran it
@@ -330,7 +330,7 @@ def test_full_night_with_the_live_request_types(tmp_path):
         if kind in ("bags", "noise", "spill") or (kind == "amenity" and rid == "R-008"):
             assert fake.reports.get(rid) == "done", (rid, kind, fake.reports.get(rid))
         if kind == "followup":
-            assert fake.reports.get(rid) == "failed", rid
+            assert fake.reports.get(rid) == "declined", rid
     ids = {d["id"] for d in _decisions(tmp_path, result, "hypothesis")}
     assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill", "H-duplicate"} <= ids
     assert result["score"] >= 250

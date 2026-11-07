@@ -365,10 +365,10 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
     if orig is None:  # a false claim: declined with the reason scores +5 live (failed 0, done -20)
         h.log("delivered nothing: no order on record", h.before, ex.score_now(), original=None)
         raise Declined(f"No {item} order from {num} on record tonight; nothing was ordered.")
-    if orig.status == "done":
+    if orig.status == "done":  # live: a second call about a delivered order declined scored +5 (R-049)
         h.log(f"delivered nothing: {orig.request} was already done", h.before, ex.score_now(),
               original=orig.request)
-        raise ActionFailed(f"no order for {item} from {num} on record ({orig.request} was already done)")
+        raise Declined(f"The {item} for {num} was already delivered under {orig.request}; nothing more to bring.")
     queued = next((t for t in ex.queue if t.request == orig.request), None)
     if queued is not None:  # still waiting: do it now, under its own id
         ex.queue.remove(queued)

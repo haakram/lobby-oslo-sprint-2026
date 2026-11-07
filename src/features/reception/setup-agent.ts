@@ -1,5 +1,5 @@
-// Creates the receptionist agent at ElevenLabs, or updates it when ELEVENLABS_RECEPTION_AGENT_ID is
-// already set. Prints only the agent id. Run only after ShirazIQ's yes:
+// Updates the receptionist agent at ElevenLabs (the team's agent by default, or
+// ELEVENLABS_RECEPTION_AGENT_ID when set). Prints only the agent id. Run only after ShirazIQ's yes:
 //
 //   npx tsx --conditions=react-server --env-file=.env src/features/reception/setup-agent.ts
 //
@@ -14,8 +14,8 @@
 // samtalen") stay empty and requests appear only in Samtalelogg after the call. Stay in client mode
 // (RECEPTION_PUBLIC_URL unset) for the browser demo; use a separate phone agent if you need both.
 //
-// This script never prints or stores a key or the secret. Put the printed id in .env as
-// ELEVENLABS_RECEPTION_AGENT_ID (and in Vercel's project settings).
+// This script never prints or stores a key or the secret. The team's agent id is the default in
+// src/lib/env.ts (an id is not a secret); set ELEVENLABS_RECEPTION_AGENT_ID only for another agent.
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { receptionEnv } from "../../lib/env";
 import { receptionAgentConfig, type ToolMode } from "./agentConfig";

@@ -101,11 +101,18 @@ export function voiceEnv(): VoiceEnv {
   });
 }
 
+/**
+ * The team's receptionist agent at ElevenLabs. An agent id is a name, not a secret: starting a
+ * conversation needs a token our server signs with ELEVENLABS_API_KEY (the agent has auth enabled),
+ * and changing the agent needs that key too. Set ELEVENLABS_RECEPTION_AGENT_ID to use another agent.
+ */
+export const RECEPTION_AGENT_ID_DEFAULT = "agent_5901m6v2qbmrebhvp01v3wpkd3xm";
+
 /** What the receptionist needs: its own agent id, and for webhook tools a public URL and a secret. */
 export function receptionEnv(): ReceptionEnv {
   return parse(receptionSchema, {
     ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
-    ELEVENLABS_RECEPTION_AGENT_ID: process.env.ELEVENLABS_RECEPTION_AGENT_ID,
+    ELEVENLABS_RECEPTION_AGENT_ID: process.env.ELEVENLABS_RECEPTION_AGENT_ID || RECEPTION_AGENT_ID_DEFAULT,
     RECEPTION_PUBLIC_URL: process.env.RECEPTION_PUBLIC_URL,
     RECEPTION_TOOL_SECRET: process.env.RECEPTION_TOOL_SECRET,
   });

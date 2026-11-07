@@ -71,7 +71,14 @@ export const HOTEL = {
     "Resepsjonen er betjent 07:00–23:00.",
     "Flytoget går fra Oslo S til flyplassen på under 25 minutter, og det er fem minutters gange til stasjonen.",
     "Treningsrommet i kjelleren er åpent hele døgnet for gjester.",
+    "Inngangen er trinnfri, og heisen går til alle etasjer. To dobbeltrom er tilrettelagt for rullestol, med bred dør og dusj uten terskel.",
+    "Førerhunder og andre assistansehunder er alltid velkomne, uten tillegg.",
   ],
+  privacy: {
+    controller: "Hotell Nattskift AS",
+    email: "personvern@nattskift.example",
+    retentionDays: 30,
+  },
 } as const satisfies {
   name: "Hotell Nattskift";
   city: "Oslo";
@@ -79,6 +86,8 @@ export const HOTEL = {
   checkIn: "15:00";
   checkOut: "11:00";
   facts: readonly string[];
+  /** Who answers for the callers' personal data, where to ask, and how long call records are kept. */
+  privacy: { controller: string; email: string; retentionDays: number };
 };
 
 export const DIRECT_DISCOUNT = 0.1;

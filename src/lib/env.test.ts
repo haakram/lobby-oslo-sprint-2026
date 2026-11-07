@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { receptionEnv, serverEnv, voiceEnv } from "./env";
+import { RECEPTION_AGENT_ID_DEFAULT, receptionEnv, serverEnv, voiceEnv } from "./env";
 
 // Made-up test values, never real keys.
 const ELEVEN = "test-eleven-value-123";
@@ -121,11 +121,11 @@ describe("receptionEnv", () => {
     return "";
   }
 
-  it("needs only the ElevenLabs key; the rest is optional", () => {
+  it("needs only the ElevenLabs key; the agent id defaults to the team's agent", () => {
     vi.stubEnv("ELEVENLABS_RECEPTION_AGENT_ID", "");
     expect(receptionEnv()).toEqual({
       ELEVENLABS_API_KEY: ELEVEN,
-      ELEVENLABS_RECEPTION_AGENT_ID: undefined,
+      ELEVENLABS_RECEPTION_AGENT_ID: RECEPTION_AGENT_ID_DEFAULT,
       RECEPTION_PUBLIC_URL: undefined,
       RECEPTION_TOOL_SECRET: undefined,
     });

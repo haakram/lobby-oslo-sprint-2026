@@ -129,10 +129,20 @@ class TaskSkipped(Exception):
     the flows' own handlers (a scan place out of reach, a top-up) must not swallow it."""
 
 
+class OutOfStock(ActionFailed):
+    """gather found the item at none of the stock places (nor, for a sign, as stock anywhere)."""
+
+
 class Declined(ActionFailed):
     """The request is turned down for a true reason and reported `declined` (the server's third
     outcome besides done/failed; the fourth is cancelled). Live (scout, 5 of 5): a follow-up claim
     with no order on record reported declined scores +5; the same as failed scores 0, and as done -20."""
+
+
+def night_seconds(clock: str) -> int:
+    """Sim second of a night clock, after-midnight clocks counted past 24:00 (00:10 is after 23:50)."""
+    s = clock_to_seconds(clock)
+    return s + 24 * 3600 if s < 12 * 3600 else s
 
 
 class _Replan:
@@ -176,7 +186,9 @@ class Executor:
         # id, as the shift loop's read finds it: the manager answers a `reply` this way (Task 9).
         self.answers: dict[str, list[str]] = {}
         self.checked_out: set[str] = set()  # rooms the manager's skip says checked out: nothing is done there
-        self.wet_at_read: dict[str, frozenset[str]] = {}  # spill request -> wet spots known when it was read
+        # wet spot -> night second it was first seen wet (the map's own: the shift start); H-spill's
+        # "old patch" is one first seen before the request's message arrived
+        self.wet_first_seen: dict[str, int] = dict.fromkeys(hotel.wet_spots(), night_seconds(SHIFT_START))
         self.signs_placed: dict[str, str] = {}  # place -> the spill request its wet-floor sign serves, oldest first
         self.verified: set[str] = set()  # requests whose "done" report the server thanked for
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
@@ -227,9 +239,29 @@ class Executor:
         """The task about to be reported done rides on this experiment."""
         self._exp_pending = name
 
+    def stamp_wet(self) -> None:
+        """Stamp each wet spot not stamped yet with the clock now: run before every call, that is the
+        clock of the reply that showed it wet (an unreadable clock: the shift start, i.e. old)."""
+        new = [s for s in self.hotel.wet_spots() if s not in self.wet_first_seen]
+        if new:
+            try:
+                now = night_seconds(self.state.clock)
+            except (AttributeError, TypeError, ValueError):
+                now = night_seconds(SHIFT_START)
+            self.wet_first_seen.update(dict.fromkeys(new, now))
+
+    def movable_signs(self) -> list[str]:
+        """Where our wet-floor signs stand over spills already reported done and verified, oldest
+        first: what a new patch may take when storage is out. None while sign_move or spill_done is
+        off (live the place never raises the score: without spill_done no done report is made)."""
+        if not (self.experiment("sign_move") and self.experiment("spill_done")):
+            return []
+        return [place for place, rid in self.signs_placed.items() if rid in self.verified]
+
     # --- server calls --------------------------------------------------------------------------
 
     def cmd(self, name: str, **args) -> Reply:
+        self.stamp_wet()  # spots the last reply showed wet: first seen at its clock
         self._calls += 1  # Task 18: the status cache
         self.calls += 1  # Task 19: fresh_look
         reply = self.session.cmd(name, **args)
@@ -1008,7 +1040,7 @@ class Executor:
                 self.survey()  # the belief failed: see the stock places once, if not seen yet
                 place = self._stock_place(item, tried) or self._unchecked_stock_place(item, tried)
             if place is None:
-                raise ActionFailed(f"{item} out of stock")
+                raise OutOfStock(f"{item} out of stock")
             self.go(place)
             if place in self._looked and self.hotel.stock.get(place, {}).get(item, 0) <= 0:
                 tried.add(place)  # the look here showed none: no pick wasted

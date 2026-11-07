@@ -273,8 +273,6 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
             better = brain.classify(task.request, task.text, task.arrived)
             if better is not None and better.kind is not Kind.UNKNOWN:
                 task = _vet_brain(ex, task, flows.normalize(better))
-        if task.kind is Kind.SPILL:  # a patch wet before this read is not this spill's (H-spill)
-            ex.wet_at_read[rid] = frozenset(ex.hotel.wet_spots())
         ex.log("request", request=rid, kind=task.kind.value, text=task.text)
         ex.ledger.add(task)
         pending.append(task)
@@ -381,7 +379,7 @@ def run_shift(
                 ex.ensure_battery()  # below 25 %: charge at the dock before the next task or wait
                 # No close-out before 06:00: a declined real request pays 0 and a request still open
                 # at 06:00 costs nothing (live), so the best task is tried to the end.
-                task = choose_next(pending, state, hotel, params)
+                task = choose_next(pending, state, hotel, params, movable_signs=ex.movable_signs())
                 if task is None:
                     ex.wait_for_request(should_stop=out_of_time)
                 else:

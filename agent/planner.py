@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 
 from agent.routing import NoRoute, route_seconds
@@ -109,8 +110,10 @@ def _carried_like(state: RobotState, item: str) -> bool:
     return any(n == item or n.startswith(item + "-") for n in [*state.hands, *(state.cart or [])])
 
 
-def _stops(task: Task, state: RobotState, hotel: Hotel) -> list[str] | None:
-    """Ordered places to visit before the action is done; None if impossible."""
+def _stops(task: Task, state: RobotState, hotel: Hotel,
+           movable_signs: Sequence[str] = ()) -> list[str] | None:
+    """Ordered places to visit before the action is done; None if impossible. `movable_signs`: where
+    the executor may take a credited wet-floor sign when none is in stock (H-spill, sign_move)."""
     stops: list[str] = []
     if task.kind is Kind.FOLLOWUP:
         return stops  # mostly a report; a waiting original is planned on its own
@@ -131,7 +134,7 @@ def _stops(task: Task, state: RobotState, hotel: Hotel) -> list[str] | None:
         stops.append(hotel.special.get("clerk", "front-desk"))
     if task.kind is Kind.SPILL:
         if not state.carrying("wet-floor-sign"):
-            place = hotel.stock_location("wet-floor-sign")
+            place = hotel.stock_location("wet-floor-sign") or next(iter(movable_signs), None)
             if place is None:
                 return None
             stops.append(place)
@@ -151,8 +154,9 @@ def _stops(task: Task, state: RobotState, hotel: Hotel) -> list[str] | None:
     return stops
 
 
-def estimate_seconds(task: Task, state: RobotState, hotel: Hotel, params: Params) -> float:
-    stops = _stops(task, state, hotel)
+def estimate_seconds(task: Task, state: RobotState, hotel: Hotel, params: Params, *,
+                     movable_signs: Sequence[str] = ()) -> float:
+    stops = _stops(task, state, hotel, movable_signs)
     if stops is None:
         return UNREACHABLE_S
     cart = state.has_cart
@@ -176,7 +180,8 @@ def estimate_value(task: Task, now_s: int, params: Params) -> float:
     return max(VALUE_FLOOR, base - params.decay_per_min * waited_min)
 
 
-def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Params) -> Task | None:
+def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Params, *,
+                movable_signs: Sequence[str] = ()) -> Task | None:
     """Shortest task first. Every request loses about a point a minute while it waits, whatever
     its kind, so the order that minimises the sum of waits (shortest processing time first) loses
     the fewest points; the old value-per-second order ran a 10-minute lost-item search ahead of
@@ -186,7 +191,7 @@ def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Para
     best: tuple | None = None
     pick: Task | None = None
     for idx, t in enumerate(tasks):
-        secs = estimate_seconds(t, state, hotel, params)
+        secs = estimate_seconds(t, state, hotel, params, movable_signs=movable_signs)
         if params.order == "ratio":
             rank = -estimate_value(t, int(now + secs), params) / max(secs, 1.0)
         else:

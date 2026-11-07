@@ -2,16 +2,16 @@
 
 import { ConversationProvider } from "@elevenlabs/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useCallback, useState } from "react";
 import type { VoicePhase, VoiceProblem } from "@/features/voice/useFetteroVoice";
 import { Transcript } from "@/features/voice/Transcript";
 import { VoiceOrb } from "@/features/voice/VoiceOrb";
-import { Button, Card, EmptyState, ErrorState, fadeRise, MicIcon } from "@/ui";
+import { Button, Card, cx, EmptyState, ErrorState, fadeRise, MicIcon } from "@/ui";
 import { CallLogPanel } from "./CallLogPanel";
 import { RecordCard } from "./RecordCard";
 import type { ReceptionRecord } from "./records";
 import { useReceptionVoice } from "./useReceptionVoice";
 import { useStaffMarks, type StaffMark } from "./useStaffMarks";
+import { useStoredRecords } from "./useStoredRecords";
 
 const STATUS: Record<VoicePhase, string> = {
   idle: "Trykk og snakk som en gjest.",
@@ -30,12 +30,9 @@ export function ReceptionScreen() {
 }
 
 function ReceptionSession() {
-  // Everything taken down on this page visit, newest first. Staff ticks live in useStaffMarks.
-  const [records, setRecords] = useState<ReceptionRecord[]>([]);
-  const onRecord = useCallback((record: ReceptionRecord) => {
-    setRecords((current) => [record, ...current.filter((r) => r.id !== record.id)]);
-  }, []);
-  const voice = useReceptionVoice(onRecord);
+  // Everything taken down, newest first, kept across reloads until staff settle it. Ticks live in useStaffMarks.
+  const { records, add } = useStoredRecords();
+  const voice = useReceptionVoice(add);
   const { marks, mark } = useStaffMarks();
   const busy = voice.phase === "connecting";
 
@@ -87,10 +84,11 @@ function ReceptionSession() {
           </Card>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-10">
+        {/* On a phone, what waits for a tap comes before the call controls once there is something. */}
+        <div className={cx("flex min-w-0 flex-col gap-10", records.length > 0 && "max-lg:order-first")}>
           <section aria-labelledby="records-heading" className="flex flex-col gap-4">
-            <h2 id="records-heading" className="text-2xl font-bold tracking-[-0.02em]">
-              Denne samtalen
+            <h2 id="records-heading" className="text-lg font-bold tracking-[-0.01em]">
+              Bookinger og beskjeder
             </h2>
             <Records records={records} marks={marks} onMark={mark} />
           </section>
@@ -108,13 +106,13 @@ function Records({
 }: {
   records: ReceptionRecord[];
   marks: Record<string, StaffMark>;
-  onMark: (id: string, value: StaffMark) => void;
+  onMark: (id: string, value: StaffMark | null) => void;
 }) {
   const reduced = useReducedMotion();
   if (records.length === 0) {
     return (
       <Card>
-        <EmptyState title="Ingen forespørsler ennå" body="Bookinger og beskjeder fra samtalen kommer her." />
+        <EmptyState title="Ingen forespørsler ennå" body="Bookinger og beskjeder resepsjonisten tar imot, venter her til du har svart på dem." />
       </Card>
     );
   }

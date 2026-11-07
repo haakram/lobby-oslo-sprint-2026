@@ -142,7 +142,7 @@ describe("ReceptionScreen", () => {
     expect(within(card).getByText("Dobbeltrom")).toBeInTheDocument();
     expect(within(card).getByText("20.11.2026")).toBeInTheDocument();
     expect(within(card).getByText("22.11.2026")).toBeInTheDocument();
-    expect(within(card).getByText("3042 kr")).toBeInTheDocument();
+    expect(within(card).getByText("3 042 kr")).toBeInTheDocument();
     expect(screen.queryByText("Ingen forespørsler ennå")).not.toBeInTheDocument();
     await screen.findByText("Ingen samtaler ennå");
   });
@@ -155,13 +155,51 @@ describe("ReceptionScreen", () => {
     const card = screen.getByRole("article", { name: "Bookingforespørsel" });
     expect(within(card).getByText("Bekreftet")).toBeInTheDocument();
     expect(within(card).queryByText("Venter")).not.toBeInTheDocument();
-    expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+    // Only the way back is left, and focus moved to it instead of falling to the page.
+    expect(within(card).getAllByRole("button").map((button) => button.textContent)).toEqual(["Angre"]);
+    expect(within(card).getByRole("button", { name: "Angre" })).toHaveFocus();
     await screen.findByText("Ingen samtaler ennå");
     first.unmount();
 
     render(<ReceptionScreen />);
     push(BOOKING);
     expect(within(screen.getByRole("article", { name: "Bookingforespørsel" })).getByText("Bekreftet")).toBeInTheDocument();
+    await screen.findByText("Ingen samtaler ennå");
+  });
+
+  it("keeps what the receptionist took down across a reload, until staff settle it", async () => {
+    stubCalls(ok({ calls: [] }));
+    const first = render(<ReceptionScreen />);
+    push(BOOKING);
+    push(MESSAGE);
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+    await screen.findByText("Ingen samtaler ennå");
+    first.unmount();
+
+    // A new page load: nothing is pushed, the records come back from the browser, newest first.
+    render(<ReceptionScreen />);
+    const cards = screen.getAllByRole("article");
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveAccessibleName(/Beskjed/);
+    expect(within(cards[1]).getByText("Venter")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bookinger og beskjeder" })).toBeInTheDocument();
+    expect(screen.queryByText("Ingen forespørsler ennå")).not.toBeInTheDocument();
+    await screen.findByText("Ingen samtaler ennå");
+  });
+
+  it("takes a tick back on Angre: the booking waits again", async () => {
+    stubCalls(ok({ calls: [] }));
+    render(<ReceptionScreen />);
+    push(BOOKING);
+    const card = screen.getByRole("article", { name: "Bookingforespørsel" });
+    fireEvent.click(within(card).getByRole("button", { name: "Avvis" }));
+    expect(within(card).getByText("Avvist")).toBeInTheDocument();
+
+    fireEvent.click(within(card).getByRole("button", { name: "Angre" }));
+    expect(within(card).getByText("Venter")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Bekreft" })).toHaveFocus();
+    expect(within(card).getByRole("button", { name: "Avvis" })).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("resepsjon-marks-v1") ?? "{}")).toEqual({});
     await screen.findByText("Ingen samtaler ennå");
   });
 
@@ -184,8 +222,12 @@ describe("ReceptionScreen", () => {
     expect(within(card).getByText("I left my charger in room 214.")).toBeInTheDocument();
     fireEvent.click(within(card).getByRole("button", { name: "Ringt tilbake" }));
     expect(within(card).queryByText("Haster")).not.toBeInTheDocument();
-    expect(within(card).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(card).getAllByRole("button").map((button) => button.textContent)).toEqual(["Angre"]);
     expect(within(card).getByText("Ringt tilbake")).toBeInTheDocument();
+
+    fireEvent.click(within(card).getByRole("button", { name: "Angre" }));
+    expect(within(card).getByText("Haster")).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "Ringt tilbake" })).toBeInTheDocument();
     await screen.findByText("Ingen samtaler ennå");
   });
 

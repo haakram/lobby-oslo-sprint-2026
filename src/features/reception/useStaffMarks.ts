@@ -42,9 +42,12 @@ export function useStaffMarks() {
     typeof window === "undefined" ? {} : readMarks(),
   );
 
-  const mark = useCallback((id: string, value: StaffMark) => {
+  /** Sets a tick, or takes it back with null (Angre): the record waits again. */
+  const mark = useCallback((id: string, value: StaffMark | null) => {
     setMarks((current) => {
-      const next = { ...current, [id]: value };
+      const next = { ...current };
+      if (value === null) delete next[id];
+      else next[id] = value;
       writeMarks(next);
       return next;
     });

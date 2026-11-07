@@ -8,11 +8,14 @@ import itertools
 import json
 
 import httpx
+import pytest
 
 from agent.agent import run_shift
-from agent.client import WybeClient
-from agent.executor import ActionFailed
+from agent.client import ShiftEnded, ShiftSession, WybeClient
+from agent.executor import ActionFailed, Executor
 from agent.planner import Params
+from agent.tasks import parse_request
+from agent.world import Hotel, RobotState
 from tests.agent.test_executor import calls, decisions, map_file, next_task, settings, setup, solo
 from tests.fakes.fake_wybe import FakeWybe
 
@@ -203,6 +206,118 @@ def test_dock_is_not_relearnt_after_a_move(tmp_path):
     assert ex.hotel.special["dock"] == "charging-dock"
 
 
+# --- Task 24 / 1: a shift adopted mid-night (a restart) keeps the map's dock ------------------------
+
+
+def adopt(session):
+    """What a restarted process does with a live shift: a fresh Executor on the same session."""
+    return Executor(session, Hotel.load(), RobotState())
+
+
+def read_inbox(ex):
+    """The loop's inbox read: through the executor (so its status cache sees it), flag cleared."""
+    ex.cmd("inbox")
+    ex.inbox_waiting = False
+
+
+def move_away(session, scans=0):
+    """The robot leaves the dock (and time passes) before the process restarts."""
+    for to in ("lobby", "front-desk"):
+        session.cmd("move", to=to)
+    for _ in range(scans):
+        session.cmd("scan")  # 60 sim-s each
+
+
+def test_moved_then_adopted_shift_keeps_the_maps_dock_and_docks(tmp_path):
+    fake, session, _ = setup(tmp_path, requests=[])
+    move_away(session, scans=3)  # 22:03: past the shift's opening
+    ex = adopt(session)
+    ex.refresh()
+    assert ex.hotel.special["dock"] == "charging-dock"
+    assert not decisions(session, "dock_learnt")
+    fake.battery = 50
+    read_inbox(ex)
+    ex._surveyed = True
+    ex.wait_for_request(max_idle=3)
+    docks = calls(fake, "dock")
+    assert docks and docks[0]["ok"], docks
+
+
+def test_dock_is_learnt_only_at_the_very_start_of_the_shift(tmp_path):
+    for scans, learnt in ((2, True), (3, False)):  # 22:02:00 is still the start; 22:03:00 is not
+        _fake, session, _ = setup(tmp_path, requests=[], hotel_path=map_file(tmp_path, rename_dock))
+        for _ in range(scans):
+            session.cmd("scan")
+        ex = adopt(session)
+        ex.refresh()
+        assert (ex.hotel.special["dock"] == "dock") is learnt, scans
+
+
+def test_dock_window_runs_from_the_start_clock_the_session_reports(tmp_path):
+    _fake, session, _ = setup(tmp_path, requests=[], hotel_path=map_file(tmp_path, rename_dock))
+    for _ in range(3):
+        session.cmd("scan")
+    session.start_clock = "22:02:00"
+    ex = adopt(session)
+    ex.refresh()
+    assert ex.hotel.special["dock"] == "dock"
+
+
+def test_adopted_shift_after_a_restart_charges_at_the_real_dock(tmp_path):
+    requests = [("22:20:00", "R-001", "104 wants a towel."), ("23:10:00", "R-002", "205 wants a water bottle.")]
+    fake = FakeWybe(requests=requests)
+    client = WybeClient(settings(tmp_path), transport=httpx.MockTransport(fake.handler),
+                        sleep=lambda s: None)
+    first = client.start_shift("practice", seed=1)
+    move_away(first, scans=3)
+    adopted = ShiftSession(client, first.shift_id, "practice", 1)  # the restarted process
+    result = run_shift(client, session=adopted, sim_end="23:40:00")
+    assert "dock_learnt" not in _kinds(_run_log(tmp_path, result))
+    docks = calls(fake, "dock")
+    assert docks and all(d["ok"] or "full" in str(d["result"]) for d in docks), docks
+    assert fake.reports == {"R-001": "done", "R-002": "done"}, fake.reports
+    assert not fake.false_done and not fake.unsafe
+
+
+def test_refused_learnt_dock_reverts_once_to_the_maps_dock(tmp_path):
+    fake, session, _ = setup(tmp_path, requests=[])
+    move_away(session)  # 22:00:15: still the opening, but the robot is no longer at the dock
+    ex = adopt(session)
+    ex.refresh()
+    assert ex.hotel.special["dock"] == "front-desk"  # learnt wrongly
+    fake.battery = 50
+    read_inbox(ex)
+    ex._surveyed = True
+    ex.wait_for_request(max_idle=4)
+    assert ex.hotel.special["dock"] == "charging-dock"
+    assert len(decisions(session, "dock_reverted")) == 1
+    assert [d["ok"] for d in calls(fake, "dock")][:2] == [False, True]
+
+
+def test_refused_learnt_dock_reverts_when_charging(tmp_path):
+    fake, session, _ = setup(tmp_path, requests=[])
+    move_away(session)
+    ex = adopt(session)
+    read_inbox(ex)
+    fake.battery = 20
+    ex.refresh()
+    assert ex.hotel.special["dock"] == "front-desk"
+    assert ex.ensure_battery() is True
+    assert ex.state.location == "charging-dock" and ex.state.battery >= 60
+    assert len(decisions(session, "dock_reverted")) == 1
+
+
+def test_full_battery_at_the_learnt_dock_does_not_revert(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=[], hotel_path=map_file(tmp_path, rename_dock))
+    ex.refresh()
+    read_inbox(ex)
+    ex._surveyed = True
+    ex.wait_for_request(max_idle=2)
+    docks = calls(fake, "dock")
+    assert docks and "already full" in docks[0]["result"], docks  # refused, but the dock is right
+    assert ex.hotel.special["dock"] == "dock" and not decisions(session, "dock_reverted")
+
+
 # --- requirement 6: battery ----------------------------------------------------------------------
 
 
@@ -242,6 +357,214 @@ def test_low_battery_is_charged_before_a_trip(tmp_path):
     out = ex.run(task)
     assert out.status == "done", out
     assert calls(fake, "dock", since=since)
+
+
+# --- Task 24 / 3: no charge while work waits (unless the battery is nearly flat) -------------------
+
+
+def low_at_the_lobby(tmp_path, battery):
+    fake, session, ex = setup(tmp_path, requests=[])
+    read_inbox(ex)
+    ex.go("lobby")
+    fake.battery = battery
+    ex.refresh()
+    return fake, session, ex
+
+
+def test_ensure_battery_does_not_charge_while_a_request_is_queued(tmp_path):
+    fake, session, ex = low_at_the_lobby(tmp_path, 20)
+    ex.queue.append(parse_request("R-009", "104 wants a towel.", "22:01:00"))
+    since = len(fake.log)
+    assert ex.ensure_battery() is False
+    assert not calls(fake, "dock") and len(fake.log) == since and ex.state.location == "lobby"
+    assert decisions(session, "charge_deferred")
+
+
+def test_ensure_battery_does_not_charge_while_a_message_waits(tmp_path):
+    fake, _session, ex = low_at_the_lobby(tmp_path, 20)
+    ex.inbox_waiting = True
+    assert ex.ensure_battery() is False
+    assert not calls(fake, "dock") and ex.state.location == "lobby"
+
+
+def test_ensure_battery_charges_below_10_even_with_work_waiting(tmp_path):
+    fake, _session, ex = low_at_the_lobby(tmp_path, 8)
+    ex.queue.append(parse_request("R-009", "104 wants a towel.", "22:01:00"))
+    assert ex.ensure_battery() is True
+    assert calls(fake, "dock") and ex.state.location == "charging-dock"
+
+
+def test_message_on_the_way_to_the_dock_stops_the_charge_before_docking(tmp_path):
+    fake, _session, ex = setup(tmp_path, requests=[("22:00:50", "R-001", "104 wants a towel.")])
+    read_inbox(ex)
+    ex._looked.update(ex.hotel.nodes)  # no first-visit looks: only the walks spend time
+    ex.go("storage")  # 35 m: here at 22:00:35
+    fake.battery = 20
+    ex.refresh()
+    assert not ex.inbox_waiting
+    ex.ensure_battery()  # the walk back (35 s) brings R-001's inbox event
+    assert ex.inbox_waiting and not calls(fake, "dock")
+
+
+# --- Task 24 / 4: ensure_battery never raises into the loop -----------------------------------------
+
+
+def test_ensure_battery_ignores_a_battery_that_is_not_a_number(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=[])
+    since = len(fake.log)
+    for odd in (None, "17%", True, [20]):
+        ex.state.battery = odd
+        assert ex.ensure_battery() is False, odd
+    assert len(fake.log) == since
+    assert decisions(session, "battery_unknown")
+
+
+def test_ensure_battery_logs_an_unexpected_error_instead_of_raising(tmp_path, monkeypatch):
+    _fake, session, ex = low_at_the_lobby(tmp_path, 20)
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("odd reply shape")
+
+    monkeypatch.setattr(ex, "go", broken)
+    ex.ensure_battery()
+    failed = decisions(session, "charge_failed")
+    assert failed and failed[-1]["error"] == "RuntimeError", failed
+
+
+def test_ensure_battery_still_lets_the_shift_end_and_ctrl_c_through(tmp_path, monkeypatch):
+    _fake, _session, ex = low_at_the_lobby(tmp_path, 20)
+    for exc in (ShiftEnded("time"), KeyboardInterrupt()):
+        def stop(*args, exc=exc, **kwargs):
+            raise exc
+
+        monkeypatch.setattr(ex, "go", stop)
+        with pytest.raises(type(exc)):
+            ex.ensure_battery()
+
+
+def test_odd_battery_in_status_does_not_block_the_loop(tmp_path):
+    fake = FakeWybe(requests=[("22:05:00", "R-001", "104 wants a towel.")])
+
+    def handler(request):
+        reply = fake.handler(request)
+        body = json.loads(reply.content)
+        if json.loads(request.content).get("cmd") == "status" and isinstance(body.get("result"), dict):
+            body["result"]["battery"] = "n/a"
+            return httpx.Response(reply.status_code, json=body)
+        return reply
+
+    client = WybeClient(settings(tmp_path), transport=httpx.MockTransport(handler), sleep=lambda s: None)
+    result = run_shift(client, seed=1, sim_end="22:40:00")
+    assert fake.reports == {"R-001": "done"}, (fake.reports, result["reason"])
+
+
+# --- Task 24 / coordinator: a closed corridor on the way home, a far dock ---------------------------
+
+CLOSED = "Closed off: a cleaning crew has blocked that corridor."  # live seed 3 and 4
+
+
+def close_corridor(fake, a, b):
+    """The live seed-3 obstacle: moves between a and b are refused; looks flag that exit blocked."""
+    real_move, real_look = fake._cmd_move, fake._cmd_look
+
+    def move(args):
+        if {fake._location, args.get("to")} == {a, b}:
+            fake._spend(3)
+            return False, CLOSED
+        return real_move(args)
+
+    def look(args):
+        ok, result = real_look(args)
+        if ok and not args and isinstance(result, dict) and fake._location in (a, b):
+            other = b if fake._location == a else a
+            for ex in result.get("exits", []):
+                if ex.get("to") == other:
+                    ex["blocked"] = "closed off for cleaning"
+        return ok, result
+
+    fake._cmd_move, fake._cmd_look = move, look
+
+
+def refused_moves(fake, since=0):
+    return [(e["args"]["to"], e["result"]) for e in calls(fake, "move", since) if not e["ok"]]
+
+
+def at_3b_with_3a_closed(tmp_path, *more):
+    fake, session, ex = setup(tmp_path, requests=[])
+    read_inbox(ex)
+    ex._surveyed = True
+    ex.go("corridor-3b")  # up the elevator, through 3a: the map still has 3a-3b
+    for a, b in (("corridor-3a", "corridor-3b"), *more):
+        close_corridor(fake, a, b)
+    fake.battery = 50
+    return fake, session, ex
+
+
+def test_dock_route_through_a_closed_corridor_does_not_loop(tmp_path):
+    fake, _session, ex = at_3b_with_3a_closed(tmp_path)
+    since = len(fake.log)
+    for _ in range(3):  # the shift loop calling again
+        ex.wait_for_request(max_idle=3)
+    assert len(refused_moves(fake, since)) <= 1, refused_moves(fake, since)
+    assert ex.state.location == "charging-dock"
+    assert any(d["ok"] for d in calls(fake, "dock", since))
+
+
+def test_dock_out_of_reach_is_not_tried_again_every_idle_cycle(tmp_path):
+    fake, session, ex = at_3b_with_3a_closed(tmp_path, ("corridor-3b", "corridor-3c"))  # cut off
+    since = len(fake.log)
+    for _ in range(6):  # about 6 sim-minutes of the shift loop's idle passes
+        ex.wait_for_request(max_idle=3)
+    assert len(refused_moves(fake, since)) <= 2, refused_moves(fake, since)
+    assert len(calls(fake, "scan", since)) >= 6  # each pass still spends its bounded wait
+    assert ex.state.location == "corridor-3b" and decisions(session, "wait_failed")
+
+
+def test_charge_trip_through_a_closed_corridor_finds_the_other_way(tmp_path):
+    fake, _session, ex = at_3b_with_3a_closed(tmp_path)
+    fake.battery = 20
+    ex.refresh()
+    assert ex.ensure_battery() is True
+    assert ex.state.location == "charging-dock" and ex.state.battery >= 60
+    assert len(refused_moves(fake)) <= 1
+
+
+def test_the_same_move_refused_three_times_in_a_row_breaks_the_loop(tmp_path):
+    fake, session, ex = at_3b_with_3a_closed(tmp_path)
+    for _ in range(10):  # any loop that keeps asking for the same walk
+        try:
+            ex.go("corridor-3a")
+            break
+        except ActionFailed:
+            continue
+    assert refused_moves(fake) == [("corridor-3a", CLOSED)] * 3
+    assert ex.state.location == "corridor-3a"  # the fourth try went round by 3c and 3d
+    assert decisions(session, "move_refused_repeatedly")
+
+
+def test_a_room_door_refused_three_times_keeps_its_edge(tmp_path):
+    _fake, _session, ex = setup(tmp_path, requests=[])
+    ex.go("corridor-1b")
+    for _ in range(2):
+        assert not ex.move("room-104").ok  # locked: no keycard
+    with pytest.raises(ActionFailed):
+        ex.move("room-104")
+    assert any(e.b == "room-104" for e in ex.hotel.neighbors("corridor-1b"))
+
+
+def test_far_dock_is_charged_for_above_25(tmp_path):
+    fake, session, ex = low_at_the_lobby(tmp_path, 40)
+    ex.queue.append(parse_request("R-009", "104 wants a towel.", "22:01:00"))
+    ex.hotel.set_metres("charging-dock", "lobby", 3000.0)  # believed 50 min away: ~45 % to get there
+    assert ex.ensure_battery() is True  # even with work waiting: later it could not get there
+    assert calls(fake, "dock") and ex.state.location == "charging-dock"
+    assert decisions(session, "battery_low")[-1]["reserve"] > 40
+
+
+def test_near_dock_keeps_the_fixed_threshold(tmp_path):
+    fake, _session, ex = low_at_the_lobby(tmp_path, 30)
+    assert ex.ensure_battery() is False
+    assert not calls(fake, "dock")
 
 
 # --- requirement 7: no route -> look, learn the exits, replan once ---------------------------------
@@ -432,7 +755,9 @@ def test_first_idle_of_the_shift_runs_the_survey_once(tmp_path):
 
 
 def test_low_battery_is_charged_before_the_loop_chooses_a_task(tmp_path):
-    fake = FakeWybe(requests=[("22:01:00", "R-001", "104 wants a towel.")])
+    # Task 24: R-001 comes after the opening, so nothing waits when the loop first sees the low
+    # battery (a queued request would defer the charge: no 40-minute charge in front of it).
+    fake = FakeWybe(requests=[("22:30:00", "R-001", "104 wants a towel.")])
 
     def handler(request):
         reply = fake.handler(request)
@@ -441,7 +766,7 @@ def test_low_battery_is_charged_before_the_loop_chooses_a_task(tmp_path):
         return reply
 
     client = WybeClient(settings(tmp_path), transport=httpx.MockTransport(handler), sleep=lambda s: None)
-    result = run_shift(client, seed=1, sim_end="22:40:00")
+    result = run_shift(client, seed=1, sim_end="23:10:00")
     kinds = _kinds(_run_log(tmp_path, result))
     # flows.handle checks the battery only after task_start: a charge before it is the loop's.
     assert "battery_low" in kinds and "task_start" in kinds

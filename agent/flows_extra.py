@@ -26,7 +26,8 @@ from agent.flows import (
     _open_with_keycard,
     _refuse_checked_out,
     _rose,
-    carried_like,
+    note_own_numbered,
+    own_object,
     pick_for_others,
 )
 from agent.routing import NoRoute, best_tour
@@ -34,6 +35,7 @@ from agent.tasks import Kind, Task
 
 CART_SLOTS = 8  # live: the 9th item in the cart is refused
 BAG_WORDS = ("bag", "luggage", "suitcase")
+BAG_PREFIXES = ("luggage", "bags", "bag", "suitcase")  # live: luggage-205, luggage-205-36; the fake: bags-205
 NOISE_SAY = ("Good evening. Sorry to disturb you — could you please keep the noise down? "
              "Other guests are sleeping.")
 STAFF = ("clerk", "maintenance")
@@ -151,25 +153,36 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
         raise ActionFailed("the cart is full: no room for the bags (dropped nothing)")
     if not ex.get_cart():  # bags are heavy, like trays
         raise ActionFailed("could not get the cart for the bags")
-    name = carried_like(ex, f"luggage-{room.removeprefix('room-')}")
+    name = _own_bags(ex, task, [*ex.state.hands, *(ex.state.cart or [])])
     if name is None:
         ex.go(ex.hotel.special.get("clerk", "front-desk"))
         objects = objects_here(ex.fresh_look())
         from agent.flows import _fewer_objects_than_orders
 
-        if dup := _fewer_objects_than_orders(ex, task, objects, f"luggage-{room.removeprefix('room-')}"):
+        base = _bags_base(room, objects)
+        if dup := _fewer_objects_than_orders(ex, task, objects, base):
             score = ex.score_now()
             hyp(ex, "H-duplicate", task, f"not redone: one set of bags for {room}, {dup}'s", score, score)
             raise Declined(f"Duplicate of {dup}: only one set of bags for {room} is at the desk, and it is {dup}'s")
-        name = find_object(objects, BAG_WORDS, room) or "bags"
+        # A second set for a room carries the request number (live: luggage-205-36): only this one's.
+        name = own_object(ex, task, objects, base) or next(
+            (o for o in objects if any(w in o.lower() for w in BAG_WORDS) and not re.search(r"\d", o)), None)
+        if name is None:
+            others = [o for o in objects if o.startswith(base + "-")]
+            if others:
+                ex.log("note", request=task.request, text=f"not taken: {', '.join(others)} (other requests')")
+                raise Declined(f"No bags for {task.request} at the desk: {', '.join(others)} carry other "
+                               f"requests' numbers")
+            raise Declined(f"No bags for {room} are waiting at the desk; they went up already or were never left")
         ok, text = ex.pick(name)
         if not ok:
-            if name == "bags" or f"no {name}".lower() in text.lower():
+            if f"no {name}".lower() in text.lower():
                 raise Declined(f"No bags for {room} are waiting at the desk; they went up already or were never left")
             raise ActionFailed(f"could not pick {name}: {text}")
         if name in objects:
             objects.remove(name)
-        pick_for_others(ex, task, Kind.BAGS, lambda t: f"luggage-{t.room.removeprefix('room-')}", objects)
+        pick_for_others(ex, task, Kind.BAGS, lambda t: _bags_base(t.room, objects), objects)
+    note_own_numbered(ex, task, name)
     if not ex.state.carrying("keycard"):
         ex.gather("keycard")
     ex.go(corridor)
@@ -187,6 +200,18 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
     if placed.ok and _rose(mid, after):
         return f"{name} taken up to {room}", None
     raise ActionFailed(f"placed {name} in {room} ({placed.result}) but the score did not rise")
+
+
+def _bags_base(room: str, names: list[str]) -> str:
+    """The plain name of a room's bags as `names` spell it: luggage-206 (live), bags-206 (the fake)."""
+    num = room.removeprefix("room-")
+    return next((f"{p}-{num}" for p in BAG_PREFIXES
+                 if any(n == f"{p}-{num}" or n.startswith(f"{p}-{num}-") for n in names)), f"luggage-{num}")
+
+
+def _own_bags(ex: Executor, task: Task, names: list[str]) -> str | None:
+    """This request's bags among `names` (own_object), whichever prefix they carry."""
+    return own_object(ex, task, names, _bags_base(task.room, names))
 
 
 # --- H-noise -------------------------------------------------------------------------------------

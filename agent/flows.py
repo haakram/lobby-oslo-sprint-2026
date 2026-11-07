@@ -307,6 +307,8 @@ def _top_up_for_others(ex: Executor, task: Task) -> None:
             return
         if other.kind is not Kind.AMENITY or not other.item or other.request == task.request:
             continue
+        if other.room in ex.checked_out:  # worth 0 tonight: its item would ride along all night
+            continue
         if ex.count(other.item) >= max(1, other.count):
             continue
         if ex.hotel.stock.get(here, {}).get(other.item, 0) <= 0:
@@ -328,20 +330,81 @@ def tray(ex: Executor, task: Task) -> Result:
         ex.cart_needed = False
 
 
-def carried_like(ex: Executor, item: str) -> str | None:
-    """The carried item named `item` or `item-<suffix>` (a second tray or bag for a room)."""
-    for name in [*ex.state.hands, *(ex.state.cart or [])]:
-        if name == item or name.startswith(item + "-"):
-            return name
+def _request_number(request: str | None) -> int | None:
+    """'R-036' -> 36."""
+    m = re.search(r"(\d+)\s*$", request or "")
+    return int(m[1]) if m else None
+
+
+def own_suffix(ex: Executor, task: Task) -> str | None:
+    """The number on this request's tray or bags when a plain one for the room was given out
+    earlier tonight. Live logs (20 seeds, 46 numbered trays, 32 numbered bags, no exception):
+    bags carry the request number (R-036 -> luggage-205-36); a tray carries its place among the
+    night's tray requests, room service for a named guest included (seed 5: R-054 was the 7th ->
+    tray-104-7; seed 11: R-062, R-071 the 11th, 12th -> tray-308-11, tray-308-12)."""
+    num = _request_number(task.request)
+    if num is None:
+        return None
+    if task.kind is Kind.BAGS:
+        return str(num)
+    if task.kind is Kind.TRAY:
+        earlier = sum(1 for e in ex.ledger.entries.values()
+                      if e.kind is Kind.TRAY and (n := _request_number(e.request)) is not None and n < num)
+        return str(earlier + 1)
     return None
+
+
+def _bare_owner(ex: Executor, task: Task, names: list[str], base: str) -> str | None:
+    """The earliest earlier open order of task's kind for its room whose own numbered object is not
+    among `names`: the plain `base` is that order's (the first order for a room gets the plain name)."""
+    num = _request_number(task.request)
+    if num is None:
+        return None
+    earlier = sorted(((n, e) for e in ex.ledger.entries.values()
+                      if e.kind is task.kind and e.status == "pending"
+                      and (n := _request_number(e.request)) is not None and n < num), key=lambda ne: ne[0])
+    for _n, entry in earlier:
+        if (entry.room or ex.guest_rooms.get(entry.task.guest or "")) != task.room:
+            continue
+        suffix = own_suffix(ex, entry.task)
+        if suffix and f"{base}-{suffix}" in names:
+            continue
+        return entry.request
+    return None
+
+
+def own_object(ex: Executor, task: Task, names: list[str], base: str) -> str | None:
+    """This request's tray or bags among `names` (the objects at the pickup, or what is carried):
+    `base-<own suffix>` first; the plain `base` only when no earlier open order for the room owns
+    it; never one numbered for another request (a wrong delivery costs 10-20 and loses that tray)."""
+    suffix = own_suffix(ex, task)
+    if suffix and f"{base}-{suffix}" in names:
+        return f"{base}-{suffix}"
+    if base in names and _bare_owner(ex, task, names, base) is None:
+        return base
+    return None
+
+
+def note_own_numbered(ex: Executor, task: Task, item: str) -> None:
+    """Delivering its own numbered tray or bags: the server credits that object to this request
+    only (live seed 7: R-052 placing R-034's luggage-313-34 cost -18), so no Task 22 twin applies."""
+    suffix = own_suffix(ex, task)
+    if suffix and task.room and item.endswith(f"-{task.room.removeprefix('room-')}-{suffix}"):
+        ex.own_numbered.add(task.request)
+
+
+def carried_like(ex: Executor, task: Task, item: str) -> str | None:
+    """This request's carried tray or bags: `item-<own suffix>`, or the plain `item` (own_object)."""
+    return own_object(ex, task, [*ex.state.hands, *(ex.state.cart or [])], item)
 
 
 def pick_for_others(ex: Executor, task: Task, kind: Kind, names: Callable[[Task], str | None],
                     objects: list[str]) -> None:
     """One trip for several: while here, pick what other pending tasks of this kind (room known,
-    no DND seen lately) need, while the cart has room. Each task still delivers and verifies on
-    its own; it just finds its item carried. Live seed 5: 79 requests, a request waited 165 s on
-    average for the robot to be free, at about 1 point a minute."""
+    no DND seen lately, not checked out) need, while the cart has room: each one's own object only
+    (own_object). Each task still delivers and verifies on its own; it just finds its item carried.
+    Live seed 5: 79 requests, a request waited 165 s on average for the robot to be free, at about
+    1 point a minute."""
     from agent.flows_extra import CART_SLOTS
 
     for other in list(ex.queue):
@@ -349,12 +412,14 @@ def pick_for_others(ex: Executor, task: Task, kind: Kind, names: Callable[[Task]
             return
         if other.kind is not kind or other.request == task.request or not other.room:
             continue
+        if other.room in ex.checked_out:  # worth 0 tonight: it would sit in the cart all night
+            continue
         if ex.ledger.dnd_seen(other.room, ex.state.clock, DND_MEMORY_S):
             continue
         want = names(other)
-        if not want or carried_like(ex, want):
+        if not want or carried_like(ex, other, want):
             continue
-        here = next((o for o in objects if o == want or o.startswith(want + "-")), None)
+        here = own_object(ex, other, objects, want)
         if here is None:
             continue
         ok, _text = ex.pick(here)
@@ -364,46 +429,46 @@ def pick_for_others(ex: Executor, task: Task, kind: Kind, names: Callable[[Task]
 
 
 def _fewer_objects_than_orders(ex: Executor, task: Task, objects: list[str], want: str) -> str | None:
-    """Trays and bags are judged at the pickup, not by text: the earliest open order for the room
-    owns the first object. The request of an earlier open order when there are fewer objects for
-    the room here than open orders up to and including this one, else None."""
-    mine = [o for o in objects if o == want or o.startswith(want + "-")]
-    earlier = [e.request for e in ex.ledger.entries.values()
-               if e.kind is task.kind and e.room == task.room and e.request < task.request
-               and e.status == "pending"]
-    if earlier and len(mine) < len(earlier) + 1:
-        return earlier[0]
-    return None
+    """Trays and bags are judged at the pickup, not by text: each order has its own object
+    (own_suffix), and the plain one is the earliest open order's for the room. That earlier order's
+    request when nothing here is this one's but the plain one is here, else None."""
+    if own_object(ex, task, objects, want) is not None or want not in objects:
+        return None
+    return _bare_owner(ex, task, objects, want)
 
 
 def _tray(ex: Executor, task: Task) -> Result:
     _refuse_checked_out(ex, task.room, task.request)
     _corridor(ex, task.room)
     _refuse_known_dnd(ex, task.room, task.request)
-    item = task.item or f"tray-{task.room.removeprefix('room-')}"
-    carried = carried_like(ex, item)
-    if carried:
-        item = carried
-    else:
+    base = task.item or f"tray-{task.room.removeprefix('room-')}"
+    item = carried_like(ex, task, base)
+    if item is None:
         if not ex.get_cart():
             raise ActionFailed("could not get the cart for the tray")
         ex.go(ex.hotel.special.get("kitchen", "kitchen-pass"))
         from agent.flows_extra import find_object, hyp, objects_here
 
         objects = objects_here(ex.fresh_look())
-        if dup := _fewer_objects_than_orders(ex, task, objects, item):
+        if dup := _fewer_objects_than_orders(ex, task, objects, base):
             score = ex.score_now()
             hyp(ex, "H-duplicate", task, f"not redone: one tray for {task.room}, {dup}'s", score, score)
             raise Declined(f"Duplicate of {dup}: only one tray for {task.room} is waiting, and that one is {dup}'s")
+        # A second tray for a room carries a number (live: tray-104-7): only this request's is taken.
+        item = own_object(ex, task, objects, base)
+        if item is None and task.guest:  # H-named: the tray may carry the guest's name
+            item = find_object(objects, ("tray",), None, task.guest, exact=True)
+        if item is None:
+            others = [o for o in objects if o.startswith(base + "-")]
+            if others:
+                ex.log("note", request=task.request, text=f"not taken: {', '.join(others)} (other requests')")
+                raise Declined(f"No tray for {task.request} at the kitchen pass: {', '.join(others)} "
+                               f"carry other requests' numbers")
+            if _bare_owner(ex, task, objects, base):  # a plain one would be that earlier order's
+                raise Declined(f"No tray for {task.request} is waiting at the kitchen pass; "
+                               "it was taken up already or never put out")
+            item = base  # nothing listed for the room: one try at the plain name
         ok, text = ex.pick(item)
-        if not ok:
-            # A second tray for the same room carries a suffix (live: tray-104-7, like luggage).
-            alt = next((o for o in objects if o == item or o.startswith(item + "-")), None)
-            if alt is None and task.guest:  # H-named: the tray may carry the guest's name
-                alt = find_object(objects, ("tray",), task.room, task.guest, exact=True)
-            if alt and alt != item:
-                item = alt
-                ok, text = ex.pick(item)
         if not ok:
             if f"no {item}".lower() in text.lower():
                 raise Declined(f"No {item} is waiting at the kitchen pass; it was taken up already or never put out")
@@ -412,6 +477,7 @@ def _tray(ex: Executor, task: Task) -> Result:
             objects.remove(item)
         pick_for_others(ex, task, Kind.TRAY,
                         lambda t: t.item or f"tray-{t.room.removeprefix('room-')}", objects)
+    note_own_numbered(ex, task, item)
     return _deliver(ex, task.room, item)
 
 

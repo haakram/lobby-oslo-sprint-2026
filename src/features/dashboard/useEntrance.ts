@@ -27,22 +27,30 @@ export function useEntrance(scope: RefObject<HTMLElement | null>, ready: boolean
       const mm = gsap.matchMedia();
       mm.add("(prefers-reduced-motion: no-preference)", () => {
         const ease = standardEase();
-        gsap.from("[data-enter]", {
-          autoAlpha: 0,
-          y: 8,
-          duration: 0.24,
-          ease,
-          stagger: 0.05,
-          clearProps: "opacity,visibility,transform",
-        });
-        gsap.from("[data-tile]", {
-          autoAlpha: 0,
-          duration: 0.2,
-          ease,
-          delay: 0.12,
-          stagger: { amount: 0.24 },
-          clearProps: "opacity,visibility",
-        });
+        // Only what is on this screen: a module page has no room tiles, and GSAP warns about a missing target.
+        const root = scope.current;
+        const panels = root ? Array.from(root.querySelectorAll("[data-enter]")) : [];
+        const tiles = root ? Array.from(root.querySelectorAll("[data-tile]")) : [];
+        if (panels.length > 0) {
+          gsap.from(panels, {
+            autoAlpha: 0,
+            y: 8,
+            duration: 0.24,
+            ease,
+            stagger: 0.05,
+            clearProps: "opacity,visibility,transform",
+          });
+        }
+        if (tiles.length > 0) {
+          gsap.from(tiles, {
+            autoAlpha: 0,
+            duration: 0.2,
+            ease,
+            delay: 0.12,
+            stagger: { amount: 0.24 },
+            clearProps: "opacity,visibility",
+          });
+        }
       });
       return () => mm.revert();
     },

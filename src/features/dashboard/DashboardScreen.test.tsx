@@ -26,6 +26,8 @@ function route({ run = DEMO, runStatus = 200, calls }: { run?: string; runStatus
 }
 
 beforeEach(() => {
+  // A 503 keeps the reception panel quiet for a minute in this tab; each test starts fresh.
+  sessionStorage.clear();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
 });

@@ -88,6 +88,8 @@ same PR that first reads it.
 | `ANTHROPIC_API_KEY` | Track A agent, Track B server | **yes** | Hamad's `.env`, sent privately |
 | `ANTHROPIC_BUDGET_USD` | everything that calls Claude | no (default 30) | `.env.example` |
 | `ELEVENLABS_API_KEY` | Track B server | **yes** | Hamad's `.env.local` (written by the ElevenLabs CLI), sent privately |
+| `ELEVENLABS_AGENT_ID` | Track B server (`/api/voice/token`), `src/features/voice/setup-agent.ts` | no (blank in `.env.example`; printed by `setup-agent.ts`) | `.env` and Vercel project settings |
+| `APP_CLAUDE_BUDGET_USD` | Track B server (Claude spend meter) | no (default 5) | `.env.example` |
 
 ## 5. External services
 

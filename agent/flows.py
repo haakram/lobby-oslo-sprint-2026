@@ -29,6 +29,8 @@ GENERIC_PARTS = {"corridor", "room", "floor"}
 HINT_WORDS = {"counter": "front-desk", "counters": "front-desk", "reception": "front-desk",
               "sofa": "lobby-bar", "sofas": "lobby-bar"}
 NAMED_KINDS = (Kind.AMENITY, Kind.TRAY, Kind.MESSAGE)
+DND_MEMORY_S = 8 * 3600  # a DND sign seen this recently: do not make the trip (live: 208 all night)
+UNTIDY = ("not tidy", "n't tidy", "untidy", "messy")  # checked before "tidy"
 
 
 def handle(ex: Executor, task: Task) -> Result:
@@ -40,8 +42,10 @@ def handle(ex: Executor, task: Task) -> Result:
         raise ActionFailed(f"duplicate of {dup}")
     if task.kind is Kind.UNKNOWN:
         task = _classify(ex, task)
+    if task.kind not in (Kind.FOLLOWUP, Kind.NOISE):  # those keep their own logic
+        _refuse_known_dnd(ex, task.room, task.request)
     if task.room is None and task.guest and task.kind in NAMED_KINDS:
-        task = flows_extra.resolve_named(ex, task)
+        return flows_extra.named(ex, task)
     handler = HANDLERS.get(task.kind) or flows_extra.HANDLERS.get(task.kind)
     if handler is None:
         raise ActionFailed(f"no routine for {task.kind.value} requests")
@@ -85,18 +89,36 @@ def _corridor(ex: Executor, room: str | None) -> str:
         raise ActionFailed(f"no corridor known for {room}") from None
 
 
-def _knock(ex: Executor, room: str) -> str:
-    """'dnd' | 'no_answer' | 'open'. Looks at the door first: a DND door is never knocked on."""
+def _refuse_known_dnd(ex: Executor, room: str | None, request: str | None = None) -> None:
+    """Fail fast, with no trip and nothing picked, on a room whose DND sign was seen lately."""
+    seen = ex.ledger.dnd_seen(room, ex.state.clock, DND_MEMORY_S) if room else None
+    if seen:
+        ex.log("note", request=request, room=room, text=f"DND sign on {room} seen {seen}: skipped the trip")
+        raise ActionFailed(f"Do Not Disturb sign on {room} (seen {seen}); did not disturb")
+
+
+def _door_sign(ex: Executor, room: str) -> bool:
+    """Look at the door before any knock or keycard: True on a Do Not Disturb sign (logged for the
+    dashboard). A door that can't be seen raises: acting on an unseen sign would be a gamble."""
     door = ex.cmd("look", at=room)
     text = str(door.result)
     if DND in text.lower():
+        ex.ledger.note_dnd(room, ex.state.clock)
         ex.room_status(room, "ikke_forstyrr", "door_sign", "Do Not Disturb sign")
-        return "dnd"
-    if not door.ok:  # unseen sign: knocking would be a gamble
+        return True
+    if not door.ok:
         raise ActionFailed(f"could not see the door of {room}: {text}")
+    return False
+
+
+def _knock(ex: Executor, room: str) -> str:
+    """'dnd' | 'no_answer' | 'open'. Looks at the door first: a DND door is never knocked on."""
+    if _door_sign(ex, room):
+        return "dnd"
     reply = ex.cmd("knock", door=room)
     text = str(reply.result)
     if DND in text.lower():
+        ex.ledger.note_dnd(room, ex.state.clock)
         ex.room_status(room, "ikke_forstyrr", "knock", text)
         return "dnd"
     if not reply.ok:
@@ -142,12 +164,14 @@ def amenity(ex: Executor, task: Task) -> Result:
     if not task.item:
         raise ActionFailed("no item in the request")
     _corridor(ex, task.room)  # an unknown room fails before the trip to the stock room
+    _refuse_known_dnd(ex, task.room, task.request)  # a named guest's room is known only here
     ex.gather(task.item, task.count)
     return _deliver(ex, task.room, task.item, task.count)
 
 
 def tray(ex: Executor, task: Task) -> Result:
     _corridor(ex, task.room)
+    _refuse_known_dnd(ex, task.room, task.request)
     item = task.item or f"tray-{task.room.removeprefix('room-')}"
     if not ex.state.carrying(item):
         if not ex.get_cart():
@@ -167,6 +191,7 @@ def tray(ex: Executor, task: Task) -> Result:
 
 
 def message(ex: Executor, task: Task) -> Result:
+    _refuse_known_dnd(ex, task.room, task.request)
     _at_open_door(ex, task.room)
     before = ex.score_now()
     body = (task.message or task.text).strip().rstrip(".!")
@@ -202,7 +227,7 @@ def room_check(ex: Executor, task: Task) -> Result:
     where = ex.refresh().get("location")
     if where != room:  # the look must have been inside the room, or the check is not done
         raise ActionFailed(f"not inside {room} after entering (status says {where})")
-    if "tidy" in seen.lower() and "untidy" not in seen.lower():
+    if _tidy(seen):
         ex.room_status(room, "klar", "room_check", seen)
     else:
         ex.room_status(room, "ma_vaskes", "room_check", seen)
@@ -215,12 +240,19 @@ def room_check(ex: Executor, task: Task) -> Result:
     return f"looked inside {room}: {seen}", leave
 
 
+def _tidy(seen: str) -> bool:
+    """'The room is tidy.' -> True; 'not tidy', "isn't tidy", 'untidy', 'messy' -> False."""
+    low = seen.lower()
+    return "tidy" in low and not any(w in low for w in UNTIDY)
+
+
 def lost_item(ex: Executor, task: Task) -> Result:
     item = task.item
     if not item:
         raise ActionFailed("no lost item named")
     room = task.room or _ask_room(ex, task.guest)
     _corridor(ex, room)
+    _refuse_known_dnd(ex, room, task.request)
     stock = {name for items in ex.hotel.stock.values() for name in items}
     carried = [c for c in ex.state.hands + (ex.state.cart or [])  # a stock charger is no lost phone
                if c == item or (c not in stock and same_item(item, c))]

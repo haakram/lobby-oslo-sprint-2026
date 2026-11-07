@@ -32,6 +32,7 @@ class Hotel:
         self.special: dict[str, str] = data.get("special", {})
         self._adj: dict[str, dict[str, Edge]] = {}
         self._wet: set[frozenset[str]] = set()
+        self._wet_spots: set[str] = set()  # the game keys wetness on the spot you step onto
         for e in data["edges"]:
             self._add_edge(Edge(e["a"], e["b"], e["m"], bool(e.get("door")), bool(e.get("stairs"))))
 
@@ -56,10 +57,13 @@ class Hotel:
         raise KeyError(f"no corridor for {room}")
 
     def mark_wet(self, a: str, b: str) -> None:
+        """Moving a -> b is onto a wet floor: the spot b is wet, from every side, for the whole shift
+        (live night: after a slip elevator-3 -> corridor-3a, 3d -> 3a and 3b -> 3a only crept)."""
         self._wet.add(frozenset((a, b)))
+        self._wet_spots.add(b)
 
     def is_wet(self, a: str, b: str) -> bool:
-        return frozenset((a, b)) in self._wet
+        return b in self._wet_spots
 
     def update_from_look(self, location: str, look: dict) -> None:
         floor = look.get("floor", self.nodes[location]["floor"] if location in self.nodes else 0)

@@ -38,7 +38,9 @@ def test_full_shift_scores_and_never_false_reports(tmp_path):
     assert fake.score >= 100
     assert fake.false_done == []
     assert not fake.unsafe
-    assert set(result) == {"shift", "seed", "score", "requests_served", "reason"}
+    assert set(result) == {
+        "shift", "seed", "score", "requests_served", "reason", "calls", "at_cap",
+    }
     lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
     assert lines[0]["type"] == "start" and lines[-1]["type"] == "end"
     assert sum(1 for x in lines if x["type"] == "end") == 1
@@ -299,6 +301,10 @@ def test_follow_up_and_its_order_are_delivered_once_through_the_loop(tmp_path):
     assert fake.reports == {"R-001": "done", "R-002": "failed"}
     assert not fake.false_done and not fake.wrong_deliveries
     assert _decisions(tmp_path, result, "hypothesis")
+    assert result["requests_served"] == 1  # R-001, also when the follow-up ran it
+    path = tmp_path / "runs" / f"{result['shift']}.jsonl"
+    end = json.loads(path.read_text().splitlines()[-1])
+    assert end["type"] == "end" and end["requests_served"] == 1
 
 
 def test_full_night_with_the_live_request_types(tmp_path):

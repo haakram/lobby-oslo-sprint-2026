@@ -177,6 +177,7 @@ def parse_request(request_id: str, text: str, arrived: str) -> Task:
 # --- the request ledger: every request of the shift, for follow-ups and duplicates ----------------
 
 DUPLICATE_WINDOW_S = 600
+ORDER_KINDS = (Kind.AMENITY, Kind.TRAY, Kind.LOST_ITEM)  # what a guest can say never came
 
 
 def normalise(text: str) -> str:
@@ -216,6 +217,18 @@ class Ledger:
 
     def __init__(self) -> None:
         self.entries: dict[str, Entry] = {}
+        self.dnd: dict[str, str] = {}  # room -> sim clock when a Do Not Disturb sign was last seen
+
+    def note_dnd(self, room: str, clock: str) -> None:
+        self.dnd[room] = clock
+
+    def dnd_seen(self, room: str, now: str, memory_s: int) -> str | None:
+        """The clock a DND sign on `room` was seen, if that is within memory_s before `now`."""
+        seen = self.dnd.get(room)
+        if seen is None:
+            return None
+        a, b = _secs(seen), _secs(now)
+        return seen if a is None or b is None or 0 <= b - a <= memory_s else None
 
     def add(self, task: Task) -> None:
         if task.request not in self.entries:
@@ -253,10 +266,26 @@ class Ledger:
                 return entry.request
         return None
 
-    def original_for(self, task: Task) -> Entry | None:
-        """H-followup: the latest earlier request for the same item to the same room."""
+    def served(self) -> int:
+        """Requests served this shift: reported done, or delivered later through a follow-up."""
+        return sum(entry.status == "done" for entry in self.entries.values())
+
+    def original_for(self, task: Task, guest_rooms: dict[str, str | None] | None = None) -> Entry | None:
+        """H-followup: the latest earlier request for the same item to the same room. A named
+        guest's request has no room until it runs; it counts by the guest's room in guest_rooms
+        (the executor's cache of the clerk's answers)."""
+        if task.room is None:
+            return None
         for entry in reversed(self._earlier(task)):
-            if (entry.kind in (Kind.AMENITY, Kind.TRAY, Kind.LOST_ITEM) and entry.room == task.room
+            room = entry.room or (guest_rooms or {}).get(entry.task.guest or "")
+            if (entry.kind in ORDER_KINDS and room == task.room
                     and entry.item is not None and entry.item == task.item):
                 return entry
         return None
+
+    def unknown_guests(self, task: Task, guest_rooms: dict[str, str | None]) -> list[str]:
+        """Named guests of earlier orders for task's item whose room is not known and not asked yet."""
+        return list(dict.fromkeys(
+            entry.task.guest for entry in self._earlier(task)
+            if entry.kind in ORDER_KINDS and entry.item == task.item and entry.room is None
+            and entry.task.guest and entry.task.guest not in guest_rooms))

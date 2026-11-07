@@ -8,6 +8,7 @@ import fcntl
 import json
 import logging
 import os
+import re
 import threading
 from pathlib import Path
 
@@ -46,6 +47,28 @@ _JUDGE_PROMPT = (
 CLIENT_TIMEOUT_S = 15
 CLIENT_MAX_RETRIES = 1
 MAX_COUNT = 10
+FIELD_CAPS = {"item": 60, "area_hint": 60, "guest": 60, "message": 300}
+_ROOM_RE = re.compile(r"(?:room-)?([0-9]{3})", re.IGNORECASE)
+_CLOSE_TAG_RE = re.compile(r"<\s*/\s*untrusted_text\s*>", re.IGNORECASE)
+
+
+def neutralise(text: str) -> str:
+    """Remove the closing delimiter so world text cannot break out of the untrusted block."""
+    return _CLOSE_TAG_RE.sub("[removed]", text)
+
+
+def _room(value) -> str | None:
+    if not isinstance(value, str):
+        return None
+    m = _ROOM_RE.fullmatch(value.strip())
+    return f"room-{m.group(1)}" if m else None
+
+
+def _capped(value, cap: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()[:cap].strip()
+    return value or None
 
 
 class LedgerError(Exception):
@@ -162,32 +185,37 @@ class Brain:
         return data if isinstance(data, dict) else None
 
     def classify(self, request_id: str, text: str, arrived: str):
-        data = self._json(self._ask(_CLASSIFY_PROMPT % text))
+        data = self._json(self._ask(_CLASSIFY_PROMPT % neutralise(text)))
         if data is None:
             return None
         from agent.tasks import Kind, Task
 
+        raw_kind = data.get("kind")
         try:
-            kind = Kind(data.get("kind"))
-            count = max(1, min(MAX_COUNT, int(data.get("count") or 1)))
-        except (ValueError, TypeError, OverflowError):
+            kind = Kind(raw_kind) if isinstance(raw_kind, str) else Kind.UNKNOWN
+        except ValueError:
+            kind = Kind.UNKNOWN
+        raw_count = data.get("count")
+        if raw_count is None:
+            count = 1
+        elif isinstance(raw_count, int) and not isinstance(raw_count, bool):
+            count = max(1, min(MAX_COUNT, raw_count))
+        else:
             return None
-
-        def s(name):
-            v = data.get(name)
-            return v if isinstance(v, str) and v else None
 
         return Task(
             request=request_id, kind=kind, text=text, arrived=arrived,
-            room=s("room"), item=s("item"), count=count, message=s("message"),
-            guest=s("guest"), area_hint=s("area_hint"),
+            room=_room(data.get("room")), item=_capped(data.get("item"), FIELD_CAPS["item"]),
+            count=count, message=_capped(data.get("message"), FIELD_CAPS["message"]),
+            guest=_capped(data.get("guest"), FIELD_CAPS["guest"]),
+            area_hint=_capped(data.get("area_hint"), FIELD_CAPS["area_hint"]),
         )
 
     def judge(self, situation: str, options: list[str]) -> str | None:
         if not options:
             return None
-        listing = "\n".join(f"- {o}" for o in options)
-        text = self._ask(_JUDGE_PROMPT % (situation, listing))
+        listing = "\n".join(f"- {neutralise(o)}" for o in options)
+        text = self._ask(_JUDGE_PROMPT % (neutralise(situation), listing))
         data = self._json(text)
         choice = data.get("choice") if data else (text or "").strip()
         return choice if isinstance(choice, str) and choice in options else None

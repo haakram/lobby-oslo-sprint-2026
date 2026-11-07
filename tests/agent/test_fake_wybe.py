@@ -678,8 +678,17 @@ def test_default_script_has_the_live_request_types():
                    "would like a", "Room service for", "Let Mx Haugen know", "spill on floor",
                    "lost a wallet"):
         assert phrase in texts, phrase
-    assert DEFAULT_REQUESTS[:6] == DEFAULT_REQUESTS[:6]  # the six original requests stay first
-    assert DEFAULT_REQUESTS[0] == ("22:03:23", "R-001", "319 wants a phone charger.")
+    from agent.offline import TYPES_DEMO_REQUESTS
+
+    assert TYPES_DEMO_REQUESTS[:6] == [  # the six original requests stay first, unchanged
+        ("22:03:30", "R-001", "319 wants a phone charger."),
+        ("22:20:00", "R-002", "Bring the tray from the kitchen pass to 104."),
+        ("22:30:00", "R-003", "Tell the guest in 319 the taxi is here."),
+        ("22:40:00", "R-004", "Check if 103 is empty and tidy, report back."),
+        ("22:50:00", "R-005", "Guest in 317 lost glasses, maybe the ground floor corridor."),
+        ("23:00:00", "R-006", "208 wants a water bottle."),
+    ]
+    assert DEFAULT_REQUESTS[0] == ("22:03:23", "R-001", "319 wants a phone charger.")  # live replay
 
 
 def test_knocking_on_a_dnd_door_costs_nothing_and_is_counted():

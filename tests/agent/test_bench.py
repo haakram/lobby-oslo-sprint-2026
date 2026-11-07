@@ -186,9 +186,9 @@ def test_bench_and_tune_default_to_a_full_night_ending_06(monkeypatch, capsys):
     assert inspect.signature(run_bench).parameters["sim_end"].default == "06:00:00"
     seen = {}
 
-    def fake_bench(factory, seeds, *, parallel=5, params=None, sim_end="bad"):
+    def fake_bench(factory, seeds, *, parallel=5, params=None, sim_end="bad", max_calls=None):
         seen["sim_end"] = sim_end
-        return BenchResult(scores={s: 1 for s in seeds}, params=params or Params())
+        return BenchResult(scores={s: 1 for s in seeds}, capped_scores={s: 1 for s in seeds}, params=params or Params())
 
     monkeypatch.setattr(bench, "run_bench", fake_bench)
     assert main(["bench", "--seeds", "1-2"]) == 0

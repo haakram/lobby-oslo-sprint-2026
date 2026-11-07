@@ -114,9 +114,11 @@ def run_shift(
     sim_end: str | None = None,
     real_time_limit_s: float | None = None,
     stop: threading.Event | None = None,
+    call_cap: int = 0,
 ) -> dict:
     params = params or load_params()
     session = client.start_shift(mode, seed)
+    session.call_cap = call_cap or None  # bench: snapshot the score when the shift's calls reach it
     hotel, state = Hotel.load(), RobotState()
     # Claude classifies unknown requests in ONE place (here), so the executor gets no brain.
     ex = Executor(session, hotel, state, max_scans=params.max_scans)
@@ -127,7 +129,6 @@ def run_shift(
     pending: list[Task] = []
     ex.queue = pending  # the same list: a follow-up that runs its original removes it here
     seen: set[str] = set()
-    served = 0
     errors = 0
     opened = False
     try:
@@ -160,8 +161,7 @@ def run_shift(
                     ex.wait_for_request()
                 else:
                     pending.remove(task)
-                    outcome = ex.run(task)
-                    served += outcome.status == "done"
+                    ex.run(task)
                 errors = 0
             except ShiftEnded:
                 raise
@@ -193,7 +193,9 @@ def run_shift(
         except Exception as exc:  # noqa: BLE001 - the end line below must still be written
             session.log_decision("end_failed", {"error": type(exc).__name__})
         result["score"] = state.score
-        result["requests_served"] = served
+        result["calls"] = session.calls
+        result["at_cap"] = session.at_cap  # (score, clock) when calls reached call_cap, else None
+        result["requests_served"] = ex.ledger.served()  # also originals a follow-up ran or redelivered
         session.log_end(result)
     return result
 

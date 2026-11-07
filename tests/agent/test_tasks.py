@@ -184,6 +184,32 @@ def test_ledger_original_for_a_follow_up():
     assert led.get("R-037").status == "done"
 
 
+def test_ledger_original_for_a_named_guest_order_by_the_known_guest_room():
+    from agent.tasks import Ledger
+
+    led = Ledger()
+    order = parse_request("R-037", "Ms Kvam would like a water bottle.", "02:56:34")
+    follow = parse_request("R-049", FOLLOW.format(202, "water"), "04:29:15")
+    for t in (order, follow):
+        led.add(t)
+    assert led.unknown_guests(follow, {}) == ["Ms Kvam"]  # worth one question to the clerk
+    assert led.original_for(follow, {"Ms Kvam": None}) is None  # the clerk did not know
+    assert led.unknown_guests(follow, {"Ms Kvam": None}) == []  # asked once, not again
+    assert led.original_for(follow, {"Ms Kvam": "room-202"}).request == "R-037"
+    assert led.original_for(follow, {"Ms Kvam": "room-203"}) is None
+
+
+def test_ledger_counts_served_requests():
+    from agent.tasks import Ledger
+
+    led = Ledger()
+    for rid in ("R-1", "R-2", "R-3"):
+        led.add(parse_request(rid, "205 wants a pillow.", "23:00:00"))
+    led.set_status("R-1", "done")
+    led.set_status("R-2", "failed")
+    assert led.served() == 1
+
+
 def test_ledger_add_is_idempotent_and_keeps_status():
     from agent.tasks import Ledger
 

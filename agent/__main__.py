@@ -115,6 +115,13 @@ def _offline_factory():
     return make
 
 
+def _resolve_cap(args, settings: Settings) -> int:
+    """--max-calls: unset = what one final shift gets at our rate; 0 = unlimited."""
+    from agent.bench import default_max_calls
+
+    return default_max_calls(settings.max_rps) if args.max_calls is None else args.max_calls
+
+
 def cmd_bench(args, settings: Settings, factory: ClientFactory) -> int:
     from agent.bench import parse_seeds, run_bench
 
@@ -124,10 +131,14 @@ def cmd_bench(args, settings: Settings, factory: ClientFactory) -> int:
         make = lambda: client
     else:
         make = _offline_factory()
-    res = run_bench(make, seeds, parallel=args.parallel, sim_end=args.sim_end)
+    cap = _resolve_cap(args, settings)
+    res = run_bench(make, seeds, parallel=args.parallel, sim_end=args.sim_end, max_calls=cap)
     for seed, score in res.scores.items():
-        print(f"seed {seed}  score {score}")
+        at = f" at {res.cap_clocks[seed]}" if seed in res.cap_clocks else ""
+        print(f"seed {seed}  score {score}  calls {res.calls.get(seed, 0)}  capped {res.capped_scores[seed]}{at}")
     print(f"mean {res.mean:.1f}  mean_drop_worst {res.mean_drop_worst:.1f}")
+    print(f"cap {cap or 'none'}  capped mean {res.mean_capped:.1f}  "
+          f"capped mean_drop_worst {res.mean_drop_worst_capped:.1f}")
     print(f"params {res.params.to_json()}")
     return 0
 
@@ -137,9 +148,10 @@ def cmd_tune(args, settings: Settings, factory: ClientFactory) -> int:
 
     best, results = tune(
         _offline_factory(), parse_seeds(args.seeds), trials=args.trials, parallel=args.parallel,
-        rng_seed=args.rng_seed, out_path=Path(args.out),
+        rng_seed=args.rng_seed, out_path=Path(args.out), max_calls=_resolve_cap(args, settings),
+        capped=args.optimise_capped,
     )
-    top = max(results, key=lambda r: r.mean_drop_worst)
+    top = max(results, key=lambda r: r.mean_drop_worst_capped if args.optimise_capped else r.mean_drop_worst)
     print(f"baseline  mean {results[0].mean:.1f}  mean_drop_worst {results[0].mean_drop_worst:.1f}")
     print(f"best      mean {top.mean:.1f}  mean_drop_worst {top.mean_drop_worst:.1f}")
     print(f"params {best.to_json()}")
@@ -170,6 +182,8 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--parallel", type=int, default=5)
     p.add_argument("--sim-end", default="06:00:00", help="stop at this sim clock, HH:MM:SS (the night ends 06:00)")
     p.add_argument("--live", action="store_true", help="use the real server (counted)")
+    p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default: the final's, 44*60*rps/10; 0 = none). The capped score is the "
+                   "last score the agent observed (status/end replies); retries are not counted")
     p.set_defaults(fn=cmd_bench)
     p = sub.add_parser("tune", help="offline parameter search; writes the best params (never live)")
     p.add_argument("--seeds", default="1-20")
@@ -177,6 +191,9 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--parallel", type=int, default=5)
     p.add_argument("--rng-seed", type=int, default=0)
     p.add_argument("--out", default="agent/data/params_candidate.json")
+    p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default: the final's, 44*60*rps/10; 0 = none). The capped score is the "
+                   "last score the agent observed (status/end replies); retries are not counted")
+    p.add_argument("--optimise-capped", action="store_true", help="pick the best score at the call cap")
     p.set_defaults(fn=cmd_tune)
     args = ap.parse_args(argv)
     return args.fn(args, load_settings(), client_factory or shift.make_client)

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Card, EyeIcon, MicIcon, MoonIcon, RouteIcon } from "@/ui";
+import { Card, EyeIcon, MicIcon, MoonIcon, PhoneIcon, RouteIcon } from "@/ui";
 
 // Each card wears the surface of the screen it opens: camera and night shift are dark.
 const ENTRIES = [
@@ -23,6 +23,13 @@ const ENTRIES = [
     body: "Spør på ditt eget språk. Fettero svarer høyt og viser veien.",
     surface: "light",
     Icon: MicIcon,
+  },
+  {
+    href: "/resepsjon",
+    title: "Resepsjon",
+    body: "Svarer gjester på telefonen, på deres språk, og tar imot bookinger direkte.",
+    surface: "light",
+    Icon: PhoneIcon,
   },
   {
     href: "/natteskift",

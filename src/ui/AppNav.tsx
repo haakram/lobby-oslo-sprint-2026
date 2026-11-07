@@ -4,13 +4,14 @@ import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cx } from "./cx";
-import { EyeIcon, MicIcon, MoonIcon, RouteIcon } from "./icons";
+import { EyeIcon, MicIcon, MoonIcon, PhoneIcon, RouteIcon } from "./icons";
 import { DURATION, EASE } from "./motion";
 
 const TABS = [
   { href: "/oyne", label: "Øyne", Icon: EyeIcon },
   { href: "/ruter", label: "Ruter", Icon: RouteIcon },
   { href: "/stemme", label: "Stemme", Icon: MicIcon },
+  { href: "/resepsjon", label: "Resepsjon", Icon: PhoneIcon },
   { href: "/natteskift", label: "Natteskift", Icon: MoonIcon },
 ] as const;
 
@@ -38,7 +39,7 @@ export function AppNav() {
       >
         Fettero
       </Link>
-      <ul className="grid h-16 grid-cols-4 lg:h-auto lg:grid-cols-1 lg:gap-1 lg:px-2">
+      <ul className="grid h-16 grid-cols-5 lg:h-auto lg:grid-cols-1 lg:gap-1 lg:px-2">
         {TABS.map(({ href, label, Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (

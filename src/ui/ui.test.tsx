@@ -1,7 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
-import { Button, drawLine, EmptyState, fadeRise, Sheet, sheetIn } from "./index";
+import { describe, expect, it, vi } from "vitest";
+import { AppNav, Button, drawLine, EmptyState, fadeRise, Sheet, sheetIn } from "./index";
+
+vi.mock("next/navigation", () => ({ usePathname: () => "/resepsjon" }));
 
 describe("Button", () => {
   it("renders its label", () => {
@@ -89,5 +91,16 @@ describe("Sheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Åpne" }));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(document.body.style.overflow).toBe("");
+  });
+});
+
+describe("AppNav", () => {
+  it("has a Resepsjon tab after Stemme, marked active on /resepsjon", () => {
+    render(<AppNav />);
+    const link = screen.getByRole("link", { name: "Resepsjon" });
+    expect(link).toHaveAttribute("href", "/resepsjon");
+    expect(link).toHaveAttribute("aria-current", "page");
+    const labels = screen.getAllByRole("link").map((a) => a.textContent);
+    expect(labels).toEqual(["Fettero", "Øyne", "Ruter", "Stemme", "Resepsjon", "Natteskift"]);
   });
 });

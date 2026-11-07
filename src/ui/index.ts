@@ -6,7 +6,7 @@ export { ComingSoon } from "./ComingSoon";
 export { cx } from "./cx";
 export { EmptyState } from "./EmptyState";
 export { ErrorState } from "./ErrorState";
-export { AlertIcon, EyeIcon, MicIcon, MoonIcon, RouteIcon } from "./icons";
+export { AlertIcon, EyeIcon, MicIcon, MoonIcon, PhoneIcon, RouteIcon } from "./icons";
 export { DURATION, EASE, EASE_EXIT, drawLine, fadeRise, sheetIn } from "./motion";
 export { Sheet } from "./Sheet";
 export { Skeleton } from "./Skeleton";

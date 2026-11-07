@@ -8,12 +8,12 @@
 | Layer | Choice | Why |
 |---|---|---|
 | Frontend | TBD | |
-| Backend / API | TBD | |
+| Backend / API | Track A agent: Python 3.12 + httpx | Plays the Wybe Night Shift over HTTP. |
 | Database | TBD | |
 | Auth | TBD (or "none: seeded demo user") | |
-| AI / LLM | TBD | |
+| AI / LLM | Claude via `anthropic` (Python SDK) | Track A brain, capped at USD 30 (R7.7). |
 | Hosting | TBD | |
-| Package manager | TBD | One per language; the lockfile is committed. |
+| Package manager | pip + requirements files (Track A, `.venv`) | Versions pinned with `==`. |
 
 ## 2. Folder layout
 
@@ -45,9 +45,9 @@ primitives, API client) gets one clearly owned home.
 
 | Area | Paths | Owner | Backup |
 |---|---|---|---|
-| Track A: Night Shift agent | TBD (set in the design spec) | Hamad | ShirazIQ |
+| Track A: Night Shift agent | `agent/`, `tests/agent/`, `tests/fakes/`, `viewer/`, `requirements*.txt`, `pyproject.toml` | Hamad | ShirazIQ |
 | Track B: Fettero app | TBD (set in the design spec) | ShirazIQ | Hamad |
-| Shared contracts (the agent's log format the app reads, env vars) | TBD | Hamad | ShirazIQ |
+| Shared contracts (the agent's log format the app reads, env vars) | `docs/ARCHITECTURE.md` § 4, `.env.example` | Hamad | ShirazIQ |
 | Repo tooling, CI, docs | `scripts/`, `.githooks/`, `.github/`, `.claude/`, `docs/` | Hamad | |
 
 ## 4. Contracts
@@ -70,11 +70,52 @@ TBD — entities, fields, relations. A table per entity is enough.
 **Run log v1 (Track A → Track B).** The Night Shift agent writes one JSON object per line to
 `temp/runs/<shift>.jsonl`, `"v": 1` on every line. Types: `start` (shift, mode, seed), `call` (cmd,
 args, ok, clock, result, events, latency_ms, status), `decision` (kind: plan · task_start · task_done ·
-task_failed · brain · note, data), `state` (clock, location, score, battery, hands, cart), `end` (score,
-requests_served, reason). The 3D viewer (`viewer/`, served by `python -m agent viewer`) and anything
+task_failed · brain · note · room_status · work_order · hypothesis · noise_look · person, data), `state`
+(clock, location, score, battery, hands, cart), `end` (score, requests_served, reason). The 3D viewer
+(`viewer/`, served by `python -m agent viewer`) and anything
 Track B shows about the agent read only this. Hotel map: `agent/data/hotel_seed1.json` (nodes with
 floor, kind, x, z; edges in metres). Shortest routes for the app (Holio 6):
 `python -m agent route <from> <to>`. Details: `docs/superpowers/specs/2026-11-07-nightshift-agent-design.md`.
+
+Data of the newer decision kinds (Track A, additive):
+
+- `room_status`: `{"room": "room-206", "status": "klar" | "opptatt" | "ikke_forstyrr" | "ma_vaskes", "source": "room_check" | "knock" | "door_sign", "note": "<what the robot saw>"}`
+- `work_order`: `{"room": "room-201" | null, "place": "corridor-3a" | null, "type": "stoy" | "sol" | "teknisk" | "gjesteklage" | "annet", "text": "<short Norwegian description>", "request": "R-025" | null}`
+- `hypothesis`: `{"id": "<H-id>", "request", "action", "score_before", "score_after"}`, exactly one per run of
+  a hypothesis flow (H-named, H-bags, H-noise, H-spill, H-followup, H-duplicate, H-bathrobe; `request` is
+  null for H-bathrobe); optional extras `guest`, `room`, `seen`, `original`, `text`, `score_at_start`.
+- `noise_look`: `{"request": "R-010", "at": "corridor-2a", "description": "<look text>", "people": ["<name state>"]}`
+- `person`: `{"text": "<what the person said>", "repeat": true | false}`; `repeat` = the same words within
+  10 sim-minutes, not answered again.
+
+Decision kinds added for the final's readiness (Task 18, additive):
+
+- `adopted_shift`: `{"shift": "w2-…", "started": "Sun 12:00" | null}`; a restarted `final` took over a
+  live final shift of this team instead of starting a new one. The shift's log then holds a second
+  `start` line (from the new process) before this decision.
+- `task_requeued`: `{"request": "R-012", "error": "<server error text>"}`; a server error in the middle
+  of the task; it was put back once and runs again later.
+- `task_given_up`: `{"request": "R-012", "error": "<server error text>", "time_left": true | false}`;
+  the second such error (or no time left): the task is reported `failed` with the reason, never `done`.
+- `report_failed`: `{"request": "R-012", "error": "<server error text>"}`; that give-up report itself
+  failed; the request stays `pending` in the ledger.
+- `brain_rejected`: `{"request": "R-030", "kind": "room_check", "room": "room-999" | null, "reason":
+  "<why>"}`; the Brain's answer was refused (a room check on a noise/complaint/object text, or on a
+  room the map does not have); the request stays unknown and is reported `failed`.
+- `walk_interrupted`: `{"at": "corridor-1a", "towards": "charging-dock"}`; the idle walk back to the
+  dock stopped at this node because a request arrived; the request is planned from here.
+- `setup_failed`: `{"reason": "setup failed: <Error>: <message>"}`; written right after `start` when
+  the shift could not be set up; the shift is ended and the `end` line carries the same reason.
+
+Task 22 (additive): `report_skipped_ambiguous`: `{"request": "R-014", "other": "R-005", "room": "room-314",
+"item": "water-bottle"}`; the delivery scored, but an earlier not-done order for the same room and item
+(waiting, declined as a duplicate, failed or unreported) may have earned that rise, so the request is not
+reported at all; its `task_failed` line has status `skipped`.
+
+`task_done`/`task_failed` `points` (changed with Task 18): the score rise the flow itself observed,
+from the loop's last `status` before the task to the flow's verifying `status` after its last
+`place`/`say`. It **excludes the report's own +5**, which shows on the next `state` line. Sum
+`state.score`/the `end` line for totals, not `points`.
 
 ### 4.4 Environment variables
 
@@ -87,6 +128,10 @@ same PR that first reads it.
 | `WYBE_NIGHTSHIFT_KEY` | Track A agent | **yes**: one team, one key | Hamad's `.env`, sent privately |
 | `ANTHROPIC_API_KEY` | Track A agent, Track B server | **yes** | Hamad's `.env`, sent privately |
 | `ANTHROPIC_BUDGET_USD` | everything that calls Claude | no (default 30) | `.env.example` |
+| `NIGHTSHIFT_MAX_RPS` | Track A agent client | no (default 5) | `.env.example` |
+| `SECRETS_CLEAR_AFTER` | `scripts/secrets.sh` | no (default 60) | `.env.example` |
+| `VIEWER_ALLOWED_ORIGINS` | Track A viewer server (CORS on `/api/*`) | no (default `http://localhost:3000,http://127.0.0.1:3000`) | `.env.example` |
+| `FINAL_ARMED` | Track A final-mode lock | no | real environment only, never a file (export in the shell) |
 | `ELEVENLABS_API_KEY` | Track B server | **yes** | Hamad's `.env.local` (written by the ElevenLabs CLI), sent privately |
 | `ELEVENLABS_AGENT_ID` | Track B server (`/api/voice/token`), `src/features/voice/setup-agent.ts` | no (blank in `.env.example`; printed by `setup-agent.ts`) | `.env` and Vercel project settings |
 | `APP_CLAUDE_BUDGET_USD` | Track B server (Claude spend meter) | no (default 5) | `.env.example` |

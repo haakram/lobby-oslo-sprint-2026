@@ -1,0 +1,7 @@
+[tool.ruff]
+line-length = 110
+extend-exclude = [".claude"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

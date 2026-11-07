@@ -287,3 +287,36 @@ Holio what they reward.
 - Team lead's GitHub stars (112 repos) as tools and inspiration. Rule 3 forbids pasting existing
   code into the product.
 - GitHub account is on the free plan: a private repo can't have branch protection.
+
+## 11. How we're judged and how to submit (Saturday-morning deck, read 2026-11-07)
+
+Source: `docs/Oslo Sprint – Saturday morning.pptx` (slides and speaker notes).
+
+**Submit (deadline Sun 14:00, code freeze):** one GitHub repo for the team; **the jury looks at the
+commit history** (code committed before kickoff counts against you); type `/lever` in #general
+(team + repo; demo link and description optional); `/min-innlevering` shows what's submitted;
+`/lever` again to update. At 14:00 every repo is locked at its latest commit. *No submission, no
+demo, no prize.* **Our repo is private: the jury must be able to open it — make it public or give
+the jury access before 14:00 (team lead's decision).** The agent code must be on `main`.
+
+**Open round (14:15–17:00):** 2 min demo + 1 min questions; each juror weighs the whole product with
+a focus on their field; **top 5 per panel go to the final.** Scored 1–10 on:
+
+| Criterion | + Looks for | − Pulls down |
+|---|---|---|
+| Functionality | Live demo, the core flow works | Only slides, hard-coded answers |
+| A real problem | Clear target group, a real need | A solution looking for a problem |
+| Innovation | A new angle, smart use of tech | A copy, or a thin chatbot shell |
+| Design | Understandable without explaining | Messy, needs explaining |
+| Team efficiency | A lot done, well prioritised in 48 h | Too big a scope, little works |
+
+**Final (18:00, top 10):** 5–10 min pitch + questions; each juror judges from their own field only;
+highest total wins. Founders: *can this become a company? next step if you win tonight?* · IT and
+security: *robustness, security, scaling, data; biggest technical risk?* · Product: *the right core
+flow and cuts; what did you leave out, and why?* · Marketing: *audience, message, channels; first 100
+users?* · Creative and design: *intuitive flow, coherent look; tested with users?* · Law: *privacy,
+rights, regulation; legal hurdles?* · Domain experts: *does it match the industry; why hasn't anyone
+solved this?* **The jury judges the product, not the speaker.**
+
+Scale: 9–10 exceptional (works and stands out) · 7–8 strong (solid, one clear weakness) · 5–6 good
+(promising, not convincing) · 3–4 weak (much missing) · 1–2 very weak.

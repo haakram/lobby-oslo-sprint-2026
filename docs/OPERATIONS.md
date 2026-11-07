@@ -104,6 +104,43 @@ pre-push hook stops accidental pushes either way.
 
 TBD at the rehearsal: platform, how `main` deploys, preview URLs per PR, how to roll back.
 
+### Night Shift final runbook (Sun 8 Nov, 12:00 Oslo)
+
+The final is `FINAL_ARMED=1 .venv/bin/python -m agent final`: 10 scored shifts in parallel threads
+sharing one rate limiter (5 req/s), each stopping itself after 44 real minutes. It refuses to start,
+printing why, unless `FINAL_ARMED=1` is in the shell environment (a `.env` file does not count) and
+the Oslo time is 11:59-13:00 on 8 Nov. It never falls back to practice.
+
+What it does, in order: takes the lock `temp/final.lock` (its pid; a second `final` on the same
+machine refuses while the first is alive), loads the params and the hotel map (a bad file fails here,
+before any start), lists this team's shifts with `shifts` (also the pre-flight for the key and the
+connection), prints the plan (`N live final shift(s) to adopt, M ended, starting K new`), then each
+thread starts (or adopts) its shift and prints `shift i/10 <id> started|adopted` the moment it
+happens, and `… ended  score S (reason)` when it ends; the summary follows at the end. A failed
+start is retried with backoff for about 2 minutes; before every retry the server's list is checked
+so a start whose reply was lost is adopted, not repeated. A server error streak never ends a final
+shift: it backs off (up to 30 s) and keeps trying until its 44 minutes are up.
+
+**Only ONE `final` process may run, anywhere, for this team's key.** Two processes would adopt the
+same live shifts and drive one robot from two places, which breaks the score-rise check behind
+every "done". The lockfile stops a second one on the same machine; nothing stops one on another
+laptop, so: one person, one terminal.
+
+1. 11:45: last `git pull`, `./scripts/check.sh --fast` green, `.env` has `WYBE_NIGHTSHIFT_KEY`
+   (and `ANTHROPIC_API_KEY` if the Brain is used), no practice shift running, no stale
+   `temp/final.lock` from a test run (`rm -f temp/final.lock`).
+2. 11:59-12:00: Hamad runs the command above in a fresh terminal. ShirazIQ opens
+   `.venv/bin/python -m agent viewer` and watches (http://127.0.0.1:8765/).
+3. If one shift stops or crashes, do nothing: no hand-steering, no second `final` while the first
+   runs. The other shifts continue; Ctrl-C stops all of them cleanly (each still writes its `end`
+   line; a thread still retrying its start makes no further start).
+4. **Restart, only if the process itself is gone** (laptop sleep, crash, Ctrl-C by mistake): run the
+   same command again, once. It adopts this team's live final shifts, starts only the missing ones,
+   and never passes 10 final shifts in total (the server's own list is the count, so a lost reply
+   cannot add an eleventh). An adopted shift keeps the server's 45-minute clock from its original
+   start, so it may end earlier than the new 44-minute timer.
+5. Afterwards the run logs are in `temp/runs/`; the summary of all shifts is printed at the end.
+
 ## 8. Demo day
 
 - [ ] The deployed URL works in a private window, on a phone and on a laptop that isn't the builder's.

@@ -20,8 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from agent.routing import shortest_route  # noqa: E402
-from agent.world import Hotel  # noqa: E402
+from agent.routing import shortest_route
+from agent.world import Hotel
 
 OUT = ROOT / "src/features/routes/data/hotel.routes.json"
 

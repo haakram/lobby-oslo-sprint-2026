@@ -549,34 +549,37 @@ def test_manager_skip_drops_the_queued_request(tmp_path):
     assert result["requests_served"] == 1
 
 
-# --- the close-out near 06:00 (NIGHT_END_S was a day late, so _too_late never fired) ---------------
+# --- no close-out near 06:00: a declined real request pays 0, an open one at 06:00 costs nothing ------
 
 
-def test_too_late_is_true_near_six_and_false_earlier():
-    from agent.agent import NIGHT_END_S, _too_late
+def test_night_end_is_on_the_clock_to_seconds_scale():
+    from agent.agent import NIGHT_END_S
+    from agent.world import clock_to_seconds
+
+    assert NIGHT_END_S == clock_to_seconds("06:00:00") == 30 * 3600  # 06:00 the next day, not a day later
+
+
+def test_a_request_near_six_is_tried_not_declined(tmp_path):
+    # Live: declining a real request pays 0 and a request open at 06:00 costs nothing, so the loop
+    # never declines what its estimate says cannot finish (offline seed 3 at 1.3: a spill priced at
+    # over 6 min at 05:53 was done in time, -44 when declined).
+    import agent.agent as mod
     from agent.planner import Params, estimate_seconds
     from agent.tasks import parse_request
     from agent.world import Hotel, RobotState, clock_to_seconds
 
-    assert NIGHT_END_S == clock_to_seconds("06:00:00") == 30 * 3600  # one scale: 06:00 the next day
-    hotel, state = Hotel.load(), RobotState()
+    assert not hasattr(mod, "_close_out") and not hasattr(mod, "_too_late")
+    state = RobotState()
     state.location = "charging-dock"
-    task = parse_request("R-001", "319 wants a towel.", "05:57:00")
-    assert 150 < estimate_seconds(task, state, hotel, Params()) < 300  # a ~3-4 min task
-    for clock, late in (("05:58:00", True), ("05:50:00", False), ("03:00:00", False),
-                        ("23:30:00", False), ("22:00:00", False)):
-        state.clock = clock
-        assert _too_late(task, state, hotel, Params()) is late, clock
-
-
-def test_a_request_that_cannot_finish_by_six_is_reported_declined(tmp_path):
-    from agent.planner import Params
-    from agent.world import clock_to_seconds
-
+    task = parse_request("R-001", "319 wants a towel.", "05:58:00")
+    assert estimate_seconds(task, state, Hotel.load(), Params()) > 120  # past 06:00 by the estimate
     fake = FakeWybe(requests=[("05:58:00", "R-001", "319 wants a towel.")])
     client = client_for(tmp_path, fake.handler)
     session = client.start_shift("practice", seed=1)
     fake._now = clock_to_seconds("05:58:00")  # R-001 comes with the loop's first status
     run_shift(client, session=session, params=Params(use_cart=False))
-    assert fake.reports == {"R-001": "declined"}
-    assert _decisions(tmp_path, {"shift": session.shift_id}, "closed_out")
+    assert fake.reports.get("R-001") != "declined"
+    started = _decisions(tmp_path, {"shift": session.shift_id}, "task_start")
+    assert [d["request"] for d in started] == ["R-001"]  # the robot keeps working until 06:00
+    assert not _decisions(tmp_path, {"shift": session.shift_id}, "closed_out")
+    assert any(e["cmd"] == "pick" for e in fake.log)

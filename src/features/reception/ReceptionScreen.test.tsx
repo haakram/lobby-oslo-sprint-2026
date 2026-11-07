@@ -142,7 +142,7 @@ describe("ReceptionScreen", () => {
     expect(within(card).getByText("Dobbeltrom")).toBeInTheDocument();
     expect(within(card).getByText("20.11.2026")).toBeInTheDocument();
     expect(within(card).getByText("22.11.2026")).toBeInTheDocument();
-    expect(within(card).getByText("3 042 kr")).toBeInTheDocument();
+    expect(within(card).getByText("3042 kr")).toBeInTheDocument();
     expect(screen.queryByText("Ingen forespørsler ennå")).not.toBeInTheDocument();
     await screen.findByText("Ingen samtaler ennå");
   });

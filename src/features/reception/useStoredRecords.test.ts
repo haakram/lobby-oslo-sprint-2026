@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BookingRecord, MessageRecord } from "./records";
 import { MAX_STORED_RECORDS, RECORDS_STORAGE, useStoredRecords } from "./useStoredRecords";
 
-const BOOKING: BookingRecord = {
+// The haggling fields from the receptionist PRs (#21, #22) ride along: stored records keep them.
+const BOOKING = {
   kind: "booking",
   id: "b-1",
   createdAt: "2026-11-07T13:05:00.000Z",
@@ -14,8 +15,11 @@ const BOOKING: BookingRecord = {
   guests: 2,
   room: "dobbeltrom",
   note: "",
+  discountStep: 0,
+  perk: null,
+  pricePerNight: 1521,
   directTotal: 3042,
-};
+} as BookingRecord;
 
 const MESSAGE: MessageRecord = {
   kind: "message",

@@ -10,8 +10,9 @@ export const RECORDS_STORAGE = "resepsjon-records-v1";
 /** Enough for a night's calls; the oldest drop off first. */
 export const MAX_STORED_RECORDS = 50;
 
-// What a stored record must look like before it is rendered; anything else is dropped.
-const Booking = z.object({
+// What a stored record must look like before it is rendered; anything else is dropped. Only the fields
+// the card shows as text are checked; others (a newer record's extra fields) are kept as they are.
+const Booking = z.looseObject({
   kind: z.literal("booking"),
   id: z.string().min(1),
   createdAt: z.string(),
@@ -24,7 +25,7 @@ const Booking = z.object({
   note: z.string(),
   directTotal: z.number(),
 });
-const Message = z.object({
+const Message = z.looseObject({
   kind: z.literal("message"),
   id: z.string().min(1),
   createdAt: z.string(),
@@ -46,7 +47,7 @@ function readRecords(): ReceptionRecord[] {
     if (!Array.isArray(parsed)) return EMPTY;
     return parsed.flatMap((item) => {
       const result = StoredRecord.safeParse(item);
-      return result.success ? [result.data] : [];
+      return result.success ? [result.data as ReceptionRecord] : [];
     });
   } catch {
     return EMPTY;

@@ -19,8 +19,6 @@ function roomName(id: string): string {
   return ROOM_TYPES.find((room) => room.id === id)?.name ?? id;
 }
 
-const KR = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 0 });
-
 /**
  * One booking or message the receptionist took down, with the staff tick that settles it. A tick can
  * be taken back with Angre, and focus stays in the card's actions while the buttons swap.
@@ -160,7 +158,7 @@ function BookingCard({ record, mark, onMark, actionsRef }: CardProps<BookingReco
           {record.guests}
         </Field>
         <Field label="Pris direkte" mono>
-          <span className="whitespace-nowrap">{KR.format(record.directTotal)} kr</span>
+          {`${record.directTotal} kr`}
         </Field>
         {record.note && <Field label="Merknad">{record.note}</Field>}
       </dl>

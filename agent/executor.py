@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import time
 import traceback
 from collections.abc import Callable
@@ -51,7 +52,24 @@ DEFAULT_EXPERIMENTS = ("spill_done",)  # live seed 4: two spill reports verified
 
 IDLE_STEPS = 200  # dock+scan cycles per wait_for_request (~100 sim-s each); the loop calls again
 IDLE_STATUS_EVERY = 10  # idle checks between fallback `status` polls (replies carry the inbox event)
+# Idle: a dock at full charge is refused, so sim time passes on scans (60 s each, ~0.9 % drain) and
+# the dock (1 %/min, wakes on a message) wins it back. One dock per scan cost 2 calls per ~114 sim-s;
+# one dock per this many scans makes the same idle time ~40 % cheaper in calls. The share of time in
+# scans (when a new message waits for the scan to end) stays 60:54, so requests wait no longer.
+IDLE_SCANS_PER_DOCK = 5
 STATUS_FRESH_S = 15.0  # a status is reused only with no call since and within the final's 20 s rule
+# Commands that never raised the score live: of ~3,400 status pairs in 43 live logs with only these
+# in between (and no event but inbox/dock), none rose; the drops (slips -15) come with an event.
+# `ask` is not here: one live clerk answer ("For R-011 that's 332.") came with +10 and no event.
+# A `report` with outcome "failed" is neutral too (live: 426 of 426 left the score as it was);
+# "done", "declined" and any other outcome are not (+5, a room check's credit, -35, ...).
+SCORE_NEUTRAL = frozenset({"status", "inbox", "help", "look", "move", "navigate", "call_elevator",
+                           "knock", "pick", "scan", "dock"})
+QUIET_EVENTS = frozenset({"inbox", "dock"})
+SCORE_TRUST_CALLS = 40  # a score before an action is taken from a status at most this many calls old
+LOOP_DRAIN_PER_MIN = 2.0  # pessimistic battery drain between statuses (live 0.9 %/min, stairs more)
+LOOP_BATTERY_SAFE = 50.0  # the loop skips its status only while that floor stays above this
+DOCK_BATTERY = re.compile(r"battery\s+\d+(?:\.\d+)?%\s+to\s+(\d+(?:\.\d+)?)%", re.IGNORECASE)
 NOTE_MAX = 300
 LET_ME_IN = ("locked out", "let me in")
 REFUSAL = "I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID."
@@ -125,6 +143,11 @@ class Executor:
         self._wet_reported: set[str] = set()
         self._calls = 0  # every server call; a cached status is valid only while this stands still
         self._status_cache: tuple[dict, int, float] | None = None  # result, call count, real time
+        self._score_trusted_at: int | None = None  # call count of the last status, while only
+        # SCORE_NEUTRAL calls with quiet events followed it (None once anything else was sent)
+        self._exit_seen: dict[str, int] = {}  # place -> sim second a look last listed it as an exit
+        self._idle_scans = IDLE_SCANS_PER_DOCK  # scans since the last idle dock (the first step docks)
+        self._battery_seen: tuple[float, int] | None = None  # (battery %, sim second) last stated
         self._looked: set[str] = set()  # places looked at this shift (each non-room place once)
         self.looks: dict[str, dict] = {}  # the last look at each place
         self._stock_places = list(hotel.stock)  # the JSON's stock places: the survey's tour
@@ -166,6 +189,9 @@ class Executor:
         reply = self.session.cmd(name, **args)
         if reply.clock:
             self.state.clock = reply.clock
+        neutral = name in SCORE_NEUTRAL or (name == "report" and args.get("outcome") == "failed")
+        if not neutral or any(ev.get("type") not in QUIET_EVENTS for ev in reply.events):
+            self._score_trusted_at = None  # the score may have moved: the next "before" reads it
         for ev in reply.events:
             if ev.get("type") == "inbox":
                 self.inbox_waiting = True
@@ -233,11 +259,11 @@ class Executor:
             return
         self._refusing = True
         try:
-            before = self.score_now()
+            before = self.score_known()  # log fields only: no status call around the refusal
             self.cmd("say", text=REFUSAL)
             self.log("hypothesis", id="H-bathrobe", request=None, text=text[:200],
                      action="said a polite no; no keycard; did not follow",
-                     score_before=before, score_after=self.score_now())
+                     score_before=before, score_after=self.score_known())
         finally:
             self._refusing = False
 
@@ -256,6 +282,10 @@ class Executor:
             self._visited.add(self.state.location)
         self._learn_dock(reply.result.get("location"), reply.clock)
         self._status_cache = (reply.result, self._calls, time.monotonic())
+        score = reply.result.get("score")
+        trusted = isinstance(score, int | float) and not isinstance(score, bool)
+        self._score_trusted_at = self._calls if trusted else None
+        self._note_battery(reply.result.get("battery"))
         snap = {k: getattr(self.state, k) for k in STATE_FIELDS}
         snap = {k: list(v) if isinstance(v, list) else v for k, v in snap.items()}
         if snap != self._logged:
@@ -263,9 +293,60 @@ class Executor:
             self._logged = snap
         return reply.result
 
+    def _note_battery(self, battery) -> None:
+        """Remember a battery the server stated, with the sim second it was true."""
+        now = self._now_s()
+        if isinstance(battery, int | float) and not isinstance(battery, bool) and now is not None:
+            self._battery_seen = (float(battery), now)
+        else:
+            self._battery_seen = None
+
+    def _battery_floor(self) -> float | None:
+        """The last stated battery minus a pessimistic drain since (LOOP_DRAIN_PER_MIN, live 0.9)."""
+        seen, now = self._battery_seen, self._now_s()
+        if seen is None or now is None or now < seen[1]:
+            return None
+        return seen[0] - (now - seen[1]) / 60 * LOOP_DRAIN_PER_MIN
+
+    def loop_status(self) -> dict:
+        """The shift loop's status at the top of each pass, without a status call when the robot
+        already knows what the loop reads from it: whether a message waits (the inbox event: live,
+        all 2,913 statuses that counted unread messages came after one), the battery (only while
+        the pessimistic floor stays above LOOP_BATTERY_SAFE, far from any charge threshold) and the
+        score (only while still trusted, see score_before). Otherwise, a real refresh. The stand-in
+        is not cached: the next refresh after any call asks the server."""
+        if self._status_cache is not None and self._status_cache[1] == self._calls:
+            return self.refresh()  # nothing sent since the last status: it is free and true
+        floor = self._battery_floor()
+        at = self._score_trusted_at
+        if at is None or self._calls - at > SCORE_TRUST_CALLS or floor is None or floor < LOOP_BATTERY_SAFE:
+            return self.refresh()
+        self.state.battery = round(min(floor, float(self.state.battery or floor)), 1)
+        return {"location": self.state.location, "battery": self.state.battery,
+                "hands": list(self.state.hands), "cart": None if self.state.cart is None else list(self.state.cart),
+                "docked": self.state.docked, "score": self.state.score, "unread_messages": 0}
+
     def score_now(self) -> int | None:
         score = self.refresh().get("score")
         return score if isinstance(score, int | float) else None
+
+    def score_before(self) -> int | None:
+        """The score to compare a rewarding action (place, say) against, without a status call
+        when the last status still holds: only SCORE_NEUTRAL calls with quiet events since, at most
+        SCORE_TRUST_CALLS of them. Those calls never raised the score live, and a drop since (a
+        slip comes with an event) only makes a rise harder to see, never a false one. "After" is
+        always a real status (score_now)."""
+        at = self._score_trusted_at
+        score = self.state.score
+        if (at is not None and self._calls - at <= SCORE_TRUST_CALLS
+                and isinstance(score, int | float) and not isinstance(score, bool)):
+            return score
+        return self.score_now()
+
+    def score_known(self) -> int | None:
+        """The last score a status showed, with no call: for log lines only, never for a report."""
+        score = self.state.score
+        return score if isinstance(score, int | float) and not isinstance(score, bool) else None
 
     def look(self) -> dict:
         reply = self.cmd("look")
@@ -274,13 +355,16 @@ class Executor:
         look = reply.result
         loc = look.get("location") if isinstance(look.get("location"), str) else self.state.location
         self.state.location = loc
-        with contextlib.suppress(ValueError, AttributeError):
-            self._look_clock[loc] = clock_to_seconds(self.state.clock)
         exits = [
             ex for ex in look.get("exits") or []
             if isinstance(ex, dict) and isinstance(ex.get("to"), str)
             and isinstance(ex.get("metres"), int | float)
         ]
+        with contextlib.suppress(ValueError, AttributeError):
+            now = clock_to_seconds(self.state.clock)
+            self._look_clock[loc] = now
+            for ex in exits:  # a wet spot warns from every side: this look has seen each exit's floor
+                self._exit_seen[ex["to"]] = now
         look = {**look, "exits": exits}
         known_nodes = set(self.hotel.nodes)
         lost = [e.b for e in self.hotel.neighbors(loc)] if exits else []
@@ -322,6 +406,7 @@ class Executor:
         if reply.ok:
             self.state.location = result.get("at", to) if isinstance(result.get("at"), str) else to
             self.state.docked = False
+            self._idle_scans = IDLE_SCANS_PER_DOCK  # back from work: the next idle step docks
             self._visited.add(self.state.location)
             metres = result.get("metres")
             if isinstance(metres, int | float) and metres > 0:  # a ride reports 0: not an edge
@@ -483,6 +568,7 @@ class Executor:
             return False
         self.state.location = result["at"]
         self.state.docked = False
+        self._idle_scans = IDLE_SCANS_PER_DOCK
         self._visited.add(result["at"])
         self._moves += len(leg)
         self._refused_move, self._refused_run = None, 0
@@ -507,8 +593,10 @@ class Executor:
             now = clock_to_seconds(self.state.clock)
         except (ValueError, AttributeError):
             return False
-        last = self._look_clock.get(here)
-        return last is None or now - last > WET_LOOK_S
+        # The floor of `to` was seen by any look that listed it as an exit (a spot is wet from
+        # every side, world.mark_wet), not only by a look from here: the newest such look counts.
+        seen = [t for t in (self._look_clock.get(here), self._exit_seen.get(to)) if t is not None]
+        return not seen or now - max(seen) > WET_LOOK_S
 
     def _look_on_arrival(self) -> bool:
         """The first time at a non-room place this shift: one look (5 s), so wet warnings, metres
@@ -1064,7 +1152,7 @@ class Executor:
             if not forced and self._work_waiting():
                 break  # a request came in on the way: it goes first
             reply = self.cmd("dock")
-            self.state.docked = reply.ok
+            self._after_dock(reply)
             if not reply.ok and self._revert_dock(dock, str(reply.result)):
                 continue  # dock again, at the map's dock
             text = str(reply.result).lower()
@@ -1115,8 +1203,13 @@ class Executor:
                     self.scan()  # spend sim time, so the loop calling again is not a tight spin
                     return
                 continue  # moving took time: check the inbox again first
+            if self._idle_scans < IDLE_SCANS_PER_DOCK:
+                self.scan()  # charged lately: let the battery dip a little more before docking
+                self._idle_scans += 1
+                continue
             reply = self.cmd("dock")
-            self.state.docked = reply.ok
+            self._after_dock(reply)
+            self._idle_scans = 0
             text = str(reply.result).lower()
             if not reply.ok and "full" not in text:
                 if self._revert_dock(dock, str(reply.result)):
@@ -1128,6 +1221,31 @@ class Executor:
             if self.inbox_waiting:  # a dock that woke on a message brings the inbox event
                 return
             self.scan()  # idle time spent usefully; the battery dips so the next dock works
+            self._idle_scans = 1
+
+    def _after_dock(self, reply: Reply) -> None:
+        """A dock changes only the battery and `docked`, and its reply names the battery reached
+        ("Docked for 4 min. Battery 92% to 97%."). While the score is still trusted (only
+        SCORE_NEUTRAL calls since the last status), the status cache is renewed from what the
+        robot knows, so the loop's next refresh needs no status call. No battery in the reply,
+        or an event other than inbox/dock: nothing is assumed (the next refresh asks the server)."""
+        self.state.docked = reply.ok
+        m = DOCK_BATTERY.search(str(reply.result)) if reply.ok else None
+        if m is None:
+            return
+        battery = max(0.0, min(100.0, float(m[1])) - 0.5)  # the reply rounds to a whole per cent
+        self.state.battery = battery
+        self._note_battery(battery)
+        if (self._status_cache is None or self._score_trusted_at is None
+                or any(ev.get("type") not in QUIET_EVENTS for ev in reply.events)):
+            return
+        cached = self._status_cache[0]
+        self._status_cache = ({
+            **cached, "location": self.state.location, "battery": battery, "docked": True,
+            "hands": list(self.state.hands), "cart": None if self.state.cart is None else list(self.state.cart),
+            "score": self.state.score,
+            "unread_messages": 0,  # a message that came is the inbox_waiting flag (checked first)
+        }, self._calls, time.monotonic())
 
     # --- tasks ---------------------------------------------------------------------------------
 

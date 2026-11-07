@@ -7,7 +7,7 @@ import httpx
 
 from agent.client import WybeClient
 from agent.config import Settings
-from agent.executor import IDLE_STATUS_EVERY, IDLE_STEPS, Executor
+from agent.executor import IDLE_SCANS_PER_DOCK, IDLE_STATUS_EVERY, IDLE_STEPS, Executor
 from agent.world import Hotel, RobotState, clock_to_seconds
 from tests.fakes.fake_wybe import FakeWybe
 
@@ -39,8 +39,9 @@ def test_idle_hour_polls_status_only_every_tenth_check(tmp_path):
     cmds = _cmds(fake, since)
     assert cmds.count("status") == 3  # checks 0, 10 and 20
     assert all(b != "status" for a, b in pairwise(cmds) if a == "dock")
-    assert cmds.count("dock") == 25 and cmds.count("scan") == 25
-    assert IDLE_STATUS_EVERY == 10 and IDLE_STEPS == 200
+    # one dock per IDLE_SCANS_PER_DOCK scans: the first step docks, then 5 scans, dock again, ...
+    assert cmds.count("dock") == 5 and cmds.count("scan") == 25
+    assert IDLE_STATUS_EVERY == 10 and IDLE_STEPS == 200 and IDLE_SCANS_PER_DOCK == 5
 
 
 def test_wait_for_request_keeps_a_pending_inbox_flag_and_makes_no_call(tmp_path):
@@ -102,4 +103,5 @@ def test_wait_for_request_returns_when_told_to_stop(tmp_path):
 
     since = len(fake.log)
     ex.wait_for_request(should_stop=out_of_time)
-    assert _cmds(fake, since).count("dock") == 2
+    cmds = _cmds(fake, since)
+    assert cmds.count("dock") == 1 and cmds.count("scan") == 2  # two idle steps: dock+scan, scan

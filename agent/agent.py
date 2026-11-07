@@ -363,7 +363,7 @@ def run_shift(
                 result["reason"] = "real time limit"
                 break
             try:
-                status = ex.refresh()
+                status = ex.loop_status()  # a status call only when the robot's own record won't do
                 if sim_end_s is not None and clock_to_seconds(state.clock) >= sim_end_s:
                     result["reason"] = "sim end"
                     break

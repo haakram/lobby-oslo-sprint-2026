@@ -45,12 +45,13 @@ export function Sheet({
     closeButton.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onCloseRef.current();
+        // Something inside (an open menu) already handled this Escape: leave the sheet open.
+        if (!event.defaultPrevented) onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !panel.current) return;
       // Keep Tab inside the dialog: from the last stop back to the first, and the other way round.
-      const stops = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+      const stops = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((stop) => stop.tabIndex >= 0);
       if (stops.length === 0) return;
       const first = stops[0];
       const last = stops[stops.length - 1];

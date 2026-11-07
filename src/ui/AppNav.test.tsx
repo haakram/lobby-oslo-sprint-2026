@@ -112,6 +112,32 @@ describe("AppNav on a desktop (the rail)", () => {
     expect(screen.getByRole("button", { name: "Logg ut" })).toBeInTheDocument();
   });
 
+  it("closes the user menu on Escape (focus back on the plate) and on a click outside", () => {
+    render(as("admin", <AppNav />));
+    const plate = screen.getByRole("button", { expanded: false });
+    fireEvent.click(plate);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Logg ut" }), { key: "Escape" });
+    expect(plate).toHaveAttribute("aria-expanded", "false");
+    expect(plate).toHaveFocus();
+
+    fireEvent.click(plate);
+    fireEvent.pointerDown(document.body);
+    expect(plate).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("makes the view switcher one Tab stop, with the arrow keys moving between the views", () => {
+    render(as("admin", <AppNav />));
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    const [admin, desk, robot] = screen.getAllByRole("radio");
+    expect([admin, desk, robot].map((radio) => radio.tabIndex)).toEqual([0, -1, -1]);
+    admin.focus();
+    fireEvent.keyDown(admin, { key: "ArrowDown" });
+    expect(desk).toHaveFocus();
+    fireEvent.keyDown(desk, { key: "ArrowUp" });
+    fireEvent.keyDown(admin, { key: "ArrowUp" });
+    expect(robot).toHaveFocus();
+  });
+
   it("hides itself on the login pages and when nobody is logged in", () => {
     path.current = "/login";
     expect(render(as("admin", <AppNav />)).container).toBeEmptyDOMElement();

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { SessionProvider, ViewAsBanner } from "@/features/auth";
 import { getSession } from "@/features/auth/server";
 import { PicklistProvider } from "@/features/picklist/PicklistProvider";
-import { AppNav } from "@/ui";
+import { AppNav, cx } from "@/ui";
 import "./globals.css";
 
 const grotesk = Schibsted_Grotesk({
@@ -37,11 +37,24 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   return (
     <html lang="nb" className={`${grotesk.variable} ${martian.variable}`}>
       <body>
+        {session && (
+          // First Tab stop: past the navigation to the screen (WCAG 2.4.1, and quicker at 06:00).
+          <a
+            href="#innhold"
+            className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:font-semibold focus:text-text"
+          >
+            Hopp til innhold
+          </a>
+        )}
         <SessionProvider session={session}>
           <PicklistProvider>
             <div className="min-h-dvh lg:flex">
               {session && <AppNav />}
-              <div className="flex min-h-dvh min-w-0 flex-1 flex-col pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-0">
+              {/* Room under the phone's bottom bar only when there is one (not on login or no-access). */}
+              <div
+                id="innhold"
+                className={cx("flex min-h-dvh min-w-0 flex-1 flex-col", session && "pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-0")}
+              >
                 <ViewAsBanner />
                 {children}
               </div>

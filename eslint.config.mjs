@@ -18,5 +18,6 @@ export default defineConfig([
     "node_modules/**",
     "test-results/**",
     "playwright-report/**",
+    "public/mediapipe/**",
   ]),
 ]);

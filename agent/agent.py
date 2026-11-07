@@ -7,6 +7,7 @@ World events such as a stranger asking to be let in are handled by the executor 
 
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
 import time
@@ -90,8 +91,9 @@ class FinalStarter:
     shifts in total (the ones the server already lists count, so a restarted process starts only
     the missing ones), and never a second shift for a start whose reply was lost: before every
     attempt `shifts` is read and a live final shift no thread has claimed is adopted instead.
-    A failed start is retried with backoff for about `retry_s` seconds. The final lock still
-    guards every real start (WybeClient checks it on start_shift)."""
+    A failed start is retried with backoff for about `retry_s` seconds, unless `stop` is set
+    (Ctrl-C): then no further start is attempted. The final lock still guards every real start
+    (WybeClient checks it on start_shift)."""
 
     def __init__(
         self,
@@ -99,18 +101,20 @@ class FinalStarter:
         *,
         limit: int = 10,
         retry_s: float = FINAL_START_RETRY_S,
-        sleep: Callable[[float], None] = time.sleep,
+        sleep: Callable[[float], None] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        stop: threading.Event | None = None,
     ):
         self._client = client
         self.limit = limit
         self.retry_s = retry_s
-        self._sleep = sleep
+        self._stop = stop
+        self._sleep = sleep or (stop.wait if stop is not None else time.sleep)
         self._clock = clock
         self._lock = threading.Lock()
         self.claimed: set[str] = set()  # shift ids a thread of this process is playing
         self.started = 0  # real starts made by this process
-        listed = self._retry("list the final shifts", self._shifts)
+        listed = self._retry("list the final shifts", self._shifts) or []
         finals = [s for s in listed if s.get("mode") == "final"]
         self.live = [s["shift"] for s in finals if s.get("status") == "live"]
         self.ended = len(finals) - len(self.live)
@@ -123,10 +127,15 @@ class FinalStarter:
             raise WybeError(f"shifts: unusable reply {str(reply.result)[:200]}")
         return [s for s in shifts if isinstance(s, dict) and isinstance(s.get("shift"), str)]
 
+    def _stopped(self) -> bool:
+        return self._stop is not None and self._stop.is_set()
+
     def _retry(self, what: str, fn: Callable[[], object]) -> object:
         deadline: float | None = None
         attempt = 0
         while True:
+            if self._stopped():
+                return None  # Ctrl-C: nothing more is started
             try:
                 return fn()
             except WybeError as exc:
@@ -145,14 +154,17 @@ class FinalStarter:
 
     def _adopt_or_start(self) -> ShiftSession | None:
         with self._lock:  # one start at a time: an unclaimed live final shift can only be an orphan
-            for s in self._shifts():
+            finals = [s for s in self._shifts() if s.get("mode") == "final"]
+            for s in finals:
                 sid = s["shift"]
-                if s.get("mode") == "final" and s.get("status") == "live" and sid not in self.claimed:
+                if s.get("status") == "live" and sid not in self.claimed:
                     self.claimed.add(sid)
                     session = ShiftSession(self._client, sid, "final", None)
                     session.log_decision("adopted_shift", {"shift": sid, "started": s.get("started")})
                     return session
-            if self.started >= self.remaining:
+            # The listing just fetched is the truth: a start whose reply was lost is in it too,
+            # so the count can never pass the limit, whatever this process thinks it started.
+            if len(finals) >= self.limit or self.started >= self.remaining:
                 return None
             session = self._client.start_shift("final")
             self.started += 1
@@ -221,20 +233,28 @@ def run_shift(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] | None = None,
     session: ShiftSession | None = None,
+    hotel: Hotel | None = None,
 ) -> dict:
     """One shift from start to the `end` log line. With a real-time limit (the final), an error
     streak never ends the shift: the loop backs off (capped at ERROR_BACKOFF_MAX_S) and keeps
     trying until the limit; a practice shift stops after MAX_CONSECUTIVE_ERRORS. A session that
-    was started (or adopted) elsewhere, e.g. by FinalStarter, is played instead of a new start."""
+    was started (or adopted) elsewhere, e.g. by FinalStarter, is played instead of a new start.
+    Everything that can fail on a bad file is loaded before the start; whatever fails after it
+    still ends the shift and writes its `end` line (never a started shift left unplayed)."""
     params = params or load_params()
+    hotel = hotel or Hotel.load()
     if session is None:
         session = client.start_shift(mode, seed)
     seed = session.seed
-    hotel, state = Hotel.load(), RobotState()
-    # Claude classifies unknown requests in ONE place (here), so the executor gets no brain.
-    ex = Executor(session, hotel, state, max_scans=params.max_scans)
-    deadline = clock() + real_time_limit_s if real_time_limit_s else None
-    pause = sleep or (stop.wait if stop is not None else time.sleep)
+    try:
+        state = RobotState()
+        # Claude classifies unknown requests in ONE place (here), so the executor gets no brain.
+        ex = Executor(session, hotel, state, max_scans=params.max_scans)
+        deadline = clock() + real_time_limit_s if real_time_limit_s else None
+        pause = sleep or (stop.wait if stop is not None else time.sleep)
+        sim_end_s = clock_to_seconds(sim_end) if sim_end else None
+    except Exception as exc:  # noqa: BLE001 - the shift has started: end it, don't strand it
+        return _abandon(session, seed, f"setup failed: {type(exc).__name__}: {str(exc)[:120]}")
 
     def out_of_time() -> bool:
         return (stop is not None and stop.is_set()) or (deadline is not None and clock() >= deadline)
@@ -249,7 +269,6 @@ def run_shift(
             pause(delay)
         return True
 
-    sim_end_s = clock_to_seconds(sim_end) if sim_end else None
     result: dict = {"shift": session.shift_id, "seed": seed, "score": None,
                     "requests_served": None, "reason": ""}
     pending: list[Task] = []
@@ -326,6 +345,17 @@ def run_shift(
         result["score"] = state.score
         result["requests_served"] = ex.ledger.served()  # also originals a follow-up ran or redelivered
         session.log_end(result)
+    return result
+
+
+def _abandon(session: ShiftSession, seed: int | None, reason: str) -> dict:
+    """Setup failed after the start: end the shift (best effort) and still write the `end` line."""
+    result = {"shift": session.shift_id, "seed": seed, "score": None, "requests_served": None,
+              "reason": reason}
+    session.log_decision("setup_failed", {"reason": reason})
+    with contextlib.suppress(Exception):  # ShiftEnded is the normal outcome; the end line follows anyway
+        session.cmd("end_shift")
+    session.log_end(result)
     return result
 
 

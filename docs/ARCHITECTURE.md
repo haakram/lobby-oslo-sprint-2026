@@ -88,6 +88,30 @@ Data of the newer decision kinds (Track A, additive):
 - `person`: `{"text": "<what the person said>", "repeat": true | false}`; `repeat` = the same words within
   10 sim-minutes, not answered again.
 
+Decision kinds added for the final's readiness (Task 18, additive):
+
+- `adopted_shift`: `{"shift": "w2-…", "started": "Sun 12:00" | null}`; a restarted `final` took over a
+  live final shift of this team instead of starting a new one. The shift's log then holds a second
+  `start` line (from the new process) before this decision.
+- `task_requeued`: `{"request": "R-012", "error": "<server error text>"}`; a server error in the middle
+  of the task; it was put back once and runs again later.
+- `task_given_up`: `{"request": "R-012", "error": "<server error text>", "time_left": true | false}`;
+  the second such error (or no time left): the task is reported `failed` with the reason, never `done`.
+- `report_failed`: `{"request": "R-012", "error": "<server error text>"}`; that give-up report itself
+  failed; the request stays `pending` in the ledger.
+- `brain_rejected`: `{"request": "R-030", "kind": "room_check", "room": "room-999" | null, "reason":
+  "<why>"}`; the Brain's answer was refused (a room check on a noise/complaint/object text, or on a
+  room the map does not have); the request stays unknown and is reported `failed`.
+- `walk_interrupted`: `{"at": "corridor-1a", "towards": "charging-dock"}`; the idle walk back to the
+  dock stopped at this node because a request arrived; the request is planned from here.
+- `setup_failed`: `{"reason": "setup failed: <Error>: <message>"}`; written right after `start` when
+  the shift could not be set up; the shift is ended and the `end` line carries the same reason.
+
+`task_done`/`task_failed` `points` (changed with Task 18): the score rise the flow itself observed,
+from the loop's last `status` before the task to the flow's verifying `status` after its last
+`place`/`say`. It **excludes the report's own +5**, which shows on the next `state` line. Sum
+`state.score`/the `end` line for totals, not `points`.
+
 ### 4.4 Environment variables
 
 Every variable in `.env.example`, with what reads it. Keys reach teammates only through `scripts/secrets.sh` (OPERATIONS § 4), never GitHub. Added (blank) to `.env.example` and here in the

@@ -477,3 +477,18 @@ def test_with_a_real_time_limit_an_error_streak_backs_off_and_never_ends_the_shi
     assert max(sleeps) == 30 and sleeps[:5] == [1, 2, 4, 8, 16]
     assert sum(sleeps) >= 2000 - 30
     assert fake.log[-1]["cmd"] == "end_shift"
+
+
+def test_setup_failure_after_the_start_still_ends_the_shift(tmp_path, monkeypatch):
+    import agent.agent as mod
+
+    def boom(*a, **kw):
+        raise RuntimeError("executor cannot be built")
+
+    monkeypatch.setattr(mod, "Executor", boom)
+    fake = FakeWybe()
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1)
+    assert result["reason"].startswith("setup failed") and "RuntimeError" in result["reason"]
+    assert fake._ended and fake.log[-1]["cmd"] == "end_shift"
+    lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
+    assert lines[-1]["type"] == "end" and lines[-1]["reason"] == result["reason"]

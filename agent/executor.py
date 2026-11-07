@@ -160,8 +160,8 @@ class Executor:
         reply = self.cmd("status")
         if not reply.ok or not isinstance(reply.result, dict):
             return {}
+        self.state.update_from_status(reply.result)  # first: a bad reply must not get cached
         self._status_cache = (reply.result, self._calls, time.monotonic())
-        self.state.update_from_status(reply.result)
         snap = {k: getattr(self.state, k) for k in STATE_FIELDS}
         snap = {k: list(v) if isinstance(v, list) else v for k, v in snap.items()}
         if snap != self._logged:

@@ -264,3 +264,91 @@ def test_practice_start_still_works(tmp_path):
     client = make_client(tmp_path, recording_handler(reqs))
     assert client.start_shift("practice", seed=1).shift_id == "w2-abc"
     assert len(reqs) == 1
+
+
+# --- Task 18 / C3: 429 is retried with backoff, honouring Retry-After -------------------------------
+
+
+def _rate_limited(n, retry_after=None):
+    state = {"n": 0}
+
+    def replies(request):
+        state["n"] += 1
+        if state["n"] <= n:
+            headers = {"Retry-After": str(retry_after)} if retry_after is not None else {}
+            return httpx.Response(429, text="slow down", headers=headers)
+        return ok_reply("fine")
+
+    return replies, state
+
+
+def test_429_is_retried_after_the_retry_after_header(tmp_path):
+    replies, state = _rate_limited(1, retry_after=3)
+    delays = []
+    client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
+                        sleep=delays.append)
+    session = client.start_shift("practice", seed=1)
+    assert session.cmd("status").ok and state["n"] == 2
+    assert delays == [3]
+
+
+def test_429_without_retry_after_uses_the_backoff_and_a_long_header_is_capped(tmp_path):
+    replies, _ = _rate_limited(2)
+    delays = []
+    client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
+                        sleep=delays.append)
+    session = client.start_shift("practice", seed=1)
+    assert session.cmd("status").ok and delays == [0.5, 1]
+    replies, _ = _rate_limited(1, retry_after=600)
+    delays = []
+    client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
+                        sleep=delays.append)
+    session = client.start_shift("practice", seed=1)
+    assert session.cmd("status").ok and delays == [30]
+
+
+def test_persistent_429_raises_wybe_error_after_the_retries(tmp_path):
+    replies, state = _rate_limited(99)
+    client = make_client(tmp_path, recording_handler([], replies))
+    session = client.start_shift("practice", seed=1)
+    with pytest.raises(WybeError, match="429"):
+        session.cmd("status")
+    assert state["n"] == 4
+
+
+# --- Task 18 / C2: a start is never blindly repeated after an ambiguous failure ----------------------
+
+
+def _counting(outcomes):
+    """A handler for start_shift itself: each call takes the next outcome (an exception or response)."""
+    reqs = []
+
+    def handler(request):
+        reqs.append(request)
+        outcome = outcomes[min(len(reqs), len(outcomes)) - 1]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    return handler, reqs
+
+
+def test_start_shift_is_not_retried_after_an_ambiguous_failure(tmp_path):
+    handler, reqs = _counting([httpx.ReadTimeout("gone quiet")])
+    client = make_client(tmp_path, handler)
+    with pytest.raises(WybeError, match="start_shift"):
+        client.start_shift("practice", seed=1)
+    assert len(reqs) == 1  # the server may have started it: the caller checks `shifts` first
+
+    handler, reqs = _counting([httpx.Response(503, text="busy")])
+    client = make_client(tmp_path, handler)
+    with pytest.raises(WybeError):
+        client.start_shift("practice", seed=1)
+    assert len(reqs) == 1
+
+
+def test_start_shift_is_retried_after_a_connect_error(tmp_path):
+    handler, reqs = _counting([httpx.ConnectError("refused"), ok_reply(START)])
+    client = make_client(tmp_path, handler)
+    assert client.start_shift("practice", seed=1).shift_id == "w2-abc"
+    assert len(reqs) == 2

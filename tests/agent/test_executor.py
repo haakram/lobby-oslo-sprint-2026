@@ -12,7 +12,7 @@ from agent.executor import Executor
 from agent.flows import scan_candidates
 from agent.tasks import Kind, Task, parse_request
 from agent.world import DEFAULT_MAP, Hotel, RobotState
-from tests.fakes.fake_wybe import TYPES_DEMO_REQUESTS, FakeWybe
+from tests.fakes.fake_wybe import TYPES_DEMO_REQUESTS, VERIFIED_BONUS, FakeWybe
 
 
 def settings(tmp_path) -> Settings:
@@ -43,7 +43,9 @@ def setup(tmp_path, rids=None, requests=None, **fake_kw):
 def next_task(ex, session, rid):
     """Dock until request `rid` is in the inbox, then parse it like the shift loop will."""
     for _ in range(12):
-        for msg in session.cmd("inbox").result["messages"]:
+        messages = session.cmd("inbox").result["messages"]
+        ex.inbox_waiting = False  # the loop's inbox read is what clears the flag
+        for msg in messages:
             if msg.get("request") == rid:
                 return parse_request(rid, msg["text"], msg["at"])
         ex.wait_for_request()
@@ -89,7 +91,7 @@ def test_amenity_delivered_and_verified(tmp_path):
     fake, _, _, out = run_one(tmp_path, "R-001")
     assert out.status == "done", out
     assert fake.score >= 21
-    assert out.points == fake.score
+    assert out.points == fake.score - VERIFIED_BONUS  # the flow's rise; the report's bonus is not seen
     reports = calls(fake, "report")
     assert [r["result"] for r in reports] == ["Noted. Thanks."]
     assert fake.reports == {"R-001": "done"} and not fake.false_done
@@ -268,8 +270,8 @@ def test_wait_for_request_returns_at_once_when_a_message_is_waiting(tmp_path):
 def test_wait_for_request_is_bounded(tmp_path):
     fake, session, ex = setup(tmp_path, requests=[])
     session.cmd("inbox")
-    ex.wait_for_request()  # nothing will ever arrive: it must still return
-    assert 1 <= len(calls(fake, "scan")) <= 20
+    ex.wait_for_request(max_idle=40)  # nothing will ever arrive: it must still return
+    assert 1 <= len(calls(fake, "scan")) <= 40
 
 
 def test_idle_scan_remembers_found_items(tmp_path):
@@ -504,7 +506,9 @@ def collect(ex, session, rids):
     """Dock until every request in rids has come in; parse them like the shift loop will."""
     got = {}
     for _ in range(20):
-        for msg in session.cmd("inbox").result["messages"]:
+        messages = session.cmd("inbox").result["messages"]
+        ex.inbox_waiting = False  # the loop's inbox read is what clears the flag
+        for msg in messages:
             if msg.get("request") in rids:
                 got[msg["request"]] = parse_request(msg["request"], msg["text"], msg["at"])
         if set(got) == set(rids):
@@ -1060,3 +1064,42 @@ def test_noise_work_order_tells_a_dnd_sign_from_no_answer(tmp_path, kw, words, n
     assert ex.run(task).status == "failed"
     order = [w for w in decisions(session, "work_order") if w["type"] == "stoy"][-1]
     assert words in order["text"].lower() and not_words not in order["text"].lower(), order
+
+
+# --- Task 18 / C1: no free calls that only feed the log -------------------------------------------------
+
+
+def test_task_run_makes_no_log_only_status_calls(tmp_path):
+    fake, session, ex = setup(tmp_path, rids={"R-001"})
+    task = next_task(ex, session, "R-001")
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status == "done"
+    cmds = [e["cmd"] for e in fake.log[since:]]
+    assert cmds[0] != "status", cmds[:3]  # the loop's refresh just ran: no second status
+    assert cmds[-1] == "report", cmds[-3:]  # nothing after the report
+    assert out.points > 0  # from the flow's own before/after scores
+
+
+@pytest.mark.parametrize("fake_kw,room,expected", [
+    ({"dnd_rooms": {"room-103"}}, "103", "failed"),  # a DND sign: no knock, no keycard
+    ({}, "104", "failed"),  # a guest answers: occupied, no keycard
+    ({"absent_rooms": {"room-103"}}, "103", "done"),  # nobody there: door look, knock, keycard, look inside
+])
+def test_brain_room_check_looks_at_the_door_before_any_keycard(tmp_path, fake_kw, room, expected):
+    class StubBrain:
+        def classify(self, request_id, text, arrived):
+            return Task(request_id, Kind.ROOM_CHECK, text, arrived, room=room)
+
+    fake, session, ex = setup(tmp_path, rids={"R-004"}, **fake_kw)
+    ex.brain = StubBrain()
+    task = replace(next_task(ex, session, "R-004"), kind=Kind.UNKNOWN, room=None)
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status == expected and fake.reports == {"R-004": expected}
+    cmds = [(e["cmd"], e["args"]) for e in fake.log[since:]]
+    keycards = [i for i, (c, a) in enumerate(cmds) if c == "use" and (a or {}).get("item") == "keycard"]
+    looks = [i for i, (c, a) in enumerate(cmds) if c == "look" and (a or {}).get("at") == f"room-{room}"]
+    assert looks, cmds
+    assert (not keycards) if expected == "failed" else (keycards and looks[0] < keycards[0])
+    assert not fake.unsafe and not fake.false_done

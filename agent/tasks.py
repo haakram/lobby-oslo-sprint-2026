@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 
 from agent.world import clock_to_seconds
@@ -75,7 +75,10 @@ _MESSAGE = re.compile(
     re.IGNORECASE,
 )
 _CHECK = re.compile(r"\b(empty|tidy|occupied|vacant)\b", re.IGNORECASE)
-_CHECK_VERB = re.compile(r"\b(check|is|are|verify|see)\b", re.IGNORECASE)
+# An explicit check phrase, never a bare "is"/"are": "210 is vacant now, please ..." is no room check.
+_CHECK_VERB = re.compile(r"\b(check|verify|confirm|see if|see whether|make sure|find out)\b", re.IGNORECASE)
+# A text about noise or a complaint is never a room check (a keycard entry on a false one costs -30).
+_NOT_CHECK = re.compile(r"\b(noise|noisy|loud|music|party|complaints?|complain\w*)\b", re.IGNORECASE)
 _HINT = re.compile(
     r"\b(?:maybe|probably|perhaps|possibly)\s+(?:somewhere\s+)?(?:around|in|near|at|by)?\s*"
     r"(?:the\s+)?(.+?)\s*[.!]?$",
@@ -166,12 +169,20 @@ def parse_request(request_id: str, text: str, arrived: str) -> Task:
             )
     if _TRAY.search(body) and room:
         return Task(kind=Kind.TRAY, room=room, item=f"tray-{room[5:]}", **base)
-    if room and _CHECK.search(body) and _CHECK_VERB.search(body):
+    if room and _CHECK.search(body) and _CHECK_VERB.search(body) and not _NOT_CHECK.search(body):
         return Task(kind=Kind.ROOM_CHECK, room=room, **base)
     item = _item(body)
     if room and item:
         return Task(kind=Kind.AMENITY, room=room, item=item, count=_count(body), **base)
     return Task(kind=Kind.UNKNOWN, room=room, **base)
+
+
+def vet_brain_task(task: Task) -> Task:
+    """A Brain-classified room check is accepted only when the text has nothing of a noise complaint
+    in it; otherwise it becomes UNKNOWN (reported failed, never a keycard)."""
+    if task.kind is Kind.ROOM_CHECK and _NOT_CHECK.search(task.text or ""):
+        return replace(task, kind=Kind.UNKNOWN)
+    return task
 
 
 # --- the request ledger: every request of the shift, for follow-ups and duplicates ----------------

@@ -16,7 +16,9 @@ Besides the run log v1 lines, two decision kinds feed the dashboard: `room_statu
 
 from __future__ import annotations
 
+import time
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -26,7 +28,9 @@ from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_rou
 from agent.tasks import Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
 
-IDLE_STEPS = 20  # scan+dock cycles per wait_for_request (~100 sim-s each); the loop calls again
+IDLE_STEPS = 200  # dock+scan cycles per wait_for_request (~100 sim-s each); the loop calls again
+IDLE_STATUS_EVERY = 10  # idle checks between fallback `status` polls (replies carry the inbox event)
+STATUS_FRESH_S = 15.0  # a status is reused only with no call since and within the final's 20 s rule
 NOTE_MAX = 300
 LET_ME_IN = ("locked out", "let me in")
 REFUSAL = "I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID."
@@ -77,10 +81,13 @@ class Executor:
         self._refusing = False
         self._heard: dict[str, int | None] = {}  # person event text (normalised) -> sim second heard
         self._wet_reported: set[str] = set()
+        self._calls = 0  # every server call; a cached status is valid only while this stands still
+        self._status_cache: tuple[dict, int, float] | None = None  # result, call count, real time
 
     # --- server calls --------------------------------------------------------------------------
 
     def cmd(self, name: str, **args) -> Reply:
+        self._calls += 1
         reply = self.session.cmd(name, **args)
         if reply.clock:
             self.state.clock = reply.clock
@@ -144,10 +151,16 @@ class Executor:
             self._refusing = False
 
     def refresh(self) -> dict:
-        """Free `status` -> state; logs a `state` line when something changed."""
+        """Free `status` -> state; logs a `state` line when something changed. Two refreshes with
+        no call in between (and under STATUS_FRESH_S) share one status: nothing can have changed."""
+        if self._status_cache is not None:
+            cached, calls, at = self._status_cache
+            if calls == self._calls and time.monotonic() - at < STATUS_FRESH_S:
+                return cached
         reply = self.cmd("status")
         if not reply.ok or not isinstance(reply.result, dict):
             return {}
+        self._status_cache = (reply.result, self._calls, time.monotonic())
         self.state.update_from_status(reply.result)
         snap = {k: getattr(self.state, k) for k in STATE_FIELDS}
         snap = {k: list(v) if isinstance(v, list) else v for k, v in snap.items()}
@@ -205,17 +218,25 @@ class Executor:
         except NoRoute as exc:
             raise ActionFailed(f"no known route to {dst}") from exc
 
-    def _follow(self, route: Route) -> tuple[str, str | None, str] | None:
-        """Run the steps; None when all worked, else (where, target, server text) of the failure."""
+    def _follow(self, route: Route, interruptible: bool = False) -> tuple[str, str | None, str] | None:
+        """Run the steps; None when all worked, else (where, target, server text) of the failure.
+        Interruptible: stop at the next node once a message is waiting, so the request is planned
+        from here; never between call_elevator and its ride (the 45 s call would be wasted)."""
+        ride_pending = False
         for step in route.steps:
             here = self.state.location
+            if interruptible and self.inbox_waiting and not ride_pending:
+                self.log("walk_interrupted", at=here, towards=route.path[-1] if route.path else None)
+                return None
             if step.cmd == "call_elevator":
                 reply = self.cmd("call_elevator", floor=step.args["floor"])
                 if not reply.ok:
                     return here, None, str(reply.result)
+                ride_pending = True
                 continue
             to = step.args["to"]
             reply = self.move(to)
+            ride_pending = False
             if not reply.ok:
                 return here, to, str(reply.result)
             if frozenset((here, to)) in self._tentative:  # a guessed edge held: learn it for real
@@ -226,8 +247,9 @@ class Executor:
                 self.log("edge_learnt", edge=[here, to], metres=metres)
         return None
 
-    def go(self, dst: str) -> None:
-        """Walk to dst by the shortest known route; recover once if the map turns out different."""
+    def go(self, dst: str, *, interruptible: bool = False) -> None:
+        """Walk to dst by the shortest known route; recover once if the map turns out different.
+        Interruptible walks (the way back to the dock) may stop short once a message is waiting."""
         looked = False
         try:
             for _ in range(3):  # first try, after the recovery look, after a wrong bridge guess
@@ -236,7 +258,7 @@ class Executor:
                 if self.state.location not in self.hotel.nodes and not looked:
                     looked = True  # lost: the one recovery look is spent on learning where
                     self._recover(None)
-                failure = self._follow(self._route(dst))
+                failure = self._follow(self._route(dst), interruptible)
                 if failure is None:
                     return
                 here, to, text = failure
@@ -439,18 +461,23 @@ class Executor:
         self.log("scan", at=self.state.location, found=found)
         return found
 
-    def wait_for_request(self, max_idle: int = IDLE_STEPS) -> None:
+    def wait_for_request(self, max_idle: int = IDLE_STEPS,
+                         should_stop: Callable[[], bool] | None = None) -> None:
         """Go to the dock and charge until a request arrives. Never eats the inbox (the loop
-        reads it). The dock refuses at 100 % and stops when full, so idle time is spent on scans
-        between docks; returns as soon as a message is waiting, or after max_idle cycles."""
-        self.inbox_waiting = False
+        reads it) and never clears `inbox_waiting` (only the loop's inbox read does). Every reply
+        carries the inbox event, so `status` is polled only every IDLE_STATUS_EVERY checks. The
+        dock refuses at 100 % and stops when full, so idle time is spent on scans between docks;
+        returns as soon as a message is waiting, when should_stop() says so (the final's clock),
+        or after max_idle cycles."""
         dock = self.hotel.special.get("dock", "charging-dock")
-        for _ in range(max_idle):
-            if self._request_waiting():
+        for i in range(max_idle):
+            if should_stop is not None and should_stop():
+                return
+            if self.inbox_waiting or (i % IDLE_STATUS_EVERY == 0 and self._request_waiting()):
                 return
             if self.state.location != dock:
                 try:
-                    self.go(dock)
+                    self.go(dock, interruptible=True)
                 except ActionFailed as exc:
                     self.log("wait_failed", reason=str(exc))
                     self.scan()  # spend sim time, so the loop calling again is not a tight spin
@@ -463,7 +490,7 @@ class Executor:
                 self.log("wait_failed", reason=str(reply.result))
                 self.scan()  # as above: one bounded wait per call instead of an instant return
                 return
-            if self._request_waiting():
+            if self.inbox_waiting:  # a dock that woke on a message brings the inbox event
                 return
             self.scan()  # idle time spent usefully; the battery dips so the next dock works
 
@@ -475,7 +502,10 @@ class Executor:
         self.ledger.add(task)
         self.log("task_start", request=task.request, kind=task.kind.value, room=task.room,
                  item=task.item)
-        start = self.score_now()
+        # No status call of its own: the loop refreshed just before, and the flows read the score
+        # before and after their last action (that is what verifies a "done"), so `points` comes
+        # from the scores they observed. The report's own bonus lands on the next refresh.
+        start = self.state.score
         try:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):
@@ -506,7 +536,7 @@ class Executor:
         elif outcome == "done" and "thanks" not in text.lower():
             self.log("report_unverified", request=task.request, reply=text)
         self.ledger.set_status(task.request, status)
-        end = self.score_now()
+        end = self.state.score  # the last score a flow observed; no extra call
         points = int(end - start) if end is not None and start is not None else 0
         self.log("task_done" if status == "done" else "task_failed", request=task.request,
                  status=status, points=points, note=note)

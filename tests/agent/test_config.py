@@ -73,3 +73,17 @@ def test_url_pin_refuses(tmp_path, monkeypatch, url):
     with pytest.raises(ValueError) as exc:
         load_settings((str(tmp_path / "nope"),))
     assert "WYBE_NIGHTSHIFT_URL" in str(exc.value) and "secret-value-zzz" not in str(exc.value)
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "50.5", "abc"])
+def test_max_rps_must_be_finite_and_within_bounds(tmp_path, monkeypatch, value):
+    monkeypatch.setenv("NIGHTSHIFT_MAX_RPS", value)
+    with pytest.raises(ValueError, match="NIGHTSHIFT_MAX_RPS"):
+        load_settings((str(tmp_path / "nope"),))
+
+
+def test_max_rps_bounds_are_inclusive_at_fifty(tmp_path, monkeypatch):
+    monkeypatch.setenv("NIGHTSHIFT_MAX_RPS", "50")
+    assert load_settings((str(tmp_path / "nope"),)).max_rps == 50.0
+    monkeypatch.setenv("NIGHTSHIFT_MAX_RPS", "0.5")
+    assert load_settings((str(tmp_path / "nope"),)).max_rps == 0.5

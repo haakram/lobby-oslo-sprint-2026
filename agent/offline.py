@@ -710,7 +710,7 @@ class FakeWybe:
             self._events.append(dict(INBOX_EVENT))
 
     def _live_name(self, req: _Request) -> None:
-        """[obs] Live logs (20 seeds, 46 numbered trays, 32 numbered bags): the first tray or bags for
+        """[obs] Live logs (20 seeds, 27 numbered trays, 33 numbered bags): the first tray or bags for
         a room tonight is plain (tray-224, luggage-205); a later one is numbered, bags by the request
         number (R-036 -> luggage-205-36), a tray by its place among the night's tray requests, room
         service for a named guest included (seed 5: R-054 was the 7th -> tray-104-7)."""

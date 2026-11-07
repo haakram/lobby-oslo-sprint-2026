@@ -1,5 +1,5 @@
-"""Task 10: a tray or bags at the pickup carries its own request's name (live logs, 20 seeds, 46
-numbered trays and 32 numbered bags). The first tray or bags for a room tonight is plain (tray-224,
+"""Task 10: a tray or bags at the pickup carries its own request's name (live logs, 20 seeds, 27
+numbered trays and 33 numbered bags). The first tray or bags for a room tonight is plain (tray-224,
 luggage-205); a later one for the same room is numbered: bags by the request number (R-036 ->
 luggage-205-36), a tray by its place among the night's tray requests, room service for a named
 guest included (seed 5: R-054 was the 7th -> tray-104-7). Only this request's object is taken;

@@ -338,7 +338,7 @@ def _request_number(request: str | None) -> int | None:
 
 def own_suffix(ex: Executor, task: Task) -> str | None:
     """The number on this request's tray or bags when a plain one for the room was given out
-    earlier tonight. Live logs (20 seeds, 46 numbered trays, 32 numbered bags, no exception):
+    earlier tonight. Live logs (20 seeds, 27 numbered trays, 33 numbered bags, no exception):
     bags carry the request number (R-036 -> luggage-205-36); a tray carries its place among the
     night's tray requests, room service for a named guest included (seed 5: R-054 was the 7th ->
     tray-104-7; seed 11: R-062, R-071 the 11th, 12th -> tray-308-11, tray-308-12)."""

@@ -623,3 +623,26 @@ def test_a_request_near_six_is_tried_not_declined(tmp_path):
     assert [d["request"] for d in started] == ["R-001"]  # the robot keeps working until 06:00
     assert not _decisions(tmp_path, {"shift": session.shift_id}, "closed_out")
     assert any(e["cmd"] == "pick" for e in fake.log)
+
+
+def test_loop_logs_plan_mode_only_when_the_mode_flips(tmp_path):
+    # Task 4: six deliveries at once with the battery at 20 %: the backlog outruns what the battery
+    # covers (20 - backlog_min x 0.75 < 10), so the loop orders by value per second ("overload")
+    # until the queue is short again ("spt"); one decision per flip, never two alike in a row.
+    texts = ["104 wants a towel.", "210 wants a pillow.", "319 wants a toiletry kit.",
+             "208 wants a phone charger.", "317 wants a water bottle.", "106 wants a pillow."]
+    fake = FakeWybe(requests=[("22:00:30", f"R-{i:03d}", t) for i, t in enumerate(texts, 1)])
+
+    def handler(request):
+        reply = fake.handler(request)
+        if json.loads(request.content).get("cmd") == "start_shift":
+            fake.battery = 20
+        return reply
+
+    result = run_shift(client_for(tmp_path, handler), seed=1, sim_end="23:30:00")
+    modes = _decisions(tmp_path, result, "plan_mode")
+    assert modes and modes[0]["mode"] == "overload"
+    assert set(modes[0]) == {"mode", "queue", "backlog_min", "battery"}
+    assert modes[0]["queue"] >= 2 and modes[0]["battery"] - modes[0]["backlog_min"] * 0.75 < 10
+    assert all(a["mode"] != b["mode"] for a, b in pairwise(modes))
+    assert not fake.false_done and not fake.unsafe

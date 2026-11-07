@@ -23,7 +23,7 @@ from agent.client import ShiftEnded, ShiftSession, WybeClient, WybeError
 from agent.config import Settings
 from agent.executor import NOTE_MAX, ActionFailed, Executor
 from agent.offline import FakeWybe
-from agent.planner import Params, choose_next, opening_plan
+from agent.planner import Params, backlog_seconds, choose_next, opening_plan, overloaded
 from agent.tasks import Kind, Task, is_override, parse_request, vet_brain_task
 from agent.world import Hotel, RobotState, clock_to_seconds
 
@@ -249,6 +249,21 @@ def _checked_out(ex: Executor, room: str, rid: str, pending: list[Task]) -> None
     ex.log("room_checked_out", room=room, request=rid, dropped=dropped)
 
 
+def _plan_mode(ex: Executor, pending: list[Task], params: Params, battery: float | None,
+               was_overloaded: bool) -> bool:
+    """The planner's mode for this choice: True ("overload") when the queue cannot all be served
+    before 06:00 or on the battery left, else shortest-first ("spt"). One `plan_mode` decision when
+    the mode flips, with the queue length, backlog minutes and battery."""
+    signs = ex.movable_signs()  # a spill out of signs is priced with a movable one (Task 6)
+    over = params.order != "ratio" and overloaded(pending, ex.state, ex.hotel, params, battery,
+                                                   movable_signs=signs)
+    if over != was_overloaded:
+        backlog = backlog_seconds(pending, ex.state, ex.hotel, params, movable_signs=signs)
+        ex.log("plan_mode", mode="overload" if over else "spt", queue=len(pending),
+               backlog_min=round(backlog / 60, 1), battery=None if battery is None else round(battery, 1))
+    return over
+
+
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:
     reply = ex.cmd("inbox")
     ex.inbox_waiting = False
@@ -347,6 +362,7 @@ def run_shift(
     retried: set[str] = set()  # tasks put back once after a mid-task server error
     errors = 0
     opened = False
+    plan_overload = False  # the planner's mode (Task 4), logged when it flips
     try:
         while True:
             task = None
@@ -379,7 +395,10 @@ def run_shift(
                 ex.ensure_battery()  # below 25 %: charge at the dock before the next task or wait
                 # No close-out before 06:00: a declined real request pays 0 and a request still open
                 # at 06:00 costs nothing (live), so the best task is tried to the end.
-                task = choose_next(pending, state, hotel, params, movable_signs=ex.movable_signs())
+                battery = ex._battery()
+                plan_overload = _plan_mode(ex, pending, params, battery, plan_overload)
+                task = choose_next(pending, state, hotel, params, battery=battery, overload=plan_overload,
+                                   movable_signs=ex.movable_signs())
                 if task is None:
                     ex.wait_for_request(should_stop=out_of_time)
                 else:

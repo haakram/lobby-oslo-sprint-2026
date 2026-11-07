@@ -1,8 +1,10 @@
 """Shift loop and CLI against the offline fake (no network)."""
 
 import json
+from itertools import pairwise
 
 import httpx
+import pytest
 
 from agent.__main__ import main
 from agent.agent import make_client, run_shift
@@ -174,29 +176,40 @@ def test_route_command(capsys):
 
 
 def _open_final(monkeypatch, tmp_path, n=3):
-    import agent.__main__ as cli
+    """The final's lock, satisfied only by an injected in-window clock at both layers."""
+    from datetime import datetime
+    from functools import partial
 
+    import agent.__main__ as cli
+    from agent.guard import OSLO, check_mode
+
+    in_window = datetime(2026, 11, 8, 12, 5, tzinfo=OSLO)
     monkeypatch.setenv("FINAL_ARMED", "1")
+    monkeypatch.setenv("WYBE_NIGHTSHIFT_KEY", "test-key")  # a dummy: the fake wants some bearer
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cli, "check_mode", lambda *a, **kw: None)
+    monkeypatch.setattr(cli, "_now", lambda: in_window)
+    monkeypatch.setattr("agent.client.check_mode", partial(check_mode, now=in_window))
     monkeypatch.setattr(cli, "FINAL_SHIFTS", n)
-    monkeypatch.setattr(cli, "FINAL_REAL_TIME_S", 7.0)
+    monkeypatch.setattr(cli, "FINAL_REAL_TIME_S", 1.0)
     return cli
+
+
+def _router_factory(router, made):
+    def factory(settings, *, live):
+        assert live is True
+        made.append(WybeClient(settings, transport=httpx.MockTransport(router.handler), sleep=lambda s: None))
+        return made[-1]
+
+    return factory
 
 
 def test_final_threads_share_client_and_survive_one_crash(tmp_path, monkeypatch, capsys):
     import agent.agent as mod
+    from tests.fakes.multi_wybe import MultiFakeWybe
 
     cli = _open_final(monkeypatch, tmp_path, 3)
-    made = []
-
-    def factory(settings, *, live):
-        assert live is True
-        c = object()
-        made.append(c)
-        return c
-
-    seen, lock = [], __import__("threading").Lock()
+    router, made = MultiFakeWybe(), []
+    real, seen, lock = mod.run_shift, [], __import__("threading").Lock()
 
     def fake_run_shift(client, **kw):
         with lock:
@@ -204,23 +217,24 @@ def test_final_threads_share_client_and_survive_one_crash(tmp_path, monkeypatch,
             seen.append((client, kw))
         if idx == 1:
             raise RuntimeError("shift blew up")
-        return {"shift": f"s{idx}", "seed": None, "score": 10 * idx, "requests_served": 0,
-                "reason": "done"}
+        return real(client, **kw)
 
     monkeypatch.setattr(mod, "run_shift", fake_run_shift)
-    assert main(["final"], client_factory=factory) == 0
+    assert main(["final"], client_factory=_router_factory(router, made)) == 0
     assert len(made) == 1 and len(seen) == 3
     assert all(c is made[0] for c, _ in seen)
     for _, kw in seen:
-        assert kw["mode"] == "final" and kw["seed"] is None and kw["real_time_limit_s"] == 7.0
+        assert kw["session"].mode == "final" and kw["real_time_limit_s"] == 1.0
         assert kw["stop"] is not None
+    assert router.final_starts == 3
     out = capsys.readouterr().out
-    assert out.count("shift ") == 3 and "crashed: RuntimeError" in out
+    assert "crashed: RuntimeError" in out and out.count("\nshift ") == 3
     assert cli.FINAL_SHIFTS == 3
 
 
 def test_final_returns_nonzero_when_every_shift_crashes(tmp_path, monkeypatch, capsys):
     import agent.agent as mod
+    from tests.fakes.multi_wybe import MultiFakeWybe
 
     _open_final(monkeypatch, tmp_path, 2)
 
@@ -228,7 +242,7 @@ def test_final_returns_nonzero_when_every_shift_crashes(tmp_path, monkeypatch, c
         raise RuntimeError("x")
 
     monkeypatch.setattr(mod, "run_shift", boom)
-    assert main(["final"], client_factory=lambda s, *, live: object()) != 0
+    assert main(["final"], client_factory=_router_factory(MultiFakeWybe(), [])) != 0
 
 
 def test_final_armed_but_outside_window_is_refused(tmp_path, monkeypatch, capsys):
@@ -320,3 +334,191 @@ def test_full_night_with_the_live_request_types(tmp_path):
     ids = {d["id"] for d in _decisions(tmp_path, result, "hypothesis")}
     assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill", "H-duplicate"} <= ids
     assert result["score"] >= 250
+
+
+# --- Task 18 / C1: the night must fit the final's share of the rate -----------------------------------
+
+FINAL_CALL_BUDGET = 44 * 60 * 5 // 10  # 44 min at 5 req/s shared by 10 shifts
+
+
+def test_offline_full_night_fits_the_final_call_budget_on_the_17_request_script(tmp_path):
+    fake = FakeWybe(requests=TYPES_DEMO_REQUESTS)  # the script it was written on, not the 68
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="06:00:00")
+    assert fake.false_done == [] and not fake.unsafe
+    assert result["score"] >= 250
+    assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
+
+
+# Task 24 / 2: the calibrated seed-1 night (the 68 live requests, the default fake) is still over the
+# budget (integration review: 1409 calls). The ratchet stops it creeping up; the strict xfail keeps the
+# gap visible and turns into a failure (to be flipped) the day the night fits.
+CALIBRATED_NIGHT_RATCHET = 1450
+
+
+@pytest.fixture(scope="module")
+def calibrated_night(tmp_path_factory):
+    fake = FakeWybe()
+    result = run_shift(client_for(tmp_path_factory.mktemp("calibrated"), fake.handler), seed=1,
+                       sim_end="06:00:00")
+    return fake, result
+
+
+def test_calibrated_seed1_night_calls_stay_under_the_ratchet(calibrated_night):
+    fake, result = calibrated_night
+    assert fake.false_done == [] and not fake.unsafe
+    assert result["calls"] == len(fake.log) - 1  # every shift call, not the start
+    assert len(fake.log) <= CALIBRATED_NIGHT_RATCHET, len(fake.log)
+
+
+@pytest.mark.xfail(strict=True, reason="the calibrated seed-1 night is still over the final's call budget")
+def test_calibrated_seed1_night_fits_the_final_call_budget(calibrated_night):
+    fake, _ = calibrated_night
+    assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
+
+
+def test_loop_reads_the_inbox_only_when_a_message_is_waiting(tmp_path):
+    fake = FakeWybe(requests=TYPES_DEMO_REQUESTS)  # R-001..R-005 by 23:00 (Task 13's script)
+    run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="23:00:00")
+    delivered = sum(len(e["result"]["messages"]) for e in fake.log if e["cmd"] == "inbox")
+    inbox_calls = sum(1 for e in fake.log if e["cmd"] == "inbox")
+    assert delivered >= 6  # the welcome and R-001..R-005
+    assert inbox_calls <= delivered + 1, (inbox_calls, delivered)
+    cmds = [e["cmd"] for e in fake.log]
+    assert "inbox" not in {b for a, b in pairwise(cmds) if a == "scan"}  # not read after idle scans
+
+
+# --- Task 18 / I1: a Brain room check never reaches a keycard on a noise text or an unknown room ------
+
+
+def test_brain_room_check_rejected_for_noise_texts_and_unknown_rooms(tmp_path):
+    from agent.tasks import Kind, Task
+
+    texts = {"R-001": "Loud music from 103, can you see whether it is occupied?",
+             "R-002": "Have a quick peek at 999 please, the guest left."}
+    fake = FakeWybe(requests=[("22:03:30", "R-001", texts["R-001"]), ("22:03:31", "R-002", texts["R-002"])],
+                    absent_rooms={"room-103"})
+
+    class CheckingBrain:
+        enabled = True
+
+        def classify(self, rid, text, arrived):
+            room = "103" if rid == "R-001" else "999"
+            return Task(rid, Kind.ROOM_CHECK, text, arrived, room=room)
+
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00",
+                       brain=CheckingBrain())
+    assert fake.reports == {"R-001": "failed", "R-002": "failed"}
+    assert not any(e["cmd"] == "use" and (e["args"] or {}).get("item") == "keycard" for e in fake.log)
+    assert not fake.unsafe and not fake.false_done
+    rejected = _decisions(tmp_path, result, "brain_rejected")
+    assert {d["request"] for d in rejected} == {"R-001", "R-002"}
+    assert not _decisions(tmp_path, result, "brain_classified")
+
+
+# --- Task 18 / I2, C3: a mid-task server error loses no task; the final never gives up ---------------
+
+
+def _failing_place(fake, fail_attempts, on_fail=None):
+    """A transport where the first `fail_attempts` POSTs of `place` raise ConnectError (4 attempts
+    make one WybeError); on_fail runs on each failure."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content).get("cmd") == "place":
+            attempts["n"] += 1
+            if attempts["n"] <= fail_attempts:
+                if on_fail:
+                    on_fail()
+                raise httpx.ConnectError("boom")
+        return fake.handler(request)
+
+    return handler
+
+
+def test_mid_task_wybe_error_requeues_the_task_once(tmp_path):
+    fake = FakeWybe(requests=[("22:03:30", "R-001", "319 wants a phone charger.")])
+    result = run_shift(client_for(tmp_path, _failing_place(fake, 4)), seed=1, sim_end="22:40:00")
+    assert fake.reports == {"R-001": "done"} and not fake.false_done
+    requeued = _decisions(tmp_path, result, "task_requeued")
+    assert len(requeued) == 1 and requeued[0]["request"] == "R-001"
+    assert "place" in requeued[0]["error"]
+
+
+def test_mid_task_wybe_error_twice_reports_failed_with_the_reason(tmp_path):
+    fake = FakeWybe(requests=[("22:03:30", "R-001", "319 wants a phone charger.")])
+    result = run_shift(client_for(tmp_path, _failing_place(fake, 10_000)), seed=1, sim_end="22:40:00")
+    assert fake.reports == {"R-001": "failed"} and not fake.false_done
+    assert len(_decisions(tmp_path, result, "task_requeued")) == 1
+    given_up = _decisions(tmp_path, result, "task_given_up")
+    assert len(given_up) == 1 and given_up[0]["request"] == "R-001" and "place" in given_up[0]["error"]
+    note = next(e["args"]["note"] for e in fake.log if e["cmd"] == "report")
+    assert "server error" in note and "place" in note
+
+
+def test_mid_task_wybe_error_with_no_time_left_reports_failed_at_once(tmp_path):
+    fake = FakeWybe(requests=[("22:03:30", "R-001", "319 wants a phone charger.")])
+    now = {"t": 0.0}
+
+    def jump():  # the real-time limit passes while the server is down
+        now["t"] = 10_000.0
+
+    client = client_for(tmp_path, _failing_place(fake, 4, on_fail=jump))
+    result = run_shift(client, seed=1, real_time_limit_s=60.0, clock=lambda: now["t"])
+    assert fake.reports == {"R-001": "failed"}
+    assert not _decisions(tmp_path, result, "task_requeued")
+    assert _decisions(tmp_path, result, "task_given_up")
+    assert result["reason"] == "real time limit"
+
+
+def test_real_time_limit_ends_the_shift_cleanly(tmp_path):
+    fake = FakeWybe()
+    ticks = {"t": 0.0}
+
+    def clock() -> float:
+        ticks["t"] += 1.0
+        return ticks["t"]
+
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, real_time_limit_s=30.0, clock=clock)
+    assert result["reason"] == "real time limit"
+    assert fake.log[-1]["cmd"] == "end_shift" and fake._ended
+    lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
+    assert lines[-1]["type"] == "end" and lines[-1]["reason"] == "real time limit"
+
+
+def test_with_a_real_time_limit_an_error_streak_backs_off_and_never_ends_the_shift(tmp_path, monkeypatch):
+    import agent.agent as mod
+
+    def always(*a, **kw):
+        raise RuntimeError("stuck")
+
+    monkeypatch.setattr(mod, "choose_next", always)
+    fake = FakeWybe()
+    now, sleeps = {"t": 0.0}, []
+
+    def sleep(s: float) -> None:
+        sleeps.append(s)
+        now["t"] += s
+
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, real_time_limit_s=2000.0,
+                       clock=lambda: now["t"], sleep=sleep)
+    assert result["reason"] == "real time limit"
+    notes = _decisions(tmp_path, result, "note")
+    assert len(notes) > mod.MAX_CONSECUTIVE_ERRORS  # practice would have stopped at the cap
+    assert max(sleeps) == 30 and sleeps[:5] == [1, 2, 4, 8, 16]
+    assert sum(sleeps) >= 2000 - 30
+    assert fake.log[-1]["cmd"] == "end_shift"
+
+
+def test_setup_failure_after_the_start_still_ends_the_shift(tmp_path, monkeypatch):
+    import agent.agent as mod
+
+    def boom(*a, **kw):
+        raise RuntimeError("executor cannot be built")
+
+    monkeypatch.setattr(mod, "Executor", boom)
+    fake = FakeWybe()
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1)
+    assert result["reason"].startswith("setup failed") and "RuntimeError" in result["reason"]
+    assert fake._ended and fake.log[-1]["cmd"] == "end_shift"
+    lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
+    assert lines[-1]["type"] == "end" and lines[-1]["reason"] == result["reason"]

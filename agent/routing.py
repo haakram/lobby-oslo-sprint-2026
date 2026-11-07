@@ -1,4 +1,8 @@
-"""Exact shortest routes in sim seconds (Dijkstra) and best-order tours."""
+"""Exact shortest routes in sim seconds (Dijkstra) and best-order tours.
+
+A route never uses a blocked edge (a corridor closed off for cleaning: Hotel.block_edge) and never
+passes through a guest room (a room is only a route's start or end: live seed 2 routed 3a ->
+locked room-321 -> 3d); when only such a way exists there is no route (NoRoute)."""
 
 from __future__ import annotations
 
@@ -51,15 +55,15 @@ def _edge_seconds(hotel: Hotel, a: str, b: str, metres: float, door: bool, stair
 
 
 def _hops(hotel: Hotel, node: str, with_cart: bool):
-    """Yield (next, seconds, [Step...]) from node."""
+    """Yield (next, seconds, [Step...]) from node; blocked edges are not there to take."""
     for e in hotel.neighbors(node):
-        if e.stairs and with_cart:
+        if (e.stairs and with_cart) or hotel.is_blocked(node, e.b):
             continue
         s = _edge_seconds(hotel, node, e.b, e.metres, e.door, e.stairs)
         yield e.b, s, [Step("move", {"to": e.b}, s)]
     if hotel.nodes.get(node, {}).get("kind") == "elevator":
         for other in hotel.elevators():
-            if other != node:
+            if other != node and not hotel.is_blocked(node, other):
                 steps = [
                     Step("call_elevator", {"floor": hotel.floor(other)}, ELEVATOR_CALL_S),
                     Step("move", {"to": other}, ELEVATOR_RIDE_S),
@@ -83,6 +87,8 @@ def shortest_route(hotel: Hotel, src: str, dst: str, *, with_cart: bool = False)
         done.add(u)
         if u == dst:
             break
+        if u != src and hotel.nodes.get(u, {}).get("kind") == "room":
+            continue  # a guest room is a destination, never a way through
         for v, s, steps in _hops(hotel, u, with_cart):
             nd = d + s
             if nd < dist.get(v, float("inf")):
@@ -102,9 +108,9 @@ def shortest_route(hotel: Hotel, src: str, dst: str, *, with_cart: bool = False)
 
 
 def _version(hotel: Hotel):
-    # Key assumes existing edges are never edited in place (only added or marked wet).
+    # Key assumes existing edges are never edited in place (only added, marked wet or blocked).
     n_edges = sum(len(v) for v in hotel._adj.values())
-    return (frozenset(hotel._wet_spots), n_edges, len(hotel.nodes))
+    return (frozenset(hotel._wet_spots), n_edges, len(hotel.nodes), hotel.blocked_edges())
 
 
 def route_seconds(hotel: Hotel, src: str, dst: str, *, with_cart: bool = False) -> float:

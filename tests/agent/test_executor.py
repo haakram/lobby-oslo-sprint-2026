@@ -12,7 +12,7 @@ from agent.executor import Executor
 from agent.flows import scan_candidates
 from agent.tasks import Kind, Task, parse_request
 from agent.world import DEFAULT_MAP, Hotel, RobotState
-from tests.fakes.fake_wybe import TYPES_DEMO_REQUESTS, FakeWybe
+from tests.fakes.fake_wybe import TYPES_DEMO_REQUESTS, VERIFIED_BONUS, FakeWybe
 
 
 def settings(tmp_path) -> Settings:
@@ -43,7 +43,9 @@ def setup(tmp_path, rids=None, requests=None, **fake_kw):
 def next_task(ex, session, rid):
     """Dock until request `rid` is in the inbox, then parse it like the shift loop will."""
     for _ in range(12):
-        for msg in session.cmd("inbox").result["messages"]:
+        messages = session.cmd("inbox").result["messages"]
+        ex.inbox_waiting = False  # the loop's inbox read is what clears the flag
+        for msg in messages:
             if msg.get("request") == rid:
                 return parse_request(rid, msg["text"], msg["at"])
         ex.wait_for_request()
@@ -89,7 +91,7 @@ def test_amenity_delivered_and_verified(tmp_path):
     fake, _, _, out = run_one(tmp_path, "R-001")
     assert out.status == "done", out
     assert fake.score >= 21
-    assert out.points == fake.score
+    assert out.points == fake.score - VERIFIED_BONUS  # the flow's rise; the report's bonus is not seen
     reports = calls(fake, "report")
     assert [r["result"] for r in reports] == ["Noted. Thanks."]
     assert fake.reports == {"R-001": "done"} and not fake.false_done
@@ -171,7 +173,8 @@ def test_recovers_when_map_differs(tmp_path):
     assert out.status == "done", out
     assert fake.reports == {"R-001": "done"} and not fake.false_done
     looks = [e for e in calls(fake, "look", since=start) if not e["args"]]
-    assert len(looks) == 1
+    assert looks  # Task 19: one look per place on the first visit; the detour is learnt from them
+    assert not any(e["cmd"] == "move" and not e["ok"] for e in fake.log[start:])  # seen, not bumped
     # The detour through the new node was learnt, so it is in the map for the next trip.
     assert {e.b for e in ex.hotel.neighbors("corridor-1ab")} >= {"corridor-1a", "corridor-1b"}
     assert "corridor-1b" not in {e.b for e in ex.hotel.neighbors("corridor-1a")}
@@ -228,7 +231,13 @@ def test_no_reward_after_place_means_failed(tmp_path, monkeypatch):
 def test_slip_marks_the_edge_wet(tmp_path):
     fake, _, ex, out = run_one(tmp_path, "R-001", wet={frozenset({"lobby", "corridor-1a"})})
     assert out.status == "done"
-    assert any(ev["type"] == "slip" for e in fake.log for ev in e["events"])
+    # Task 19: the first-visit look in the lobby warns about the patch, so the robot creeps over
+    # it instead of slipping; the spot is known wet either way.
+    assert not any(ev["type"] == "slip" for e in fake.log for ev in e["events"])
+    assert ex.hotel.is_wet("lobby", "corridor-1a")
+    ex.hotel._wet_spots.clear()  # the move path still marks it: a move reply that says wet
+    ex.go("lobby")
+    assert ex.move("corridor-1a").ok
     assert ex.hotel.is_wet("lobby", "corridor-1a")
 
 
@@ -243,12 +252,14 @@ def test_wrong_bridge_guess_falls_back_to_known_route(tmp_path):
     start = len(fake.log)
     out = ex.run(task)
     assert out.status == "done", out
-    assert len([e for e in calls(fake, "look", since=start) if not e["args"]]) == 1
+    looks = [e for e in calls(fake, "look", since=start) if not e["args"]]
+    assert looks and not any(e["ok"] is False for e in looks)  # Task 19: one look per place visited
     assert "corridor-1b" not in {e.b for e in ex.hotel.neighbors("alcove")}
 
 
 def test_wait_for_request_idles_with_scans_until_a_request_arrives(tmp_path):
     fake, session, ex = setup(tmp_path, rids={"R-001"})
+    ex._surveyed = True  # the opening's get_cart surveyed at 22:00; not part of this test
     session.cmd("inbox")  # the welcome message
     ex.wait_for_request()
     docks = calls(fake, "dock")
@@ -268,8 +279,8 @@ def test_wait_for_request_returns_at_once_when_a_message_is_waiting(tmp_path):
 def test_wait_for_request_is_bounded(tmp_path):
     fake, session, ex = setup(tmp_path, requests=[])
     session.cmd("inbox")
-    ex.wait_for_request()  # nothing will ever arrive: it must still return
-    assert 1 <= len(calls(fake, "scan")) <= 20
+    ex.wait_for_request(max_idle=40)  # nothing will ever arrive: it must still return
+    assert 1 <= len(calls(fake, "scan")) <= 40
 
 
 def test_idle_scan_remembers_found_items(tmp_path):
@@ -326,7 +337,8 @@ def test_go_from_an_unknown_place_looks_once_then_routes(tmp_path):
     ex.state.location = "somewhere-new"  # e.g. a place name our map has never seen
     ex.go("lobby")
     assert ex.state.location == "lobby"
-    assert len([e for e in calls(fake, "look") if not e["args"]]) == 1
+    cmds = [e["cmd"] for e in fake.log]
+    assert cmds[:cmds.index("move")].count("look") == 1  # one look to learn where, then it routes
 
 
 # --- fix round 1 -----------------------------------------------------------------------------------
@@ -504,7 +516,9 @@ def collect(ex, session, rids):
     """Dock until every request in rids has come in; parse them like the shift loop will."""
     got = {}
     for _ in range(20):
-        for msg in session.cmd("inbox").result["messages"]:
+        messages = session.cmd("inbox").result["messages"]
+        ex.inbox_waiting = False  # the loop's inbox read is what clears the flag
+        for msg in messages:
             if msg.get("request") in rids:
                 got[msg["request"]] = parse_request(msg["request"], msg["text"], msg["at"])
         if set(got) == set(rids):
@@ -695,6 +709,7 @@ def test_follow_up_runs_the_pending_original_first(tmp_path):
 def test_duplicate_request_is_reported_failed_not_redone(tmp_path):
     tray = "Bring the tray from the kitchen pass to 322."
     fake, session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", tray), ("22:01:30", "R-002", tray)])
+    ex._surveyed = True  # the opening's get_cart surveyed at 22:00; not part of this test
     got = collect(ex, session, {"R-001", "R-002"})
     ex.ledger.add(got["R-001"])
     ex.ledger.add(got["R-002"])
@@ -764,7 +779,10 @@ def test_bathrobe_man_during_a_keycard_task_gets_a_polite_no_and_no_keycard(
     # The man waits in the corridor of the task's room, next to his own door, while the robot
     # carries a keycard for the task: the keycard opens the task's room and nothing else.
     plea = f'A man in a bathrobe stops the robot: "I\'m locked out of {stranger}. Can you let me in?"'
-    fake, session, ex, task = solo(tmp_path, text, people_events=[("22:00:00", corridor, plea)], **kw)
+    fake, session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", text)],
+                              people_events=[("22:00:00", corridor, plea)], **kw)
+    ex._surveyed = True  # the opening's get_cart surveyed at 22:00; not part of this test
+    task = next_task(ex, session, "R-001")
     assert ex.ensure_item("keycard")
     out = ex.run(task)
     assert out.status == "done", out
@@ -1060,3 +1078,183 @@ def test_noise_work_order_tells_a_dnd_sign_from_no_answer(tmp_path, kw, words, n
     assert ex.run(task).status == "failed"
     order = [w for w in decisions(session, "work_order") if w["type"] == "stoy"][-1]
     assert words in order["text"].lower() and not_words not in order["text"].lower(), order
+
+
+# --- Task 18 / C1: no free calls that only feed the log -------------------------------------------------
+
+
+def test_task_run_makes_no_log_only_status_calls(tmp_path):
+    fake, session, ex = setup(tmp_path, rids={"R-001"})
+    task = next_task(ex, session, "R-001")
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status == "done"
+    cmds = [e["cmd"] for e in fake.log[since:]]
+    assert cmds[0] != "status", cmds[:3]  # the loop's refresh just ran: no second status
+    assert cmds[-1] == "report", cmds[-3:]  # nothing after the report
+    assert out.points > 0  # from the flow's own before/after scores
+
+
+@pytest.mark.parametrize("fake_kw,room,expected", [
+    ({"dnd_rooms": {"room-103"}}, "103", "failed"),  # a DND sign: no knock, no keycard
+    ({}, "104", "failed"),  # a guest answers: occupied, no keycard
+    ({"absent_rooms": {"room-103"}}, "103", "done"),  # nobody there: door look, knock, keycard, look inside
+])
+def test_brain_room_check_looks_at_the_door_before_any_keycard(tmp_path, fake_kw, room, expected):
+    class StubBrain:
+        def classify(self, request_id, text, arrived):
+            return Task(request_id, Kind.ROOM_CHECK, text, arrived, room=room)
+
+    fake, session, ex = setup(tmp_path, rids={"R-004"}, **fake_kw)
+    ex.brain = StubBrain()
+    task = replace(next_task(ex, session, "R-004"), kind=Kind.UNKNOWN, room=None)
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status == expected and fake.reports == {"R-004": expected}
+    cmds = [(e["cmd"], e["args"]) for e in fake.log[since:]]
+    keycards = [i for i, (c, a) in enumerate(cmds) if c == "use" and (a or {}).get("item") == "keycard"]
+    looks = [i for i, (c, a) in enumerate(cmds) if c == "look" and (a or {}).get("at") == f"room-{room}"]
+    assert looks, cmds
+    assert (not keycards) if expected == "failed" else (keycards and looks[0] < keycards[0])
+    assert not fake.unsafe and not fake.false_done
+
+
+def test_scan_cap_cannot_cut_off_hinted_and_secondary_places(tmp_path):
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, task = solo(tmp_path, text, hidden={"wallet": "lobby-bar"})
+    ex.max_scans = 2  # old behaviour: stop after the three corridors' first two, never reach the bar
+    out = ex.run(task)
+    assert out.status == "done", out
+    assert "lobby-bar" in scan_places(fake)
+
+
+def test_scan_count_stays_bounded_when_the_item_is_nowhere(tmp_path):
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, task = solo(tmp_path, text, hidden={})
+    ex.max_scans = 2
+    ex.run(task)
+    assert 3 + 3 <= len(scan_places(fake)) <= 9
+
+
+def test_lost_toy_hinted_at_the_bar_is_found_as_numbered_toy(tmp_path):
+    text = "Guest in 320 lost a child's toy, maybe the lobby bar."
+    fake, _session, ex, task = solo(tmp_path, text, hidden={"toy-2": "lobby-bar"})
+    fake._requests["R-001"].item = "toy-2"
+    out = ex.run(task)
+    assert out.status == "done", out
+
+
+# --- Task 28: the Nth lost-item request of an item gets the Nth item (live seeds 1, 2, 5) ---------
+
+
+def _lost_shift(tmp_path, texts, hidden):
+    """A shift with several lost-item requests, all in the ledger as the loop would add them."""
+    requests = [(f"22:0{i}:00", f"R-00{i}", t) for i, t in enumerate(texts, 1)]
+    fake, session, ex = setup(tmp_path, requests=requests, hidden=hidden)
+    tasks = [next_task(ex, session, f"R-00{i}") for i in range(1, len(texts) + 1)]
+    for t in tasks:
+        ex.ledger.add(t)
+    return fake, ex, tasks
+
+
+def _placed(fake):
+    return [e["args"]["item"] for e in calls(fake, "place") if e["ok"]]
+
+
+def test_second_glasses_request_gets_glasses_2_not_the_first_ones(tmp_path):
+    # seed 2: R-015's unsuffixed glasses lay in the corridor too; R-017 delivered it and lost 20
+    texts = ["Guest in 317 lost glasses, maybe the ground floor corridor.",
+             "Guest in 207 lost glasses, maybe the ground floor corridor."]
+    fake, ex, (_t1, t2) = _lost_shift(tmp_path, texts,
+                                      {"glasses": "corridor-1a", "glasses-2": "corridor-1b"})
+    out = ex.run(t2)
+    assert out.status == "done", out
+    assert _placed(fake) == ["glasses-2"]
+    assert "glasses" not in [e["args"]["item"] for e in calls(fake, "pick")]
+
+
+def test_first_glasses_request_still_gets_the_unsuffixed_item(tmp_path):
+    texts = ["Guest in 317 lost glasses, maybe the ground floor corridor.",
+             "Guest in 207 lost glasses, maybe the ground floor corridor."]
+    fake, ex, (t1, _t2) = _lost_shift(tmp_path, texts,
+                                      {"glasses": "corridor-1a", "glasses-2": "corridor-1a"})
+    out = ex.run(t1)
+    assert out.status == "done", out
+    assert _placed(fake) == ["glasses"]
+
+
+def test_a_failed_first_request_still_counts_for_the_numbering(tmp_path):
+    # seed 5: R-019's wallet was never found; R-069 (the 2nd wallet request) must not take it
+    texts = ["Guest in 105 lost a wallet, maybe the kitchen pass.",
+             "Mr Aune lost a wallet earlier tonight, probably somewhere around near the kitchen."]
+    fake, ex, (_t1, t2) = _lost_shift(tmp_path, texts, {"wallet": "kitchen-pass"})
+    ex.guest_rooms["Mr Aune"] = "room-213"
+    out = ex.run(t2)
+    assert out.status == "failed" or not _placed(fake), out
+    assert not calls(fake, "pick") and not fake.wrong_deliveries
+
+
+def test_the_carried_wrong_item_is_not_delivered(tmp_path):
+    texts = ["Guest in 105 lost a wallet, maybe the kitchen pass.",
+             "Guest in 213 lost a wallet, maybe the kitchen pass."]
+    fake, ex, (_t1, t2) = _lost_shift(tmp_path, texts,
+                                      {"wallet": "kitchen-pass", "wallet-2": "kitchen-pass"})
+    ex.go("kitchen-pass")
+    ex.scan()
+    ex.pick_or_cart("wallet")  # picked up by an earlier idle scan
+    out = ex.run(t2)
+    assert out.status == "done", out
+    assert _placed(fake) == ["wallet-2"] and not fake.wrong_deliveries
+
+
+def test_one_lost_item_is_never_delivered_twice(tmp_path):
+    texts = ["Guest in 105 lost a wallet, maybe the kitchen pass."]
+    fake, ex, (t1,) = _lost_shift(tmp_path, texts, {"wallet": "kitchen-pass"})
+    assert ex.run(t1).status == "done"
+    t2 = replace(t1, request="R-009", room="room-213")  # not in the ledger: no known owner
+    ex.found["wallet"] = "kitchen-pass"  # a stale memory of the same item
+    ex.max_scans = 1
+    out = ex.run(t2)
+    assert out.status != "done", out
+    assert _placed(fake) == ["wallet"]
+
+
+def test_two_unowned_candidates_away_from_the_hint_deliver_none(tmp_path):
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, task = solo(tmp_path, text,
+                                    hidden={"wallet-3": "lobby-bar", "wallet-4": "lobby-bar"})
+    out = ex.run(task)
+    assert out.status == "failed", out
+    assert not _placed(fake) and not fake.wrong_deliveries
+
+
+def test_a_failed_delivery_does_not_mark_the_item_delivered(tmp_path):
+    text = "Guest in 208 lost a wallet, maybe the kitchen pass."
+    fake, _session, ex, t1 = solo(tmp_path, text, hidden={"wallet": "kitchen-pass"})
+    out = ex.run(t1)  # room 208 has a DND sign: nothing is delivered
+    assert out.status != "done" and not _placed(fake), out
+    assert "wallet" not in getattr(ex, "lost_delivered", set())
+    from agent import flows
+
+    assert flows._verdict(ex, "R-001", "wallet") == "match"  # still free to reach its owner
+
+
+def test_item_numbered_past_the_known_requests_is_not_taken_when_others_exist(tmp_path):
+    # one lost-glasses request seen (R-001); glasses-3 lies there with glasses-2: a request was missed
+    text = "Guest in 317 lost glasses, maybe the ground floor corridor."
+    fake, ex, (t1,) = _lost_shift(tmp_path, [text], {"glasses-2": "corridor-1a", "glasses-3": "corridor-1a"})
+    out = ex.run(t1)
+    assert out.status != "done" and not _placed(fake), out
+
+
+def test_ambiguity_stops_the_search_at_once(tmp_path):
+    from agent import flows
+    from agent.executor import ActionFailed
+
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, _task = solo(tmp_path, text,
+                                    hidden={"wallet-3": "corridor-1a", "wallet-4": "corridor-1a"})
+    ex.found.update({"wallet-3": "corridor-1a", "wallet-4": "corridor-1a"})
+    with pytest.raises(ActionFailed, match="did not guess"):  # request unknown to the ledger: both free
+        flows._find(ex, "wallet", "ground floor corridor", None)
+    assert not calls(fake, "scan") and not calls(fake, "pick")

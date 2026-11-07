@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from enum import Enum
 
 from agent.world import clock_to_seconds
@@ -75,7 +76,16 @@ _MESSAGE = re.compile(
     re.IGNORECASE,
 )
 _CHECK = re.compile(r"\b(empty|tidy|occupied|vacant)\b", re.IGNORECASE)
-_CHECK_VERB = re.compile(r"\b(check|is|are|verify|see)\b", re.IGNORECASE)
+# An explicit check phrase, never a bare "is"/"are": "210 is vacant now, please ..." is no room check.
+_CHECK_VERB = re.compile(r"\b(check|verify|confirm|see if|see whether|make sure|find out)\b", re.IGNORECASE)
+# A text about noise or a complaint is never a room check (a keycard entry on a false one costs -30),
+# nor is one about an object in the room ("check the minibar in 305, it is empty" is not the room).
+_NOT_CHECK = re.compile(
+    r"\b(noise|noisy|loud|music|party|complaints?|complain\w*"
+    r"|minibar|mini-bar|fridge|refrigerator|safe|wardrobe|closet|drawer|cupboard|shelf|shelves|bin"
+    r"|kettle|bathtub|sink|toilet|shower)\b",
+    re.IGNORECASE,
+)
 _HINT = re.compile(
     r"\b(?:maybe|probably|perhaps|possibly)\s+(?:somewhere\s+)?(?:around|in|near|at|by)?\s*"
     r"(?:the\s+)?(.+?)\s*[.!]?$",
@@ -166,12 +176,20 @@ def parse_request(request_id: str, text: str, arrived: str) -> Task:
             )
     if _TRAY.search(body) and room:
         return Task(kind=Kind.TRAY, room=room, item=f"tray-{room[5:]}", **base)
-    if room and _CHECK.search(body) and _CHECK_VERB.search(body):
+    if room and _CHECK.search(body) and _CHECK_VERB.search(body) and not _NOT_CHECK.search(body):
         return Task(kind=Kind.ROOM_CHECK, room=room, **base)
     item = _item(body)
     if room and item:
         return Task(kind=Kind.AMENITY, room=room, item=item, count=_count(body), **base)
     return Task(kind=Kind.UNKNOWN, room=room, **base)
+
+
+def vet_brain_task(task: Task) -> Task:
+    """A Brain-classified room check is accepted only when the text has nothing of a noise complaint
+    in it; otherwise it becomes UNKNOWN (reported failed, never a keycard)."""
+    if task.kind is Kind.ROOM_CHECK and _NOT_CHECK.search(task.text or ""):
+        return replace(task, kind=Kind.UNKNOWN)
+    return task
 
 
 # --- the request ledger: every request of the shift, for follow-ups and duplicates ----------------
@@ -203,6 +221,11 @@ class Entry:
     @property
     def item(self) -> str | None:
         return self.task.item
+
+
+def _tray(task: Task, room: str | None) -> str | None:
+    """A named guest's tray has no item until its room is known: tray-<number> of that room."""
+    return f"tray-{room.removeprefix('room-')}" if task.kind is Kind.TRAY and room else None
 
 
 def _secs(clock: str) -> int | None:
@@ -280,6 +303,23 @@ class Ledger:
             room = entry.room or (guest_rooms or {}).get(entry.task.guest or "")
             if (entry.kind in ORDER_KINDS and room == task.room
                     and entry.item is not None and entry.item == task.item):
+                return entry
+        return None
+
+    def open_twin(self, task: Task, room: str | None, *, same: Callable[[str, str], bool],
+                  guest_rooms: dict[str, str | None] | None = None) -> Entry | None:
+        """Task 22: the first earlier order for the same room and item (`same` compares item names)
+        that is not done (waiting, declined as a duplicate, failed or unreported). A delivery reply
+        does not name the request it was credited to, so a score rise after delivering task may be
+        this one's. A named guest's order counts by the guest's room; a named tray by its room."""
+        item = task.item or _tray(task, room)
+        if room is None or not item:
+            return None
+        for entry in self._earlier(task):
+            there = entry.room or (guest_rooms or {}).get(entry.task.guest or "")
+            other = entry.item or _tray(entry.task, there)
+            if (entry.kind in ORDER_KINDS and entry.status != "done" and there == room
+                    and other and same(item, other)):
                 return entry
         return None
 

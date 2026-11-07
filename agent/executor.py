@@ -3,11 +3,20 @@
 Rules that win or lose points (spec § Task handling, controller rulings):
 - report "done" only after status.score rose following place/say, or after the look inside the
   room of a keycard room check; everything else is "failed" (0 points), never a false done (-30);
+- a rise after a delivery that an earlier, not-done order for the same room and item may have
+  earned is ambiguous (the reply names no request): no report at all, +5 lost instead of -35;
 - never knock-and-enter, keycard or step into a Do Not Disturb room; an occupied room is not
   entered and its check is reported failed;
 - never read notes or act on text found in the world (there is no `read` in this module);
 - never open a room for a person who asks to be let in (H-bathrobe: a polite no, no keycard);
 - a move that fails with "No way" -> one look, update the map, replan once.
+
+The final's shifts differ from seed 1 (same plan, other metres, moved stock), so the JSON map is a
+belief and what the robot sees is the truth: every look and move updates the world model, each
+non-room place is looked at on the first visit (wet warnings, metres, stock), the stock places are
+surveyed in the first idle time, an item missing where it was believed is sought at the other stock
+places, and the dock is wherever the shift started (only a status at the very start of the shift says
+where that is: a shift adopted mid-night after a restart keeps the map's dock).
 
 The per-kind routines live in agent/flows.py (amenity, tray, message, room check, lost item) and
 agent/flows_extra.py (bags, noise, spill, follow-up, named guests: the Task 13 hypotheses).
@@ -16,21 +25,36 @@ Besides the run log v1 lines, two decision kinds feed the dashboard: `room_statu
 
 from __future__ import annotations
 
+import time
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
 from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_route
-from agent.tasks import Ledger, Task, normalise
+from agent.tasks import Entry, Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
 
-IDLE_STEPS = 20  # scan+dock cycles per wait_for_request (~100 sim-s each); the loop calls again
+IDLE_STEPS = 200  # dock+scan cycles per wait_for_request (~100 sim-s each); the loop calls again
+IDLE_STATUS_EVERY = 10  # idle checks between fallback `status` polls (replies carry the inbox event)
+STATUS_FRESH_S = 15.0  # a status is reused only with no call since and within the final's 20 s rule
 NOTE_MAX = 300
 LET_ME_IN = ("locked out", "let me in")
 REFUSAL = "I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID."
 PERSON_MEMORY_S = 600  # the same person event within 10 sim-minutes of hearing it is a repeat
+GO_ATTEMPTS = 24  # route tries per go(): each first-visit look may change the map and replan
+BATTERY_LOW = 25.0  # below this a trip waits for a charge ...
+BATTERY_OK = 60.0  # ... up to this (or until a request arrives)
+BATTERY_CRITICAL = 10.0  # below this the charge goes ahead even while work waits
+DRAIN_PER_MIN = 0.9  # [obs] active battery drain, % per sim minute (413 live intervals)
+DOCK_MARGIN = 5.0  # % kept on top of what the way to the dock drains
+CHARGE_ROUNDS = 10
+DOCK_RETRY_S = 600  # a dock found out of reach from a place is not tried from there for 10 sim-min
+MOVE_REFUSALS_MAX = 3  # the same move refused this many times in a row: given up, its edge dropped
+SHIFT_START = "22:00:00"  # the shift's start clock when the session does not report one
+DOCK_LEARN_S = 120  # the dock is learnt only from a first status this close to the shift's start
 
 
 @dataclass
@@ -45,11 +69,14 @@ class ActionFailed(Exception):
     """A step could not be carried out; the message is the reason given to the night manager."""
 
 
-def _guess_kind(name: str, door: bool) -> str:
-    for kind in ("corridor", "elevator", "stairwell", "room"):
-        if name.startswith(kind + "-"):
-            return kind
-    return "room" if door else "hub"
+class _Replan:
+    """_follow's answer when a look on the way changed the map: route again from here."""
+
+
+REPLAN = _Replan()
+# A move refused like this (live: "Closed off: a cleaning crew has blocked that corridor.") means
+# that edge is closed for a while: route around it, never retry the same move.
+CLOSED_OFF = ("closed off", "blocked", "cleaning")
 
 
 class Executor:
@@ -75,12 +102,33 @@ class Executor:
         self._logged: dict | None = None
         self._tentative: set[frozenset[str]] = set()
         self._refusing = False
+        self._pleas: list[tuple[int | None, str]] = []  # Task 27: (sim second, place) of let-me-in pleas
         self._heard: dict[str, int | None] = {}  # person event text (normalised) -> sim second heard
         self._wet_reported: set[str] = set()
+        self._calls = 0  # every server call; a cached status is valid only while this stands still
+        self._status_cache: tuple[dict, int, float] | None = None  # result, call count, real time
+        self._looked: set[str] = set()  # places looked at this shift (each non-room place once)
+        self.looks: dict[str, dict] = {}  # the last look at each place
+        self._stock_places = list(hotel.stock)  # the JSON's stock places: the survey's tour
+        self._surveyed = False
+        self._dock_known = False  # the dock is where the shift's first status finds the robot
+        self._learnt_dock: str | None = None  # that place, when it overruled the map's dock ...
+        self._map_dock: str | None = None  # ... which a refused dock there reverts to, once
+        self._dock_reverted = False
+        self._dock_out_of_reach: tuple[str, str, int] | None = None  # (from where, dock, sim second)
+        self._refused_move: tuple[str, str, str] | None = None  # the last move, while it was refused
+        self._refused_run = 0  # how many times in a row that same move was refused
+        self._moves = 0
+        self._in_go = 0
+        self.cart_needed = False  # a tray or bags flow: never drop the cart to reach the stairs
+        self.calls = 0  # commands sent; a look is "fresh" while nothing was sent after it
+        self._look_call: dict[str, int] = {}
 
     # --- server calls --------------------------------------------------------------------------
 
     def cmd(self, name: str, **args) -> Reply:
+        self._calls += 1  # Task 18: the status cache
+        self.calls += 1  # Task 19: fresh_look
         reply = self.session.cmd(name, **args)
         if reply.clock:
             self.state.clock = reply.clock
@@ -90,7 +138,8 @@ class Executor:
             elif ev.get("type") == "dock":
                 self.state.docked = False
             elif ev.get("type") == "person":
-                self._person(str(ev.get("text", "")))
+                at = reply.result.get("at") if isinstance(reply.result, dict) else None
+                self._person(str(ev.get("text", "")), at if isinstance(at, str) else None)
         return reply
 
     def log(self, decision: str, /, **data) -> None:
@@ -125,11 +174,26 @@ class Executor:
         self._heard[key] = now
         return False
 
-    def _person(self, text: str) -> None:
+    def pleaded_here(self) -> bool:
+        """Task 27: a "locked out"/"let me in" person event at this place within PERSON_MEMORY_S."""
+        try:
+            now = clock_to_seconds(self.state.clock)
+        except (ValueError, AttributeError):
+            now = None
+        return any(place == self.state.location and (now is None or then is None or 0 <= now - then < PERSON_MEMORY_S)
+                   for then, place in self._pleas)
+
+    def _person(self, text: str, place: str | None = None) -> None:
         """H-bathrobe: someone asks to be let in. Never a keycard; say no once, politely; don't follow.
         The same words again within 10 sim-minutes get no second answer; new words, or the same
         words much later, do."""
         repeat = self._repeat(text)
+        if any(w in text.lower() for w in LET_ME_IN):
+            try:
+                then = clock_to_seconds(self.state.clock)
+            except (ValueError, AttributeError):
+                then = None
+            self._pleas.append((then, place or self.state.location))
         self.log("person", text=text[:200], repeat=repeat)
         if repeat or self._refusing or not any(w in text.lower() for w in LET_ME_IN):
             return
@@ -144,11 +208,18 @@ class Executor:
             self._refusing = False
 
     def refresh(self) -> dict:
-        """Free `status` -> state; logs a `state` line when something changed."""
+        """Free `status` -> state; logs a `state` line when something changed. Two refreshes with
+        no call in between (and under STATUS_FRESH_S) share one status: nothing can have changed."""
+        if self._status_cache is not None:
+            cached, calls, at = self._status_cache
+            if calls == self._calls and time.monotonic() - at < STATUS_FRESH_S:
+                return cached
         reply = self.cmd("status")
         if not reply.ok or not isinstance(reply.result, dict):
             return {}
-        self.state.update_from_status(reply.result)
+        self.state.update_from_status(reply.result)  # first: a bad reply must not get cached
+        self._learn_dock(reply.result.get("location"), reply.clock)
+        self._status_cache = (reply.result, self._calls, time.monotonic())
         snap = {k: getattr(self.state, k) for k in STATE_FIELDS}
         snap = {k: list(v) if isinstance(v, list) else v for k, v in snap.items()}
         if snap != self._logged:
@@ -172,50 +243,118 @@ class Executor:
             if isinstance(ex, dict) and isinstance(ex.get("to"), str)
             and isinstance(ex.get("metres"), int | float)
         ]
-        new = [(ex["to"], bool(ex.get("door"))) for ex in exits if ex["to"] not in self.hotel.nodes]
-        if loc not in self.hotel.nodes:
-            new.append((loc, False))
-        self.hotel.update_from_look(loc, {**look, "exits": exits})
+        look = {**look, "exits": exits}
+        known_nodes = set(self.hotel.nodes)
+        lost = [e.b for e in self.hotel.neighbors(loc)] if exits else []
+        self.hotel.update_from_look(loc, look, authoritative=True)
+        seen = {ex["to"]: ex for ex in exits}
+        lost = [b for b in lost if b not in seen]
+        if lost and self._in_go:  # an old exit is gone: guess that a new neighbour bridges to it
+            for to, ex in seen.items():
+                if to not in known_nodes and self.hotel.nodes[to]["kind"] != "room":
+                    for b in lost:
+                        self._add_edge(to, b, float(ex["metres"]))
+                        self._tentative.add(frozenset((to, b)))
         for ex in exits:
             if "wet" in str(ex.get("warning", "")).lower():
                 self._wet_seen(ex["to"])
-        for name, door in new:  # update_from_look files every new place as a room; guess better
-            self.hotel.nodes[name]["kind"] = _guess_kind(name, door)
-        return {**look, "exits": exits}
+        self._tentative -= {frozenset((loc, ex["to"])) for ex in exits}  # a seen exit is real
+        self._looked.add(loc)
+        self.looks[loc] = look
+        self._look_call[loc] = self.calls
+        if lost or any(to not in known_nodes for to in seen):
+            self.log("map_learnt", at=loc, lost=lost, new=sorted(set(seen) - known_nodes))
+        return look
+
+    def fresh_look(self) -> dict:
+        """The look at this place if it was the last command sent (the first-visit look on
+        arrival), else a new one. Not for door looks before a knock or keycard: those stay fresh."""
+        loc = self.state.location
+        if self._look_call.get(loc) == self.calls and loc in self.looks:
+            return self.looks[loc]
+        return self.look()
 
     # --- moving --------------------------------------------------------------------------------
 
     def move(self, to: str) -> Reply:
         here = self.state.location
+        self._moves += 1
         reply = self.cmd("move", to=to)
         result = reply.result if isinstance(reply.result, dict) else {}
         if reply.ok:
             self.state.location = result.get("at", to) if isinstance(result.get("at"), str) else to
             self.state.docked = False
+            metres = result.get("metres")
+            if isinstance(metres, int | float) and metres > 0:  # a ride reports 0: not an edge
+                self.hotel.set_metres(here, self.state.location, float(metres))
+            self._refused_move, self._refused_run = None, 0
         slipped = any(e.get("type") == "slip" for e in reply.events)
         if (slipped or "wet" in str(result.get("notice", "")).lower()) and here in self.hotel.nodes:
             self.hotel.mark_wet(here, to)
             self.log("wet_floor", edge=[here, to], slipped=slipped)
             self._wet_seen(to)
+        if not reply.ok:
+            self._move_refused(here, to, str(reply.result))
         return reply
 
-    def _route(self, dst: str) -> Route:
-        try:
-            return shortest_route(self.hotel, self.state.location, dst, with_cart=self.state.has_cart)
-        except NoRoute as exc:
-            raise ActionFailed(f"no known route to {dst}") from exc
+    def _move_refused(self, here: str, to: str, text: str) -> None:
+        """The same move refused MOVE_REFUSALS_MAX times in a row (no move worked in between):
+        whatever loop keeps asking for it is broken out of (ActionFailed), and the edge is dropped
+        from the map so no route plans it again. Live seed 3: one corridor closed for cleaning was
+        tried 125 times until the battery died and the shift ended "stranded" (-200)."""
+        key = (here, to, text)
+        self._refused_run = self._refused_run + 1 if key == self._refused_move else 1
+        self._refused_move = key
+        if self._refused_run < MOVE_REFUSALS_MAX:
+            return
+        closed = self._close_edge(here, to, text)
+        self.log("move_refused_repeatedly", at=here, to=to, times=self._refused_run, reason=text[:200],
+                 edge_dropped=closed)
+        raise ActionFailed(f"the move {here} -> {to} was refused {self._refused_run} times in a row: {text}")
 
-    def _follow(self, route: Route) -> tuple[str, str | None, str] | None:
-        """Run the steps; None when all worked, else (where, target, server text) of the failure."""
+    def _close_edge(self, a: str, b: str, text: str) -> bool:
+        """Drop an edge the server refused, unless a room door or the robot itself (its battery,
+        its cart) is the reason: those ways open again with a keycard, a charge or without the cart."""
+        low = text.lower()
+        if "battery" in low or "cart" in low or "room" in {
+                self.hotel.nodes.get(n, {}).get("kind") for n in (a, b)}:
+            return False
+        self.hotel.forget_edge(a, b)
+        return True
+
+    def _close_refused(self) -> list[str] | None:
+        """Drop the edge of the last refused move (if a move was refused since the last that
+        worked); the edge as [from, to] when it was dropped."""
+        if self._refused_move is None:
+            return None
+        here, to, text = self._refused_move
+        return [here, to] if self._close_edge(here, to, text) else None
+
+    def _route(self, dst: str) -> Route:
+        return shortest_route(self.hotel, self.state.location, dst, with_cart=self.state.has_cart)
+
+    def _follow(
+        self, route: Route, interruptible: bool = False
+    ) -> tuple[str, str | None, str] | _Replan | None:
+        """Run the steps; None when all worked, REPLAN when a first-visit look changed the map on
+        the way, else (where, target, server text) of the failure.
+        Interruptible: stop at the next node once a message is waiting, so the request is planned
+        from here; never between call_elevator and its ride (the 45 s call would be wasted)."""
+        ride_pending = False
         for step in route.steps:
             here = self.state.location
+            if interruptible and self.inbox_waiting and not ride_pending:
+                self.log("walk_interrupted", at=here, towards=route.path[-1] if route.path else None)
+                return None
             if step.cmd == "call_elevator":
                 reply = self.cmd("call_elevator", floor=step.args["floor"])
                 if not reply.ok:
                     return here, None, str(reply.result)
+                ride_pending = True
                 continue
             to = step.args["to"]
             reply = self.move(to)
+            ride_pending = False
             if not reply.ok:
                 return here, to, str(reply.result)
             if frozenset((here, to)) in self._tentative:  # a guessed edge held: learn it for real
@@ -224,91 +363,266 @@ class Executor:
                 self._forget_edge(here, to)
                 self._add_edge(here, to, metres if isinstance(metres, int | float) else 1.0)
                 self.log("edge_learnt", edge=[here, to], metres=metres)
+            if self._look_on_arrival():
+                return REPLAN
         return None
 
-    def go(self, dst: str) -> None:
-        """Walk to dst by the shortest known route; recover once if the map turns out different."""
-        looked = False
+    def _look_on_arrival(self) -> bool:
+        """The first time at a non-room place this shift: one look (5 s), so wet warnings, metres
+        and stock are known before the next step. True when the map changed (route again)."""
+        loc = self.state.location
+        if loc in self._looked or self.hotel.nodes.get(loc, {}).get("kind") == "room":
+            return False
+        before = self.hotel.version
         try:
-            for _ in range(3):  # first try, after the recovery look, after a wrong bridge guess
+            self.look()
+        except ActionFailed as exc:
+            self._looked.add(loc)  # once per place, even when the look failed
+            self.log("look_failed", at=loc, reason=str(exc))
+        return self.hotel.version != before
+
+    def go(self, dst: str, *, interruptible: bool = False) -> None:
+        """Walk to dst by the shortest known route. When the believed map has no route, or a move
+        fails with "No way", one look learns the real exits and the route is planned again (once).
+        A route changed by a first-visit look on the way is simply planned again from there.
+        A move refused as closed off (cleaning) closes that edge for BLOCK_S and plans again from
+        here (live seed 3: 125 retries of one closed move stranded the robot).
+        Interruptible walks (the way back to the dock) may stop short once a message is waiting."""
+        looked = False
+        self._in_go += 1
+        try:
+            for _ in range(GO_ATTEMPTS):
                 if self.state.location == dst:
                     return
+                try:  # closures start their time now, and the ones whose time is up open again
+                    self.hotel.expire_blocks(clock_to_seconds(self.state.clock))
+                except (ValueError, AttributeError):
+                    pass
                 if self.state.location not in self.hotel.nodes and not looked:
                     looked = True  # lost: the one recovery look is spent on learning where
                     self._recover(None)
-                failure = self._follow(self._route(dst))
+                try:
+                    route = self._route(dst)
+                except NoRoute:
+                    if self._drop_cart_for(dst):
+                        continue
+                    if looked:
+                        raise ActionFailed(f"no known route to {dst}") from None
+                    looked = True
+                    self._recover(None)
+                    continue
+                failure = self._follow(route, interruptible)
                 if failure is None:
                     return
+                if failure is REPLAN:
+                    continue
                 here, to, text = failure
                 if to is not None and frozenset((here, to)) in self._tentative:
                     self.log("replan", at=here, reason="guessed edge does not exist", to=to)
                     self._drop_tentative()
                     continue
                 low = text.lower()
+                if to is not None and any(w in low for w in CLOSED_OFF):
+                    self.hotel.block_edge(here, to)  # BLOCK_S from the clock of this refusal
+                    self.log("replan", at=here, reason="closed off", blocked=to, text=text[:120])
+                    continue
                 if looked or not ("no way" in low or "no elevator panel" in low):
                     raise ActionFailed(f"could not reach {dst}: {text}")
                 looked = True
                 self._recover(to)
             raise ActionFailed(f"could not reach {dst}")
         finally:
-            self._drop_tentative()
+            self._in_go -= 1
+            if not self._in_go:
+                self._drop_tentative()
 
     def _recover(self, failed_to: str | None) -> None:
-        """One look: the look is the truth about this place's exits. Drop stale edges, add new
-        ones, and guess that a new neighbour bridges to where the old edge went."""
+        """One look: the look is the truth about this place's exits (look() drops stale edges, adds
+        new places and guesses that a new neighbour bridges to where a lost edge went)."""
         before = self.state.location
         old = next((e for e in self.hotel.neighbors(before) if e.b == failed_to), None)
         known_nodes = set(self.hotel.nodes)
         look = self.look()
         loc = self.state.location
         seen = {ex["to"]: ex for ex in look["exits"]}
-        for e in self.hotel.neighbors(loc) if seen else []:  # an empty look proves nothing
-            if e.b not in seen:
-                self._forget_edge(loc, e.b)
         guesses = []
         if failed_to and failed_to in self.hotel.nodes and failed_to not in seen:
             for to, ex in seen.items():
                 if to not in known_nodes and self.hotel.nodes[to]["kind"] != "room":
-                    self._add_edge(to, failed_to, old.metres if old else float(ex["metres"]))
-                    self._tentative.add(frozenset((to, failed_to)))
+                    if frozenset((to, failed_to)) not in self._tentative:
+                        self._add_edge(to, failed_to, old.metres if old else float(ex["metres"]))
+                        self._tentative.add(frozenset((to, failed_to)))
                     guesses.append(to)
         self.log("replan", at=loc, was_at=before, blocked=failed_to, exits=sorted(seen),
                  bridge_guesses=guesses)
+
+    def _drop_cart_for(self, dst: str) -> bool:
+        """No route with the cart (stairs): let go of it here when a route exists without it and
+        the task does not need it. The cart's place is remembered so it can be fetched again."""
+        if not self.state.has_cart or self.cart_needed:
+            return False
+        try:
+            shortest_route(self.hotel, self.state.location, dst, with_cart=False)
+        except NoRoute:
+            return False
+        reply = self.cmd("drop", item="cart")
+        self.log("cart_dropped", at=self.state.location, to_reach=dst, ok=reply.ok,
+                 left_in_cart=list(self.state.cart or []))
+        if not reply.ok:
+            self.refresh()
+            return not self.state.has_cart
+        self.state.cart = None
+        self.hotel.stock.setdefault(self.state.location, {})["cart"] = 1
+        return True
 
     def _add_edge(self, a: str, b: str, metres: float) -> None:
         floor = self.hotel.nodes.get(a, {}).get("floor", 0)
         self.hotel.update_from_look(a, {"floor": floor, "exits": [{"to": b, "metres": metres}]})
 
     def _forget_edge(self, a: str, b: str) -> None:
-        # world.Hotel has no public way to drop an edge, so this reaches into its adjacency.
-        # routing caches routes by edge count, so the cache is cleared with every removal.
-        adj = self.hotel._adj
-        adj.get(a, {}).pop(b, None)
-        adj.get(b, {}).pop(a, None)
-        self.hotel._route_cache = None
+        self.hotel.forget_edge(a, b)
 
     def _drop_tentative(self) -> None:
         for key in self._tentative:
             self._forget_edge(*tuple(key))
         self._tentative.clear()
 
+    def explore_floor(self, floor: int, target: str | None = None, *, max_looks: int = 8) -> bool:
+        """Task 26: a request names a room the map does not know (other nights number and lay out
+        floors differently; live seed 2 lost ~500 points to "unknown room"). Go to that floor and
+        visit its corridors not yet looked at this shift, nearest first (the believed ones, then
+        corridor exits the looks discover), each first visit being a look that teaches the map
+        the rooms off it. Stops as soon as `target` hangs off a looked-at corridor. Bounded: at
+        most `max_looks` corridor visits per call, and a floor swept to the end with nothing
+        skipped is not swept again this shift. Exits the world model marks blocked (Task 25
+        `is_blocked`) are left out. A floor the map has nothing on gets one elevator try (the
+        lift refusing it closes the floor for the shift).
+        Never raises; True when `target` is known (with a corridor) afterwards."""
+        explored: set[int] = self.__dict__.setdefault("_explored_floors", set())
+        is_blocked = getattr(self.hotel, "is_blocked", None)
+
+        def known() -> bool:
+            if not target or target not in self.hotel.nodes:
+                return False
+            try:
+                self.hotel.room_corridor(target)
+            except KeyError:
+                return False
+            return True
+
+        def unusable(place: str) -> bool:
+            edges = self.hotel.neighbors(place)
+            return bool(edges) and callable(is_blocked) and all(is_blocked(e.b, place) for e in edges)
+
+        def todo() -> list[str]:
+            return [n for n, v in self.hotel.nodes.items()
+                    if v.get("kind") == "corridor" and v.get("floor") == floor
+                    and n not in self._looked and n not in skipped and not unusable(n)]
+
+        def ride_to_floor() -> bool:
+            """The map has nothing on this floor: from the nearest elevator landing ask the lift
+            for it, step in and look (the look teaches the landing's corridors). False when the
+            server refuses the floor, which then closes it for the shift (a clean failure)."""
+            landings = [e for e in self.hotel.elevators() if self._seconds_to(e) < float("inf")]
+            if not landings:
+                return False
+            try:
+                self.go(min(landings, key=self._seconds_to))
+            except ActionFailed as exc:
+                self.log("explore_skip", place=f"floor {floor}", reason=str(exc))
+                return False
+            reply = self.cmd("call_elevator", floor=floor)
+            text = str(reply.result)
+            if not reply.ok:
+                explored.add(floor)
+                self.log("explore_skip", place=f"floor {floor}", reason=text)
+                return False
+            after = text.lower().split("step in to ", 1)  # "... Step in to elevator-4 to ride ..."
+            landing = after[1].split()[0].strip(".,") if len(after) > 1 and after[1].split() else ""
+            self.hotel.add_node(landing or f"elevator-{floor}", floor, "elevator")
+            reply = self.move(landing or f"elevator-{floor}")
+            if not reply.ok:
+                self.log("explore_skip", place=f"floor {floor}", reason=str(reply.result))
+                return False
+            looked.append(self.state.location)
+            if self.state.location not in self._looked:
+                try:
+                    self.look()
+                except ActionFailed as exc:
+                    self._looked.add(self.state.location)
+                    self.log("look_failed", at=self.state.location, reason=str(exc))
+            return True
+
+        if known():
+            return True
+        skipped: set[str] = set()
+        looked: list[str] = []
+        believed = set(todo())
+        if floor in explored:
+            self.log("floor_explored", floor=floor, target=target, looked=looked, found=False,
+                     reason="already swept this shift")
+            return False
+        new_floor = not believed and not any(
+            v.get("floor") == floor for v in self.hotel.nodes.values())
+        if new_floor and not ride_to_floor():  # a floor the starting map does not have: one try
+            self.log("floor_explored", floor=floor, target=target, looked=looked, found=False,
+                     swept=False, skipped=[f"floor {floor}"])
+            return False
+        swept = False
+        while len(looked) < max_looks:
+            candidates = todo()
+            if not candidates:
+                swept = True  # every believed and discovered corridor of the floor was looked at
+                break
+            nxt = min(candidates, key=lambda c: (c not in believed, self._seconds_to(c), c))
+            if self._seconds_to(nxt) == float("inf"):
+                skipped.add(nxt)
+                continue
+            try:
+                self.go(nxt)  # the first visit looks on arrival
+            except ActionFailed as exc:
+                skipped.add(nxt)
+                self.log("explore_skip", place=nxt, reason=str(exc))
+                continue
+            if self.state.location not in self._looked:
+                try:
+                    self.look()
+                except ActionFailed as exc:
+                    self._looked.add(self.state.location)
+                    self.log("look_failed", at=self.state.location, reason=str(exc))
+            looked.append(self.state.location)
+            if known():
+                break
+        found = known()
+        if swept and not found and not skipped:  # a skipped corridor (a closure) may open later
+            explored.add(floor)
+        self.log("floor_explored", floor=floor, target=target, looked=looked, found=found,
+                 swept=swept, skipped=sorted(skipped))
+        return found
+
     # --- items and the cart ----------------------------------------------------------------------
 
     def count(self, item: str) -> int:
         return self.state.hands.count(item) + (self.state.cart or []).count(item)
 
+    def _seconds_to(self, place: str) -> float:
+        try:
+            return route_seconds(self.hotel, self.state.location, place, with_cart=self.state.has_cart)
+        except NoRoute:
+            return float("inf")
+
     def _stock_place(self, item: str, exclude: set[str] = frozenset()) -> str | None:
+        """The nearest place believed to hold item (the JSON, corrected by every look and pick)."""
         places = [p for p, items in self.hotel.stock.items()
                   if items.get(item, 0) > 0 and p not in exclude and p in self.hotel.nodes]
+        return min(places, key=self._seconds_to, default=None)
 
-        def seconds(p):
-            try:
-                return route_seconds(self.hotel, self.state.location, p,
-                                     with_cart=self.state.has_cart)
-            except NoRoute:
-                return float("inf")
-
-        return min(places, key=seconds, default=None)
+    def _unchecked_stock_place(self, item: str, exclude: set[str] = frozenset()) -> str | None:
+        """The nearest stock place (storage, laundry, front desk, ...) not yet looked at this shift:
+        tonight's stock may sit there whatever the JSON says (live seed 2: towels in the laundry)."""
+        places = [p for p in self._stock_places
+                  if p not in exclude and p not in self._looked and p in self.hotel.nodes]
+        return min(places, key=self._seconds_to, default=None)
 
     def pick(self, item: str) -> tuple[bool, str]:
         reply = self.cmd("pick", item=item)
@@ -347,13 +661,23 @@ class Executor:
             self.state.cart.remove(item)
 
     def gather(self, item: str, n: int = 1) -> None:
-        """Carry at least n of item, fetching from stock; raises ActionFailed with the reason."""
+        """Carry at least n of item, fetching from stock; raises ActionFailed with the reason.
+        Where it is believed to be first; when it is not there (the look shows none, or the pick is
+        refused), the survey (if it has not run yet) and then the other stock places not yet seen
+        this shift, nearest first."""
         tried: set[str] = set()
         while self.count(item) < n:
             place = self._stock_place(item, tried)
             if place is None:
+                self.survey()  # the belief failed: see the stock places once, if not seen yet
+                place = self._stock_place(item, tried) or self._unchecked_stock_place(item, tried)
+            if place is None:
                 raise ActionFailed(f"{item} out of stock")
             self.go(place)
+            if place in self._looked and self.hotel.stock.get(place, {}).get(item, 0) <= 0:
+                tried.add(place)  # the look here showed none: no pick wasted
+                self.log("stock_miss", item=item, at=place)
+                continue
             while self.count(item) < n:
                 ok, text = self.pick_or_cart(item)
                 if not ok:
@@ -373,7 +697,8 @@ class Executor:
     def get_cart(self) -> bool:
         if self.state.has_cart:
             return True
-        place = self._stock_place("cart")
+        self.survey()
+        place = self._stock_place("cart") or self._unchecked_stock_place("cart")
         if place is None:
             return False
         try:
@@ -421,6 +746,191 @@ class Executor:
         self.log("stock_cart", picked=picked)
         self.refresh()
 
+    # --- learning the night's hotel --------------------------------------------------------------
+
+    def _learn_dock(self, location, clock) -> None:
+        """The dock is where the shift's first status finds the robot, when that status comes at
+        the very start of the shift (within DOCK_LEARN_S of its start clock) and before any move.
+        A JSON dock named otherwise is then overruled, so waiting and charging go to the real one.
+        A shift adopted mid-night (a restart) finds the robot anywhere: it keeps the map's dock."""
+        if self._dock_known:
+            return
+        self._dock_known = True
+        if self._moves or not isinstance(location, str) or not location:
+            return
+        believed = self.hotel.special.get("dock", "charging-dock")
+        if location == believed:
+            return
+        if not self._at_shift_start(clock):
+            self.log("dock_kept", dock=believed, at=location, clock=clock)
+            return
+        self.hotel.special["dock"] = location
+        self.hotel.add_node(location, self.hotel.nodes.get(believed, {}).get("floor", 1), "place")
+        self._learnt_dock, self._map_dock = location, believed
+        self.log("dock_learnt", dock=location, believed=believed)
+
+    def _at_shift_start(self, clock) -> bool:
+        """True when clock is within DOCK_LEARN_S after the shift's start clock (the one the
+        session reports, else SHIFT_START). No usable clock: False (the map's dock is safer)."""
+        start = getattr(self.session, "start_clock", None)
+        try:
+            gap = clock_to_seconds(clock) - clock_to_seconds(start if isinstance(start, str) else SHIFT_START)
+        except (AttributeError, TypeError, ValueError):
+            return False
+        return 0 <= gap <= DOCK_LEARN_S
+
+    def _revert_dock(self, dock: str, text: str) -> bool:
+        """A dock refused at the learnt dock for any reason but a full battery: the learning was
+        wrong (e.g. a restart in the shift's first minutes, after the robot had moved). Back to the
+        map's dock, once per shift; True when the caller should walk there and dock again."""
+        if (self._dock_reverted or self._learnt_dock is None or self._map_dock is None
+                or dock != self._learnt_dock or "full" in text.lower()):
+            return False
+        self._dock_reverted = True
+        self.hotel.special["dock"] = self._map_dock
+        self.log("dock_reverted", dock=self._map_dock, learnt=dock, reason=text[:200])
+        return True
+
+    def survey(self) -> None:
+        """Once per shift, in the first idle time (or before the first stock trip): look at the dock
+        and the believed stock places (storage, laundry, front desk) on one tour, so tonight's stock
+        and metres are known before a request depends on them. Never raises."""
+        if self._surveyed:
+            return
+        self._surveyed = True
+        dock = self.hotel.special.get("dock", "charging-dock")
+        places = [p for p in dict.fromkeys([dock, *self._stock_places]) if p in self.hotel.nodes]
+        start = self.state.location
+        try:
+            if start not in self._looked:
+                self.look()  # here first: at 22:00 that is the dock, before anything moves
+            todo = [p for p in places if p not in self._looked]
+            try:
+                order, _ = best_tour(self.hotel, self.state.location, todo, with_cart=self.state.has_cart)
+            except NoRoute:
+                order = todo
+            for place in order:
+                if place in self._looked:
+                    continue
+                try:
+                    self.go(place)  # the first visit looks on arrival
+                except ActionFailed as exc:
+                    self.log("survey_skip", place=place, reason=str(exc))
+                    continue
+                if place not in self._looked:
+                    self.look()
+        except ActionFailed as exc:
+            self.log("survey_failed", reason=str(exc))
+        self.log("survey", from_place=start, looked=sorted(p for p in places if p in self._looked),
+                 stock={p: self.hotel.stock.get(p, {}) for p in places})
+
+    def _now_s(self) -> int | None:
+        try:
+            return clock_to_seconds(self.state.clock)
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+    def _reach_dock(self, dock: str, *, interruptible: bool = False) -> bool:
+        """Walk to the dock; True once there (or stopped short for a waiting message). A failed
+        walk is never retried by the same route: one fresh look updates the map, the move the
+        server refused is dropped from it, and the route is planned once more. When that fails
+        too, the dock counts as out of reach from here for DOCK_RETRY_S, so the idle passes
+        between do not walk into the same refusal again (they spend their bounded wait instead)."""
+        here, now = self.state.location, self._now_s()
+        out = self._dock_out_of_reach
+        if (out is not None and out[:2] == (here, dock) and now is not None
+                and 0 <= now - out[2] < DOCK_RETRY_S):
+            return False
+        try:
+            self.go(dock, interruptible=interruptible)
+            return True
+        except ActionFailed as exc:
+            first = str(exc)
+        try:
+            self.look()
+        except ActionFailed as exc:
+            self.log("look_failed", at=self.state.location, reason=str(exc))
+        self.log("dock_replan", at=self.state.location, dock=dock, reason=first[:200],
+                 dropped=self._close_refused())
+        try:
+            self.go(dock, interruptible=interruptible)
+            return True
+        except ActionFailed as exc:
+            self._close_refused()
+            self._dock_out_of_reach = (self.state.location, dock, self._now_s() or 0)
+            self.log("dock_out_of_reach", at=self.state.location, dock=dock, reason=str(exc)[:200])
+            return False
+
+    def _battery(self) -> float | None:
+        battery = self.state.battery
+        if isinstance(battery, int | float) and not isinstance(battery, bool):
+            return float(battery)
+        return None
+
+    def _dock_reserve(self, dock: str) -> float:
+        """% the way to the dock drains (route seconds x DRAIN_PER_MIN) plus DOCK_MARGIN; 0 at the
+        dock, or when no route is known (there is nothing to plan the reserve on)."""
+        if self.state.location == dock:
+            return 0.0
+        seconds = self._seconds_to(dock)
+        if seconds == float("inf"):
+            return 0.0
+        return seconds / 60 * DRAIN_PER_MIN + DOCK_MARGIN
+
+    def _work_waiting(self) -> bool:
+        return self.inbox_waiting or bool(self.queue)
+
+    def ensure_battery(self, low: float = BATTERY_LOW, enough: float = BATTERY_OK) -> bool:
+        """Charge at the dock below `low` %, or below what the way to the dock drains plus a margin
+        (a far dock is headed for earlier), up to `enough` % (or until a request wakes the robot,
+        or the dock refuses). Not while work waits (a message, or a queued task: no 40-minute
+        charge in front of it) unless the battery is below BATTERY_CRITICAL or that reserve: a
+        flat battery loses the rest of the night. True when a charge was attempted. Never raises
+        except ShiftEnded and Ctrl-C: the loop calls it before every choice."""
+        try:
+            return self._charge(low, enough)
+        except ShiftEnded:
+            raise
+        except Exception as exc:  # noqa: BLE001 - an odd reply must not block every loop pass
+            self.log("charge_failed", error=type(exc).__name__, reason=str(exc)[:200])
+            return False
+
+    def _charge(self, low: float, enough: float) -> bool:
+        battery = self._battery()
+        if battery is None:
+            self.log("battery_unknown", battery=repr(self.state.battery)[:40])
+            return False
+        dock = self.hotel.special.get("dock", "charging-dock")
+        reserve = self._dock_reserve(dock)
+        if battery >= max(low, reserve):
+            return False
+        forced = battery < max(BATTERY_CRITICAL, reserve)
+        if not forced and self._work_waiting():
+            self.log("charge_deferred", battery=battery, queued=len(self.queue), inbox=self.inbox_waiting)
+            return False
+        self.log("battery_low", battery=battery, at=self.state.location, dock=dock,
+                 reserve=round(reserve, 1), forced=forced)
+        for _ in range(CHARGE_ROUNDS):
+            battery = self._battery()
+            if battery is None or battery >= enough:
+                break
+            dock = self.hotel.special.get("dock", "charging-dock")
+            if not self._reach_dock(dock):
+                self.log("charge_failed", reason=f"could not reach {dock}")
+                break
+            if not forced and self._work_waiting():
+                break  # a request came in on the way: it goes first
+            reply = self.cmd("dock")
+            self.state.docked = reply.ok
+            if not reply.ok and self._revert_dock(dock, str(reply.result)):
+                continue  # dock again, at the map's dock
+            text = str(reply.result).lower()
+            self.refresh()
+            if not reply.ok or self.inbox_waiting or "woke" in text or "message" in text:
+                break
+        self.log("charged", battery=self.state.battery, woken=self.inbox_waiting)
+        return True
+
     # --- waiting -------------------------------------------------------------------------------
 
     def _request_waiting(self) -> bool:
@@ -439,20 +949,26 @@ class Executor:
         self.log("scan", at=self.state.location, found=found)
         return found
 
-    def wait_for_request(self, max_idle: int = IDLE_STEPS) -> None:
+    def wait_for_request(self, max_idle: int = IDLE_STEPS,
+                         should_stop: Callable[[], bool] | None = None) -> None:
         """Go to the dock and charge until a request arrives. Never eats the inbox (the loop
-        reads it). The dock refuses at 100 % and stops when full, so idle time is spent on scans
-        between docks; returns as soon as a message is waiting, or after max_idle cycles."""
-        self.inbox_waiting = False
+        reads it) and never clears `inbox_waiting` (only the loop's inbox read does). Every reply
+        carries the inbox event, so `status` is polled only every IDLE_STATUS_EVERY checks. The
+        dock refuses at 100 % and stops when full, so idle time is spent on scans between docks;
+        returns as soon as a message is waiting, when should_stop() says so (the final's clock),
+        or after max_idle cycles."""
         dock = self.hotel.special.get("dock", "charging-dock")
-        for _ in range(max_idle):
-            if self._request_waiting():
+        for i in range(max_idle):
+            if should_stop is not None and should_stop():
                 return
+            if self.inbox_waiting or (i % IDLE_STATUS_EVERY == 0 and self._request_waiting()):
+                return
+            if not self._surveyed:
+                self.survey()  # the shift's first idle time: look at tonight's stock places once
+                continue  # the survey took time: check the inbox again first
             if self.state.location != dock:
-                try:
-                    self.go(dock)
-                except ActionFailed as exc:
-                    self.log("wait_failed", reason=str(exc))
+                if not self._reach_dock(dock, interruptible=True):
+                    self.log("wait_failed", reason=f"could not reach {dock}")
                     self.scan()  # spend sim time, so the loop calling again is not a tight spin
                     return
                 continue  # moving took time: check the inbox again first
@@ -460,10 +976,13 @@ class Executor:
             self.state.docked = reply.ok
             text = str(reply.result).lower()
             if not reply.ok and "full" not in text:
+                if self._revert_dock(dock, str(reply.result)):
+                    dock = self.hotel.special["dock"]
+                    continue  # walk to the map's dock and dock there
                 self.log("wait_failed", reason=str(reply.result))
                 self.scan()  # as above: one bounded wait per call instead of an instant return
                 return
-            if self._request_waiting():
+            if self.inbox_waiting:  # a dock that woke on a message brings the inbox event
                 return
             self.scan()  # idle time spent usefully; the battery dips so the next dock works
 
@@ -475,7 +994,10 @@ class Executor:
         self.ledger.add(task)
         self.log("task_start", request=task.request, kind=task.kind.value, room=task.room,
                  item=task.item)
-        start = self.score_now()
+        # No status call of its own: the loop refreshed just before, and the flows read the score
+        # before and after their last action (that is what verifies a "done"), so `points` comes
+        # from the scores they observed. The report's own bonus lands on the next refresh.
+        start = self.state.score
         try:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):
@@ -498,16 +1020,33 @@ class Executor:
 
     def _finish(self, task: Task, outcome: str, note: str, start: int | None) -> Outcome:
         note = note[:NOTE_MAX]
-        reply = self.cmd("report", request=task.request, outcome=outcome, note=note)
-        text = str(reply.result)
-        status = outcome
-        if not reply.ok:
-            status, note = "skipped", f"{note} (report refused: {text})"[:NOTE_MAX]
-        elif outcome == "done" and "thanks" not in text.lower():
-            self.log("report_unverified", request=task.request, reply=text)
+        twin = self._open_twin(task) if outcome == "done" else None
+        if twin is not None:  # Task 22: the rise may be twin's; unreported, not "failed" either
+            status, note = "skipped", f"{note} (not reported: the rise may be {twin.request}'s)"[:NOTE_MAX]
+        else:
+            reply = self.cmd("report", request=task.request, outcome=outcome, note=note)
+            text = str(reply.result)
+            status = outcome
+            if not reply.ok:
+                status, note = "skipped", f"{note} (report refused: {text})"[:NOTE_MAX]
+            elif outcome == "done" and "thanks" not in text.lower():
+                self.log("report_unverified", request=task.request, reply=text)
         self.ledger.set_status(task.request, status)
-        end = self.score_now()
+        end = self.state.score  # the last score a flow observed; no extra call
         points = int(end - start) if end is not None and start is not None else 0
         self.log("task_done" if status == "done" else "task_failed", request=task.request,
                  status=status, points=points, note=note)
         return Outcome(task.request, status, points, note)
+
+    def _open_twin(self, task: Task) -> Entry | None:
+        """An earlier, not-done order for the room (a named guest's, once asked) and item of task:
+        the server may have credited task's delivery to it. Logged when found."""
+        from agent.flows import same_item
+
+        entry = self.ledger.get(task.request)
+        room = (entry.room if entry else None) or task.room or self.guest_rooms.get(task.guest or "")
+        twin = self.ledger.open_twin(task, room, same=same_item, guest_rooms=self.guest_rooms)
+        if twin is not None:
+            self.log("report_skipped_ambiguous", request=task.request, other=twin.request, room=room,
+                     item=task.item)
+        return twin

@@ -1,5 +1,6 @@
 """Settings loader. Later env file wins; real environment variables win over files."""
 
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,6 +42,19 @@ def _checked_url(url: str) -> str:
     )
 
 
+MAX_RPS_CEILING = 50.0  # a 0, negative or NaN rate would switch the limiter off: refuse to start
+
+
+def _rps(raw: str) -> float:
+    try:
+        rps = float(raw)
+    except ValueError:
+        rps = math.nan
+    if not math.isfinite(rps) or not 0 < rps <= MAX_RPS_CEILING:
+        raise ValueError(f"NIGHTSHIFT_MAX_RPS must be a number in (0, {MAX_RPS_CEILING:g}], got {raw!r}")
+    return rps
+
+
 def load_settings(env_files: tuple[str, ...] = (".env", ".env.local")) -> Settings:
     values: dict[str, str | None] = {}
     for path in env_files:
@@ -55,7 +69,7 @@ def load_settings(env_files: tuple[str, ...] = (".env", ".env.local")) -> Settin
         key=get("WYBE_NIGHTSHIFT_KEY"),
         anthropic_key=get("ANTHROPIC_API_KEY") or None,
         budget_usd=float(get("ANTHROPIC_BUDGET_USD", "30")),
-        max_rps=float(get("NIGHTSHIFT_MAX_RPS", "5")),
+        max_rps=_rps(get("NIGHTSHIFT_MAX_RPS", "5")),
         # Environment only, never a file, so nobody arms the final by accident.
         final_armed=os.environ.get("FINAL_ARMED") == "1",
     )

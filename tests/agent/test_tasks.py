@@ -51,7 +51,7 @@ A = Kind.AMENITY
          {"room": "room-205", "item": "water-bottle", "count": 1}),
         ("Two fresh towels for 212", A, {"room": "room-212", "item": "towel", "count": 2}),
         ("Take the towel from 105 to 206", A, {"room": "room-206", "item": "towel"}),
-        ("Is room 214 empty?", Kind.ROOM_CHECK, {"room": "room-214"}),
+        ("Is room 214 empty?", Kind.UNKNOWN, {"room": "room-214"}),  # no check verb: not a room check
     ],
 )
 def test_parses_seen_requests(text, kind, fields):
@@ -224,3 +224,46 @@ def test_ledger_add_is_idempotent_and_keeps_status():
 def test_room_messages_win_over_the_new_patterns():
     t = parse_request("R-1", "Tell the guest in 319 the noise has stopped.", "t")
     assert t.kind is Kind.MESSAGE and t.message == "the noise has stopped"
+
+
+# --- Task 18 / I1: a room check needs an explicit check phrase; noise texts are never room checks ----
+
+ROOM_CHECKS = [  # the live phrasings (wybe-api.md § 12)
+    "Check if 103 is empty and tidy, report back.",
+    "R-017: Check if 107 is empty and tidy, report back.",
+    "Please verify that 204 is vacant.",
+    "See if 206 is empty, then report back.",
+]
+NOT_ROOM_CHECKS = [
+    ("Is room 214 empty?", Kind.UNKNOWN),
+    ("210 is vacant now, please send someone up.", Kind.UNKNOWN),
+    ("Complaint about noise near 201.", Kind.NOISE),
+    ("Loud music from 312, check if the room is occupied.", Kind.UNKNOWN),
+    ("Guest in 205 complains the next room is empty and noisy, check it.", Kind.UNKNOWN),
+    ("Take the bags at the desk up to 206. The room is empty, the guest checks in later.", Kind.BAGS),
+    ("Could you check the minibar in 305? It is empty.", Kind.UNKNOWN),  # an object, not the room
+    ("Check whether the fridge in 212 is empty and tidy it up.", Kind.UNKNOWN),
+]
+
+
+@pytest.mark.parametrize("text", ROOM_CHECKS)
+def test_room_checks_need_an_explicit_check_phrase(text):
+    assert parse_request("R-1", text, "t").kind is Kind.ROOM_CHECK
+
+
+@pytest.mark.parametrize("text,kind", NOT_ROOM_CHECKS)
+def test_bare_state_words_and_noise_texts_are_not_room_checks(text, kind):
+    assert parse_request("R-1", text, "t").kind is kind
+
+
+def test_vet_brain_task_rejects_a_room_check_on_a_noise_text():
+    from agent.tasks import vet_brain_task
+
+    noisy = Task("R-1", Kind.ROOM_CHECK, "Loud music near 201, see whether the room is occupied.", "t",
+                 room="room-201")
+    assert vet_brain_task(noisy).kind is Kind.UNKNOWN
+    clean = Task("R-2", Kind.ROOM_CHECK, "Have a look whether 201 is free.", "t", room="room-201")
+    assert vet_brain_task(clean) is clean
+    other = Task("R-3", Kind.AMENITY, "Complaint: 201 has no towels, bring two.", "t", room="room-201",
+                 item="towel")
+    assert vet_brain_task(other) is other

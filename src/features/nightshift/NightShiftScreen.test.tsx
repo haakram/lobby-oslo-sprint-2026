@@ -3,9 +3,13 @@ import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NightShiftScreen } from "./NightShiftScreen";
+import { parseRunLog, summarise } from "./runlog";
 import { viewerBase } from "./useRun";
 
 const SAMPLE = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
+// The demo night changes when a better live run is published; the screen must show whatever it holds.
+const EXPECTED = summarise(parseRunLog(SAMPLE).lines);
+const SHOWN_DECISION = EXPECTED.decisions.find((d) => d.text.startsWith("R-"))?.text ?? "";
 const SHIFT = "w2-3fa94c1d07be4e2a9c55d1e8b6a0f217";
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -31,9 +35,9 @@ describe("NightShiftScreen, replay", () => {
     expect(await screen.findByText("Ferdig")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/runs/demo.jsonl", expect.anything());
     const stats = screen.getByRole("group", { name: "Skiftet i tall" });
-    expect(within(stats).getByText("134")).toBeInTheDocument();
-    expect(within(stats).getByText("22:43:43")).toBeInTheDocument();
-    expect(screen.getByText("R-007 · Towel placed in room-205. Verified.")).toBeInTheDocument();
+    expect(within(stats).getByText(String(EXPECTED.score))).toBeInTheDocument();
+    expect(within(stats).getByText(EXPECTED.clock ?? "")).toBeInTheDocument();
+    expect(screen.getAllByText(SHOWN_DECISION).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Spill av" })).toBeEnabled();
   });
 

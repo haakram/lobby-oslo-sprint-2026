@@ -11,7 +11,7 @@ from agent.executor import Executor
 from agent.flows import scan_candidates
 from agent.tasks import Kind, Task, parse_request
 from agent.world import DEFAULT_MAP, Hotel, RobotState
-from tests.fakes.fake_wybe import DEFAULT_REQUESTS, FakeWybe
+from tests.fakes.fake_wybe import TYPES_DEMO_REQUESTS, FakeWybe
 
 
 def settings(tmp_path) -> Settings:
@@ -29,7 +29,7 @@ def settings(tmp_path) -> Settings:
 def setup(tmp_path, rids=None, requests=None, **fake_kw):
     """A fake with only the named default requests (or the given script), a shift and an executor."""
     if requests is None:
-        requests = [r for r in DEFAULT_REQUESTS if rids is None or r[1] in rids]
+        requests = [r for r in TYPES_DEMO_REQUESTS if rids is None or r[1] in rids]
     fake = FakeWybe(requests=requests, **fake_kw)
     client = WybeClient(
         settings(tmp_path), transport=httpx.MockTransport(fake.handler), sleep=lambda s: None
@@ -599,11 +599,11 @@ def test_bags_without_a_score_rise_are_not_done(tmp_path, monkeypatch):
 
 def test_noise_complaint_asks_the_named_room_to_keep_it_down(tmp_path):
     fake, session, ex, task = solo(tmp_path, "Complaint about noise near 201.",
-                                   noise_sources={"room-201": "room-203"})
+                                   noise_sources={"room-201": "room-202"})  # 203 is empty on the live night
     assert task.kind is Kind.NOISE
     out = ex.run(task)
     assert out.status == "done", out
-    assert [e["args"]["door"] for e in calls(fake, "knock")] == ["room-203"]
+    assert [e["args"]["door"] for e in calls(fake, "knock")] == ["room-202"]
     assert_every_knock_looked_first(fake)
     said = calls(fake, "say")[0]["args"]["text"]
     assert "keep the noise down" in said
@@ -665,7 +665,7 @@ def test_follow_up_without_an_order_delivers_nothing(tmp_path):
 
 
 def test_follow_up_for_a_done_order_delivers_nothing(tmp_path):
-    reqs = [DEFAULT_REQUESTS[0], ("22:20:00", "R-002", FOLLOW.format(319, "phone charger"))]
+    reqs = [TYPES_DEMO_REQUESTS[0], ("22:20:00", "R-002", FOLLOW.format(319, "phone charger"))]
     fake, session, ex = setup(tmp_path, requests=reqs)
     assert ex.run(next_task(ex, session, "R-001")).status == "done"
     places = len(calls(fake, "place"))
@@ -675,7 +675,7 @@ def test_follow_up_for_a_done_order_delivers_nothing(tmp_path):
 
 
 def test_follow_up_runs_the_pending_original_first(tmp_path):
-    reqs = [DEFAULT_REQUESTS[0], ("22:04:00", "R-002", FOLLOW.format(319, "phone charger"))]
+    reqs = [TYPES_DEMO_REQUESTS[0], ("22:04:00", "R-002", FOLLOW.format(319, "phone charger"))]
     fake, session, ex = setup(tmp_path, requests=reqs)
     got = collect(ex, session, {"R-001", "R-002"})
     first = got["R-001"]

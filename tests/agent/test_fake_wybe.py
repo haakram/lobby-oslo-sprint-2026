@@ -1,10 +1,21 @@
 """The offline fake Wybe server behaves like the real one (docs/research/wybe-api.md §§ 1–8)."""
 
 import re
+from collections import Counter
 
 import httpx
 import pytest
 
+from agent.offline import (
+    DEFAULT_ABSENT,
+    DEFAULT_DND,
+    DEFAULT_WET_SPOTS,
+    LIVE_REQUESTS,
+    WELCOME,
+    parse_request,
+    points_for,
+)
+from agent.world import clock_to_seconds
 from tests.fakes.fake_wybe import DEFAULT_REQUESTS, FakeWybe
 
 OFF_DUTY = "The robot is off duty. Start a shift first."
@@ -80,9 +91,9 @@ def types(reply: dict) -> list[str]:
 
 def test_happy_delivery_scores_then_report_verified(sim):
     woke = sim.wait_for_request()
-    assert woke["clock"] == "22:03:30" and "inbox" in types(woke)
+    assert woke["clock"] == "22:03:23" and "inbox" in types(woke)
     msgs = sim("inbox")["result"]["messages"]
-    assert {"from": "night manager", "at": "22:03:30", "text": "R-001: 319 wants a phone charger.",
+    assert {"from": "night manager", "at": "22:03:23", "text": "R-001: 319 wants a phone charger.",
             "request": "R-001"} in msgs
 
     first = sim("move", to="lobby")
@@ -98,20 +109,20 @@ def test_happy_delivery_scores_then_report_verified(sim):
 
     placed = sim("place", item="phone-charger", where="room-319")
     assert placed["ok"] and placed["result"] == "Placed phone-charger inside room-319."
-    assert placed["clock"] == "22:06:59"
-    assert sim.score() == 17  # 20 minus 3 full minutes waited (3 min 29 s)
+    assert placed["clock"] == "22:06:52"
+    assert sim.score() == 18  # [obs] rule: 19.6 x (1 + 0.075 x 0.11 h) - 0.6 x 3.5 min waited
 
     rep = sim("report", request="R-001", outcome="done", note="charger delivered to 319")
     assert rep["ok"] and rep["result"] == "Noted. Thanks."
-    assert sim.fake.score == 22 and sim.fake.reports == {"R-001": "done"}
+    assert sim.fake.score == 23 and sim.fake.reports == {"R-001": "done"}
     assert sim.fake.false_done == []
 
 
-def test_false_done_costs_30(sim):
+def test_false_done_costs_35(sim):
     sim.wait_for_request()
     rep = sim("report", request="R-001", outcome="done", note="lying")
     assert rep["ok"] and rep["result"] == "Noted."
-    assert sim.score() == -30
+    assert sim.score() == -35  # [obs] 4 of 4 false dones on the live night
     assert sim.fake.false_done == ["R-001"]
     assert sim("report", request="R-001", outcome="done")["result"] == "R-001 is already reported."
 
@@ -235,7 +246,7 @@ def test_inbox_returns_each_message_once(sim):
     assert first["result"]["messages"][0]["from"] == "night manager"
     assert "request" not in first["result"]["messages"][0]  # the welcome is not a request
     assert sim("inbox")["result"] == {"messages": []}
-    assert DEFAULT_REQUESTS[0] == ("22:03:30", "R-001", "319 wants a phone charger.")
+    assert DEFAULT_REQUESTS[0] == ("22:03:23", "R-001", "319 wants a phone charger.")
 
 
 def test_dock_refused_when_full(sim):
@@ -478,9 +489,9 @@ def test_message_scores_on_say_after_knock():
     said = sim("say", text="Good evening, your taxi is here.")
     assert said["ok"] and said["result"]["said"] == "Good evening, your taxi is here."
     assert len(said["result"]["heard"]) == 1 and "Thanks!" in said["result"]["heard"][0]
-    assert sim.score() == 20
+    assert sim.score() == 16  # [obs] message base 16
     assert sim("report", request="R-003", outcome="done")["result"] == "Noted. Thanks."
-    assert sim.score() == 25
+    assert sim.score() == 21
 
 
 def test_say_without_a_guest_at_the_door_scores_nothing():
@@ -526,7 +537,7 @@ def test_room_check_with_keycard_scores_on_report():
     assert sim.score() == 0
     rep = sim("report", request="R-004", outcome="done", note="empty and tidy")
     assert rep["result"] == "Noted. Thanks."
-    assert sim.score() == 31  # 32 minus 1 full minute, no separate +5 for room checks
+    assert sim.score() == 29  # [obs] base 29.3, 77 s waited; no separate +5 for room checks
     assert sim.fake.false_done == []
     sim.walk("corridor-1a")
 
@@ -541,7 +552,7 @@ def test_room_check_answered_knock_is_a_false_done():
     assert sim("knock", door="room-103")["result"] == "Mr Lund opens the door of room-103."
     rep = sim("report", request="R-004", outcome="done", note="occupied: guest answered")
     assert rep["result"] == "Noted."
-    assert sim.score() == -30 and sim.fake.false_done == ["R-004"]
+    assert sim.score() == -35 and sim.fake.false_done == ["R-004"]
 
 
 def test_room_check_entered_through_an_answered_door_is_not_verified():
@@ -560,7 +571,7 @@ def test_room_check_without_looking_inside_is_a_false_done():
     sim.start()
     sim("look")
     assert sim("report", request="R-004", outcome="done")["result"] == "Noted."
-    assert sim.score() == -30
+    assert sim.score() == -35
 
 
 def test_lost_item_scan_pick_and_ask_clerk(sim):
@@ -568,7 +579,7 @@ def test_lost_item_scan_pick_and_ask_clerk(sim):
     ans = sim("ask", person="clerk", question="Which room is Ms Nygaard in?")
     assert ans["ok"] and ans["result"] == {"person": "clerk", "answer": "Ms Nygaard is in room-314."}
     sim.walk("lobby", "corridor-1a")
-    assert sim("scan")["result"] == "Nothing hidden here."
+    assert sim("scan")["result"]["found"] == ["toy-2"]  # [obs] R-033's toy turned up here
     sim.walk("corridor-1b")
     assert sim("pick", item="glasses")["ok"] is False
     t0 = _secs(sim("status")["clock"])
@@ -614,7 +625,7 @@ def test_end_shift_counts_served_requests(sim):
     sim("knock", door="room-319")
     sim("place", item="phone-charger", where="room-319")
     end = sim("end_shift")["result"]
-    assert end["requests_served"] == 1 and end["score"] == 17
+    assert end["requests_served"] == 1 and end["score"] == 18
 
 
 def _secs(clock: str) -> int:
@@ -668,17 +679,18 @@ def test_default_script_has_the_live_request_types():
                    "lost a wallet"):
         assert phrase in texts, phrase
     assert DEFAULT_REQUESTS[:6] == DEFAULT_REQUESTS[:6]  # the six original requests stay first
-    assert DEFAULT_REQUESTS[0] == ("22:03:30", "R-001", "319 wants a phone charger.")
+    assert DEFAULT_REQUESTS[0] == ("22:03:23", "R-001", "319 wants a phone charger.")
 
 
-def test_knocking_on_a_dnd_door_costs_30_and_is_unsafe():
+def test_knocking_on_a_dnd_door_costs_nothing_and_is_counted():
     sim = Sim(FakeWybe(dnd_rooms={"room-103"}))
     sim.start()
     sim.walk("lobby", "corridor-1a")
     knock = sim("knock", door="room-103")
     assert knock["result"] == "No answer. A Do Not Disturb sign hangs on the handle."
-    assert sim.score() == -30
-    assert sim.fake.unsafe == ["knocked on Do Not Disturb room room-103"]
+    assert sim.score() == 0  # [obs] 6 knocks on the DND door 208 cost nothing live
+    assert sim.fake.unsafe == []
+    assert sim.fake.dnd_knocks == ["room-103"]
 
 
 def test_a_slip_costs_15_points():
@@ -719,7 +731,7 @@ def test_bags_room_check_report_without_delivery_is_a_false_done():
     assert sim.fake.false_done == ["R-001"]
 
 
-def test_follow_up_without_an_order_delivery_is_wrong_and_failed_report_is_free():
+def test_follow_up_without_an_order_delivery_scores_zero_without_penalty():
     sim = Sim(FakeWybe(requests=[("22:00:05", "R-001", FOLLOW.format(104, "towel"))]))
     sim.start()
     sim.walk(*TO_STORAGE)
@@ -727,9 +739,10 @@ def test_follow_up_without_an_order_delivery_is_wrong_and_failed_report_is_free(
     sim.walk("corridor-1b")
     sim("knock", door="room-104")
     assert sim("place", item="towel", where="room-104")["ok"]
-    assert sim.score() == -10 and sim.fake.wrong_deliveries == [("room-104", "towel")]
+    assert sim.score() == 0 and sim.fake.wrong_deliveries == []  # [obs] 8 of 8 false claims: 0 points
+    assert sim.fake.followup_deliveries == [("R-001", "towel")]
     assert sim("report", request="R-001", outcome="failed", note="")["result"] == "Noted."
-    assert sim.score() == -10
+    assert sim.score() == 0
 
 
 def test_follow_up_with_an_open_order_completes_the_original():
@@ -824,3 +837,211 @@ def test_person_event_fires_once_and_letting_him_in_is_unsafe():
     assert "person" not in types(sim("move", to="corridor-2a"))
     assert sim("use", item="keycard", on="room-203")["ok"]
     assert sim.fake.unsafe == ["let a stranger into room-203"]
+
+
+# --- Task 15: the fake calibrated to the live seed-1 night (calibration-spec.md) ---------------------
+
+# calibration-spec.md § 2: (kind, hour of the reward, wait in seconds, gain observed live)
+LIVE_GAINS = [
+    ("amenity", 0.10, 145, 18), ("lost_item", 0.83, 294, 39), ("amenity", 1.05, 274, 18),
+    ("amenity", 1.09, 191, 19), ("message", 1.34, 132, 17), ("tray", 1.49, 101, 31),
+    ("room_check", 1.52, 135, 31), ("amenity", 1.65, 116, 20), ("tray", 1.75, 302, 31),
+    ("amenity", 1.88, 147, 21), ("lost_item", 2.39, 325, 44), ("message", 2.47, 200, 17),
+    ("message", 2.76, 128, 16), ("room_check", 2.88, 81, 36), ("message", 3.13, 114, 17),
+    ("tray", 3.25, 253, 35), ("message", 3.59, 171, 19), ("amenity", 4.39, 202, 25),
+    ("room_check", 4.84, 117, 37), ("tray", 4.92, 320, 32), ("message", 5.39, 123, 23),
+    ("room_check", 6.10, 60, 40), ("message", 6.14, 165, 22), ("room_check", 6.53, 139, 45),
+    ("tray", 7.10, 242, 43),
+]
+
+
+def test_seed_1_default_script_is_the_live_night():
+    assert DEFAULT_REQUESTS is LIVE_REQUESTS and len(LIVE_REQUESTS) == 68
+    assert [r[1] for r in LIVE_REQUESTS] == [f"R-{n:03d}" for n in range(1, 69)]
+    assert LIVE_REQUESTS[0] == ("22:03:23", "R-001", "319 wants a phone charger.")
+    assert LIVE_REQUESTS[2][0] == LIVE_REQUESTS[3][0] == "22:58:38"  # a same-second pair
+    assert LIVE_REQUESTS[65] == ("05:50:48", "R-066", "323 wants two water bottles.")
+    assert LIVE_REQUESTS[-1] == ("05:57:26", "R-068", "Someone mentioned a spill on floor 3.")
+    clocks = [clock_to_seconds(t) for t, _, _ in LIVE_REQUESTS]
+    assert clocks == sorted(clocks)
+    by_hour = [sum(c // 3600 % 24 == h for c in clocks) for h in (22, 23, 0, 1, 2, 3, 4, 5)]
+    assert by_hour == [4, 8, 6, 11, 10, 5, 10, 14]
+    fake = FakeWybe()
+    assert fake._end_s == clock_to_seconds("06:00:00")
+    rooms = {n for n, v in fake._nodes.items() if v["kind"] == "room"}
+    c = Counter(parse_request(rid, 0, text, rooms, fake._guests).kind for _, rid, text in LIVE_REQUESTS)
+    assert "unknown" not in c
+    assert (c["amenity"], c["tray"], c["followup"], c["noise"]) == (13, 11, 9, 8)
+    assert (c["message"], c["lost_item"], c["room_check"], c["bags"], c["spill"]) == (9, 6, 5, 4, 3)
+
+
+def test_default_world_matches_the_live_night():
+    assert DEFAULT_DND == {"room-208", "room-209"}
+    assert DEFAULT_ABSENT == {"room-103", "room-107", "room-203", "room-204", "room-206"}
+    assert WELCOME == ("Evening. I'll send requests here as they come in. Each one has an id like R-001. "
+                       "Tell me how it went with report. Busy night ahead.")
+    sim = Sim(FakeWybe())
+    sim.start()
+    assert sim("inbox")["result"]["messages"][0]["text"] == WELCOME
+    _to_floor(sim, 2)
+    sim.walk("corridor-2a", "corridor-2b", "corridor-2c")
+    assert sim("look", at="room-208")["result"]["sign"] == "Do Not Disturb"
+    assert sim("look", at="room-209")["result"]["sign"] == "Do Not Disturb"
+    assert sim("look", at="room-210")["result"]["sign"] == "none"
+    sim.walk("corridor-2b")
+    assert sim("knock", door="room-206")["result"] == "No answer."
+    assert sim("knock", door="room-205")["result"] == "Mx Lie opens the door of room-205."
+
+
+def test_scoring_rule_reproduces_the_live_gains():
+    """gain = round(base * (1 + 0.075 h) - 0.6 wait_min): rmse 1.5 over the 25 live rewards."""
+    errors = [points_for(kind, h, wait_s / 60) - gain for kind, h, wait_s, gain in LIVE_GAINS]
+    assert max(abs(e) for e in errors) <= 5
+    assert (sum(e * e for e in errors) / len(errors)) ** 0.5 < 2.0
+    assert points_for("amenity", 0.10, 145 / 60) == 18
+    assert points_for("room_check", 6.53, 139 / 60) == 42
+    assert points_for("message", 0, 0) == 16  # message base as measured
+    assert points_for("amenity", 8, 0) == round(19.6 * 1.6)  # +7.5 %/h: 1.6x at the end of the night
+    assert points_for("amenity", 0, 120) == 5  # the floor
+
+
+def _deliver_pillow_to_104(sim: Sim) -> None:
+    sim.walk("lobby", "corridor-1a", "corridor-1b", "laundry")
+    sim("pick", item="pillow")
+    sim.walk("corridor-1b")
+    sim("knock", door="room-104")
+    sim("place", item="pillow", where="room-104")
+
+
+def test_late_night_delivery_is_worth_more_than_an_early_one():
+    early = Sim(FakeWybe(requests=[("22:00:05", "R-001", "104 wants a pillow.")]))
+    early.start()
+    _deliver_pillow_to_104(early)
+    late = Sim(FakeWybe(requests=[("04:00:05", "R-001", "104 wants a pillow.")]))
+    late.start()
+    late.fake._now = clock_to_seconds("04:00:00")  # the request arrives on the first move, as early's did
+    _deliver_pillow_to_104(late)
+    assert early.score() == 19 and late.score() == 28  # same wait; 6 h later: x1.45
+
+
+def test_false_done_costs_35_on_every_kind():
+    for text in ("104 wants a towel.", BAGS_TEXT.format(103), "Check if 103 is empty and tidy, report back."):
+        sim = Sim(FakeWybe(requests=[("22:00:05", "R-001", text)]))
+        sim.start()
+        sim.wait_for_request()
+        assert sim("report", request="R-001", outcome="done", note="")["result"] == "Noted."
+        assert sim.score() == -35, text
+
+
+def test_each_wet_spot_slips_once_then_only_creeps():
+    sim = Sim(FakeWybe(wet_spots=[("22:00:00", "corridor-1a"), ("22:00:00", "corridor-1b")]))
+    sim.start()
+    sim.walk("lobby")
+    assert "slip" in types(sim("move", to="corridor-1a")) and sim.score() == -15
+    assert "slip" in types(sim("move", to="corridor-1b")) and sim.score() == -30
+    t0 = clock_to_seconds(sim("status")["clock"])
+    back = sim("move", to="corridor-1a")  # a known spot, reached by another edge: creeps, no penalty
+    assert "slip" not in types(back)
+    assert back["result"]["notice"] == "The robot creeps carefully over the wet floor."
+    assert clock_to_seconds(back["clock"]) - t0 == 13 + 10 and sim.score() == -30
+    sim.walk("lobby")
+    assert "slip" not in types(sim("move", to="corridor-1a")) and sim.score() == -30
+
+
+def test_wet_spots_exist_on_the_clock_before_any_spill_request_and_stay():
+    assert DEFAULT_WET_SPOTS == [("23:40:00", "corridor-3a"), ("00:25:00", "corridor-2b"),
+                                 ("01:25:00", "corridor-2d"), ("01:27:00", "corridor-2c"),
+                                 ("04:30:00", "corridor-1b")]
+    fake = FakeWybe(requests=[("23:45:00", "R-001", "104 wants a towel.")])  # no spill request at all
+    sim = Sim(fake)
+    sim.start()
+    _to_floor(sim, 3)  # 22:01: nothing wet yet
+    assert not any(e.get("warning") for e in sim("look")["result"]["exits"])
+    fake._now = clock_to_seconds("23:44:00")  # later that night, still on the landing
+    assert any(e["to"] == "corridor-3a" and e.get("warning") for e in sim("look")["result"]["exits"])
+    fake._now = clock_to_seconds("05:59:00")  # it stays wet all night; seen, so it creeps
+    assert sim("move", to="corridor-3a")["result"]["notice"] == "The robot creeps carefully over the wet floor."
+    assert sim.score() == 0 and "corridor-3a" in fake._spots
+
+
+def test_unseen_default_wet_spot_slips_at_the_measured_time():
+    fake = FakeWybe(requests=[])
+    sim = Sim(fake)
+    sim.start()
+    _to_floor(sim, 3)
+    fake._now = clock_to_seconds("23:44:00")
+    assert "slip" in types(sim("move", to="corridor-3a")) and sim.score() == -15
+
+
+def test_bathrobe_man_appears_twice_at_the_measured_times():
+    fake = FakeWybe(requests=[])
+    sim = Sim(fake)
+    sim.start()
+    _to_floor(sim, 2)
+    assert "person" not in types(sim("move", to="corridor-2a"))  # 22:01: not yet
+    sim.walk("elevator-2")
+    fake._now = clock_to_seconds("03:01:00")
+    assert {"type": "person", "text": BATHROBE} in sim("move", to="corridor-2a")["events"]
+    sim.walk("elevator-2")
+    assert "person" not in types(sim("move", to="corridor-2a"))  # once per event
+    sim.walk("elevator-2")
+    fake._now = clock_to_seconds("04:04:00")
+    assert {"type": "person", "text": BATHROBE} in sim("move", to="corridor-2a")["events"]
+    sim.walk("elevator-2")
+    assert "person" not in types(sim("move", to="corridor-2a"))
+
+
+def test_second_tray_for_a_room_never_appears_whatever_the_gap():
+    tray = "Bring the tray from the kitchen pass to 104."
+    fake = FakeWybe(requests=[("22:00:05", "R-001", tray), ("23:30:00", "R-002", tray),
+                              ("23:30:05", "R-003", "Bring the tray from the kitchen pass to 105.")])
+    sim = Sim(fake)
+    sim.start()
+    sim.wait_for_request()  # 22:00:05
+    sim.wait_for_request()  # 23:30:00
+    sim("look")  # R-003 arrives
+    assert fake._objects["kitchen-pass"] == {"tray-104": 1, "tray-105": 1}
+    assert fake._requests["R-002"].dup_of == "R-001"
+
+
+def test_lost_items_with_numbered_ids_and_late_availability():
+    fake = FakeWybe(requests=[("02:28:00", "R-001", "Guest in 104 lost a child's toy, maybe the lobby bar.")],
+                    hidden={"toy-3": ("lobby-bar", "02:30:00")})
+    sim = Sim(fake)
+    sim.start()
+    sim.wait_for_request()
+    sim.walk("lobby", "lobby-bar")
+    assert sim("scan")["result"] == "Nothing hidden here."  # 02:29: not there yet
+    fake._now = clock_to_seconds("02:30:00")
+    assert sim("scan")["result"]["found"] == ["toy-3"]
+    sim("pick", item="toy-3")
+    sim.walk("lobby", "corridor-1a", "corridor-1b")
+    sim("knock", door="room-104")
+    sim("place", item="toy-3", where="room-104")
+    assert sim.score() > 40 and fake._requests["R-001"].completed
+
+
+def test_default_hidden_items_match_the_live_night():
+    fake = FakeWybe()
+    assert fake._hidden["glasses"] == "corridor-1b"
+    assert fake._hidden["toy"] == "kitchen-pass" and fake._hidden["wallet"] == "kitchen-pass"
+    assert fake._hidden["toy-2"] == "corridor-1a"
+    assert fake._hidden["toy-3"] == ("lobby-bar", "02:30:00")
+    assert "glasses-2" not in fake._hidden  # Ms Nygaard's were never found
+
+
+def test_hotel_override_changes_metres_and_stock():
+    import json
+
+    from agent.world import DEFAULT_MAP
+
+    data = json.loads(DEFAULT_MAP.read_text())
+    for e in data["edges"]:
+        if {e["a"], e["b"]} == {"charging-dock", "lobby"}:
+            e["m"] = 6
+    data["stock"]["laundry"]["water-bottle"] = data["stock"]["storage"].pop("water-bottle")
+    sim = Sim(FakeWybe(hotel=data))
+    sim.start()
+    assert sim("move", to="lobby")["clock"] == "22:00:06"
+    sim.walk("corridor-1a", "corridor-1b", "laundry")
+    assert "water-bottle x8" in sim("look")["result"]["objects"]

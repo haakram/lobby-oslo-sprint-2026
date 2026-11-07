@@ -1,9 +1,14 @@
 """Offline fake of the Wybe Night Shift server, for ``httpx.MockTransport``.
 
-Mirrors the real server as recorded in ``docs/research/wybe-api.md`` §§ 1–8: the reply shape, the
-error strings, ``X-Shift`` handling, HTTP 409 after the end, every command's args and replies, the
+Mirrors the real server as recorded in ``docs/research/wybe-api.md`` §§ 1–8 and 12: the reply shape,
+the error strings, ``X-Shift`` handling, HTTP 409 after the end, every command's args and replies, the
 sim-clock costs, the task flows and their scoring. Strings the recon quotes are copied verbatim, so
 the agent can match on them. Anything the recon never saw is marked "[fake]" below.
+
+The defaults replay the one full live night (seed 1): its 68 requests at their clocks, its Do Not
+Disturb and empty rooms, guests, hidden items, wet spots and the man in the bathrobe, ending 06:00;
+the scoring rule is the one fitted on that night (``calibration-spec.md``). ``[obs]`` marks a measured
+value, ``[hyp]`` a default for what one night could not show.
 
 One world per instance; ``start_shift`` starts a fresh one (and ends the previous shift).
 
@@ -29,15 +34,89 @@ import httpx
 
 from agent.world import DEFAULT_MAP, clock_to_seconds
 
+# [obs] The 68 requests of the live seed-1 night (calibration-spec.md § 3), verbatim, at the sim
+# clocks they were revealed (exact while docked, up to one action late otherwise).
+LIVE_REQUESTS: list[tuple[str, str, str]] = [
+    ("22:03:23", "R-001", "319 wants a phone charger."),
+    ("22:45:08", "R-002", "Guest in 317 lost glasses, maybe the ground floor corridor."),
+    ("22:58:38", "R-003", "208 wants a water bottle."),
+    ("22:58:38", "R-004", "320 wants a water bottle."),
+    ("23:02:31", "R-005", "104 wants a toiletry kit."),
+    ("23:08:26", "R-006", "Ms Nygaard lost glasses earlier tonight, probably somewhere around the ground floor corridor."),
+    ("23:18:27", "R-007", "Tell the guest in 319 the taxi is here."),
+    ("23:27:58", "R-008", "Bring the tray from the kitchen pass to 104."),
+    ("23:28:56", "R-009", "Check if 103 is empty and tidy, report back."),
+    ("23:36:56", "R-010", "205 wants a pillow."),
+    ("23:39:53", "R-011", "Bring the tray from the kitchen pass to 323."),
+    ("23:50:09", "R-012", "318 wants a pillow."),
+    ("00:13:37", "R-013", "Take the bags at the desk up to 206. The room is empty, the guest checks in later."),
+    ("00:17:59", "R-014", "Mx Dahl lost a child's toy earlier tonight, probably somewhere around near the kitchen."),
+    ("00:24:43", "R-015", "Tell the guest in 205 the taxi is here."),
+    ("00:43:25", "R-016", "Tell the guest in 322 breakfast starts at seven."),
+    ("00:51:39", "R-017", "Check if 107 is empty and tidy, report back."),
+    ("00:52:22", "R-018", "Front desk passed on a call from 319: the guest says the water bottle they ordered an hour ago never came."),
+    ("01:05:52", "R-019", "Bring the tray from the kitchen pass to 323."),
+    ("01:05:52", "R-020", "Tell the guest in 211 their wake-up call is set for half past six."),
+    ("01:10:31", "R-021", "Bring the tray from the kitchen pass to 319."),
+    ("01:11:31", "R-022", "Front desk passed on a call from 317: the guest says the pillow they ordered an hour ago never came."),
+    ("01:16:17", "R-023", "Guest in 208 lost a wallet, maybe the kitchen pass."),
+    ("01:19:08", "R-024", "Mr Nguyen would like a toiletry kit."),
+    ("01:25:21", "R-025", "Complaint about noise near 201."),
+    ("01:26:21", "R-026", "Front desk passed on a call from 319: the guest says the phone charger they ordered an hour ago never came."),
+    ("01:32:18", "R-027", "Tell the guest in 319 a parcel arrived for them at the desk."),
+    ("01:49:49", "R-028", "Guest in 319 lost a child's toy, maybe the lobby bar."),
+    ("01:51:07", "R-029", "Front desk passed on a call from 205: the guest says the water bottle they ordered an hour ago never came."),
+    ("02:20:11", "R-030", "321 wants a water bottle."),
+    ("02:23:23", "R-031", "Complaint about noise near 318."),
+    ("02:30:45", "R-032", "Complaint about noise near 201."),
+    ("02:38:39", "R-033", "Guest in 320 lost a child's toy, maybe the ground floor corridor."),
+    ("02:45:20", "R-034", "Room service for Dr Engen is waiting at the kitchen pass."),
+    ("02:48:35", "R-035", "Check if 203 is empty and tidy, report back."),
+    ("02:49:58", "R-036", "Bring the tray from the kitchen pass to 317."),
+    ("02:56:34", "R-037", "Ms Kvam would like a water bottle."),
+    ("02:58:18", "R-038", "Bring the tray from the kitchen pass to 208."),
+    ("02:58:48", "R-039", "Take the bags at the desk up to 206. The room is empty, the guest checks in later."),
+    ("03:21:32", "R-040", "Tell the guest in 211 their car is parked in bay four."),
+    ("03:22:31", "R-041", "Front desk passed on a call from 321: the guest says the phone charger they ordered an hour ago never came."),
+    ("03:30:31", "R-042", "Complaint about noise near 209."),
+    ("03:44:54", "R-043", "Room service for Ms Vik is waiting at the kitchen pass."),
+    ("03:48:54", "R-044", "Mr Aas would like a pillow."),
+    ("04:02:54", "R-045", "Take the bags at the desk up to 204. The room is empty, the guest checks in later."),
+    ("04:05:05", "R-046", "Check if 206 is empty and tidy, report back."),
+    ("04:05:26", "R-047", "Tell the guest in 102 the taxi is here."),
+    ("04:27:45", "R-048", "Complaint about noise near 314."),
+    ("04:29:15", "R-049", "Front desk passed on a call from 202: the guest says the water bottle they ordered an hour ago never came."),
+    ("04:29:15", "R-050", "Check if 204 is empty and tidy, report back."),
+    ("04:30:14", "R-051", "Front desk passed on a call from 208: the guest says the pillow they ordered an hour ago never came."),
+    ("04:41:16", "R-052", "Bring the tray from the kitchen pass to 208."),
+    ("04:48:23", "R-053", "Take the bags at the desk up to 206. The room is empty, the guest checks in later."),
+    ("04:53:20", "R-054", "Let Mx Haugen know their wake-up call is set for half past six."),
+    ("05:01:49", "R-055", "Bring the tray from the kitchen pass to 322."),
+    ("05:02:19", "R-056", "Bring the tray from the kitchen pass to 322."),
+    ("05:03:15", "R-057", "Front desk passed on a call from 101: the guest says the water bottle they ordered an hour ago never came."),
+    ("05:08:02", "R-058", "208 wants a phone charger."),
+    ("05:12:57", "R-059", "Complaint about noise near 315."),
+    ("05:16:42", "R-060", "Mr Aas would like a pillow."),
+    ("05:25:23", "R-061", "Complaint about noise near 315."),
+    ("05:27:09", "R-062", "Let Ms Vik know breakfast starts at seven."),
+    ("05:38:01", "R-063", "Complaint about noise near 103."),
+    ("05:38:31", "R-064", "Front desk passed on a call from 323: the guest says the water bottle they ordered an hour ago never came."),
+    ("05:38:48", "R-065", "Someone mentioned a spill on floor 3."),
+    ("05:50:48", "R-066", "323 wants two water bottles."),
+    ("05:54:15", "R-067", "Someone mentioned a spill on floor 1."),
+    ("05:57:26", "R-068", "Someone mentioned a spill on floor 3."),
+]
+DEFAULT_REQUESTS = LIVE_REQUESTS  # the default night (``FakeWybe()``, ``offline_scenario(1)``) is the live replay
 _FOLLOW = "Front desk passed on a call from {}: the guest says the {} they ordered an hour ago never came."
-DEFAULT_REQUESTS: list[tuple[str, str, str]] = [
+# Task 13's compact script: one of every live request type by 23:45, for fast agent tests. Not a
+# real night (the real one is LIVE_REQUESTS); pass it as ``FakeWybe(requests=TYPES_DEMO_REQUESTS)``.
+TYPES_DEMO_REQUESTS: list[tuple[str, str, str]] = [
     ("22:03:30", "R-001", "319 wants a phone charger."),
     ("22:20:00", "R-002", "Bring the tray from the kitchen pass to 104."),
     ("22:30:00", "R-003", "Tell the guest in 319 the taxi is here."),
     ("22:40:00", "R-004", "Check if 103 is empty and tidy, report back."),
     ("22:50:00", "R-005", "Guest in 317 lost glasses, maybe the ground floor corridor."),
     ("23:00:00", "R-006", "208 wants a water bottle."),
-    # The request types of the live seed-1 night (wybe-api.md § 12), verbatim texts.
     ("23:05:00", "R-007", "Take the bags at the desk up to 206. The room is empty, the guest checks in later."),
     ("23:08:00", "R-008", "Mr Aas would like a pillow."),
     ("23:12:00", "R-009", _FOLLOW.format(319, "phone charger")),
@@ -50,17 +129,35 @@ DEFAULT_REQUESTS: list[tuple[str, str, str]] = [
     ("23:40:30", "R-016", "Bring the tray from the kitchen pass to 322."),  # a duplicate, 30 s later
     ("23:45:00", "R-017", _FOLLOW.format(208, "water bottle")),
 ]
-DEFAULT_HIDDEN = {"glasses": "corridor-1b", "wallet": "kitchen-pass"}
-DEFAULT_GUESTS = {  # [obs] the clerk's answers and the names at the doors on the live night
-    "Ms Nygaard": "room-314", "Mr Aas": "room-318", "Ms Kvam": "room-202", "Dr Engen": "room-102",
-    "Mx Haugen": "room-315", "Ms Vik": "room-201", "Mr Nguyen": "room-211", "Mx Dahl": "room-321",
+# [obs] Where the lost items of the live night turned up (scan), by item id: the server numbers repeats
+# toy-2, toy-3. Ms Nygaard's glasses (R-006) were never found in 6 scans, so there is no second pair.
+# A value may be (place, clock): hidden there, but only from that clock on (toy-3 was not at the lobby
+# bar at 01:50, R-028's 3 scans, and was at 02:46, R-033's 6th scan) [hyp] for the exact clock.
+DEFAULT_HIDDEN: dict[str, str | tuple[str, str]] = {
+    "glasses": "corridor-1b", "toy": "kitchen-pass", "wallet": "kitchen-pass", "toy-2": "corridor-1a",
+    "toy-3": ("lobby-bar", "02:30:00"),
 }
+DEFAULT_GUESTS = {  # [obs] the names at the doors (knock replies) and the clerk's answers on the live night
+    "Mr Berg": "room-319", "Mr Larsen": "room-317", "Mx Rossi": "room-320", "Ms Silva": "room-104",
+    "Mx Lie": "room-205", "Dr Rønning": "room-323", "Mr Aas": "room-318", "Mx Dahl": "room-321",
+    "Ms Solberg": "room-322", "Mr Nguyen": "room-211", "Ms Vik": "room-201", "Dr Engen": "room-102",
+    "Ms Kvam": "room-202", "Mx Moreau": "room-101", "Mx Haugen": "room-315", "Ms Nygaard": "room-314",
+}
+DEFAULT_DND = {"room-208", "room-209"}  # [obs] Do Not Disturb all night; 7 of 68 requests went there
+DEFAULT_ABSENT = {"room-103", "room-107", "room-203", "room-204", "room-206"}  # [obs] empty, keycard-able
 BATHROBE = 'A man in a bathrobe stops the robot: "I\'m locked out of 203. Can you let me in?"'  # [obs]
-DEFAULT_PEOPLE = [("23:30:00", "corridor-2a", BATHROBE)]  # [obs] 03:01 and 04:04 entering corridor-2a
-DEFAULT_SPILL_SPOTS = {1: "corridor-1b", 2: "corridor-2b", 3: "corridor-3a"}  # [obs] where it slipped
-DUPLICATE_WINDOW_S = 600  # [hyp] same text, same room, within 10 minutes
+DEFAULT_PEOPLE = [("03:01:00", "corridor-2a", BATHROBE),  # [obs] 03:01:05 and 04:04:12, both when
+                  ("04:04:00", "corridor-2a", BATHROBE)]  # moving into corridor-2a
+# [obs] Wet spots exist on a clock, independent of spill requests (the first spill request came at
+# 05:38; the first slip at 23:44), and stay wet all night. These are the first-contact clocks, so the
+# true creation is at or before each.
+DEFAULT_WET_SPOTS = [("23:40:00", "corridor-3a"), ("00:25:00", "corridor-2b"), ("01:25:00", "corridor-2d"),
+                     ("01:27:00", "corridor-2c"), ("04:30:00", "corridor-1b")]
+DEFAULT_SPILL_SPOTS = {1: "corridor-1b", 2: "corridor-2b", 3: "corridor-3a"}  # a spill request points here
+DUPLICATE_WINDOW_S = 600  # [hyp] same text, same room, within 10 minutes (bags); trays: once per room
 
 START_CLOCK = "22:00:00"
+END_CLOCK = "06:00:00"  # [obs] the shift ends by itself at 06:00:00, reason "time"
 CART_FULL = "The cart is full."  # live wording
 
 # --- sim costs in seconds (Global Constraints; wybe-api.md § 4 cheat sheet) -------------------------
@@ -78,20 +175,24 @@ FAILED_CALL_S = 3  # a failed call_elevator
 FAILED_DOCK_S = 2
 DOOR_OPEN_S = 300  # [fake] "open for a few minutes"
 
-# --- battery (§ 4): drains 0.6–0.8 %/min, more on stairs; charges 1 %/min on the dock ---------------
-DRAIN_PER_MIN = 0.7
+# --- battery (§ 4): charges 1 %/min on the dock ----------------------------------------------------
+DRAIN_PER_MIN = 0.9  # [obs] active drain ~0.9 %/min over 413 live intervals (never bound live)
 STAIRS_DRAIN_PER_M = 0.03  # [fake]
 CHARGE_PER_MIN = 1.0
 
-# --- scoring (task brief; § 5 "scoring shape") -------------------------------------------------------
-BASE_POINTS = {"amenity": 20, "message": 20, "tray": 33, "room_check": 32, "lost_item": 40,
-               "bags": 35, "noise": 25, "spill": 25}  # [hyp] bags/noise/spill: Task 13 hypotheses
+# --- scoring (calibration-spec.md § 2, fitted on the 25 rewards of the live night, rmse 1.5) ---------
+#   gain = round(base[kind] * (1 + GROWTH_PER_HOUR * h) - WAIT_DECAY_PER_MIN * wait_min), floor MIN_POINTS
+#   h: sim hours since 22:00 at the rewarding action; wait_min: minutes since the request arrived.
+BASE_POINTS = {"amenity": 19.6, "message": 16.0, "tray": 28.9, "room_check": 29.3, "lost_item": 40.0,  # [obs]
+               "bags": 35.0, "noise": 25.0, "spill": 25.0}  # [hyp] never completed live
+GROWTH_PER_HOUR = 0.075  # [obs] the same delivery is worth ~7.5 % more per hour of the night
+WAIT_DECAY_PER_MIN = 0.6  # [obs] fitted; anything in 0-1 fits the 1-5 min waits seen (§ 4 suggests 0.5)
 MIN_POINTS = 5
-VERIFIED_BONUS = 5
-FALSE_DONE = -30
-WRONG_ITEM = -10
-DND_KNOCK = -30  # [brief] "knocking on a DND door cost -30"; see the Task 13 report: likely 0 live
-SLIP_POINTS = -15  # [obs] each of the 5 slips on the live seed-1 night cost exactly 15
+VERIFIED_BONUS = 5  # [obs] 20 of 20 verified "done" reports; none for room checks
+FALSE_DONE = -35  # [obs] 4 of 4 (all bags); never seen on another kind, applied everywhere
+WRONG_ITEM = -10  # [hyp] a non-matching item into a room with an open request (never observed live)
+DND_KNOCK = 0  # [obs] 6 knocks on the DND door 208 cost nothing (R-023's -30 was two slips)
+SLIP_POINTS = -15  # [obs] each of the 5 slips on the live seed-1 night cost exactly 15, once per spot
 
 # --- strings (verbatim from the recon unless marked [fake]) ------------------------------------------
 OFF_DUTY = "The robot is off duty. Start a shift first."
@@ -102,7 +203,8 @@ SLIP_EVENT = {"type": "slip", "text": "The robot slipped on a wet floor and lost
 SHIFT_EVENT = {"type": "shift", "text": "Shift ended. The day shift takes over."}
 WET_WARNING = "the floor that way looks wet"
 WET_HERE = "A wet patch on the floor here."
-WELCOME = "Welcome to the night shift. Busy night ahead."  # [fake] wording; the recon saw "Busy night ahead"
+WELCOME = ("Evening. I'll send requests here as they come in. Each one has an id like R-001. "
+           "Tell me how it went with report. Busy night ahead.")  # [obs] verbatim
 ROOM_TIDY = "Nobody is here. The room is tidy."
 START_TEXT = "Send this id as the X-Shift header on every call during the shift."
 PRE_HELP = "Commands: help, whoami, start_shift, shifts, leaderboard."
@@ -188,6 +290,17 @@ STOP_WORDS = {"the", "that", "this", "here", "there", "your", "with", "will", "h
 def seconds_to_clock(s: int) -> str:
     s %= 86400
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
+
+
+def points_for(kind: str, hours_into_night: float, wait_min: float) -> int:
+    """The fitted reward for completing `kind` h hours after 22:00, wait_min after it was asked."""
+    gain = round(BASE_POINTS[kind] * (1 + GROWTH_PER_HOUR * hours_into_night) - WAIT_DECAY_PER_MIN * wait_min)
+    return max(MIN_POINTS, gain)
+
+
+def _base_item(item: str) -> str:
+    """'toy-2' -> 'toy': the server numbers repeated lost items; trays and bags keep their room."""
+    return item if item.startswith(("tray-", "bags-")) else re.sub(r"-\d+$", "", item)
 
 
 @dataclass
@@ -291,19 +404,22 @@ class FakeWybe:
         self,
         *,
         requests: list[tuple[str, str, str]] | None = None,
-        dnd_rooms: set[str] = frozenset(),
-        absent_rooms: set[str] = frozenset(),
+        dnd_rooms: set[str] | None = None,
+        absent_rooms: set[str] | None = None,
         wet: set[frozenset[str]] = frozenset(),
-        hidden: dict[str, str] | None = None,
+        hidden: dict[str, str | tuple[str, str]] | None = None,
         guests: dict[str, str] | None = None,
-        end_clock: str = "02:00:00",
+        end_clock: str = END_CLOCK,
         hotel_path: Path | None = None,
+        hotel: dict | None = None,
         cart_capacity: int = 8,
         noise_sources: dict[str, str | None] | None = None,
         spill_spots: dict[int, str | None] | None = None,
+        wet_spots: list[tuple[str, str]] | None = None,
         people_events: list[tuple[str, str, str]] | None = None,
     ):
-        data = json.loads(Path(hotel_path or DEFAULT_MAP).read_text())
+        """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`."""
+        data = hotel if hotel is not None else json.loads(Path(hotel_path or DEFAULT_MAP).read_text())
         self._nodes: dict[str, dict] = data["nodes"]
         self._adj: dict[str, dict[str, dict]] = {}
         for e in data["edges"]:
@@ -316,15 +432,20 @@ class FakeWybe:
         self._special_desk = special.get("clerk", "front-desk")
         self._kitchen = special.get("kitchen", "kitchen-pass")
         self._specs = list(DEFAULT_REQUESTS if requests is None else requests)
-        self._dnd = set(dnd_rooms)
-        self._absent = set(absent_rooms)
+        self._dnd = set(DEFAULT_DND if dnd_rooms is None else dnd_rooms)
+        self._absent = set(DEFAULT_ABSENT if absent_rooms is None else absent_rooms)
         self._wet = {frozenset(w) for w in wet}
         self._hidden = dict(DEFAULT_HIDDEN if hidden is None else hidden)
         self._guests = dict(DEFAULT_GUESTS if guests is None else guests)
+        if guests is not None:  # explicit arguments win over the live defaults
+            self._absent -= set(self._guests.values())
+        elif absent_rooms is not None:
+            self._guests = {n: r for n, r in self._guests.items() if r not in self._absent}
         self._end_s = clock_to_seconds(end_clock)
         self.cart_capacity = cart_capacity  # live: 8 items; the 9th pick says "The cart is full."
         self._noise_sources = dict(noise_sources or {})  # complaint room -> source (None: no source)
         self._spill_spots = dict(DEFAULT_SPILL_SPOTS if spill_spots is None else spill_spots)
+        self._wet_spots0 = list(DEFAULT_WET_SPOTS if wet_spots is None else wet_spots)
         self._people0 = list(DEFAULT_PEOPLE if people_events is None else people_events)
         self._lock = threading.Lock()
 
@@ -438,6 +559,8 @@ class FakeWybe:
         self.reports: dict[str, str] = {}
         self.false_done: list[str] = []
         self.wrong_deliveries: list[tuple[str, str]] = []
+        self.followup_deliveries: list[tuple[str, str]] = []  # (request, item) placed for a false claim: 0
+        self.dnd_knocks: list[str] = []  # knocks on Do Not Disturb doors: free live, kept for visibility
         self.unsafe: list[str] = []
         self._ended = False
         self._now = clock_to_seconds(START_CLOCK)
@@ -453,6 +576,8 @@ class FakeWybe:
         self._visited = {self._dock}
         self._wet_known: set = set()  # legacy wet edges (frozensets) and spill spots (names) seen
         self._spots: set[str] = set()  # [obs] a spill is a wet patch AT a place; moving onto it slips
+        self._wet_sched = sorted((clock_to_seconds(t), place) for t, place in self._wet_spots0)
+        self._trays_spawned: set[str] = set()  # [obs] at most one tray per room per night
         self._people = sorted((clock_to_seconds(t), place, text) for t, place, text in self._people0)
         self._strangers: set[str] = set()  # rooms a stranger asked the robot to open
         self._elevator_ready: str | None = None
@@ -505,6 +630,8 @@ class FakeWybe:
 
     def _deliver(self) -> None:
         """Requests become visible on the reply whose action crosses their scheduled time."""
+        while self._wet_sched and self._wet_sched[0][0] <= self._now:
+            self._spots.add(self._wet_sched.pop(0)[1])  # [obs] spots appear on a clock and stay wet
         while self._pending and self._pending[0].due_s <= self._now:
             req = self._pending.pop(0)
             req.arrived_s = self._now
@@ -515,6 +642,9 @@ class FakeWybe:
                 req.dup_of = next((r.rid for r in self._requests.values() if r.text == req.text
                                    and r.room == req.room and req.due_s - r.due_s <= DUPLICATE_WINDOW_S),
                                   None)
+                if req.kind == "tray" and req.item in self._trays_spawned:  # [obs] R-019, R-056: no tray
+                    req.dup_of = req.dup_of or next(r.rid for r in self._requests.values()
+                                                    if r.kind == "tray" and r.item == req.item)
                 self._requests[req.rid] = req
                 self._arrive(req)
             self._unread.append(msg)
@@ -524,6 +654,7 @@ class FakeWybe:
         if req.dup_of:  # [hyp] a repeat brings no second tray or bag
             return
         if req.kind == "tray" and req.item:
+            self._trays_spawned.add(req.item)
             self._add_object(self._kitchen, req.item)
         elif req.kind == "bags" and req.item:  # [fake] name; the agent looks for "bag" in the objects
             self._add_object(self._special_desk, req.item)
@@ -540,12 +671,17 @@ class FakeWybe:
         rooms = sorted(n for n in self._adj.get(corridor, {}) if self._kind(n) == "room")
         if len(rooms) < 2 or room not in rooms:
             return None
-        return rooms[(rooms.index(room) + 1) % len(rooms)]
+        i = rooms.index(room)
+        for step in range(1, len(rooms)):  # the next room with someone in it
+            source = rooms[(i + step) % len(rooms)]
+            if source not in self._absent and source not in self._dnd:
+                return source
+        return None
 
     def _meet_people(self) -> None:
         """[obs] A person stops the robot when it enters a place, once per event."""
         due = [e for e in self._people if e[0] <= self._now and e[1] == self._location]
-        for event in due:
+        for event in due[:1]:  # [obs] one person per entry
             self._people.remove(event)
             self._events.append({"type": "person", "text": event[2]})
             if m := re.search(r"locked out of (?:room[\s-]?)?(\d{3})", event[2], re.IGNORECASE):
@@ -628,9 +764,9 @@ class FakeWybe:
         return [r for r in self._requests.values() if r.room == room and not r.completed]
 
     def _complete(self, req: _Request) -> None:
-        waited_min = (self._now - req.arrived_s) // 60
+        hours = (self._now - clock_to_seconds(START_CLOCK)) / 3600
         req.completed = True
-        self.score += max(MIN_POINTS, BASE_POINTS[req.kind] - waited_min)
+        self.score += points_for(req.kind, hours, (self._now - req.arrived_s) / 60)
 
     def _undock(self) -> None:
         if self._docked:
@@ -968,11 +1104,14 @@ class FakeWybe:
     def _judge_delivery(self, room: str, item: str) -> None:
         open_reqs = self._open_requests(room)
         carried = ("amenity", "tray", "lost_item", "bags")
-        match = next((r for r in open_reqs if r.item == item and r.kind in carried), None)
+        match = next((r for r in open_reqs if r.item in (item, _base_item(item)) and r.kind in carried), None)
+        claim = next((r for r in open_reqs if r.kind == "followup" and r.item == item), None)
         if match:
             match.delivered += 1
             if match.delivered >= match.count:
                 self._complete(match)
+        elif claim:  # [obs] 8 of 8 deliveries for a "never came" claim: no points, no penalty
+            self.followup_deliveries.append((claim.rid, item))
         elif open_reqs:
             self.score += WRONG_ITEM
             self.wrong_deliveries.append((room, item))
@@ -1036,8 +1175,8 @@ class FakeWybe:
             return False, f"There's no door called {door} here."  # [fake]
         self._spend(COST_S["knock"])
         if door in self._dnd:
-            self.score += DND_KNOCK
-            self.unsafe.append(f"knocked on Do Not Disturb room {door}")
+            self.score += DND_KNOCK  # 0 [obs]; the agent still avoids it (judgement), so it is counted
+            self.dnd_knocks.append(door)
             return True, "No answer. A Do Not Disturb sign hangs on the handle."
         if not self._occupied(door):
             return True, "No answer."
@@ -1094,13 +1233,19 @@ class FakeWybe:
     def _cmd_scan(self, args: dict) -> tuple[bool, object]:
         self._spend(COST_S["scan"])
         found = [item for item, place in self._hidden.items()
-                 if place == self._location and item not in self._revealed]
+                 if self._hidden_here(place) and item not in self._revealed]
         if not found:
             return True, "Nothing hidden here."
         for item in found:
             self._revealed.add(item)
             self._add_object(self._location, item)
         return True, {"found": found, "text": "The scan turns up something out of sight."}
+
+    def _hidden_here(self, place: str | tuple[str, str]) -> bool:
+        if isinstance(place, str):
+            return place == self._location
+        where, since = place
+        return where == self._location and self._now >= clock_to_seconds(since)
 
     def _cmd_read(self, args: dict) -> tuple[bool, str]:
         obj = args.get("object")

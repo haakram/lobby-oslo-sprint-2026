@@ -1,6 +1,7 @@
 """Benchmark and parameter search against the offline fake (no network)."""
 
 import inspect
+import itertools
 import json
 from dataclasses import replace
 from pathlib import Path
@@ -175,3 +176,178 @@ def test_offline_scenario_has_the_live_types_after_midnight():
     assert NEW_KINDS <= after
     assert not NEW_KINDS & before  # the recon never saw them before ~00:13
     assert named >= 3
+
+
+# --- Task 15: calibrated nights (calibration-spec.md) ---------------------------------------------------
+
+
+def test_bench_and_tune_default_to_a_full_night_ending_06(monkeypatch, capsys):
+    assert bench.OFFLINE_END == "06:00:00"
+    assert inspect.signature(run_bench).parameters["sim_end"].default == "06:00:00"
+    seen = {}
+
+    def fake_bench(factory, seeds, *, parallel=5, params=None, sim_end="bad"):
+        seen["sim_end"] = sim_end
+        return BenchResult(scores={s: 1 for s in seeds}, params=params or Params())
+
+    monkeypatch.setattr(bench, "run_bench", fake_bench)
+    assert main(["bench", "--seeds", "1-2"]) == 0
+    assert seen["sim_end"] == "06:00:00"
+    capsys.readouterr()
+
+
+def test_offline_scenario_seed_1_is_the_live_replay():
+    from agent.offline import (
+        DEFAULT_ABSENT,
+        DEFAULT_DND,
+        DEFAULT_GUESTS,
+        DEFAULT_HIDDEN,
+        DEFAULT_PEOPLE,
+        DEFAULT_WET_SPOTS,
+        LIVE_REQUESTS,
+    )
+
+    sc = offline_scenario(1)
+    assert sc["requests"] == list(LIVE_REQUESTS) and len(sc["requests"]) == 68
+    assert sc["dnd_rooms"] == DEFAULT_DND and sc["absent_rooms"] == DEFAULT_ABSENT
+    assert sc["guests"] == DEFAULT_GUESTS and sc["hidden"] == DEFAULT_HIDDEN
+    assert sc["wet_spots"] == DEFAULT_WET_SPOTS and sc["people_events"] == DEFAULT_PEOPLE
+    assert [t for t, _, _ in sc["people_events"]] == ["03:01:00", "04:04:00"]
+    assert sc["end_clock"] == "06:00:00" and sc.get("hotel") is None
+    assert offline_scenario(1, "02:00:00")["end_clock"] == "02:00:00"
+    FakeWybe(**sc)
+
+
+def _kinds(sc):
+    return [(t, parse_request(rid, text, t)) for t, rid, text in sc["requests"]]
+
+
+def test_generated_nights_match_the_live_rate_and_mix():
+    from agent.offline import DEFAULT_ABSENT, DEFAULT_GUESTS
+
+    seeds = range(2, 32)
+    counts, hourly, dnd, real_follow, follow, named, same_sec, short_gap, gaps = [], [0] * 8, 0, 0, 0, 0, 0, 0, 0
+    texts: list[str] = []
+    for seed in seeds:
+        sc = offline_scenario(seed)
+        assert sc["dnd_rooms"] == {"room-208", "room-209"} and sc["absent_rooms"] == DEFAULT_ABSENT
+        assert sc["guests"] == DEFAULT_GUESTS and sc["end_clock"] == "06:00:00"
+        assert [p for _, p in sc["wet_spots"]] == ["corridor-3a", "corridor-2b", "corridor-2d", "corridor-2c",
+                                                   "corridor-1b"]
+        assert len(sc["people_events"]) == 2 and all(p == "corridor-2a" for _, p, _ in sc["people_events"])
+        tasks = _kinds(sc)
+        counts.append(len(tasks))
+        secs = [clock_to_seconds(t) for t, _ in tasks]
+        assert secs == sorted(secs) and clock_to_seconds("22:02:30") <= secs[0] <= clock_to_seconds("22:04:30")
+        assert secs[1] - secs[0] >= 20 * 60  # a quiet opening, as live (41 min)
+        for s in secs:
+            hourly[(s - clock_to_seconds("22:00:00")) // 3600] += 1
+        for a, b in itertools.pairwise(secs):
+            gaps += 1
+            same_sec += b == a
+            short_gap += b - a <= 60
+        orders = set()
+        for t, task in tasks:
+            assert task.kind is not Kind.UNKNOWN, task.text
+            texts.append(task.text)
+            if task.room in ("room-208", "room-209"):
+                dnd += 1
+            if task.kind in (Kind.ROOM_CHECK, Kind.BAGS):
+                assert task.room in DEFAULT_ABSENT, task.text
+            if task.kind is Kind.AMENITY and task.room:
+                orders.add((task.room, task.item))
+            if task.kind is Kind.FOLLOWUP:
+                follow += 1
+                real_follow += (task.room, task.item) in orders
+            if task.guest:
+                named += 1
+                assert task.guest in DEFAULT_GUESTS
+        FakeWybe(**sc)
+    n = sum(counts)
+    assert 58 <= n / len(counts) <= 78, counts  # ~68 a night, 8.5/h
+    assert all(45 <= c <= 95 for c in counts), counts
+    live = [4, 8, 6, 11, 10, 5, 10, 14]
+    for h, (got, want) in enumerate(zip(hourly, live, strict=True)):
+        assert 0.6 * want <= got / len(counts) <= 1.4 * want, (h, got / len(counts), want)
+    assert 0.06 <= dnd / n <= 0.15  # the two DND rooms take ~10 % of the requests
+    assert 0.02 <= same_sec / gaps <= 0.08 and 0.08 <= short_gap / gaps <= 0.24  # live: 4.5 %, 12 % (n=67)
+    assert follow / n >= 0.08 and real_follow / follow <= 0.3  # 8 of 9 live claims were false
+    assert 0.07 <= named / n <= 0.20
+    joined = " ".join(texts)
+    assert "towel" not in joined and "breakfast is ready" not in joined and "car has arrived" not in joined
+    for phrase in ("the taxi is here", "breakfast starts at seven", "wake-up call is set for half past six",
+                   "a parcel arrived for them at the desk", "their car is parked in bay four",
+                   "wants two water bottles", "lost a child's toy", "lost a wallet", "Room service for",
+                   "earlier tonight, probably somewhere around"):
+        assert phrase in joined, phrase
+
+
+def test_generated_lost_items_are_half_findable_with_numbered_ids():
+    findable = unfindable = 0
+    for seed in range(2, 22):
+        sc = offline_scenario(seed)
+        lost = [task for _, task in _kinds(sc) if task.kind is Kind.LOST_ITEM]
+        ids = {k.split("-")[0] if not k.startswith("toy-") else "toy" for k in sc["hidden"]}
+        for task in lost:
+            base = task.item if task.item in ("glasses", "wallet", "toy") else "toy"
+            if base in ids:
+                findable += 1
+            else:
+                unfindable += 1
+        for k, place in sc["hidden"].items():
+            spot = place if isinstance(place, str) else place[0]
+            assert spot in ("corridor-1a", "corridor-1b", "corridor-1c", "kitchen-pass", "lobby-bar"), (k, place)
+    assert findable and unfindable
+
+
+def test_seed_2_hotel_is_the_observed_floor_1_layout():
+    sc = offline_scenario(2)
+    hotel = sc["hotel"]
+    metres = {frozenset((e["a"], e["b"])): e["m"] for e in hotel["edges"]}
+    want = {("charging-dock", "lobby"): 6, ("lobby", "front-desk"): 6, ("lobby", "elevator-1"): 10,
+            ("lobby", "corridor-1a"): 12, ("corridor-1a", "corridor-1b"): 16, ("corridor-1b", "corridor-1c"): 18,
+            ("corridor-1a", "staff-room"): 5, ("corridor-1b", "storage"): 4, ("corridor-1b", "laundry"): 6}
+    for (a, b), m in want.items():
+        assert metres[frozenset((a, b))] == m, (a, b)
+    assert hotel["stock"]["storage"] == {"pillow": 5, "toiletry-kit": 6, "phone-charger": 4, "wet-floor-sign": 3}
+    assert hotel["stock"]["laundry"] == {"cart": 1, "towel": 8, "water-bottle": 8}
+    assert hotel["stock"]["front-desk"] == {"keycard": 2}
+    assert offline_scenario(2) == sc
+    fake = FakeWybe(**sc)
+    assert fake._adj["charging-dock"]["lobby"]["m"] == 6
+
+
+def test_other_seeds_vary_metres_and_shuffle_stock_deterministically():
+    import json
+
+    from agent.world import DEFAULT_MAP
+
+    base = json.loads(DEFAULT_MAP.read_text())
+    base_m = {frozenset((e["a"], e["b"])): e for e in base["edges"]}
+    totals = {}
+    for items in base["stock"].values():
+        for item, n in items.items():
+            totals[item] = totals.get(item, 0) + n
+    seen = set()
+    for seed in (3, 4, 5, 17):
+        hotel = offline_scenario(seed)["hotel"]
+        assert hotel["nodes"] == base["nodes"]
+        got = {frozenset((e["a"], e["b"])): e for e in hotel["edges"]}
+        assert got.keys() == base_m.keys()  # same topology
+        changed = 0
+        for key, e in got.items():
+            b = base_m[key]
+            assert e.get("door") == b.get("door") and e.get("stairs") == b.get("stairs")
+            assert 1 <= e["m"] and 0.55 * b["m"] <= e["m"] <= 1.45 * b["m"], (key, e["m"], b["m"])
+            changed += e["m"] != b["m"]
+        assert changed >= len(got) // 3
+        seen.add(tuple(sorted(hotel["stock"]["storage"].items())))
+        got_totals = {}
+        for items in hotel["stock"].values():
+            for item, n in items.items():
+                got_totals[item] = got_totals.get(item, 0) + n
+        assert got_totals == totals
+        assert hotel["stock"]["laundry"]["cart"] == 1 and hotel["stock"]["front-desk"] == {"keycard": 2}
+        assert set(hotel["stock"]) == {"storage", "laundry", "front-desk"}
+        assert offline_scenario(seed)["hotel"] == hotel
+    assert len(seen) >= 2  # the shelves differ between seeds

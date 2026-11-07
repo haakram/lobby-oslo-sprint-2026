@@ -5,6 +5,12 @@ import { PAGES, ROLES, ROUTES_BY_ROLE, canAccess, isRole, roleLabel, type Role }
 // Every page and API the app has today, and who may open it (auth brief, "Roles and access").
 const MATRIX: Record<string, Record<Role, boolean>> = {
   "/": { admin: true, receptionist: true, robot: true },
+  "/rom": { admin: true, receptionist: true, robot: true },
+  "/gjester": { admin: true, receptionist: true, robot: false },
+  "/foresporsler": { admin: true, receptionist: true, robot: true },
+  "/vedlikehold": { admin: true, receptionist: false, robot: true },
+  "/lager": { admin: true, receptionist: false, robot: true },
+  "/ansatte": { admin: true, receptionist: true, robot: false },
   "/hotell": { admin: true, receptionist: false, robot: true },
   "/natteskift": { admin: true, receptionist: false, robot: true },
   "/oyne": { admin: true, receptionist: false, robot: true },

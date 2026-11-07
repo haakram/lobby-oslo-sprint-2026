@@ -6,7 +6,7 @@ import { cleaningHref, type RoomView } from "./selectors";
  * Renhold: the rooms the robot's checks marked "må vaskes", and the screen's one primary action,
  * Lag renholdsrute, which hands them to Ruter for the shortest round across floors.
  */
-export function Cleaning({ rooms, className }: { rooms: RoomView[] | null; className?: string }) {
+export function Cleaning({ rooms, primary = false, className }: { rooms: RoomView[] | null; primary?: boolean; className?: string }) {
   const dirty = rooms?.filter((room) => room.status === "ma_vaskes") ?? [];
   const unchecked = rooms?.filter((room) => room.status === "ukjent") ?? [];
 
@@ -55,7 +55,7 @@ export function Cleaning({ rooms, className }: { rooms: RoomView[] | null; class
             <div>
               <Link
                 href={cleaningHref(dirty.map((room) => room.id))}
-                className={cx(buttonClasses("secondary"), "w-full")}
+                className={cx(buttonClasses(primary ? "primary" : "secondary"), "w-full")}
               >
                 Lag renholdsrute
               </Link>

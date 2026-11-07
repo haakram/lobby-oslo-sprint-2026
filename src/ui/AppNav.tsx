@@ -6,7 +6,7 @@ import { useState, useSyncExternalStore } from "react";
 import { useSession } from "@/features/auth/SessionProvider";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
-import { groupsFor, isActive, type NavGroup, type NavItem } from "./nav";
+import { barItemsFor, groupsFor, isActive, type NavGroup, type NavItem } from "./nav";
 import { Sheet } from "./Sheet";
 import { UserPlate } from "./UserPlate";
 
@@ -30,8 +30,8 @@ function readDesktop() {
 }
 
 /**
- * The navigation, grouped by job (Hotellet · Roboten · Resepsjon) and filtered by what the
- * effective role may open. Desktop: a rail on the Natt surface with the user plate bottom-left.
+ * The navigation, grouped by job (Hotellet · Drift · Roboten · Resepsjon, from the module registry)
+ * and filtered by what the effective role may open. Desktop: a rail on the Natt surface with the user plate bottom-left.
  * Phone: a bottom bar with the first screens and Meny, which opens the whole list as a sheet.
  * Hidden on the login page.
  */
@@ -43,7 +43,7 @@ export function AppNav() {
   // Nobody logged in (the login page, the no-access page): no navigation.
   if (!effectiveRole || pathname.startsWith("/login")) return null;
   const groups = groupsFor(effectiveRole);
-  return desktop ? <Rail groups={groups} pathname={pathname} /> : <Bar groups={groups} pathname={pathname} />;
+  return desktop ? <Rail groups={groups} pathname={pathname} /> : <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} />;
 }
 
 function Rail({ groups, pathname }: { groups: NavGroup[]; pathname: string }) {
@@ -58,7 +58,7 @@ function Rail({ groups, pathname }: { groups: NavGroup[]; pathname: string }) {
         <span className="mt-1.5 text-xs text-muted">{HOTEL_NAME}</span>
       </Link>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 pb-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-4">
         {groups.map((group) => (
           <div key={group.label}>
             <p className="px-3 pb-1 text-xs font-medium text-muted">{group.label}</p>
@@ -98,11 +98,9 @@ function RailLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-function Bar({ groups, pathname }: { groups: NavGroup[]; pathname: string }) {
+function Bar({ groups, shown, pathname }: { groups: NavGroup[]; shown: NavItem[]; pathname: string }) {
   const [menu, setMenu] = useState(false);
-  const all = groups.flatMap((group) => group.items);
-  const shown = all.slice(0, BAR_ITEMS);
-  const rest = all.slice(BAR_ITEMS);
+  const rest = groups.flatMap((group) => group.items).filter((item) => !shown.includes(item));
   const restActive = rest.some((item) => isActive(item.href, pathname));
 
   return (
@@ -128,7 +126,7 @@ function Bar({ groups, pathname }: { groups: NavGroup[]; pathname: string }) {
                 >
                   {active && <span aria-hidden="true" className="absolute inset-x-4 top-0 h-0.5 rounded-b-sm bg-accent animate-fade" />}
                   <RegenIcon name={item.icon} size={22} className={active ? "text-accent-text" : undefined} />
-                  <span className="max-w-full truncate px-1">{item.label}</span>
+                  <span className="max-w-full truncate px-1">{item.short}</span>
                 </Link>
               </li>
             );

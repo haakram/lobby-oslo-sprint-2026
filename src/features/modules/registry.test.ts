@@ -1,0 +1,65 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+import { canAccess, PAGES } from "@/features/auth/roles";
+import { WIDGETS } from "@/features/dashboard/widgets";
+import { MODULE_GROUPS, MODULES, moduleById, moduleRoutesFor } from "./registry";
+
+// The registry is the one list of the hotel's modules: the navigation, the route table and the
+// widgets on Oversikt all read it. These tests keep the three in step with it.
+describe("the module registry", () => {
+  it("lists every module once, with its own route, in the four groups", () => {
+    expect(MODULE_GROUPS.map((group) => group.label)).toEqual(["Hotellet", "Drift", "Roboten", "Resepsjon"]);
+    expect(new Set(MODULES.map((module) => module.id)).size).toBe(MODULES.length);
+    expect(new Set(MODULES.map((module) => module.route)).size).toBe(MODULES.length);
+    for (const group of MODULE_GROUPS) expect(MODULES.some((module) => module.group === group.id), group.id).toBe(true);
+    expect(MODULES.map((module) => module.id)).toEqual([
+      "oversikt",
+      "rom",
+      "gjester",
+      "ruter",
+      "foresporsler",
+      "vedlikehold",
+      "lager",
+      "ansatte",
+      "hotell3d",
+      "natteskift",
+      "oyne",
+      "stemme",
+      "resepsjon",
+    ]);
+  });
+
+  it("has a page under src/app for every route", () => {
+    for (const module of MODULES) {
+      const dir = module.route === "/" ? "" : module.route;
+      expect(existsSync(resolve(process.cwd(), `src/app${dir}/page.tsx`)), module.route).toBe(true);
+    }
+  });
+
+  it("has a widget on Oversikt exactly for the modules that say they have one", () => {
+    for (const module of MODULES) expect(Boolean(WIDGETS[module.id]), module.id).toBe(Boolean(module.widget));
+  });
+
+  it("drives the route table: admin opens everything, the other roles only their modules", () => {
+    expect(PAGES).toEqual(MODULES.map((module) => module.route));
+    for (const module of MODULES) {
+      expect(canAccess("admin", module.route), module.route).toBe(true);
+      expect(canAccess("receptionist", module.route), module.route).toBe(module.roles.includes("receptionist"));
+      expect(canAccess("robot", module.route), module.route).toBe(module.roles.includes("robot"));
+    }
+    expect(moduleRoutesFor("receptionist")).toEqual(["/", "/rom", "/gjester", "/ruter", "/foresporsler", "/ansatte", "/resepsjon"]);
+    expect(moduleRoutesFor("robot")).toEqual(["/", "/rom", "/ruter", "/foresporsler", "/vedlikehold", "/lager", "/hotell", "/natteskift", "/oyne", "/stemme"]);
+  });
+
+  it("finds a module by id and refuses an unknown one", () => {
+    expect(moduleById("rom")).toMatchObject({ name: "Rom og renhold", short: "Rom", route: "/rom", group: "hotellet" });
+    expect(() => moduleById("kjeller" as never)).toThrow(/Unknown module/);
+  });
+
+  it("says where every module's figures come from, so test data is never shown as real", () => {
+    const sources = new Set(["run-log", "reception", "test", "mixed", "none"]);
+    for (const module of MODULES) expect(sources.has(module.data), module.id).toBe(true);
+    expect(MODULES.filter((module) => module.data === "test").map((module) => module.id)).toEqual(["lager", "ansatte"]);
+  });
+});

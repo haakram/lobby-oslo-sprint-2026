@@ -67,6 +67,9 @@ class WybeClient:
         self._http = httpx.Client(transport=transport, timeout=30.0)
 
     def _post(self, cmd: str, args: dict | None, shift_id: str | None) -> tuple[Reply, float]:
+        if cmd == "start_shift":
+            # Lowest layer: no path may send a start without an explicit, allowed mode.
+            check_mode((args or {}).get("mode"), armed=self.settings.final_armed)
         body: dict[str, Any] = {"cmd": cmd}
         if args:
             body["args"] = args

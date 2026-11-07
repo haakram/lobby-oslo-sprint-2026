@@ -239,3 +239,28 @@ def test_rate_limiter_is_shared_across_threads():
     for t in threads:
         t.join()
     assert time.monotonic() - start >= 0.9
+
+
+def test_call_start_shift_final_blocked_at_lowest_layer(tmp_path):
+    reqs = []
+    client = make_client(tmp_path, recording_handler(reqs))
+    with pytest.raises(FinalModeLocked):
+        client.call("start_shift", {"mode": "final"})
+    assert len(reqs) == 0
+
+
+def test_call_start_shift_without_mode_refused(tmp_path):
+    reqs = []
+    client = make_client(tmp_path, recording_handler(reqs))
+    with pytest.raises(ValueError):
+        client.call("start_shift", {})
+    with pytest.raises(ValueError):
+        client.call("start_shift")
+    assert len(reqs) == 0
+
+
+def test_practice_start_still_works(tmp_path):
+    reqs = []
+    client = make_client(tmp_path, recording_handler(reqs))
+    assert client.start_shift("practice", seed=1).shift_id == "w2-abc"
+    assert len(reqs) == 1

@@ -53,15 +53,15 @@ def test_cross_floor_uses_elevator(hotel):
 def test_cart_never_uses_stairs(hotel):
     cart = shortest_route(hotel, "corridor-1c", "corridor-2d", with_cart=True)
     assert not any("stairwell" in n for n in cart.path)
-    free = route_seconds(hotel, "corridor-1c", "corridor-2d")
-    assert free <= cart.seconds
     assert cart.seconds == pytest.approx(total_with_virtual(cart.path))
-    # stairs alternative by hand
-    to_s = route_seconds(hotel, "corridor-1c", "stairwell-1", with_cart=True)
-    from_s = route_seconds(hotel, "stairwell-2", "corridor-2d", with_cart=True)
-    assert to_s < 1e9 and from_s < 1e9
-    stairs_alt = hand_dijkstra_stairs(hotel)
-    assert free <= stairs_alt + 1e-9
+    stairs = (
+        EDGE[frozenset(("corridor-1c", "stairwell-1"))]["m"]
+        + EDGE[frozenset(("stairwell-1", "stairwell-2"))]["m"] * 3
+        + EDGE[frozenset(("stairwell-2", "corridor-2d"))]["m"]
+    )
+    assert stairs == 7 + 57 + 6
+    assert route_seconds(hotel, "corridor-1c", "corridor-2d") == stairs
+    assert cart.seconds > stairs
 
 
 def total_with_virtual(path):
@@ -71,27 +71,39 @@ def total_with_virtual(path):
     return t
 
 
-def hand_dijkstra_stairs(hotel):
-    r_to = route_seconds(hotel, "corridor-1c", "stairwell-1", with_cart=True)
-    r_from = route_seconds(hotel, "stairwell-2", "corridor-2d", with_cart=True)
-    return r_to + 19 * 3.0 + r_from
-
-
 def test_known_wet_floor_costs_10(hotel):
-    base = shortest_route(hotel, "corridor-3a", "corridor-3d")
+    m = EDGE[frozenset(("corridor-3a", "corridor-3d"))]["m"]
+    detour = (
+        EDGE[frozenset(("corridor-3a", "corridor-3b"))]["m"]
+        + EDGE[frozenset(("corridor-3c", "corridor-3d"))]["m"]
+    )  # plus the unseen 3b-3c leg, so a lower bound
+    assert detour > m + 10
+    assert route_seconds(hotel, "corridor-3a", "corridor-3d") == m
     hotel.mark_wet("corridor-3a", "corridor-3d")
-    after = shortest_route(hotel, "corridor-3a", "corridor-3d")
-    assert after.seconds in (pytest.approx(base.seconds + 10), pytest.approx(base.seconds))
-    assert after.seconds >= base.seconds
+    assert route_seconds(hotel, "corridor-3a", "corridor-3d") == m + 10
+    assert shortest_route(hotel, "corridor-3a", "corridor-3d").seconds == m + 10
 
 
 def test_wet_invalidates_cache(hotel):
+    m = EDGE[frozenset(("corridor-3a", "corridor-3d"))]["m"]
     before = route_seconds(hotel, "corridor-3a", "corridor-3d")
+    assert before == m
     assert route_seconds(hotel, "corridor-3a", "corridor-3d") == before
     hotel.mark_wet("corridor-3a", "corridor-3d")
-    direct = EDGE.get(frozenset(("corridor-3a", "corridor-3d")))
-    if direct and total(["corridor-3a", "corridor-3d"]) == before:
-        assert route_seconds(hotel, "corridor-3a", "corridor-3d") == before + 10
+    assert route_seconds(hotel, "corridor-3a", "corridor-3d") == m + 10
+
+
+def test_update_from_look_invalidates_cache(hotel):
+    src, dst = "corridor-3a", "corridor-3d"
+    m = EDGE[frozenset((src, dst))]["m"]
+    assert route_seconds(hotel, src, dst) == m
+    # (a) wet-warning exit on the existing edge
+    hotel.update_from_look(src, {"exits": [{"to": dst, "metres": m, "warning": "wet floor"}]})
+    assert route_seconds(hotel, src, dst) == m + 10
+    # (b) a new 5 m shortcut beats the wet 18 m edge (+10)
+    hotel.update_from_look(src, {"exits": [{"to": "corridor-3c", "metres": 5}]})
+    c_to_d = EDGE[frozenset(("corridor-3c", dst))]["m"]
+    assert route_seconds(hotel, src, dst) == 5 + c_to_d
 
 
 def test_best_tour_exact_small(hotel):

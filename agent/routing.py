@@ -100,6 +100,7 @@ def shortest_route(hotel: Hotel, src: str, dst: str, *, with_cart: bool = False)
 
 
 def _version(hotel: Hotel):
+    # Key assumes existing edges are never edited in place (only added or marked wet).
     n_edges = sum(len(v) for v in hotel._adj.values())
     return (frozenset(hotel._wet), n_edges, len(hotel.nodes))
 

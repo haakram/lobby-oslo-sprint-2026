@@ -290,8 +290,8 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
         rid = msg["request"]
         text = str(msg.get("text", ""))
         sender = str(msg.get("from", "")).lower()
-        if rid in seen:  # an answer, a skip or a follow-up on a known request: kept for the flows
-            ex.answers.setdefault(rid, []).append(text)
+        if rid in seen and "manager" in sender:  # the manager's answer, skip or follow-up on a known
+            ex.answers.setdefault(rid, []).append(text)  # request: kept for the flows
         if (m := _SKIP.match(text)) and "manager" in sender:  # only the manager's inbox instructs
             _skip(ex, m.group(1), text, seen, pending)
             continue

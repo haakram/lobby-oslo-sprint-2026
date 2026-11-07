@@ -155,10 +155,11 @@ def test_read_inbox_stashes_messages_on_known_requests(tmp_path):
     fake, _, ex = setup(tmp_path, requests=[("23:00:00", "R-099", "104 wants a towel.")])
     fake._unread = [
         {"from": "night manager", "at": "22:00:00", "text": "R-014: Sorry: 201.", "request": "R-014"},
-        {"from": "night manager", "at": "22:00:00", "text": "R-020: 104 wants a towel.", "request": "R-020"}]
+        {"from": "night manager", "at": "22:00:00", "text": "R-020: 104 wants a towel.", "request": "R-020"},
+        {"from": "guest in 202", "at": "22:00:00", "text": "R-014: it is 203.", "request": "R-014"}]
     seen, pending = {"R-014"}, []
     _read_inbox(ex, None, seen, pending)
-    assert ex.answers == {"R-014": ["R-014: Sorry: 201."]}
+    assert ex.answers == {"R-014": ["R-014: Sorry: 201."]}  # only the night manager's messages
     assert [t.request for t in pending] == ["R-020"]
 
 
@@ -172,3 +173,87 @@ def test_manager_room_parses_only_this_requests_answer(tmp_path):
     assert flows._manager_room(ex, "R-015", PHRASE) is None  # floor 3 is not floor 2
     assert flows._manager_room(ex, "R-016", PHRASE) == "room-203"
     assert flows._manager_room(ex, "R-017", PHRASE) is None  # never another request's answer
+
+
+# --- fix round 1 ---------------------------------------------------------------------------------
+
+
+def _placed(fake) -> list[tuple[str, str]]:
+    return [(e["args"]["item"], e["args"]["where"]) for e in calls(fake, "place") if e["ok"]]
+
+
+def test_same_words_minutes_apart_with_two_answered_rooms_are_both_delivered(tmp_path):
+    # The text-duplicate check cannot judge a described room before it is known (None == None).
+    fake = FakeWybe(requests=[("22:03:30", "R-014", KIT), ("22:08:00", "R-031", KIT)],
+                    described_rooms=TWO_ROOMS)
+    run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="23:00:00")
+    assert [e["args"]["request"] for e in calls(fake, "reply")] == ["R-014", "R-031"]
+    assert sorted(_placed(fake)) == [("toiletry-kit", "room-201"), ("toiletry-kit", "room-202")]
+    assert fake.reports == {"R-014": "done", "R-031": "done"}
+    assert not fake.wrong_deliveries and not fake.false_done
+
+
+def test_same_words_and_the_same_answered_room_is_a_duplicate_declined_after_its_reply(tmp_path):
+    fake = FakeWybe(requests=[("22:03:30", "R-014", KIT), ("22:08:00", "R-031", KIT)],
+                    described_rooms={"R-014": "room-201", "R-031": "room-201"})
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="23:00:00")
+    assert [e["args"]["request"] for e in calls(fake, "reply")] == ["R-014", "R-031"]  # +10 each
+    assert _placed(fake) == [("toiletry-kit", "room-201")]
+    assert fake.reports == {"R-014": "done", "R-031": "declined"}
+    dup = [d for d in _decisions(tmp_path, result, "hypothesis")
+           if d["id"] == "H-duplicate" and d["request"] == "R-031"]
+    assert dup and "R-014" in dup[0]["action"]
+
+
+def test_a_skip_for_the_running_request_in_the_mid_task_read_declines_it(tmp_path):
+    fake = FakeWybe(requests=[("22:03:30", "R-014", KIT)], described_rooms={"R-014": "room-201"})
+    real_reply = fake._cmd_reply
+
+    def reply_then_skip(args):
+        out = real_reply(args)
+        fake._requests["R-014"].skipped = True
+        fake._unread.append({"from": "night manager", "at": fake._clock(), "request": "R-014",
+                             "text": "Skip R-014. Don't bother with it."})
+        return out
+
+    fake._cmd_reply = reply_then_skip
+    run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00")
+    assert fake.reports == {"R-014": "cancelled"}  # the skip's report; the decline after it is refused
+    assert [e["args"]["outcome"] for e in calls(fake, "report")] == ["cancelled", "declined"]
+    assert not calls(fake, "place") and not calls(fake, "ask")
+
+
+def test_the_clerks_room_on_another_floor_is_not_used(tmp_path):
+    fake, _, ex, task = solo(tmp_path, KIT, described_rooms={"R-001": "room-201"})
+    fake._answer = lambda who, q: "The room next to the elevator? For R-001 that's 311."
+    out = ex.run(task)
+    assert out.status == "failed"
+    assert not calls(fake, "place")
+
+
+def test_the_managers_answer_that_came_during_the_walk_to_the_desk_is_used(tmp_path):
+    fake = FakeWybe(requests=[("22:03:30", "R-014", KIT)], described_rooms={"R-014": "room-201"})
+    held: list[dict] = []
+    real_reply, real_ask = fake._cmd_reply, fake._cmd_ask
+
+    def late_reply(args):
+        out = real_reply(args)
+        held.append(fake._unread.pop())
+        return out
+
+    def ask(args):  # the answer lands while the robot is at the desk
+        out = real_ask(args)
+        fake._unread.extend(held)
+        held.clear()
+        return out
+
+    fake._cmd_reply, fake._cmd_ask = late_reply, ask
+    fake._answer = lambda who, q: "I don't know. The night manager might."
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00")
+    assert len(calls(fake, "ask")) == 1
+    i = next(i for i, e in enumerate(fake.log) if e["cmd"] == "ask")
+    assert fake.log[i + 1]["cmd"] == "inbox" and fake.log[i + 1]["clock"] == fake.log[i]["clock"]
+    assert _placed(fake) == [("toiletry-kit", "room-201")]
+    assert fake.reports == {"R-014": "done"}
+    assert _decisions(tmp_path, result, "manager_answer") == [
+        {"request": "R-014", "room": "room-201", "phrase": PHRASE}]

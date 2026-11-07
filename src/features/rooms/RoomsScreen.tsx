@@ -6,7 +6,7 @@ import { Cleaning } from "@/features/dashboard/Cleaning";
 import { placeLabel } from "@/features/dashboard/labels";
 import { RoomBoard } from "@/features/dashboard/RoomBoard";
 import { RoomSheet } from "@/features/dashboard/RoomSheet";
-import { countRooms, selectRoomNight } from "@/features/dashboard/selectors";
+import { cleaningHref, countRooms, selectRoomNight } from "@/features/dashboard/selectors";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
@@ -18,9 +18,10 @@ import { assignRooms } from "./housekeeping";
 
 /**
  * Rom og renhold: the key rack (every room's status as the robot last saw it), today's cleaning
- * round split between the cleaners, the rooms out of order, and the one action: the cleaning route.
+ * round split between the cleaners, the rooms out of order, and the one action: the cleaning route,
+ * in the header so a phone has it above the rack. `initialRoom` (`?rom=`) opens that room's night.
  */
-export function RoomsScreen({ viewerUrl }: { viewerUrl?: string }) {
+export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: string; initialRoom?: string | null }) {
   const { resolved, statusOf } = useOrderStatuses();
   const { run, night, rooms, orders, robot } = useNight(viewerUrl, resolved);
   const ready = run.status === "ready";
@@ -31,10 +32,18 @@ export function RoomsScreen({ viewerUrl }: { viewerUrl?: string }) {
   const outOfOrder = useMemo(() => outOfOrderRooms(maintenance), [maintenance]);
   const assignments = useMemo(() => (rooms ? assignRooms(rooms, cleanersToday()) : null), [rooms]);
 
-  const [sheet, setSheet] = useState<{ room: string; open: boolean } | null>(null);
+  const [sheet, setSheet] = useState<{ room: string; open: boolean } | null>(initialRoom ? { room: initialRoom, open: true } : null);
   const openRoom = useCallback((room: string | null) => {
     if (room) setSheet({ room, open: true });
   }, []);
+  const closeRoom = useCallback(() => {
+    setSheet((current) => (current ? { ...current, open: false } : null));
+    // Opened from a link (?rom=): closing leaves the plain rack, so a reload doesn't open it again.
+    if (new URLSearchParams(window.location.search).has("rom")) window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+  const dirty = useMemo(() => rooms?.filter((room) => room.status === "ma_vaskes") ?? [], [rooms]);
+  const unchecked = rooms?.filter((room) => room.status === "ukjent") ?? [];
+  const dirtyIds = useMemo(() => dirty.map((room) => room.id), [dirty]);
   const sheetRoom = sheet && rooms ? (rooms.find((room) => room.id === sheet.room) ?? null) : null;
   const sheetEntries = useMemo(() => (night && sheet ? selectRoomNight(night, sheet.room) : []), [night, sheet]);
 
@@ -61,7 +70,22 @@ export function RoomsScreen({ viewerUrl }: { viewerUrl?: string }) {
   }
 
   return (
-    <ModulePage module="rom" ready={ready} lede="Slik roboten sist så rommene, hvem som vasker i dag, og rommene som ikke kan selges.">
+    <ModulePage
+      module="rom"
+      ready={ready}
+      lede="Slik roboten sist så rommene, hvem som vasker i dag, og rommene som ikke kan selges."
+      actions={
+        dirty.length > 0 ? (
+          <Link href={cleaningHref(dirtyIds)} className={buttonClasses("primary")}>
+            Lag renholdsrute
+          </Link>
+        ) : unchecked.length > 0 ? (
+          <Link href={cleaningHref(unchecked.map((room) => room.id))} className={buttonClasses("secondary")}>
+            Lag sjekkrunde for {unchecked.length} rom
+          </Link>
+        ) : null
+      }
+    >
       <FigureRow label="Rommene i tall">
         <Figure label="Klare til salg" value={counts?.klar} unit={rooms ? `av ${rooms.length}` : undefined} tone={counts && counts.klar / Math.max(1, rooms?.length ?? 1) < 0.25 ? "warning" : "success"} />
         <Figure label="Må vaskes" value={counts?.ma_vaskes} tone={counts && counts.ma_vaskes > 0 ? "warning" : "default"} />
@@ -73,7 +97,8 @@ export function RoomsScreen({ viewerUrl }: { viewerUrl?: string }) {
         <RoomBoard rooms={rooms} clock={robot?.clock ?? null} onOpen={openRoom} />
 
         <div className="flex min-w-0 flex-col gap-6 lg:gap-8">
-          <Cleaning rooms={rooms} primary />
+          {/* The route itself is the header's action; the panel says what it will cover. */}
+          <Cleaning rooms={rooms} withAction={false} />
 
           <section aria-labelledby="housekeeping-heading" data-enter>
             <Card className="sm:p-6">
@@ -84,7 +109,7 @@ export function RoomsScreen({ viewerUrl }: { viewerUrl?: string }) {
                   <Skeleton className="h-12 w-full" />
                 </div>
               ) : assignments.length === 0 ? (
-                <EmptyState className="mt-4" title="Ingen renholdere på vakt" body="Sett opp dagvakten under Ansatte og vakter." />
+                <EmptyState as="h3" className="mt-4" title="Ingen renholdere på vakt" body="Sett opp dagvakten under Ansatte og vakter." />
               ) : (
                 <ul className="mt-3 divide-y divide-line">
                   {assignments.map(({ cleaner, rooms: own }) => (
@@ -101,7 +126,7 @@ export function RoomsScreen({ viewerUrl }: { viewerUrl?: string }) {
                           ) : (
                             <>
                               <span className="font-semibold tabular-nums">{own.length}</span> rom:{" "}
-                              <span className="font-mono text-xs tabular-nums">{own.map((room) => room.number).join(" ")}</span>
+                              <span className="font-mono text-sm tabular-nums">{own.map((room) => room.number).join(" ")}</span>
                             </>
                           )}
                         </p>
@@ -162,7 +187,8 @@ export function RoomsScreen({ viewerUrl }: { viewerUrl?: string }) {
         room={sheetRoom}
         entries={sheetEntries}
         ended={robot?.ended ?? false}
-        onClose={() => setSheet((current) => (current ? { ...current, open: false } : null))}
+        dirtyIds={dirtyIds}
+        onClose={closeRoom}
       />
     </ModulePage>
   );

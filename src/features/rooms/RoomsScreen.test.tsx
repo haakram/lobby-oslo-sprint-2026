@@ -65,10 +65,33 @@ describe("RoomsScreen (Rom og renhold)", () => {
     route({ run: night.map((line) => JSON.stringify(line)).join("\n") });
     render(<RoomsScreen />);
 
+    // One primary on the screen, in the header, above the rack (a phone sees it without scrolling).
     const send = await screen.findByRole("link", { name: "Lag renholdsrute" });
     expect(send).toHaveAttribute("href", "/ruter?rom=room-201,room-214");
+    expect(send.compareDocumentPosition(screen.getByRole("region", { name: "Romstatus" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(rack().getByRole("button", { name: /^Rom 201: Må vaskes/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Renholdere i dag" })).toBeInTheDocument();
+
+    // "Legg i renholdsrute" on another room adds it to tonight's dirty rooms, not a route of one.
+    fireEvent.click(rack().getByRole("button", { name: /^Rom 103/ }));
+    const sheet = within(screen.getByRole("dialog", { name: "Rom 103" }));
+    expect(sheet.getByRole("link", { name: "Legg i renholdsrute" })).toHaveAttribute("href", "/ruter?rom=room-201,room-214,room-103");
+  });
+
+  it("puts the check round in the header when no room must be cleaned", async () => {
+    route();
+    render(<RoomsScreen />);
+    await rack().findByRole("button", { name: /^Rom 319/ });
+    const unchecked = ROOMS.filter((room) => room.status === "ukjent").length;
+    expect(screen.getAllByRole("link", { name: `Lag sjekkrunde for ${unchecked} rom` })).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: "Lag renholdsrute" })).not.toBeInTheDocument();
+  });
+
+  it("opens the room a link names (?rom= from a tile on Oversikt) once the night is in", async () => {
+    route();
+    render(<RoomsScreen initialRoom="room-319" />);
+    const sheet = await screen.findByRole("dialog", { name: "Rom 319" });
+    expect(within(sheet).getAllByText("Gjesteklage").length).toBe(2);
   });
 
   it("shows an error with a retry when the night can't be loaded", async () => {

@@ -3,10 +3,11 @@ import { Badge, buttonClasses, Card, cx, EmptyState, Skeleton } from "@/ui";
 import { cleaningHref, type RoomView } from "./selectors";
 
 /**
- * Renhold: the rooms the robot's checks marked "må vaskes", and the screen's one primary action,
- * Lag renholdsrute, which hands them to Ruter for the shortest round across floors.
+ * Renhold: the rooms the robot's checks marked "må vaskes", and the action that hands them to Ruter
+ * for the shortest round across floors. `withAction={false}` when the screen's header already holds
+ * that action (Rom og renhold), so it isn't on the screen twice.
  */
-export function Cleaning({ rooms, primary = false, className }: { rooms: RoomView[] | null; primary?: boolean; className?: string }) {
+export function Cleaning({ rooms, withAction = true, className }: { rooms: RoomView[] | null; withAction?: boolean; className?: string }) {
   const dirty = rooms?.filter((room) => room.status === "ma_vaskes") ?? [];
   const unchecked = rooms?.filter((room) => room.status === "ukjent") ?? [];
 
@@ -24,6 +25,7 @@ export function Cleaning({ rooms, primary = false, className }: { rooms: RoomVie
           </div>
         ) : dirty.length === 0 ? (
           <EmptyState
+            as="h3"
             className="mt-3"
             title="Ingen rom må vaskes"
             body={
@@ -32,6 +34,7 @@ export function Cleaning({ rooms, primary = false, className }: { rooms: RoomVie
                 : "Romsjekkene i natt fant ingen rom som må vaskes."
             }
             action={
+              withAction &&
               unchecked.length > 0 && (
                 <Link href={cleaningHref(unchecked.map((room) => room.id))} className={buttonClasses("secondary")}>
                   Lag sjekkrunde for {unchecked.length} rom
@@ -53,13 +56,15 @@ export function Cleaning({ rooms, primary = false, className }: { rooms: RoomVie
               ))}
             </ul>
             <div>
-              <Link
-                href={cleaningHref(dirty.map((room) => room.id))}
-                className={cx(buttonClasses(primary ? "primary" : "secondary"), "w-full")}
-              >
-                Lag renholdsrute
-              </Link>
-              <p className="mt-2 text-sm text-muted">Ruter finner korteste runde på tvers av etasjene. Ingen varsles før du deler ruten.</p>
+              {withAction && (
+                <Link href={cleaningHref(dirty.map((room) => room.id))} className={cx(buttonClasses("secondary"), "mb-2 w-full")}>
+                  Lag renholdsrute
+                </Link>
+              )}
+              <p className="text-sm text-muted">
+                {withAction ? "Ruter finner korteste runde på tvers av etasjene." : "Lag renholdsrute øverst gir korteste runde på tvers av etasjene."} Ingen varsles
+                før du deler ruten.
+              </p>
             </div>
           </div>
         )}

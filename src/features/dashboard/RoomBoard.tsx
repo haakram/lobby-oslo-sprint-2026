@@ -129,7 +129,8 @@ function RoomTile({ room, clock, onOpen }: { room: RoomView; clock: string | nul
         </span>
         <span>
           <span className="block font-mono text-lg leading-none font-medium tabular-nums">{room.number}</span>
-          <span className={cx("mt-1 block truncate text-sm leading-5", look.loud ? "font-semibold" : "font-medium", look.word_class)}>{look.word}</span>
+          {/* The word is the tile's point: it wraps ("Ikke / sjekket") rather than cut to "Ikke sjek…". */}
+          <span className={cx("mt-1 block text-sm leading-5", look.loud ? "font-semibold" : "font-medium", look.word_class)}>{look.word}</span>
         </span>
       </span>
     </button>

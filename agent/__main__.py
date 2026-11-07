@@ -71,6 +71,7 @@ def cmd_final(args, settings: Settings, factory: ClientFactory) -> int:
 
 
 def _final(settings: Settings, factory: ClientFactory) -> int:
+    from agent.bench import default_max_calls
     from agent.world import Hotel
 
     try:  # a bad params or map file must fail here, before any shift has started
@@ -111,7 +112,7 @@ def _final(settings: Settings, factory: ClientFactory) -> int:
         try:
             results[i] = shift.run_shift(
                 client, session=session, params=params, hotel=hotel, brain=brain,
-                real_time_limit_s=FINAL_REAL_TIME_S, stop=stop,
+                real_time_limit_s=FINAL_REAL_TIME_S, stop=stop, call_cap=default_max_calls(settings.max_rps),
             )
         except Exception as exc:  # noqa: BLE001
             results[i] = {"shift": session.shift_id, "score": None, "reason": f"crashed: {type(exc).__name__}"}

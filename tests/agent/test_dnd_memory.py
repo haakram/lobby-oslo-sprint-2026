@@ -49,9 +49,13 @@ def test_memory_window_and_midnight():
 
 def test_named_guest_resolving_to_dnd_room_fails_fast(tmp_path):
     fake, session, ex = _after_first(tmp_path, NAMED, guests={"Ms Kvam": "room-208"})
-    out, spent = _run_and_spent(fake, session, ex, "R-103")
+    task = next_task(ex, session, "R-103")
+    start = len(fake.log)
+    out = ex.run(task)
+    spent = fake.log[start:]
     assert out.status == "failed" and "Do Not Disturb" in out.note
-    assert not {"pick", "knock", "place", "look"} & set(spent)  # only the clerk question is asked
+    assert not {"pick", "knock", "place"} & {e["cmd"] for e in spent}  # only the clerk question is asked
+    assert not [e for e in spent if e["cmd"] == "look" and e["args"]]  # no door look (Task 19 looks at the desk)
 
 
 def test_room_check_on_known_dnd_room_fails_fast(tmp_path):

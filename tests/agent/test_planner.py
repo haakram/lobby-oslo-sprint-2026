@@ -14,6 +14,22 @@ def amenity(room, item="towel", arrived="22:10:00", req="R-1"):
     return Task(request=req, kind=Kind.AMENITY, text="", arrived=arrived, room=room, item=item)
 
 
+def test_stops_come_from_the_learned_stock_and_specials(hotel):
+    from agent.planner import _stops
+
+    hotel.stock["laundry"] = {"cart": 0, "pillow": 5}
+    hotel.stock["storage"]["cart"] = 1  # tonight the cart stands in storage ...
+    hotel.stock["front-desk"] = {}
+    hotel.stock["staff-room"] = {"keycard": 2}  # ... and the keycards hang in the staff room
+    hotel.special["kitchen"] = "lobby-bar"
+    st = RobotState(location="lobby", clock="22:10:00")
+    tray = Task(request="R-1", kind=Kind.TRAY, text="", arrived="22:10:00", room="room-104", item="tray-104")
+    assert _stops(tray, st, hotel) == ["storage", "lobby-bar", "corridor-1b"]
+    check = Task(request="R-2", kind=Kind.ROOM_CHECK, text="", arrived="22:10:00", room="room-103")
+    assert _stops(check, st, hotel) == ["staff-room", "corridor-1a"]
+    assert estimate_seconds(tray, st, hotel, Params()) < 1e6
+
+
 def test_prefers_nearby_task_when_values_equal(hotel):
     st = RobotState(location="corridor-3c", clock="22:10:00", cart=["towel"])
     far, near = amenity("room-104", req="R-1"), amenity("room-319", req="R-2")

@@ -50,6 +50,11 @@ class Params:
         return cls(**data)
 
 
+def cart_place(hotel: Hotel) -> str:
+    """Where the cart stands tonight: the learned stock, else the JSON's laundry."""
+    return hotel.stock_location("cart") or hotel.special.get("laundry", "laundry")
+
+
 def _stops(task: Task, state: RobotState, hotel: Hotel) -> list[str] | None:
     """Ordered places to visit before the action is done; None if impossible."""
     stops: list[str] = []
@@ -58,16 +63,16 @@ def _stops(task: Task, state: RobotState, hotel: Hotel) -> list[str] | None:
     if task.room is None and task.guest:
         stops.append(hotel.special.get("clerk", "front-desk"))  # ask the clerk for the room
     if task.kind in (Kind.TRAY, Kind.BAGS) and not state.has_cart:
-        stops.append("laundry")
+        stops.append(cart_place(hotel))
     if task.kind is Kind.AMENITY and task.item and not state.carrying(task.item):
         place = hotel.stock_location(task.item)
         if place is None:
             return None
         stops.append(place)
     if task.kind is Kind.TRAY:
-        stops.append("kitchen-pass")
+        stops.append(hotel.special.get("kitchen", "kitchen-pass"))
     if task.kind is Kind.ROOM_CHECK and not state.carrying("keycard"):
-        stops.append("front-desk")
+        stops.append(hotel.stock_location("keycard") or hotel.special.get("clerk", "front-desk"))
     if task.kind is Kind.BAGS:
         stops.append(hotel.special.get("clerk", "front-desk"))
     if task.kind is Kind.SPILL:
@@ -98,9 +103,10 @@ def estimate_seconds(task: Task, state: RobotState, hotel: Hotel, params: Params
         return UNREACHABLE_S
     cart = state.has_cart
     here, total = state.location, 0.0
+    where_cart = cart_place(hotel)
     for i, stop in enumerate(stops):
-        # a tray (or bags) trip to the laundry is how the robot gets the cart
-        with_cart = cart or (task.kind in (Kind.TRAY, Kind.BAGS) and "laundry" in stops[:i])
+        # a tray (or bags) trip to the cart's place is how the robot gets the cart
+        with_cart = cart or (task.kind in (Kind.TRAY, Kind.BAGS) and where_cart in stops[:i])
         try:
             total += route_seconds(hotel, here, stop, with_cart=with_cart)
         except NoRoute:

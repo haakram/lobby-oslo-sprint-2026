@@ -44,6 +44,7 @@ def handle(ex: Executor, task: Task) -> Result:
         task = _classify(ex, task)
     if task.kind not in (Kind.FOLLOWUP, Kind.NOISE):  # those keep their own logic
         _refuse_known_dnd(ex, task.room, task.request)
+    ex.ensure_battery()  # a trip starts: below 25 % it charges first (never runs flat)
     if task.room is None and task.guest and task.kind in NAMED_KINDS:
         return flows_extra.named(ex, task)
     handler = HANDLERS.get(task.kind) or flows_extra.HANDLERS.get(task.kind)
@@ -170,6 +171,14 @@ def amenity(ex: Executor, task: Task) -> Result:
 
 
 def tray(ex: Executor, task: Task) -> Result:
+    ex.cart_needed = True  # the tray rides only in the cart: never let go of it for the stairs
+    try:
+        return _tray(ex, task)
+    finally:
+        ex.cart_needed = False
+
+
+def _tray(ex: Executor, task: Task) -> Result:
     _corridor(ex, task.room)
     _refuse_known_dnd(ex, task.room, task.request)
     item = task.item or f"tray-{task.room.removeprefix('room-')}"

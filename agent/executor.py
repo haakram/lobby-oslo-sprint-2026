@@ -9,6 +9,12 @@ Rules that win or lose points (spec § Task handling, controller rulings):
 - never open a room for a person who asks to be let in (H-bathrobe: a polite no, no keycard);
 - a move that fails with "No way" -> one look, update the map, replan once.
 
+The final's shifts differ from seed 1 (same plan, other metres, moved stock), so the JSON map is a
+belief and what the robot sees is the truth: every look and move updates the world model, each
+non-room place is looked at on the first visit (wet warnings, metres, stock), the stock places are
+surveyed in the first idle time, an item missing where it was believed is sought at the other stock
+places, and the dock is wherever the shift started.
+
 The per-kind routines live in agent/flows.py (amenity, tray, message, room check, lost item) and
 agent/flows_extra.py (bags, noise, spill, follow-up, named guests: the Task 13 hypotheses).
 Besides the run log v1 lines, two decision kinds feed the dashboard: `room_status` and `work_order`.
@@ -35,6 +41,10 @@ NOTE_MAX = 300
 LET_ME_IN = ("locked out", "let me in")
 REFUSAL = "I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID."
 PERSON_MEMORY_S = 600  # the same person event within 10 sim-minutes of hearing it is a repeat
+GO_ATTEMPTS = 24  # route tries per go(): each first-visit look may change the map and replan
+BATTERY_LOW = 25.0  # below this a trip waits for a charge ...
+BATTERY_OK = 60.0  # ... up to this (or until a request arrives)
+CHARGE_ROUNDS = 10
 
 
 @dataclass
@@ -49,11 +59,11 @@ class ActionFailed(Exception):
     """A step could not be carried out; the message is the reason given to the night manager."""
 
 
-def _guess_kind(name: str, door: bool) -> str:
-    for kind in ("corridor", "elevator", "stairwell", "room"):
-        if name.startswith(kind + "-"):
-            return kind
-    return "room" if door else "hub"
+class _Replan:
+    """_follow's answer when a look on the way changed the map: route again from here."""
+
+
+REPLAN = _Replan()
 
 
 class Executor:
@@ -83,6 +93,14 @@ class Executor:
         self._wet_reported: set[str] = set()
         self._calls = 0  # every server call; a cached status is valid only while this stands still
         self._status_cache: tuple[dict, int, float] | None = None  # result, call count, real time
+        self._looked: set[str] = set()  # places looked at this shift (each non-room place once)
+        self.looks: dict[str, dict] = {}  # the last look at each place
+        self._stock_places = list(hotel.stock)  # the JSON's stock places: the survey's tour
+        self._surveyed = False
+        self._dock_known = False  # the dock is where the shift's first status finds the robot
+        self._moves = 0
+        self._in_go = 0
+        self.cart_needed = False  # a tray or bags flow: never drop the cart to reach the stairs
 
     # --- server calls --------------------------------------------------------------------------
 
@@ -162,6 +180,7 @@ class Executor:
             return {}
         self._status_cache = (reply.result, self._calls, time.monotonic())
         self.state.update_from_status(reply.result)
+        self._learn_dock(reply.result.get("location"))
         snap = {k: getattr(self.state, k) for k in STATE_FIELDS}
         snap = {k: list(v) if isinstance(v, list) else v for k, v in snap.items()}
         if snap != self._logged:
@@ -185,26 +204,41 @@ class Executor:
             if isinstance(ex, dict) and isinstance(ex.get("to"), str)
             and isinstance(ex.get("metres"), int | float)
         ]
-        new = [(ex["to"], bool(ex.get("door"))) for ex in exits if ex["to"] not in self.hotel.nodes]
-        if loc not in self.hotel.nodes:
-            new.append((loc, False))
-        self.hotel.update_from_look(loc, {**look, "exits": exits})
+        look = {**look, "exits": exits}
+        known_nodes = set(self.hotel.nodes)
+        lost = [e.b for e in self.hotel.neighbors(loc)] if exits else []
+        self.hotel.update_from_look(loc, look, authoritative=True)
+        seen = {ex["to"]: ex for ex in exits}
+        lost = [b for b in lost if b not in seen]
+        if lost and self._in_go:  # an old exit is gone: guess that a new neighbour bridges to it
+            for to, ex in seen.items():
+                if to not in known_nodes and self.hotel.nodes[to]["kind"] != "room":
+                    for b in lost:
+                        self._add_edge(to, b, float(ex["metres"]))
+                        self._tentative.add(frozenset((to, b)))
         for ex in exits:
             if "wet" in str(ex.get("warning", "")).lower():
                 self._wet_seen(ex["to"])
-        for name, door in new:  # update_from_look files every new place as a room; guess better
-            self.hotel.nodes[name]["kind"] = _guess_kind(name, door)
-        return {**look, "exits": exits}
+        self._tentative -= {frozenset((loc, ex["to"])) for ex in exits}  # a seen exit is real
+        self._looked.add(loc)
+        self.looks[loc] = look
+        if lost or any(to not in known_nodes for to in seen):
+            self.log("map_learnt", at=loc, lost=lost, new=sorted(set(seen) - known_nodes))
+        return look
 
     # --- moving --------------------------------------------------------------------------------
 
     def move(self, to: str) -> Reply:
         here = self.state.location
+        self._moves += 1
         reply = self.cmd("move", to=to)
         result = reply.result if isinstance(reply.result, dict) else {}
         if reply.ok:
             self.state.location = result.get("at", to) if isinstance(result.get("at"), str) else to
             self.state.docked = False
+            metres = result.get("metres")
+            if isinstance(metres, int | float) and metres > 0:  # a ride reports 0: not an edge
+                self.hotel.set_metres(here, self.state.location, float(metres))
         slipped = any(e.get("type") == "slip" for e in reply.events)
         if (slipped or "wet" in str(result.get("notice", "")).lower()) and here in self.hotel.nodes:
             self.hotel.mark_wet(here, to)
@@ -213,13 +247,13 @@ class Executor:
         return reply
 
     def _route(self, dst: str) -> Route:
-        try:
-            return shortest_route(self.hotel, self.state.location, dst, with_cart=self.state.has_cart)
-        except NoRoute as exc:
-            raise ActionFailed(f"no known route to {dst}") from exc
+        return shortest_route(self.hotel, self.state.location, dst, with_cart=self.state.has_cart)
 
-    def _follow(self, route: Route, interruptible: bool = False) -> tuple[str, str | None, str] | None:
-        """Run the steps; None when all worked, else (where, target, server text) of the failure.
+    def _follow(
+        self, route: Route, interruptible: bool = False
+    ) -> tuple[str, str | None, str] | _Replan | None:
+        """Run the steps; None when all worked, REPLAN when a first-visit look changed the map on
+        the way, else (where, target, server text) of the failure.
         Interruptible: stop at the next node once a message is waiting, so the request is planned
         from here; never between call_elevator and its ride (the 45 s call would be wasted)."""
         ride_pending = False
@@ -245,22 +279,53 @@ class Executor:
                 self._forget_edge(here, to)
                 self._add_edge(here, to, metres if isinstance(metres, int | float) else 1.0)
                 self.log("edge_learnt", edge=[here, to], metres=metres)
+            if self._look_on_arrival():
+                return REPLAN
         return None
 
+    def _look_on_arrival(self) -> bool:
+        """The first time at a non-room place this shift: one look (5 s), so wet warnings, metres
+        and stock are known before the next step. True when the map changed (route again)."""
+        loc = self.state.location
+        if loc in self._looked or self.hotel.nodes.get(loc, {}).get("kind") == "room":
+            return False
+        before = self.hotel.version
+        try:
+            self.look()
+        except ActionFailed as exc:
+            self._looked.add(loc)  # once per place, even when the look failed
+            self.log("look_failed", at=loc, reason=str(exc))
+        return self.hotel.version != before
+
     def go(self, dst: str, *, interruptible: bool = False) -> None:
-        """Walk to dst by the shortest known route; recover once if the map turns out different.
+        """Walk to dst by the shortest known route. When the believed map has no route, or a move
+        fails with "No way", one look learns the real exits and the route is planned again (once).
+        A route changed by a first-visit look on the way is simply planned again from there.
         Interruptible walks (the way back to the dock) may stop short once a message is waiting."""
         looked = False
+        self._in_go += 1
         try:
-            for _ in range(3):  # first try, after the recovery look, after a wrong bridge guess
+            for _ in range(GO_ATTEMPTS):
                 if self.state.location == dst:
                     return
                 if self.state.location not in self.hotel.nodes and not looked:
                     looked = True  # lost: the one recovery look is spent on learning where
                     self._recover(None)
-                failure = self._follow(self._route(dst), interruptible)
+                try:
+                    route = self._route(dst)
+                except NoRoute:
+                    if self._drop_cart_for(dst):
+                        continue
+                    if looked:
+                        raise ActionFailed(f"no known route to {dst}") from None
+                    looked = True
+                    self._recover(None)
+                    continue
+                failure = self._follow(route, interruptible)
                 if failure is None:
                     return
+                if failure is REPLAN:
+                    continue
                 here, to, text = failure
                 if to is not None and frozenset((here, to)) in self._tentative:
                     self.log("replan", at=here, reason="guessed edge does not exist", to=to)
@@ -273,41 +338,55 @@ class Executor:
                 self._recover(to)
             raise ActionFailed(f"could not reach {dst}")
         finally:
-            self._drop_tentative()
+            self._in_go -= 1
+            if not self._in_go:
+                self._drop_tentative()
 
     def _recover(self, failed_to: str | None) -> None:
-        """One look: the look is the truth about this place's exits. Drop stale edges, add new
-        ones, and guess that a new neighbour bridges to where the old edge went."""
+        """One look: the look is the truth about this place's exits (look() drops stale edges, adds
+        new places and guesses that a new neighbour bridges to where a lost edge went)."""
         before = self.state.location
         old = next((e for e in self.hotel.neighbors(before) if e.b == failed_to), None)
         known_nodes = set(self.hotel.nodes)
         look = self.look()
         loc = self.state.location
         seen = {ex["to"]: ex for ex in look["exits"]}
-        for e in self.hotel.neighbors(loc) if seen else []:  # an empty look proves nothing
-            if e.b not in seen:
-                self._forget_edge(loc, e.b)
         guesses = []
         if failed_to and failed_to in self.hotel.nodes and failed_to not in seen:
             for to, ex in seen.items():
                 if to not in known_nodes and self.hotel.nodes[to]["kind"] != "room":
-                    self._add_edge(to, failed_to, old.metres if old else float(ex["metres"]))
-                    self._tentative.add(frozenset((to, failed_to)))
+                    if frozenset((to, failed_to)) not in self._tentative:
+                        self._add_edge(to, failed_to, old.metres if old else float(ex["metres"]))
+                        self._tentative.add(frozenset((to, failed_to)))
                     guesses.append(to)
         self.log("replan", at=loc, was_at=before, blocked=failed_to, exits=sorted(seen),
                  bridge_guesses=guesses)
+
+    def _drop_cart_for(self, dst: str) -> bool:
+        """No route with the cart (stairs): let go of it here when a route exists without it and
+        the task does not need it. The cart's place is remembered so it can be fetched again."""
+        if not self.state.has_cart or self.cart_needed:
+            return False
+        try:
+            shortest_route(self.hotel, self.state.location, dst, with_cart=False)
+        except NoRoute:
+            return False
+        reply = self.cmd("drop", item="cart")
+        self.log("cart_dropped", at=self.state.location, to_reach=dst, ok=reply.ok,
+                 left_in_cart=list(self.state.cart or []))
+        if not reply.ok:
+            self.refresh()
+            return not self.state.has_cart
+        self.state.cart = None
+        self.hotel.stock.setdefault(self.state.location, {})["cart"] = 1
+        return True
 
     def _add_edge(self, a: str, b: str, metres: float) -> None:
         floor = self.hotel.nodes.get(a, {}).get("floor", 0)
         self.hotel.update_from_look(a, {"floor": floor, "exits": [{"to": b, "metres": metres}]})
 
     def _forget_edge(self, a: str, b: str) -> None:
-        # world.Hotel has no public way to drop an edge, so this reaches into its adjacency.
-        # routing caches routes by edge count, so the cache is cleared with every removal.
-        adj = self.hotel._adj
-        adj.get(a, {}).pop(b, None)
-        adj.get(b, {}).pop(a, None)
-        self.hotel._route_cache = None
+        self.hotel.forget_edge(a, b)
 
     def _drop_tentative(self) -> None:
         for key in self._tentative:
@@ -319,18 +398,24 @@ class Executor:
     def count(self, item: str) -> int:
         return self.state.hands.count(item) + (self.state.cart or []).count(item)
 
+    def _seconds_to(self, place: str) -> float:
+        try:
+            return route_seconds(self.hotel, self.state.location, place, with_cart=self.state.has_cart)
+        except NoRoute:
+            return float("inf")
+
     def _stock_place(self, item: str, exclude: set[str] = frozenset()) -> str | None:
+        """The nearest place believed to hold item (the JSON, corrected by every look and pick)."""
         places = [p for p, items in self.hotel.stock.items()
                   if items.get(item, 0) > 0 and p not in exclude and p in self.hotel.nodes]
+        return min(places, key=self._seconds_to, default=None)
 
-        def seconds(p):
-            try:
-                return route_seconds(self.hotel, self.state.location, p,
-                                     with_cart=self.state.has_cart)
-            except NoRoute:
-                return float("inf")
-
-        return min(places, key=seconds, default=None)
+    def _unchecked_stock_place(self, item: str, exclude: set[str] = frozenset()) -> str | None:
+        """The nearest stock place (storage, laundry, front desk, ...) not yet looked at this shift:
+        tonight's stock may sit there whatever the JSON says (live seed 2: towels in the laundry)."""
+        places = [p for p in self._stock_places
+                  if p not in exclude and p not in self._looked and p in self.hotel.nodes]
+        return min(places, key=self._seconds_to, default=None)
 
     def pick(self, item: str) -> tuple[bool, str]:
         reply = self.cmd("pick", item=item)
@@ -369,13 +454,23 @@ class Executor:
             self.state.cart.remove(item)
 
     def gather(self, item: str, n: int = 1) -> None:
-        """Carry at least n of item, fetching from stock; raises ActionFailed with the reason."""
+        """Carry at least n of item, fetching from stock; raises ActionFailed with the reason.
+        Where it is believed to be first; when it is not there (the look shows none, or the pick is
+        refused), the survey (if it has not run yet) and then the other stock places not yet seen
+        this shift, nearest first."""
         tried: set[str] = set()
         while self.count(item) < n:
             place = self._stock_place(item, tried)
             if place is None:
+                self.survey()  # the belief failed: see the stock places once, if not seen yet
+                place = self._stock_place(item, tried) or self._unchecked_stock_place(item, tried)
+            if place is None:
                 raise ActionFailed(f"{item} out of stock")
             self.go(place)
+            if place in self._looked and self.hotel.stock.get(place, {}).get(item, 0) <= 0:
+                tried.add(place)  # the look here showed none: no pick wasted
+                self.log("stock_miss", item=item, at=place)
+                continue
             while self.count(item) < n:
                 ok, text = self.pick_or_cart(item)
                 if not ok:
@@ -395,7 +490,8 @@ class Executor:
     def get_cart(self) -> bool:
         if self.state.has_cart:
             return True
-        place = self._stock_place("cart")
+        self.survey()
+        place = self._stock_place("cart") or self._unchecked_stock_place("cart")
         if place is None:
             return False
         try:
@@ -442,6 +538,79 @@ class Executor:
                     picked[item] = picked.get(item, 0) + 1
         self.log("stock_cart", picked=picked)
         self.refresh()
+
+    # --- learning the night's hotel --------------------------------------------------------------
+
+    def _learn_dock(self, location) -> None:
+        """The dock is where the shift's first status finds the robot (before any move). A JSON
+        dock named otherwise is overruled, so waiting and charging go to the real one."""
+        if self._dock_known:
+            return
+        self._dock_known = True
+        if self._moves or not isinstance(location, str) or not location:
+            return
+        believed = self.hotel.special.get("dock", "charging-dock")
+        if location != believed:
+            self.hotel.special["dock"] = location
+            self.hotel.add_node(location, self.hotel.nodes.get(believed, {}).get("floor", 1), "place")
+            self.log("dock_learnt", dock=location, believed=believed)
+
+    def survey(self) -> None:
+        """Once per shift, in the first idle time (or before the first stock trip): look at the dock
+        and the believed stock places (storage, laundry, front desk) on one tour, so tonight's stock
+        and metres are known before a request depends on them. Never raises."""
+        if self._surveyed:
+            return
+        self._surveyed = True
+        dock = self.hotel.special.get("dock", "charging-dock")
+        places = [p for p in dict.fromkeys([dock, *self._stock_places]) if p in self.hotel.nodes]
+        start = self.state.location
+        try:
+            if start not in self._looked:
+                self.look()  # here first: at 22:00 that is the dock, before anything moves
+            todo = [p for p in places if p not in self._looked]
+            try:
+                order, _ = best_tour(self.hotel, self.state.location, todo, with_cart=self.state.has_cart)
+            except NoRoute:
+                order = todo
+            for place in order:
+                if place in self._looked:
+                    continue
+                try:
+                    self.go(place)  # the first visit looks on arrival
+                except ActionFailed as exc:
+                    self.log("survey_skip", place=place, reason=str(exc))
+                    continue
+                if place not in self._looked:
+                    self.look()
+        except ActionFailed as exc:
+            self.log("survey_failed", reason=str(exc))
+        self.log("survey", from_place=start, looked=sorted(p for p in places if p in self._looked),
+                 stock={p: self.hotel.stock.get(p, {}) for p in places})
+
+    def ensure_battery(self, low: float = BATTERY_LOW, enough: float = BATTERY_OK) -> bool:
+        """Below `low` %: go to the dock and charge until `enough` % (or until a request wakes the
+        robot, or the dock refuses). True when a charge was attempted. Never raises."""
+        if self.state.battery >= low:
+            return False
+        dock = self.hotel.special.get("dock", "charging-dock")
+        self.log("battery_low", battery=self.state.battery, at=self.state.location, dock=dock)
+        try:
+            self.go(dock)
+        except ActionFailed as exc:
+            self.log("charge_failed", reason=str(exc))
+            return True
+        for _ in range(CHARGE_ROUNDS):
+            if self.state.battery >= enough:
+                break
+            reply = self.cmd("dock")
+            self.state.docked = reply.ok
+            text = str(reply.result).lower()
+            self.refresh()
+            if not reply.ok or self.inbox_waiting or "woke" in text or "message" in text:
+                break
+        self.log("charged", battery=self.state.battery, woken=self.inbox_waiting)
+        return True
 
     # --- waiting -------------------------------------------------------------------------------
 

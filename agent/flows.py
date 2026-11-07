@@ -46,7 +46,9 @@ def handle(ex: Executor, task: Task) -> Result:
     # Trays and bags are not judged by text: a second order is a second object at the pickup
     # (tray-104-7, luggage-313-34; live seed 7: a real second suitcase declined as a duplicate, and
     # the third request then paid -18 for taking it). Nothing there -> declined (0).
-    if task.kind not in (Kind.TRAY, Kind.BAGS) and (dup := ex.ledger.duplicate_of(task)):
+    # A described room ("next to the elevator") is known only once asked: judged in _described_room.
+    if (task.kind not in (Kind.TRAY, Kind.BAGS) and not (task.room is None and _described(task.guest))
+            and (dup := ex.ledger.duplicate_of(task))):
         score = ex.score_known()  # log fields only: no status call
         flows_extra.hyp(ex, "H-duplicate", task, f"not redone: same text and room as {dup}", score, score)
         # Live (scout, seed 1): a duplicate reported done is a false done (-30) even though the first
@@ -540,23 +542,60 @@ def _described_room(ex: Executor, phrase: str, request: str | None) -> str:
     if not request:
         raise ActionFailed(f"no request id to ask which room is the one {phrase}")
     room = _manager_room(ex, request, phrase)  # answered already (the task runs a second time)
+    asked = False
     if room is None:
         reply = ex.cmd("reply", request=request, text=f"Which room number is the one {phrase}?")
         ex.log("asked_manager", request=request, phrase=phrase, reply=str(reply.result)[:160])
-        if reply.ok and ex.read_inbox is not None:
-            ex.read_inbox()  # the shift loop's read (0 s): the answer lands in ex.answers
-            room = _manager_room(ex, request, phrase)
+        asked = reply.ok
+        if asked:
+            room = _read_answer(ex, request, phrase)
     if room is None:
         room = _clerk_room(ex, phrase, request)
+    if room is None and asked:  # the answer may have come during the walk to the desk (0 s)
+        room = _read_answer(ex, request, phrase)
     if room is None:
         raise ActionFailed(f"neither the night manager nor the clerk said which room {request} means")
+    _refuse_described_duplicate(ex, request, room)
     return room
+
+
+def _read_answer(ex: Executor, request: str, phrase: str) -> str | None:
+    """The shift loop's inbox read (0 s), then this request's answer from ex.answers. A skip of this
+    request in that read (it is the one running) ends it: declined, nothing delivered."""
+    if ex.read_inbox is None:
+        return None
+    ex.read_inbox()
+    if (entry := ex.ledger.get(request)) and entry.status == "skipped":
+        raise Declined(f"Skipped by the night manager ({request}) while under way; nothing delivered")
+    return _manager_room(ex, request, phrase)
+
+
+def _refuse_described_duplicate(ex: Executor, request: str, room: str) -> None:
+    """The text-duplicate check, once a described room is known: the same words for the same room
+    within 10 minutes is declined (after its reply's +10); the same words for another room are not."""
+    from agent.flows_extra import hyp
+
+    entry = ex.ledger.get(request)
+    if entry is None or entry.task.kind in (Kind.TRAY, Kind.BAGS):
+        return
+    if dup := ex.ledger.duplicate_of(entry.task, room=room):
+        score = ex.score_known()  # log fields only: no status call (var-15)
+        hyp(ex, "H-duplicate", entry.task, f"not redone: same text and room ({room}) as {dup}", score, score)
+        raise Declined(f"Duplicate of {dup} (same words, same room {room}), which was already handled")
+
+
+def _on_floor(ex: Executor, request: str, phrase: str, room: str, who: str) -> bool:
+    """A room on the floor the phrase names ("... on floor 2" -> room-2NN); else logged, not used."""
+    floor = re.search(r"floor (\d)", phrase)
+    if floor and room_floor(room) != int(floor[1]):
+        ex.log("note", request=request, text=f"{who}'s answer {room} is not on floor {floor[1]}: not used")
+        return False
+    return True
 
 
 def _manager_room(ex: Executor, request: str, phrase: str) -> str | None:
     """The room in the manager's answer on `request` ("R-014: Sorry: 201." or "room-201"), never from
     another request's messages. A skip is no answer; a room on another floor than the phrase is not used."""
-    floor = re.search(r"floor (\d)", phrase)
     for text in ex.answers.get(request, []):
         if text.lstrip().startswith("Skip "):
             continue
@@ -564,9 +603,7 @@ def _manager_room(ex: Executor, request: str, phrase: str) -> str | None:
         if not m:
             continue
         room = f"room-{m[1]}"
-        if floor and room_floor(room) != int(floor[1]):
-            ex.log("note", request=request,
-                   text=f"manager's answer {room} is not on floor {floor[1]}: not used")
+        if not _on_floor(ex, request, phrase, room, "manager"):
             continue
         ex.log("manager_answer", request=request, room=room, phrase=phrase)
         return room
@@ -584,6 +621,8 @@ def _clerk_room(ex: Executor, phrase: str, request: str) -> str | None:
         r"(?<![\dR-])(\d{3})(?!\d)", answer.replace(phrase, "").replace(request, ""))
     others = set(re.findall(r"\bR-\d+\b", answer)) - {request}
     room = f"room-{m[1]}" if reply.ok and m and not others else None
+    if room and not _on_floor(ex, request, phrase, room, "clerk"):
+        room = None
     ex.log("asked_room", guest=phrase, request=request, room=room, answer=answer[:200])
     if room is None and "note" in answer.lower():
         room = _room_from_desk_note(ex, phrase, request)

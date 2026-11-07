@@ -299,14 +299,16 @@ class Ledger:
             out.append(entry)
         return out
 
-    def duplicate_of(self, task: Task) -> str | None:
-        """H-duplicate: the same normalised text for the same room within 10 minutes earlier."""
+    def duplicate_of(self, task: Task, room: str | None = None) -> str | None:
+        """H-duplicate: the same normalised text for the same room within 10 minutes earlier. With
+        `room` (a described room, known only once asked), the earlier entries' resolved rooms count."""
         now, norm = _secs(task.arrived), normalise(task.text)
         if now is None or not norm:
             return None
         for entry in reversed(self._earlier(task)):
             then = _secs(entry.task.arrived)
-            if (entry.norm == norm and entry.task.room == task.room and then is not None
+            there, here = (entry.room, room) if room else (entry.task.room, task.room)
+            if (entry.norm == norm and there == here and then is not None
                     and 0 <= now - then <= DUPLICATE_WINDOW_S):
                 return entry.request
         return None

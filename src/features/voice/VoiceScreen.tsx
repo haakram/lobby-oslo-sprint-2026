@@ -30,15 +30,19 @@ const STATUS: Record<VoicePhase, string> = {
 };
 
 /** /stemme: talk to Fettero in any language; it answers out loud and shows what it means. */
-export function VoiceScreen() {
+/**
+ * `ready`: the server has the Fettero agent (ELEVENLABS_AGENT_ID and the key). Without it the screen says
+ * so calmly up front, instead of offering a button that can only end in "ikke satt opp".
+ */
+export function VoiceScreen({ ready = true }: { ready?: boolean }) {
   return (
     <ConversationProvider>
-      <VoiceSession />
+      <VoiceSession ready={ready} />
     </ConversationProvider>
   );
 }
 
-function VoiceSession() {
+function VoiceSession({ ready }: { ready: boolean }) {
   const picklist = usePicklist();
   const addToPicklist = picklist.add;
   const [shown, setShown] = useState<Shown | null>(null);
@@ -109,19 +113,35 @@ function VoiceSession() {
                 getInputVolume={voice.getInputVolume}
                 getOutputVolume={voice.getOutputVolume}
               />
-              <p aria-live="polite" className="min-h-7 text-center text-lg font-medium text-text">
-                {STATUS[voice.phase]}
-              </p>
-              {voice.connected ? (
-                <Button variant="secondary" size="lg" className="w-full max-w-xs" onClick={voice.stop}>
-                  Avslutt
-                </Button>
+              {!ready && !voice.connected ? (
+                <div className="flex max-w-sm flex-col items-center gap-2 text-center">
+                  <p className="text-lg font-medium text-text">Stemmen er ikke slått på ennå</p>
+                  <p className="text-base text-muted">
+                    Fettero-agenten er ikke lagt inn på denne serveren. Øyne og Ruter virker som vanlig.
+                  </p>
+                  <div className="pt-3">
+                    <Link href="/oyne" className={buttonClasses("secondary", "lg")}>
+                      Åpne Øyne
+                    </Link>
+                  </div>
+                </div>
               ) : (
-                <Button size="lg" className="w-full max-w-xs" loading={busy} onClick={() => void voice.start()}>
-                  Snakk med Fettero
-                </Button>
+                <>
+                  <p aria-live="polite" className="min-h-7 text-center text-lg font-medium text-text">
+                    {STATUS[voice.phase]}
+                  </p>
+                  {voice.connected ? (
+                    <Button variant="secondary" size="lg" className="w-full max-w-xs" onClick={voice.stop}>
+                      Avslutt
+                    </Button>
+                  ) : (
+                    <Button size="lg" className="w-full max-w-xs" loading={busy} onClick={() => void voice.start()}>
+                      Snakk med Fettero
+                    </Button>
+                  )}
+                  {voice.problem && <ServiceProblem problem={voice.problem} onRetry={voice.start} />}
+                </>
               )}
-              {voice.problem && <ServiceProblem problem={voice.problem} onRetry={voice.start} />}
             </>
           )}
         </section>

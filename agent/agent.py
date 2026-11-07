@@ -257,7 +257,7 @@ def run_shift(
     try:
         state = RobotState()
         # Claude classifies unknown requests in ONE place (here), so the executor gets no brain.
-        ex = Executor(session, hotel, state, max_scans=params.max_scans)
+        ex = Executor(session, hotel, state, max_scans=params.max_scans, params=params)
         deadline = clock() + real_time_limit_s if real_time_limit_s else None
         pause = sleep or (stop.wait if stop is not None else time.sleep)
         sim_end_s = clock_to_seconds(sim_end) if sim_end else None
@@ -314,6 +314,8 @@ def run_shift(
                         try:
                             if step == "get_cart":
                                 ex.get_cart()
+                            elif step == "stock_cart" and ex.loadout_on():
+                                ex.stock_loadout()  # Variant 2: the night's likeliest items
                             elif step == "stock_cart":
                                 ex.stock_cart(params.cart_stock)
                         except ActionFailed as exc:

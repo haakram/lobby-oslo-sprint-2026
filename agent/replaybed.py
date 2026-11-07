@@ -11,13 +11,15 @@ the noisy rooms behind each complaint, the man in the bathrobe. What the log nev
 item never found, a spill spot never seen) is modelled as the fake does today and listed in
 ``Scenario.flags``.
 
-``fit_scoring`` fits the fake's per-kind reward (base, decay per minute of wait, false-done penalty)
-on every served request of every log; ``run_replays`` replays nights with the current agent (or an
-exported older commit's agent, for the fidelity check) in parallel processes.
+``fit_scoring`` fits the fake's per-kind reward on every served request of every log; ``merge_siblings``
+fills a night's gaps from other real nights of the same seed; ``replay_bench`` replays nights with this
+checkout's agent, another checkout's (``--code``/``--vs``) or, for the fidelity check, the commit that
+played each night live (``--fidelity``, agent/data/replay_codes.json), in parallel child processes against
+``FakeWybe(live=True)``. Never the live server.
 
-    python -m agent replaybench --seeds 16,10          # the longest log of each seed
-    python -m agent replaybench --nights all --fit      # every real night, refit the scoring first
-    python -m agent replaybench --seeds 16 --code <dir> # an older agent export against the same night
+    python -m agent replaybench --vs <baseline checkout>   # candidate vs baseline on every full real night
+    python -m agent replaybench --seeds 16,23               # the newest night of each seed
+    python -m agent replaybench --fidelity                  # each night by the code that played it
 """
 
 from __future__ import annotations

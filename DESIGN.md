@@ -5,7 +5,9 @@
 > `src/app/globals.css` (CSS variables + Tailwind `@theme`); Tailwind's own colour and radius
 > palettes are switched off there, so only these names exist.
 
-Character: **a calm, precise work tool you trust at 06:00 on a warehouse floor.** Industrial, not
+Character: **a calm, precise operations tool for a hotel you trust at 06:00.** (Pivot, team lead
+2026-11-07 19:50: Fettero is hotel oversight with AI: one screen for the whole hotel, a robot that works
+the night, a receptionist that answers the phone.) Industrial, not
 playful: the look of floor tape, shelf labels and a scanner handle, because the person holding it is
 working, often new, sometimes in gloves.
 
@@ -124,3 +126,25 @@ All in `src/ui/`, exported from `src/ui/index.ts`.
   exclamation marks.
 - **Errors** say what happened and what to do next, without apologising: "Kameraet er blokkert. Gi
   tilgang i nettleseren og prøv igjen."
+
+## Hotel oversight additions (team lead, 2026-11-07 19:50)
+
+Applies to the oversight dashboard (`/`), the 3D hotel (`/hotell`), Ruter and Natteskift. The rules above
+still hold unless a line here says otherwise.
+
+- **World (hotel nouns):** rom, etasje, korridor, heis, robot, oppgave, arbeidsordre, gjest, booking,
+  samtale, renhold, romservice, klar, må vaskes, opptatt, ikke forstyrr, avvik.
+- **Icons:** Regen Icons (MIT, kazdenc/regen-icons) through `RegenIcon` from `src/ui`. 24 px grid,
+  1.75 stroke, `currentColor`. They replace the hand-drawn set on new screens; no emoji.
+- **3D:** the hotel is drawn with three.js (`three`), floors stacked, rooms as tiles in their status
+  colour, the robot as one distinct shape in `--accent`. The 3D scene is exempt from "flat, no shadows"
+  (soft light only, no glossy materials). A 2D fallback shows the same state when WebGL is missing.
+- **Motion (GSAP, `gsap` + `@gsap/react`, following greensock/gsap-skills):** the robot moves along its
+  real route at sim pace (a replay may run longer than 300 ms because it shows a change over time);
+  UI entrances stay within the durations above. Everything stops or jumps to the end state under
+  `prefers-reduced-motion`.
+- **Ambient background (Vanta, `vanta` with three r134 as `three-vanta`):** only behind the dashboard
+  header, low contrast (night steel tones), paused when the tab is hidden and off under reduced motion.
+  Never behind text that must be read at 4.5:1 without a solid surface between.
+- **Design guidance:** follow emilkowalski/skills (emil-design-eng, animate, animation-performance)
+  for craft and animation choices.

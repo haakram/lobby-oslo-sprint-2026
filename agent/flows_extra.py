@@ -381,27 +381,29 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
     if orig is None:  # a false claim: declined with the reason scores +5 live (failed 0, done -20)
         h.log("delivered nothing: no order on record", h.before, ex.score_now(), original=None)
         raise Declined(f"No {item} order from {num} on record tonight; nothing was ordered.")
-    if orig.status == "done":
+    if orig.status == "done":  # live: a second call about a delivered order declined scored +5 (R-049)
         h.log(f"delivered nothing: {orig.request} was already done", h.before, ex.score_now(),
               original=orig.request)
-        raise Declined(f"The {item} order from {num} ({orig.request}) was already delivered tonight")
+        raise Declined(f"The {item} for {num} was already delivered under {orig.request}; nothing more to bring.")
     queued = next((t for t in ex.queue if t.request == orig.request), None)
     if queued is not None:  # still waiting: do it now, under its own id
         ex.queue.remove(queued)
         out = ex.run(queued)
         h.log(f"ran the waiting {orig.request}: {out.status}", h.before, ex.score_now(), original=orig.request)
+        # Live (scout, 6 of 6): the follow-up itself is declined (+5) while the order is delivered
+        # under its own id; a follow-up reported done is a false done.
         if out.status == "done":
-            raise ActionFailed(f"delivered via {orig.request}")
-        raise ActionFailed(f"tried {orig.request} again: {out.note}")
+            raise Declined(f"The {item} for {num} is delivered now under {orig.request}; this call needs nothing more.")
+        raise Declined(f"The {item} order for {num} is {orig.request}, tried again: {out.note}")
     # The original was reported failed earlier: deliver again (a place may still score).
     try:
         BASE_HANDLERS[orig.kind](ex, replace(orig.task, room=orig.room))
     except ActionFailed as exc:
         h.log(f"retried {orig.request}: {exc}", h.before, ex.score_now(), original=orig.request)
-        raise ActionFailed(f"retried {orig.request}: {exc}") from None
+        raise Declined(f"The {item} order for {num} is {orig.request}, tried again: {exc}") from None
     ex.ledger.set_status(orig.request, "done")  # served now: another follow-up must not redeliver it
     h.log(f"redelivered {orig.request}", h.before, ex.score_now(), original=orig.request)
-    raise ActionFailed(f"delivered via {orig.request}")
+    raise Declined(f"The {item} for {num} is delivered now under {orig.request}; this call needs nothing more.")
 
 
 HANDLERS: dict[Kind, Callable[[Executor, Task], Result]] = {

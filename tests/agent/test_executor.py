@@ -685,7 +685,7 @@ def test_follow_up_for_a_done_order_delivers_nothing(tmp_path):
     assert ex.run(next_task(ex, session, "R-001")).status == "done"
     places = len(calls(fake, "place"))
     out = ex.run(next_task(ex, session, "R-002"))
-    assert out.status == "declined" and "order from 319" in out.note and "already delivered" in out.note
+    assert out.status == "declined" and "already delivered under R-001" in out.note
     assert len(calls(fake, "place")) == places and fake.reports["R-002"] == "declined"
 
 
@@ -697,8 +697,8 @@ def test_follow_up_runs_the_pending_original_first(tmp_path):
     ex.ledger.add(first)
     ex.queue.append(first)  # still waiting in the shift loop's queue
     out = ex.run(got["R-002"])
-    assert out.status == "failed" and out.note == "delivered via R-001"
-    assert fake.reports == {"R-001": "done", "R-002": "failed"} and not fake.false_done
+    assert out.status == "declined" and "delivered now under R-001" in out.note
+    assert fake.reports == {"R-001": "done", "R-002": "declined"} and not fake.false_done
     assert first not in ex.queue
     assert ex.ledger.get("R-001").status == "done"
 
@@ -992,9 +992,9 @@ def test_follow_up_finds_a_named_guest_order_that_has_not_run_yet(tmp_path):
     ex.ledger.add(got["R-002"])
     ex.queue.append(got["R-001"])  # still waiting: its room is not known yet
     out = ex.run(got["R-002"])
-    assert out.status == "failed" and out.note == "delivered via R-001"
+    assert out.status == "declined" and "delivered now under R-001" in out.note
     assert [e["args"] for e in calls(fake, "place") if e["ok"]] == [{"item": "water-bottle", "where": "room-202"}]
-    assert fake.reports == {"R-001": "done", "R-002": "failed"} and not fake.false_done
+    assert fake.reports == {"R-001": "done", "R-002": "declined"} and not fake.false_done
     assert [e["args"]["question"] for e in calls(fake, "ask")] == ["Which room is Ms Kvam in?"]
     assert ex.ledger.get("R-001").status == "done" and ex.queue == []
 
@@ -1007,15 +1007,15 @@ def test_follow_up_redelivers_a_failed_order_once(tmp_path):
     assert first.status == "failed" and "no answer" in first.note
     fake._absent.discard("room-319")  # the guest is back and calls the desk
     out = ex.run(next_task(ex, session, "R-002"))
-    assert out.status == "failed" and out.note == "delivered via R-001"
+    assert out.status == "declined" and "delivered now under R-001" in out.note
     assert [e["args"] for e in calls(fake, "place") if e["ok"]] == [
         {"item": "phone-charger", "where": "room-319"}]
     assert fake._requests["R-001"].completed and not fake.wrong_deliveries
     assert ex.ledger.get("R-001").status == "done"
     again = ex.run(next_task(ex, session, "R-003"))  # a second call about the same order
-    assert again.status == "declined" and "(R-001) was already delivered" in again.note
+    assert again.status == "declined" and "already delivered under R-001" in again.note
     assert len([e for e in calls(fake, "place") if e["ok"]]) == 1
-    assert fake.reports == {"R-001": "failed", "R-002": "failed", "R-003": "declined"} and not fake.false_done
+    assert fake.reports == {"R-001": "failed", "R-002": "declined", "R-003": "declined"} and not fake.false_done
     assert [d["request"] for d in hypotheses(session, "H-followup")] == ["R-002", "R-003"]
 
 

@@ -23,6 +23,7 @@ Result = tuple[str, Callable[[], None] | None]
 
 DND = "do not disturb"
 OCCUPIED_NOTE = "occupied: guest answered; did not enter"
+MAX_SCANS_BOUND = 9
 SECONDARY_SCANS = ("lobby-bar", "front-desk", "lobby")  # sofas and counters, then the lobby
 FLOOR_WORDS = {"ground": 1, "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3}
 GENERIC_PARTS = {"corridor", "room", "floor"}
@@ -319,13 +320,17 @@ def _find(ex: Executor, item: str, hint: str | None) -> str:
     if name := _pick_found(ex, item, primary):
         return name
     scans = 0
-    for group in (primary, secondary):
+    # The cap must not cut off the hinted places plus the likely ones (bar, desk, lobby); bounded at 9.
+    likely = [n for n in secondary if n in SECONDARY_SCANS]
+    cap = min(MAX_SCANS_BOUND, max(ex.max_scans, len(primary) + len(likely)))
+    rest = [n for n in secondary if n not in likely]
+    for group in (primary, likely, rest):
         try:
             order, _ = best_tour(ex.hotel, ex.state.location, group, with_cart=ex.state.has_cart)
         except NoRoute:
             order = group
         for place in order:
-            if scans >= ex.max_scans:
+            if scans >= cap:
                 break
             try:
                 ex.go(place)

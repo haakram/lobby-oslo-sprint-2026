@@ -1117,3 +1117,28 @@ def test_brain_room_check_looks_at_the_door_before_any_keycard(tmp_path, fake_kw
     assert looks, cmds
     assert (not keycards) if expected == "failed" else (keycards and looks[0] < keycards[0])
     assert not fake.unsafe and not fake.false_done
+
+
+def test_scan_cap_cannot_cut_off_hinted_and_secondary_places(tmp_path):
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, task = solo(tmp_path, text, hidden={"wallet": "lobby-bar"})
+    ex.max_scans = 2  # old behaviour: stop after the three corridors' first two, never reach the bar
+    out = ex.run(task)
+    assert out.status == "done", out
+    assert "lobby-bar" in scan_places(fake)
+
+
+def test_scan_count_stays_bounded_when_the_item_is_nowhere(tmp_path):
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, task = solo(tmp_path, text, hidden={})
+    ex.max_scans = 2
+    ex.run(task)
+    assert 3 + 3 <= len(scan_places(fake)) <= 9
+
+
+def test_lost_toy_hinted_at_the_bar_is_found_as_numbered_toy(tmp_path):
+    text = "Guest in 320 lost a child's toy, maybe the lobby bar."
+    fake, _session, ex, task = solo(tmp_path, text, hidden={"toy-2": "lobby-bar"})
+    fake._requests["R-001"].item = "toy-2"
+    out = ex.run(task)
+    assert out.status == "done", out

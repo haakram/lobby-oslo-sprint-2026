@@ -23,11 +23,13 @@ function renderWith(skus: string[], screenElement: ReactNode = <RoutesScreen par
   );
 }
 
-// A short night: two rooms to clean, one with guests, one Do Not Disturb, and one task walked.
+// A short night: three rooms to clean (one not on the map), one with guests, one Do Not Disturb, one task walked.
 const NIGHT = [
   { v: 1, type: "state", clock: "22:00:00", location: "charging-dock", score: 0 },
   { v: 1, type: "decision", kind: "room_status", data: { room: "room-214", status: "ma_vaskes", source: "room_check" } },
   { v: 1, type: "decision", kind: "room_status", data: { room: "room-201", status: "ma_vaskes", source: "room_check" } },
+  // Seed 5 has a room 327; the seed-1 map does not.
+  { v: 1, type: "decision", kind: "room_status", data: { room: "room-327", status: "ma_vaskes", source: "room_check" } },
   { v: 1, type: "decision", kind: "room_status", data: { room: "room-319", status: "opptatt", source: "knock" } },
   { v: 1, type: "decision", kind: "room_status", data: { room: "room-208", status: "ikke_forstyrr", source: "door_sign" } },
   { v: 1, type: "decision", kind: "task_start", data: { request: "R-001", kind: "amenity", room: "room-104" } },
@@ -61,11 +63,14 @@ describe("RoutesScreen, Renhold", () => {
     expect(screen.getByRole("heading", { name: "Ingen rom valgt" })).toBeInTheDocument();
     expect(screen.getByText("Velg rom på kartet eller hent rommene som må vaskes.")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/runs/demo.jsonl", expect.anything());
-    // The night's log names two rooms to clean.
+    // The night's log names three rooms to clean; room 327 is not on the map, so it gets a row of its own.
     fireEvent.click(await screen.findByRole("button", { name: /Hent rommene som må vaskes/ }));
     const stops = within(screen.getByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem");
     expect(stops).toHaveLength(2);
     expect(screen.getByRole("region", { name: "Rutetall" })).toBeInTheDocument();
+    const apart = screen.getByRole("region", { name: "Rom som ikke er med i ruten" });
+    expect(apart).toHaveTextContent("Rom 327 finnes ikke på kartet for i natt — besøk det manuelt");
+    expect(screen.queryByText("Ingen rute funnet")).not.toBeInTheDocument();
   });
 
   it("loads the rooms from ?rom= and draws their route", () => {
@@ -76,9 +81,26 @@ describe("RoutesScreen, Renhold", () => {
     expect(screen.getByRole("button", { name: /^Rom 201/ })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("says which rooms from the link are not in the hotel", () => {
-    renderRoutes({ rom: "201,999" });
-    expect(screen.getByRole("status")).toHaveTextContent("Fant ikke 999 i hotellkartet");
+  it("routes the rooms on the map and lists the rest apart, each with a way to remove it", () => {
+    renderRoutes({ rom: "201,327,206" });
+    expect(within(screen.getByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem")).toHaveLength(2);
+    const apart = screen.getByRole("region", { name: "Rom som ikke er med i ruten" });
+    expect(apart).toHaveTextContent("1 rom er ikke med i ruten");
+    expect(apart).toHaveTextContent("Rom 327 finnes ikke på kartet for i natt — besøk det manuelt");
+    fireEvent.click(within(apart).getByRole("button", { name: "Fjern rom 327" }));
+    expect(screen.queryByRole("region", { name: "Rom som ikke er med i ruten" })).not.toBeInTheDocument();
+  });
+
+  it("shows only the rows apart when no picked room is on the map", () => {
+    renderRoutes({ rom: "327" });
+    expect(screen.getByRole("region", { name: "Rom som ikke er med i ruten" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Rekkefølge" })).not.toBeInTheDocument();
+  });
+
+  it("says what in the link is not a room number", () => {
+    renderRoutes({ rom: "201,laundry" });
+    expect(screen.getByRole("status")).toHaveTextContent("Lenken hadde noe som ikke er et romnummer: laundry");
     expect(within(screen.getByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem")).toHaveLength(1);
   });
 

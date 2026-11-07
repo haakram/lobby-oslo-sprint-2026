@@ -21,10 +21,11 @@ const first = (raw: Param) => (Array.isArray(raw) ? raw[0] : raw);
 
 /**
  * The rooms in ?rom=, in the order given, each once. Takes "room-201", "rom-201" or "201", split by
- * commas or spaces (repeated ?rom= values too). Anything that isn't a guest room on the map comes
- * back in `unknown` (cut to 32 characters) so the screen can say so.
+ * commas or spaces (repeated ?rom= values too). Every room id is kept, even one tonight's map lacks:
+ * the screen shows those apart instead of losing them. Anything that isn't a room id comes back in
+ * `unknown` (cut to 32 characters) so the screen can say so.
  */
-export function parseRoomQuery(raw: Param, known: ReadonlySet<string>): { rooms: string[]; unknown: string[] } {
+export function parseRoomQuery(raw: Param): { rooms: string[]; unknown: string[] } {
   const values = raw === undefined ? [] : Array.isArray(raw) ? raw : [raw];
   const tokens = values
     .flatMap((v) => v.split(/[\s,;]+/))
@@ -35,8 +36,8 @@ export function parseRoomQuery(raw: Param, known: ReadonlySet<string>): { rooms:
   const unknown: string[] = [];
   for (const token of tokens) {
     const digits = /^(?:room-|rom-|rom)?(\d{1,4})$/.exec(token);
-    const id = digits ? `room-${digits[1]}` : token;
-    if (known.has(id)) {
+    if (digits) {
+      const id = `room-${digits[1]}`;
       if (!rooms.includes(id)) rooms.push(id);
     } else {
       const shown = token.slice(0, MAX_TOKEN_LENGTH);

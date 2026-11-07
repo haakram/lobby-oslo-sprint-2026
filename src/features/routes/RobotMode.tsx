@@ -115,6 +115,13 @@ export function RobotMode({ map, log }: { map: HotelMap; log: NightLog }) {
 
   return (
     <div className="flex flex-col gap-4 lg:gap-6">
+      {night.offMap.length > 0 && (
+        <p role="status" className="rounded-md border-l-4 border-warning bg-warning-soft px-4 py-3 text-base text-warning">
+          Roboten var i {night.offMap.length === 1 ? "et rom" : `${night.offMap.length} rom`} som ikke finnes på kartet for i
+          natt: {night.offMap.map((id) => placeLabel(id)).join(", ")}. Metrene dit er talt med, men veien er ikke tegnet.
+        </p>
+      )}
+
       <section aria-label="Natten i tall">
         <Card className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-4 sm:p-5">
           <Stat label="Gått i natt" value={nb.format(night.metres)} unit="m" />

@@ -1,40 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { parseCart, parseMode, parseRoomQuery, parseStart } from "./query";
 
-const KNOWN = new Set(["room-104", "room-201", "room-214", "room-319"]);
-
 describe("parseRoomQuery", () => {
   it("reads the dashboard's ?rom=room-201,room-214 in the order given", () => {
-    expect(parseRoomQuery("room-214,room-201", KNOWN)).toEqual({ rooms: ["room-214", "room-201"], unknown: [] });
+    expect(parseRoomQuery("room-214,room-201")).toEqual({ rooms: ["room-214", "room-201"], unknown: [] });
   });
 
   it("takes bare numbers and rom-201, split by commas or spaces, each room once", () => {
-    expect(parseRoomQuery("201 rom-319, 201;ROOM-104", KNOWN)).toEqual({
+    expect(parseRoomQuery("201 rom-319, 201;ROOM-104")).toEqual({
       rooms: ["room-201", "room-319", "room-104"],
       unknown: [],
     });
   });
 
   it("joins repeated ?rom= values", () => {
-    expect(parseRoomQuery(["201", "214"], KNOWN).rooms).toEqual(["room-201", "room-214"]);
+    expect(parseRoomQuery(["201", "214"]).rooms).toEqual(["room-201", "room-214"]);
   });
 
-  it("reports what is not a guest room on the map, cut to 32 characters", () => {
+  it("keeps a room id the map may lack, and reports what is not a room id, cut to 32 characters", () => {
     const long = "x".repeat(80);
-    expect(parseRoomQuery(`999,laundry,${long},201`, KNOWN)).toEqual({
-      rooms: ["room-201"],
-      unknown: ["999", "laundry", "x".repeat(32)],
+    expect(parseRoomQuery(`327,laundry,${long},201,room-12345`)).toEqual({
+      rooms: ["room-327", "room-201"],
+      unknown: ["laundry", "x".repeat(32), "room-12345"],
     });
   });
 
   it("is empty for no value or a blank one", () => {
-    expect(parseRoomQuery(undefined, KNOWN)).toEqual({ rooms: [], unknown: [] });
-    expect(parseRoomQuery(" , ", KNOWN)).toEqual({ rooms: [], unknown: [] });
+    expect(parseRoomQuery(undefined)).toEqual({ rooms: [], unknown: [] });
+    expect(parseRoomQuery(" , ")).toEqual({ rooms: [], unknown: [] });
   });
 
   it("reads at most 64 values", () => {
-    const many = Array.from({ length: 100 }, () => "999").map((v, i) => `${v}${i}`).join(",");
-    expect(parseRoomQuery(many, KNOWN).unknown).toHaveLength(64);
+    const many = Array.from({ length: 100 }, (_, i) => `x${i}`).join(",");
+    expect(parseRoomQuery(many).unknown).toHaveLength(64);
   });
 });
 

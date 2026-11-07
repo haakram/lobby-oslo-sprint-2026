@@ -58,6 +58,11 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
       <ErrorState
         title="Rutekartet kunne ikke leses"
         body="Kartfila er ugyldig. Last siden på nytt, og si fra til skiftleder hvis det skjer igjen."
+        action={
+          <Button variant="secondary" onClick={() => window.location.reload()}>
+            Last siden på nytt
+          </Button>
+        }
       />
     );
   }
@@ -84,11 +89,20 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
   if (!result.ok) {
     const name = (id: string) =>
       products.find((p) => p.location === id)?.locationLabel ?? m.nodes[id]?.label ?? id;
+    const blocked = result.missing.to === m.start ? result.missing.from : result.missing.to;
+    const there = products.filter((p) => p.location === blocked);
     return (
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
         <ErrorState
           title="Ingen rute funnet"
           body={`Kartet har ingen vei fra ${name(result.missing.from)} til ${name(result.missing.to)}. Fjern varen fra plukklisten og prøv igjen.`}
+          action={
+            there.length > 0 ? (
+              <Button onClick={() => there.forEach((p) => remove(p.sku))}>
+                Fjern {there.length === 1 ? there[0].name : `varene på ${name(blocked)}`}
+              </Button>
+            ) : undefined
+          }
         />
         <Card className="flex flex-col gap-2">
           <h2 className="text-xl font-semibold tracking-tight">Plukkliste</h2>

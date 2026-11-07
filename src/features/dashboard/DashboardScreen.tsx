@@ -70,7 +70,7 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
 
   return (
     <main className="flex-1">
-      <TopBar night={night ? nightLabel(night.startedAt) : null} robot={robot} source={run.source} loading={run.status === "loading"} />
+      <TopBar night={night ? nightLabel(night.startedAt) : null} robot={robot} run={run} loading={run.status === "loading"} />
       {/* The skeletons are silent; this says it in words, and says when the night is in. */}
       <p role="status" className="sr-only">
         {run.status === "loading" ? "Henter natten …" : run.status === "ready" ? "Natten er lastet." : ""}

@@ -6,6 +6,7 @@ import { Cleaning } from "@/features/dashboard/Cleaning";
 import { placeLabel } from "@/features/dashboard/labels";
 import { RoomBoard } from "@/features/dashboard/RoomBoard";
 import { RoomSheet } from "@/features/dashboard/RoomSheet";
+import { RunBadge } from "@/features/dashboard/TopBar";
 import { cleaningHref, countRooms, selectRoomNight } from "@/features/dashboard/selectors";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
@@ -74,6 +75,7 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
       module="rom"
       ready={ready}
       lede="Slik roboten sist så rommene, hvem som vasker i dag, og rommene som ikke kan selges."
+      meta={run.source === "live" ? <RunBadge run={run} /> : undefined}
       actions={
         dirty.length > 0 ? (
           <Link href={cleaningHref(dirtyIds)} className={buttonClasses("primary")}>

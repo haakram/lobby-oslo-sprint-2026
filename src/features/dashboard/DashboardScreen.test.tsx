@@ -78,7 +78,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
 
     // The top bar: the night, the shift clock at the handover, the robot's chip.
     expect(screen.getByText(/^Natt til \p{L}+ \d{1,2}\. \p{L}+ · overlevering 06:00$/u)).toBeInTheDocument();
-    expect(screen.getByLabelText("Skiftklokke")).toHaveTextContent("06:00");
+    expect(screen.getByText("Skiftklokke").parentElement).toHaveTextContent("Skiftklokke 06:00");
     expect(screen.getAllByText("Skiftet er over").length).toBeGreaterThan(0);
 
     // The hotel's figures, eight along one rule.

@@ -10,12 +10,7 @@ export const metadata: Metadata = { title: "Logg inn", robots: { index: false, f
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { next } = await searchParams;
   return (
-    // The fixed layer paints night steel over the whole viewport, so the shell's bottom padding (kept for the
-    // phone nav bar, which a logged-out visitor doesn't have) never shows as a light strip under the page.
-    <main
-      data-surface="dark"
-      className="relative isolate flex flex-1 items-center justify-center overflow-hidden bg-bg px-4 py-12 text-text before:pointer-events-none before:fixed before:inset-0 before:-z-10 before:bg-bg md:px-8"
-    >
+    <main data-surface="dark" className="relative isolate flex flex-1 items-center justify-center overflow-hidden bg-bg px-4 py-12 text-text md:px-8">
       <VantaBackdrop />
       <div className="relative z-10 w-full max-w-sm">
         <header className="mb-8">

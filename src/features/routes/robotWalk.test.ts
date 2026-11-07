@@ -82,7 +82,7 @@ describe("robotWalk", () => {
   });
 
   it("reads the demo night: the task metres and the walks between add up to the whole", () => {
-    const text = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+    const text = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
     const night = robotWalk(parseRunLog(text).lines, map);
     expect(night.moves.length).toBeGreaterThan(100);
     expect(night.tasks.length).toBeGreaterThan(10);

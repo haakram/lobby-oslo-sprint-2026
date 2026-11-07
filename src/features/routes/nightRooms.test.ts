@@ -80,7 +80,7 @@ describe("cleaningPresets", () => {
   });
 
   it("works on the demo night: every preset room is a guest room on the map, none of them Ikke forstyrr", () => {
-    const text = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+    const text = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
     const { presets, doNotDisturb } = cleaningPresets(roomStatusAt(parseRunLog(text).lines));
     const rooms = new Set(guestRooms(hotelMap()));
     const all = presets.flatMap((p) => p.rooms);

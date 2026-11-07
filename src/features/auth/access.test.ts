@@ -94,6 +94,36 @@ describe("decide: logged in", () => {
   });
 });
 
+describe("decide: the host (an Airbnb host with their own app)", () => {
+  it("lands on /vert: from /login, and from / (no Oversikt for the host, so no 403 on the front page)", () => {
+    expect(decide({ pathname: "/login", search: "", session: as("host") })).toEqual({ kind: "redirect", location: "/vert", clearCookie: false });
+    expect(decide({ pathname: "/login", search: "?next=%2From", session: as("host") })).toMatchObject({ location: "/vert" });
+    expect(decide({ pathname: "/login", search: "?next=%2Fvert%2Fmeldinger", session: as("host") })).toMatchObject({ location: "/vert/meldinger" });
+    expect(decide({ pathname: "/", search: "", session: as("host") })).toEqual({ kind: "redirect", location: "/vert", clearCookie: false });
+  });
+
+  it("opens its own pages and the shared auth API", () => {
+    for (const pathname of ["/vert", "/vert/meldinger", "/vert/bookinger", "/vert/drift", "/api/auth/session"]) {
+      expect(decide({ pathname, search: "", session: as("host") }).kind, pathname).toBe("next");
+    }
+  });
+
+  it("gets the 403 page for every hotel, robot, reception and admin screen, and 403 JSON for their APIs", () => {
+    for (const pathname of ["/rom", "/gjester", "/resepsjon", "/hotell", "/natteskift", "/oyne", "/stemme", "/vedlikehold", "/lager", "/ansatte", "/ruter", "/foresporsler"]) {
+      expect(decide({ pathname, search: "", session: as("host") }), pathname).toEqual({ kind: "forbidden", api: false });
+    }
+    for (const pathname of ["/api/reception/calls", "/api/identify", "/api/voice/token", "/api/scene"]) {
+      expect(decide({ pathname, search: "", session: as("host") }), pathname).toEqual({ kind: "forbidden", api: true });
+    }
+  });
+
+  it("leaves the hotel roles' front page alone, and lets an admin open /vert", () => {
+    expect(decide({ pathname: "/", search: "", session: as("robot") }).kind).toBe("next");
+    expect(decide({ pathname: "/vert", search: "", session: as("admin") }).kind).toBe("next");
+    expect(decide({ pathname: "/vert", search: "", session: as("receptionist") })).toEqual({ kind: "forbidden", api: false });
+  });
+});
+
 describe("safeNext", () => {
   it("keeps same-origin relative paths with their query and hash", () => {
     expect(safeNext("/ruter")).toBe("/ruter");

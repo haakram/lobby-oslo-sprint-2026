@@ -1,34 +1,38 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { PAGES, ROLES, ROUTES_BY_ROLE, canAccess, isRole, roleLabel, type Role } from "./roles";
+import { ADMIN_VIEWS, PAGES, ROLES, ROUTES_BY_ROLE, canAccess, homeFor, isRole, roleLabel, type Role } from "./roles";
 
 // Every page and API the app has today, and who may open it (auth brief, "Roles and access").
 const MATRIX: Record<string, Record<Role, boolean>> = {
-  "/": { admin: true, receptionist: true, robot: true },
-  "/rom": { admin: true, receptionist: true, robot: true },
-  "/gjester": { admin: true, receptionist: true, robot: false },
-  "/foresporsler": { admin: true, receptionist: true, robot: true },
-  "/vedlikehold": { admin: true, receptionist: false, robot: true },
-  "/lager": { admin: true, receptionist: false, robot: true },
-  "/ansatte": { admin: true, receptionist: true, robot: false },
-  "/hotell": { admin: true, receptionist: false, robot: true },
-  "/natteskift": { admin: true, receptionist: false, robot: true },
-  "/oyne": { admin: true, receptionist: false, robot: true },
-  "/stemme": { admin: true, receptionist: false, robot: true },
-  "/ruter": { admin: true, receptionist: true, robot: true },
-  "/resepsjon": { admin: true, receptionist: true, robot: false },
-  "/api/reception/calls": { admin: true, receptionist: true, robot: false },
-  "/api/reception/token": { admin: true, receptionist: true, robot: false },
-  "/api/identify": { admin: true, receptionist: false, robot: true },
-  "/api/scene": { admin: true, receptionist: false, robot: true },
-  "/api/voice/token": { admin: true, receptionist: false, robot: true },
-  "/api/auth/session": { admin: true, receptionist: true, robot: true },
-  "/api/auth/view": { admin: true, receptionist: true, robot: true },
-  "/runs/demo.jsonl": { admin: true, receptionist: true, robot: true },
-  "/login/ingen-tilgang": { admin: true, receptionist: true, robot: true },
-  "/mediapipe/vision_wasm_internal.wasm": { admin: true, receptionist: false, robot: true },
-  "/models/efficientdet_lite0.tflite": { admin: true, receptionist: false, robot: true },
-  "/something-new": { admin: true, receptionist: false, robot: false },
+  "/": { admin: true, receptionist: true, robot: true, host: false },
+  "/rom": { admin: true, receptionist: true, robot: true, host: false },
+  "/gjester": { admin: true, receptionist: true, robot: false, host: false },
+  "/foresporsler": { admin: true, receptionist: true, robot: true, host: false },
+  "/vedlikehold": { admin: true, receptionist: false, robot: true, host: false },
+  "/lager": { admin: true, receptionist: false, robot: true, host: false },
+  "/ansatte": { admin: true, receptionist: true, robot: false, host: false },
+  "/hotell": { admin: true, receptionist: false, robot: true, host: false },
+  "/natteskift": { admin: true, receptionist: false, robot: true, host: false },
+  "/oyne": { admin: true, receptionist: false, robot: true, host: false },
+  "/stemme": { admin: true, receptionist: false, robot: true, host: false },
+  "/ruter": { admin: true, receptionist: true, robot: true, host: false },
+  "/resepsjon": { admin: true, receptionist: true, robot: false, host: false },
+  "/api/reception/calls": { admin: true, receptionist: true, robot: false, host: false },
+  "/api/reception/token": { admin: true, receptionist: true, robot: false, host: false },
+  "/api/identify": { admin: true, receptionist: false, robot: true, host: false },
+  "/api/scene": { admin: true, receptionist: false, robot: true, host: false },
+  "/api/voice/token": { admin: true, receptionist: false, robot: true, host: false },
+  "/api/auth/session": { admin: true, receptionist: true, robot: true, host: true },
+  "/api/auth/view": { admin: true, receptionist: true, robot: true, host: true },
+  "/runs/demo.jsonl": { admin: true, receptionist: true, robot: true, host: true },
+  "/login/ingen-tilgang": { admin: true, receptionist: true, robot: true, host: true },
+  "/mediapipe/vision_wasm_internal.wasm": { admin: true, receptionist: false, robot: true, host: false },
+  "/models/efficientdet_lite0.tflite": { admin: true, receptionist: false, robot: true, host: false },
+  "/vert": { admin: true, receptionist: false, robot: false, host: true },
+  "/vert/meldinger": { admin: true, receptionist: false, robot: false, host: true },
+  "/vert/bookinger": { admin: true, receptionist: false, robot: false, host: true },
+  "/vert/drift": { admin: true, receptionist: false, robot: false, host: true },
+  "/something-new": { admin: true, receptionist: false, robot: false, host: false },
 };
 
 describe("canAccess", () => {
@@ -86,8 +90,9 @@ describe("canAccess", () => {
 });
 
 describe("role helpers", () => {
-  it("knows the three roles", () => {
-    expect([...ROLES]).toEqual(["admin", "receptionist", "robot"]);
+  it("knows the four roles; an admin views as the hotel's three, never as the host", () => {
+    expect([...ROLES]).toEqual(["admin", "receptionist", "robot", "host"]);
+    expect([...ADMIN_VIEWS]).toEqual(["admin", "receptionist", "robot"]);
     expect(isRole("robot")).toBe(true);
     expect(isRole("root")).toBe(false);
     expect(isRole(undefined)).toBe(false);
@@ -97,11 +102,28 @@ describe("role helpers", () => {
     expect(roleLabel("admin")).toBe("Admin");
     expect(roleLabel("receptionist")).toBe("Resepsjonist");
     expect(roleLabel("robot")).toBe("Robotansvarlig");
+    expect(roleLabel("host")).toBe("Vert");
+  });
+
+  it("starts every hotel role on Oversikt and the host on its own app", () => {
+    expect(homeFor("admin")).toBe("/");
+    expect(homeFor("receptionist")).toBe("/");
+    expect(homeFor("robot")).toBe("/");
+    expect(homeFor("host")).toBe("/vert");
+  });
+
+  it("keeps the host inside /vert: no hotel, robot, reception or admin screen and none of their APIs", () => {
+    for (const path of ["/", "/rom", "/gjester", "/resepsjon", "/hotell", "/natteskift", "/oyne", "/stemme", "/lager", "/api/reception/calls", "/api/identify", "/api/voice/token", "/vertx"]) {
+      expect(canAccess("host", path), path).toBe(false);
+    }
+    expect(canAccess("host", "/vert/meldinger?tråd=1")).toBe(true);
+    expect(canAccess("host", "/vert/../rom")).toBe(false);
   });
 
   it("lists the routes of every role", () => {
     expect(ROUTES_BY_ROLE.receptionist).toContain("/resepsjon");
     expect(ROUTES_BY_ROLE.robot).toContain("/hotell");
     expect(ROUTES_BY_ROLE.admin).toContain("*");
+    expect(ROUTES_BY_ROLE.host).toEqual(["/vert", "/vert/meldinger", "/vert/bookinger", "/vert/drift"]);
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
-import { ROLES, type Role, roleLabel } from "@/features/auth/roles";
+import { ADMIN_VIEWS, type Role, roleLabel } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
@@ -79,12 +79,12 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
           {admin && (
             <div role="radiogroup" aria-label="Vis som" onKeyDown={moveBetweenViews} className="flex flex-col gap-0.5">
               <p className="px-3 pt-1.5 pb-0.5 text-xs text-muted">Vis som</p>
-              {ROLES.map((role, index) => (
+              {ADMIN_VIEWS.map((role, index) => (
                 <ViewOption
                   key={role}
                   role={role}
                   checked={view === role}
-                  tabbable={view === role || (index === 0 && !ROLES.includes(view as Role))}
+                  tabbable={view === role || (index === 0 && !(ADMIN_VIEWS as readonly Role[]).includes(view as Role))}
                   pending={pending === role}
                   onPick={() => void pick(role)}
                 />

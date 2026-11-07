@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
+import { homeFor, type Role } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
@@ -11,6 +12,11 @@ import { Sheet } from "./Sheet";
 import { UserPlate } from "./UserPlate";
 
 export const HOTEL_NAME = "Hotell Nattskift";
+
+/** The line under "Lobby": the hotel, or for the host (an Airbnb host) their own apartments. */
+function placeFor(role: Role): string {
+  return role === "host" ? "Korttidsutleie i Oslo" : HOTEL_NAME;
+}
 
 /** How many of the role's screens fit on the phone bar before the rest go into Meny. */
 const BAR_ITEMS = 4;
@@ -43,19 +49,19 @@ export function AppNav() {
   // Nobody logged in (the login page, the no-access page): no navigation.
   if (!effectiveRole || pathname.startsWith("/login")) return null;
   const groups = groupsFor(effectiveRole);
-  return desktop ? <Rail groups={groups} pathname={pathname} /> : <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} />;
+  return desktop ? <Rail groups={groups} pathname={pathname} home={homeFor(effectiveRole)} place={placeFor(effectiveRole)} /> : <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} />;
 }
 
-function Rail({ groups, pathname }: { groups: NavGroup[]; pathname: string }) {
+function Rail({ groups, pathname, home, place }: { groups: NavGroup[]; pathname: string; home: string; place: string }) {
   return (
     <nav
       aria-label="Hovedmeny"
       data-surface="dark"
       className="sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-surface text-text lg:flex"
     >
-      <Link href="/" className="flex flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
+      <Link href={home} className="flex flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
         <span className="text-xl font-bold leading-none tracking-[-0.02em]">Lobby</span>
-        <span className="mt-1.5 text-xs text-muted">{HOTEL_NAME}</span>
+        <span className="mt-1.5 text-xs text-muted">{place}</span>
       </Link>
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-4">

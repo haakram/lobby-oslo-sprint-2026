@@ -11,7 +11,8 @@ const path = vi.hoisted(() => ({ current: "/" }));
 vi.mock("next/navigation", () => ({ usePathname: () => path.current }));
 
 function as(role: Role, children: ReactNode) {
-  const session = { user: { u: role, name: role === "admin" ? "Hamad" : "Test", role }, view: role, effectiveRole: role, exp: 0 };
+  const name = role === "admin" ? "Hamad" : role === "host" ? "Ingrid Berge" : "Test";
+  const session = { user: { u: role, name, role }, view: role, effectiveRole: role, exp: 0 };
   return <SessionProvider session={session}>{children}</SessionProvider>;
 }
 
@@ -54,6 +55,13 @@ describe("the navigation groups, from the module registry", () => {
     const groups = groupsFor("robot");
     expect(groups.map((group) => group.label)).toEqual(["Hotellet", "Drift", "Roboten"]);
     expect(groups.flatMap((group) => group.items.map((item) => item.href))).toEqual(["/", "/rom", "/ruter", "/foresporsler", "/vedlikehold", "/lager", "/hotell", "/natteskift", "/oyne", "/stemme"]);
+  });
+
+  it("gives the host only Utleie: their apartments, messages, bookings and supplies, nothing of the hotel", () => {
+    const groups = groupsFor("host");
+    expect(groups.map((group) => group.label)).toEqual(["Utleie"]);
+    expect(groups.flatMap((group) => group.items.map((item) => item.href))).toEqual(["/vert", "/vert/meldinger", "/vert/bookinger", "/vert/drift"]);
+    expect(barItemsFor("host", 4).map((item) => item.short)).toEqual(["Boliger", "Meldinger", "Bookinger", "Drift"]);
   });
 
   it("fills the phone bar with the role's pinned screens first, then the rest in order", () => {
@@ -110,6 +118,33 @@ describe("AppNav on a desktop (the rail)", () => {
     expect(screen.getByRole("radiogroup", { name: "Vis som" })).toBeInTheDocument();
     expect(screen.getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["Admin", "Resepsjonist", "Robotansvarlig"]);
     expect(screen.getByRole("button", { name: "Logg ut" })).toBeInTheDocument();
+  });
+
+  it("gives the host their own rail: home is /vert, one group, and no view switcher in the user menu", () => {
+    path.current = "/vert/meldinger";
+    render(as("host", <AppNav />));
+    expect(screen.getByRole("link", { name: /Lobby/ })).toHaveAttribute("href", "/vert");
+    expect(screen.getByText("Korttidsutleie i Oslo")).toBeInTheDocument();
+    expect(screen.queryByText("Hotellet")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Oversikt" })).not.toBeInTheDocument();
+    // A deeper screen owns its path: on /vert/meldinger only Gjestemeldinger is current, not Mine boliger.
+    expect(screen.getByRole("link", { name: "Gjestemeldinger" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Mine boliger" })).not.toHaveAttribute("aria-current");
+    const plate = screen.getByRole("button", { expanded: false });
+    expect(plate).toHaveTextContent("Ingrid Berge");
+    expect(plate).toHaveTextContent("Vert");
+    fireEvent.click(plate);
+    expect(screen.queryByRole("radiogroup", { name: "Vis som" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Logg ut" })).toBeInTheDocument();
+  });
+
+  it("keeps the admin's view switcher to the hotel's three views (no Vert)", () => {
+    render(as("admin", <AppNav />));
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.getAllByRole("radio").map((radio) => radio.textContent)).not.toContain("Vert");
+    // Admins see everything, the host's app included.
+    expect(screen.getByRole("link", { name: "Mine boliger" })).toHaveAttribute("href", "/vert");
   });
 
   it("closes the user menu on Escape (focus back on the plate) and on a click outside", () => {

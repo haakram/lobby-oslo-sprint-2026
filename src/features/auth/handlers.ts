@@ -5,7 +5,7 @@ import { authConfig } from "./config";
 import { DUMMY_HASH, verifyPassword } from "./password";
 import { createLoginLimiter } from "./rateLimit";
 import { resolveSession } from "./resolve";
-import { canAccess, ROLES } from "./roles";
+import { ADMIN_VIEWS, canAccess, homeFor } from "./roles";
 import { SESSION_COOKIE, newSession, sessionCookieOptions, signSession, withView } from "./session";
 import type { Session } from "./types";
 
@@ -140,7 +140,7 @@ export async function handleLogin(
   const payload = newSession(user.u, user.role, now());
   const session: Session = { user: { u: user.u, name: user.name, role: user.role }, view: payload.view, effectiveRole: payload.view, exp: payload.exp };
   const next = safeNext(parsed.data.next);
-  return setSession(json({ session, next: canAccess(user.role, next) ? next : "/" }), signSession(payload, config.secret));
+  return setSession(json({ session, next: canAccess(user.role, next) ? next : homeFor(user.role) }), signSession(payload, config.secret));
 }
 
 export async function handleLogout(request: NextRequest): Promise<NextResponse> {
@@ -156,7 +156,7 @@ export async function handleSession(request: NextRequest, env: Env = process.env
   return json({ session });
 }
 
-const viewSchema = z.object({ view: z.enum(ROLES) });
+const viewSchema = z.object({ view: z.enum(ADMIN_VIEWS) });
 
 export async function handleView(request: NextRequest, env: Env = process.env): Promise<NextResponse> {
   if (!isSameOrigin(request)) return fail(403, "Ikke tillatt.");

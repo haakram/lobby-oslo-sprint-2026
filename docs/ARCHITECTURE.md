@@ -70,7 +70,10 @@ TBD — entities, fields, relations. A table per entity is enough.
 
 Every other route sits behind `src/proxy.ts`: logged out → 307 to `/login?next=…` (pages) or 401 `{ error }`
 (APIs); a role that may not open it → 403 (the "Ingen tilgang" page, or `{ error }`). Who may open what:
-`ROUTES_BY_ROLE` / `canAccess` in `src/features/auth/roles.ts`. Public: `/login`, `/api/auth/login`,
+`ROUTES_BY_ROLE` / `canAccess` in `src/features/auth/roles.ts`. Roles: `admin` (everything, and the view
+switcher), `receptionist`, `robot`, and `host` ("Vert", an Airbnb host: only `/vert` and below, plus the
+shared routes; `homeFor(role)` sends the host to `/vert` after login and from `/`, never to a 403 on the
+front page). `/api/auth/view` takes only the hotel's views (`ADMIN_VIEWS`); `host` there is a 400. Public: `/login`, `/api/auth/login`,
 `/api/auth/logout`, Next's assets, the favicon, and `/api/reception/tools/*` (ElevenLabs webhook, its own secret).
 
 ### 4.3 Shared types and events
@@ -147,7 +150,7 @@ same PR that first reads it.
 | `RECEPTION_PUBLIC_URL` | `src/features/reception/setup-agent.ts` (webhook mode; `https://` only) | no (blank in `.env.example`) | `.env` when setting up the phone agent |
 | `RECEPTION_TOOL_SECRET` | Track B server (`/api/reception/tools/[tool]`), `src/features/reception/setup-agent.ts` | **yes**: at least 24 characters, also stored at ElevenLabs as a workspace secret | `.env` and Vercel project settings |
 | `LOBBY_AUTH_SECRET` | Lobby app: `src/proxy.ts`, `/api/auth/*`, `getSession()` (HMAC key of the session cookie) | **yes**: at least 32 random bytes (`node scripts/lobby-hash.mjs --secret`); rotating it logs everyone out; missing = nobody logs in | `.env` and Vercel project settings |
-| `LOBBY_USERS` | Lobby app: `src/proxy.ts`, `/api/auth/*`, `getSession()` (accounts, roles, scrypt hashes) | **yes** (hashes, never passwords; keep private): `node scripts/lobby-hash.mjs --users <password>`; missing = nobody logs in | `.env` and Vercel project settings |
+| `LOBBY_USERS` | Lobby app: `src/proxy.ts`, `/api/auth/*`, `getSession()` (accounts, roles, scrypt hashes) | **yes** (hashes, never passwords; keep private): `node scripts/lobby-hash.mjs --users <password>` (five accounts: hamad, shiraz, resepsjon, robot, and `vert` with role `host`; regenerate when an account is added); missing = nobody logs in | `.env` and Vercel project settings |
 
 ## 5. External services
 

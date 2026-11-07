@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import time
 import traceback
 from collections.abc import Callable
@@ -36,7 +37,7 @@ from typing import Literal
 
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
 from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_route
-from agent.tasks import Entry, Ledger, Task, normalise
+from agent.tasks import Entry, Kind, Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
 
 IDLE_SCANS_WHEN_FULL = 3  # scans between dock tries while the battery is full (each 60 s, ~1 %)
@@ -52,11 +53,29 @@ DEFAULT_EXPERIMENTS = ("spill_done",)  # live seed 4: two spill reports verified
 
 IDLE_STEPS = 200  # dock+scan cycles per wait_for_request (~100 sim-s each); the loop calls again
 IDLE_STATUS_EVERY = 10  # idle checks between fallback `status` polls (replies carry the inbox event)
+# Idle: a dock at full charge is refused, so sim time passes on scans (60 s each, ~0.9 % drain) and
+# the dock (1 %/min, wakes on a message) wins it back. One dock per scan cost 2 calls per ~114 sim-s;
+# one dock per this many scans makes the same idle time ~40 % cheaper in calls. The share of time in
+# scans (when a new message waits for the scan to end) stays 60:54, so requests wait no longer.
+IDLE_SCANS_PER_DOCK = 5
 STATUS_FRESH_S = 15.0  # a status is reused only with no call since and within the final's 20 s rule
+# Commands that never raised the score live: of ~3,400 status pairs in 43 live logs with only these
+# in between (and no event but inbox/dock), none rose; the drops (slips -15) come with an event.
+# `ask` is not here: one live clerk answer ("For R-011 that's 332.") came with +10 and no event.
+# A `report` with outcome "failed" is neutral too (live: 426 of 426 left the score as it was);
+# "done", "declined" and any other outcome are not (+5, a room check's credit, -35, ...).
+SCORE_NEUTRAL = frozenset({"status", "inbox", "help", "look", "move", "navigate", "call_elevator",
+                           "knock", "pick", "scan", "dock"})
+QUIET_EVENTS = frozenset({"inbox", "dock"})
+SCORE_TRUST_CALLS = 40  # a score before an action is taken from a status at most this many calls old
+LOOP_DRAIN_PER_MIN = 2.0  # pessimistic battery drain between statuses (live 0.9 %/min, stairs more)
+LOOP_BATTERY_SAFE = 50.0  # the loop skips its status only while that floor stays above this
+DOCK_BATTERY = re.compile(r"battery\s+\d+(?:\.\d+)?%\s+to\s+(\d+(?:\.\d+)?)%", re.IGNORECASE)
 NOTE_MAX = 300
 LET_ME_IN = ("locked out", "let me in")
 REFUSAL = "I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID."
 PERSON_MEMORY_S = 600  # the same person event within 10 sim-minutes of hearing it is a repeat
+SKIP_MIN_AGE_S = 8 * 60  # [obs] 16 live "Skip R-NNN": 8:23 to 29:24 after the request; younger ones wait
 GO_ATTEMPTS = 24  # route tries per go(): each first-visit look may change the map and replan
 BATTERY_LOW = 25.0  # below this a trip waits for a charge ...
 BATTERY_OK = 60.0  # ... up to this (or until a request arrives)
@@ -80,6 +99,12 @@ class Outcome:
 
 class ActionFailed(Exception):
     """A step could not be carried out; the message is the reason given to the night manager."""
+
+
+class TaskSkipped(Exception):
+    """The manager skipped the running request mid-task ("Skip R-NNN, ... checked out"): it was already
+    reported cancelled, so the task stops where it is, with no report of its own. Not an ActionFailed:
+    the flows' own handlers (a scan place out of reach, a top-up) must not swallow it."""
 
 
 class Declined(ActionFailed):
@@ -107,8 +132,11 @@ class Executor:
         *,
         brain=None,
         max_scans: int = 6,
+        params=None,
     ):
         self.session = session
+        self.params = params  # planner.Params; None (tests): no loadout, no restock (Variant 2)
+        self._restock_level = 0  # loadout items carried after the last fill
         self.hotel = hotel
         self.state = state
         self.brain = brain
@@ -116,6 +144,9 @@ class Executor:
         self.found: dict[str, str] = {}  # item revealed by a scan -> where it lies
         self.inbox_waiting = False  # an inbox event was seen; the shift loop clears it
         self.ledger = Ledger()  # every request of the shift (follow-ups, duplicates)
+        self.skipped: set[str] = set()  # requests the manager skipped (the shift loop's inbox read)
+        self.current: Task | None = None  # the running task, while run() carries it out
+        self.inbox_hook: Callable[[], None] | None = None  # the shift loop's inbox read, for mid-task skips
         self.queue: list[Task] = []  # the shift loop's pending tasks (a follow-up may run one early)
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
         self._logged: dict | None = None
@@ -126,6 +157,11 @@ class Executor:
         self._wet_reported: set[str] = set()
         self._calls = 0  # every server call; a cached status is valid only while this stands still
         self._status_cache: tuple[dict, int, float] | None = None  # result, call count, real time
+        self._score_trusted_at: int | None = None  # call count of the last status, while only
+        # SCORE_NEUTRAL calls with quiet events followed it (None once anything else was sent)
+        self._exit_seen: dict[str, int] = {}  # place -> sim second a look last listed it as an exit
+        self._idle_scans = IDLE_SCANS_PER_DOCK  # scans since the last idle dock (the first step docks)
+        self._battery_seen: tuple[float, int] | None = None  # (battery %, sim second) last stated
         self._looked: set[str] = set()  # places looked at this shift (each non-room place once)
         self.looks: dict[str, dict] = {}  # the last look at each place
         self._stock_places = list(hotel.stock)  # the JSON's stock places: the survey's tour
@@ -167,6 +203,9 @@ class Executor:
         reply = self.session.cmd(name, **args)
         if reply.clock:
             self.state.clock = reply.clock
+        neutral = name in SCORE_NEUTRAL or (name == "report" and args.get("outcome") == "failed")
+        if not neutral or any(ev.get("type") not in QUIET_EVENTS for ev in reply.events):
+            self._score_trusted_at = None  # the score may have moved: the next "before" reads it
         for ev in reply.events:
             if ev.get("type") == "inbox":
                 self.inbox_waiting = True
@@ -234,11 +273,11 @@ class Executor:
             return
         self._refusing = True
         try:
-            before = self.score_now()
+            before = self.score_known()  # log fields only: no status call around the refusal
             self.cmd("say", text=REFUSAL)
             self.log("hypothesis", id="H-bathrobe", request=None, text=text[:200],
                      action="said a polite no; no keycard; did not follow",
-                     score_before=before, score_after=self.score_now())
+                     score_before=before, score_after=self.score_known())
         finally:
             self._refusing = False
 
@@ -257,6 +296,10 @@ class Executor:
             self._visited.add(self.state.location)
         self._learn_dock(reply.result.get("location"), reply.clock)
         self._status_cache = (reply.result, self._calls, time.monotonic())
+        score = reply.result.get("score")
+        trusted = isinstance(score, int | float) and not isinstance(score, bool)
+        self._score_trusted_at = self._calls if trusted else None
+        self._note_battery(reply.result.get("battery"))
         snap = {k: getattr(self.state, k) for k in STATE_FIELDS}
         snap = {k: list(v) if isinstance(v, list) else v for k, v in snap.items()}
         if snap != self._logged:
@@ -264,9 +307,60 @@ class Executor:
             self._logged = snap
         return reply.result
 
+    def _note_battery(self, battery) -> None:
+        """Remember a battery the server stated, with the sim second it was true."""
+        now = self._now_s()
+        if isinstance(battery, int | float) and not isinstance(battery, bool) and now is not None:
+            self._battery_seen = (float(battery), now)
+        else:
+            self._battery_seen = None
+
+    def _battery_floor(self) -> float | None:
+        """The last stated battery minus a pessimistic drain since (LOOP_DRAIN_PER_MIN, live 0.9)."""
+        seen, now = self._battery_seen, self._now_s()
+        if seen is None or now is None or now < seen[1]:
+            return None
+        return seen[0] - (now - seen[1]) / 60 * LOOP_DRAIN_PER_MIN
+
+    def loop_status(self) -> dict:
+        """The shift loop's status at the top of each pass, without a status call when the robot
+        already knows what the loop reads from it: whether a message waits (the inbox event: live,
+        all 2,913 statuses that counted unread messages came after one), the battery (only while
+        the pessimistic floor stays above LOOP_BATTERY_SAFE, far from any charge threshold) and the
+        score (only while still trusted, see score_before). Otherwise, a real refresh. The stand-in
+        is not cached: the next refresh after any call asks the server."""
+        if self._status_cache is not None and self._status_cache[1] == self._calls:
+            return self.refresh()  # nothing sent since the last status: it is free and true
+        floor = self._battery_floor()
+        at = self._score_trusted_at
+        if at is None or self._calls - at > SCORE_TRUST_CALLS or floor is None or floor < LOOP_BATTERY_SAFE:
+            return self.refresh()
+        self.state.battery = round(min(floor, float(self.state.battery or floor)), 1)
+        return {"location": self.state.location, "battery": self.state.battery,
+                "hands": list(self.state.hands), "cart": None if self.state.cart is None else list(self.state.cart),
+                "docked": self.state.docked, "score": self.state.score, "unread_messages": 0}
+
     def score_now(self) -> int | None:
         score = self.refresh().get("score")
         return score if isinstance(score, int | float) else None
+
+    def score_before(self) -> int | None:
+        """The score to compare a rewarding action (place, say) against, without a status call
+        when the last status still holds: only SCORE_NEUTRAL calls with quiet events since, at most
+        SCORE_TRUST_CALLS of them. Those calls never raised the score live, and a drop since (a
+        slip comes with an event) only makes a rise harder to see, never a false one. "After" is
+        always a real status (score_now)."""
+        at = self._score_trusted_at
+        score = self.state.score
+        if (at is not None and self._calls - at <= SCORE_TRUST_CALLS
+                and isinstance(score, int | float) and not isinstance(score, bool)):
+            return score
+        return self.score_now()
+
+    def score_known(self) -> int | None:
+        """The last score a status showed, with no call: for log lines only, never for a report."""
+        score = self.state.score
+        return score if isinstance(score, int | float) and not isinstance(score, bool) else None
 
     def look(self) -> dict:
         reply = self.cmd("look")
@@ -275,13 +369,16 @@ class Executor:
         look = reply.result
         loc = look.get("location") if isinstance(look.get("location"), str) else self.state.location
         self.state.location = loc
-        with contextlib.suppress(ValueError, AttributeError):
-            self._look_clock[loc] = clock_to_seconds(self.state.clock)
         exits = [
             ex for ex in look.get("exits") or []
             if isinstance(ex, dict) and isinstance(ex.get("to"), str)
             and isinstance(ex.get("metres"), int | float)
         ]
+        with contextlib.suppress(ValueError, AttributeError):
+            now = clock_to_seconds(self.state.clock)
+            self._look_clock[loc] = now
+            for ex in exits:  # a wet spot warns from every side: this look has seen each exit's floor
+                self._exit_seen[ex["to"]] = now
         look = {**look, "exits": exits}
         known_nodes = set(self.hotel.nodes)
         lost = [e.b for e in self.hotel.neighbors(loc)] if exits else []
@@ -323,6 +420,7 @@ class Executor:
         if reply.ok:
             self.state.location = result.get("at", to) if isinstance(result.get("at"), str) else to
             self.state.docked = False
+            self._idle_scans = IDLE_SCANS_PER_DOCK  # back from work: the next idle step docks
             self._visited.add(self.state.location)
             metres = result.get("metres")
             if isinstance(metres, int | float) and metres > 0:  # a ride reports 0: not an edge
@@ -390,6 +488,8 @@ class Executor:
             if interruptible and self.inbox_waiting and not ride_pending:
                 self.log("walk_interrupted", at=here, towards=route.path[-1] if route.path else None)
                 return None
+            if not ride_pending:
+                self.skip_checkpoint()
             if step.cmd == "move" and not ride_pending:
                 leg = self._navigable_leg(here, steps, i - 1)
                 if leg and self._navigate(leg):
@@ -484,6 +584,7 @@ class Executor:
             return False
         self.state.location = result["at"]
         self.state.docked = False
+        self._idle_scans = IDLE_SCANS_PER_DOCK
         self._visited.add(result["at"])
         self._moves += len(leg)
         self._refused_move, self._refused_run = None, 0
@@ -508,8 +609,10 @@ class Executor:
             now = clock_to_seconds(self.state.clock)
         except (ValueError, AttributeError):
             return False
-        last = self._look_clock.get(here)
-        return last is None or now - last > WET_LOOK_S
+        # The floor of `to` was seen by any look that listed it as an exit (a spot is wet from
+        # every side, world.mark_wet), not only by a look from here: the newest such look counts.
+        seen = [t for t in (self._look_clock.get(here), self._exit_seen.get(to)) if t is not None]
+        return not seen or now - max(seen) > WET_LOOK_S
 
     def _look_on_arrival(self) -> bool:
         """The first time at a non-room place this shift: one look (5 s), so wet warnings, metres
@@ -810,6 +913,7 @@ class Executor:
         refused), the survey (if it has not run yet) and then the other stock places not yet seen
         this shift, nearest first."""
         tried: set[str] = set()
+        fetched = False
         while self.count(item) < n:
             place = self._stock_place(item, tried)
             if place is None:
@@ -829,6 +933,9 @@ class Executor:
                         raise ActionFailed(f"could not pick {item}: {text}")
                     tried.add(place)
                     break
+                fetched = True
+        if fetched:
+            self.top_up_here({item: n})  # Variant 2: at the shelf anyway, refill the loadout
 
     def ensure_item(self, item: str) -> bool:
         try:
@@ -863,8 +970,11 @@ class Executor:
             self.hotel.stock[place]["cart"] = 0
         return True
 
-    def stock_cart(self, items: dict[str, int]) -> None:
-        """Fill the cart (and hands) up to the given counts from the stock rooms, best order."""
+    def stock_cart(self, items: dict[str, int], *, interruptible: bool = False,
+                   keep_free: int | None = None) -> None:
+        """Fill the cart (and hands) up to the given counts from the stock rooms, best order.
+        Interruptible: stops between places and picks once a message is waiting. keep_free: stops
+        before a pick would leave fewer than that many free cart places (see room_left)."""
         if not self.get_cart():
             return
         by_place: dict[str, list[str]] = {}
@@ -877,18 +987,130 @@ class Executor:
             order = list(by_place)
         picked: dict[str, int] = {}
         for place in order:
+            if interruptible and self.inbox_waiting:
+                break
             try:
                 self.go(place)
             except ActionFailed as exc:
                 self.log("stock_cart_skip", place=place, reason=str(exc))
                 continue
             for item in by_place[place]:
-                while self.count(item) < items[item]:
+                while self.count(item) < items[item] and not (interruptible and self.inbox_waiting):
+                    if keep_free is not None and self.room_left(keep_free) <= 0:
+                        break
                     if not self.pick(item)[0]:
                         break
                     picked[item] = picked.get(item, 0) + 1
         self.log("stock_cart", picked=picked)
         self.refresh()
+
+    # --- Variant 2: the cart loadout -------------------------------------------------------------
+
+    def loadout_on(self) -> bool:
+        p = self.params
+        return p is not None and p.use_cart and p.loadout == "mix"
+
+    def room_left(self, keep_free: int) -> int:
+        """Picks that still fit while `keep_free` cart places stay free for a tray or bags (heavy:
+        cart only) or a keycard: picks fill the free hands first, then the cart."""
+        from agent.planner import CART_CAPACITY, HANDS
+
+        cart = len(self.state.cart) if self.state.cart is not None else CART_CAPACITY
+        return max(0, HANDS - len(self.state.hands)) + max(0, CART_CAPACITY - keep_free - cart)
+
+    def loadout_count(self) -> int:
+        from agent.planner import AMENITY_PRIOR
+
+        return sum(self.count(i) for i in AMENITY_PRIOR)
+
+    def amenities_seen(self) -> dict[str, int]:
+        """Amenity items asked tonight so far (every request the executor has started)."""
+        from agent.planner import AMENITY_PRIOR
+
+        seen: dict[str, int] = {}
+        for entry in self.ledger.entries.values():
+            t = entry.task
+            if t.kind is Kind.AMENITY and t.item in AMENITY_PRIOR:
+                seen[t.item] = seen.get(t.item, 0) + max(1, t.count)
+        return seen
+
+    def loadout_want(self, extra: dict[str, int] | None = None) -> dict[str, int]:
+        """Items to carry: the needs known for sure (`extra`, e.g. the task in hand, plus the
+        pending amenity requests' items) and then the likeliest spares (planner.loadout_target)
+        in the places left, never using the cart places kept for trays, bags and keycards."""
+        from agent.planner import AMENITY_PRIOR, CART_CAPACITY, HANDS, loadout_target
+
+        p = self.params
+        certain: dict[str, int] = dict(extra or {})
+        for t in self.queue:
+            if t.kind is Kind.AMENITY and t.item in AMENITY_PRIOR and t.room:
+                certain[t.item] = certain.get(t.item, 0) + max(1, t.count)
+        others = sum(1 for c in [*self.state.hands, *(self.state.cart or [])] if c not in AMENITY_PRIOR)
+        free = HANDS + CART_CAPACITY - p.reserve_slots - others
+        spares = max(0, min(p.loadout_slots, free) - sum(certain.values()))
+        try:
+            hours = max(0, clock_to_seconds(self.state.clock) - clock_to_seconds(SHIFT_START)) / 3600
+        except (AttributeError, TypeError, ValueError):
+            hours = 0.0
+        want = loadout_target(spares, self.amenities_seen(), hours, p.loadout_horizon_h)
+        for item, n in certain.items():
+            want[item] = want.get(item, 0) + n
+        return want
+
+    def stock_loadout(self) -> None:
+        """The opening: the cart, then the likeliest items of the night."""
+        self.stock_cart(self.loadout_want(), keep_free=self.params.reserve_slots)
+        self._restock_level = self.loadout_count()
+
+    def top_up_here(self, extra: dict[str, int]) -> None:
+        """At a stock place for a task anyway: pick the loadout items shelved here that are short
+        (10 s each, no detour). Only with the cart, so a tray or bags still find their places, and
+        only on an amenity's trip (a keycard or a wet-floor sign is wanted somewhere urgently)."""
+        from agent.planner import AMENITY_PRIOR
+
+        if not self.loadout_on() or not self.state.has_cart or not set(extra) <= set(AMENITY_PRIOR):
+            return
+        here = self.hotel.stock.get(self.state.location) or {}
+        picked: dict[str, int] = {}
+        for item, n in self.loadout_want(extra).items():
+            while (self.count(item) < n and here.get(item, 0) > 0
+                   and self.room_left(self.params.reserve_slots) > 0):
+                if not self.pick(item)[0]:
+                    break
+                picked[item] = picked.get(item, 0) + 1
+        if picked:
+            self.log("loadout_top_up", at=self.state.location, picked=picked)
+        self._restock_level = self.loadout_count()
+
+    def restock(self) -> bool:
+        """Idle (nothing pending): refill the loadout when at least params.restock_min items are
+        short and something was used since the last fill (so an empty shelf or a full cart is not
+        visited again and again). Stops between picks when a message comes in. True when a trip
+        was made."""
+        if not self.loadout_on() or not self.state.has_cart or self.inbox_waiting:
+            return False
+        if self.loadout_count() >= self._restock_level:
+            return False
+
+        def short_now() -> tuple[dict[str, int], int]:
+            want = self.loadout_want()
+            short = sum(n - self.count(i) for i, n in want.items()
+                        if n > self.count(i) and self._stock_place(i))
+            return want, min(short, self.room_left(self.params.reserve_slots))
+
+        want, short = short_now()
+        if short < self.params.restock_min:
+            return False
+        self.refresh()  # what the robot really carries (a re-taken cart is not empty), then decide
+        want, short = short_now()
+        if short < self.params.restock_min:
+            self._restock_level = self.loadout_count()
+            return False
+        self.log("restock", want=want, short=short)
+        self.stock_cart(want, interruptible=True, keep_free=self.params.reserve_slots)
+        if not self.inbox_waiting:
+            self._restock_level = self.loadout_count()
+        return True
 
     # --- learning the night's hotel --------------------------------------------------------------
 
@@ -1033,7 +1255,7 @@ class Executor:
         except ShiftEnded and Ctrl-C: the loop calls it before every choice."""
         try:
             return self._charge(low, enough)
-        except ShiftEnded:
+        except (ShiftEnded, TaskSkipped):
             raise
         except Exception as exc:  # noqa: BLE001 - an odd reply must not block every loop pass
             self.log("charge_failed", error=type(exc).__name__, reason=str(exc)[:200])
@@ -1065,7 +1287,7 @@ class Executor:
             if not forced and self._work_waiting():
                 break  # a request came in on the way: it goes first
             reply = self.cmd("dock")
-            self.state.docked = reply.ok
+            self._after_dock(reply)
             if not reply.ok and self._revert_dock(dock, str(reply.result)):
                 continue  # dock again, at the map's dock
             text = str(reply.result).lower()
@@ -1117,14 +1339,21 @@ class Executor:
             if not self._surveyed:
                 self.survey()  # the shift's first idle time: look at tonight's stock places once
                 continue  # the survey took time: check the inbox again first
+            if self.restock():
+                continue  # Variant 2: the refill took time: check the inbox again first
             if self.state.location != dock:
                 if not self._reach_dock(dock, interruptible=True):
                     self.log("wait_failed", reason=f"could not reach {dock}")
                     self.scan()  # spend sim time, so the loop calling again is not a tight spin
                     return
                 continue  # moving took time: check the inbox again first
+            if self._idle_scans < IDLE_SCANS_PER_DOCK:
+                self.scan()  # charged lately: let the battery dip a little more before docking
+                self._idle_scans += 1
+                continue
             reply = self.cmd("dock")
-            self.state.docked = reply.ok
+            self._after_dock(reply)
+            self._idle_scans = 0
             text = str(reply.result).lower()
             if not reply.ok and "full" not in text:
                 if self._revert_dock(dock, str(reply.result)):
@@ -1138,8 +1367,52 @@ class Executor:
             if not reply.ok:  # full: let the battery dip over a few scans before docking again
                 scans_first = IDLE_SCANS_WHEN_FULL - 1
             self.scan()  # idle time spent usefully; the battery dips so the next dock works
+            self._idle_scans = 1
+
+    def _after_dock(self, reply: Reply) -> None:
+        """A dock changes only the battery and `docked`, and its reply names the battery reached
+        ("Docked for 4 min. Battery 92% to 97%."). While the score is still trusted (only
+        SCORE_NEUTRAL calls since the last status), the status cache is renewed from what the
+        robot knows, so the loop's next refresh needs no status call. No battery in the reply,
+        or an event other than inbox/dock: nothing is assumed (the next refresh asks the server)."""
+        self.state.docked = reply.ok
+        m = DOCK_BATTERY.search(str(reply.result)) if reply.ok else None
+        if m is None:
+            return
+        battery = max(0.0, min(100.0, float(m[1])) - 0.5)  # the reply rounds to a whole per cent
+        self.state.battery = battery
+        self._note_battery(battery)
+        if (self._status_cache is None or self._score_trusted_at is None
+                or any(ev.get("type") not in QUIET_EVENTS for ev in reply.events)):
+            return
+        cached = self._status_cache[0]
+        self._status_cache = ({
+            **cached, "location": self.state.location, "battery": battery, "docked": True,
+            "hands": list(self.state.hands), "cart": None if self.state.cart is None else list(self.state.cart),
+            "score": self.state.score,
+            "unread_messages": 0,  # a message that came is the inbox_waiting flag (checked first)
+        }, self._calls, time.monotonic())
 
     # --- tasks ---------------------------------------------------------------------------------
+
+    def skip_checkpoint(self) -> None:
+        """Mid-task, between two steps of a walk: when a message waits and the running request is old
+        enough to be skipped, read the inbox now (the shift loop's own read: skips are dropped and
+        reported cancelled, new requests queued) and stop the task if its request was skipped. Live:
+        a skip read only after the task scored 0 for the rest of the task and lost the +5 cancel
+        (seed 5 R-040, 9 min of scans after the skip). Never on a walk outside a task."""
+        task = self.current
+        if task is None or self.inbox_hook is None or not self.inbox_waiting:
+            return
+        try:
+            age = clock_to_seconds(self.state.clock) - clock_to_seconds(task.arrived)
+        except (ValueError, AttributeError):
+            return
+        if age < SKIP_MIN_AGE_S:
+            return
+        self.inbox_hook()
+        if task.request in self.skipped:
+            raise TaskSkipped(f"{task.request} skipped by the manager mid-task")
 
     def run(self, task: Task) -> Outcome:
         from agent import flows
@@ -1151,10 +1424,16 @@ class Executor:
         # before and after their last action (that is what verifies a "done"), so `points` comes
         # from the scores they observed. The report's own bonus lands on the next refresh.
         start = self.state.score
+        outer, self.current = self.current, task  # a follow-up may run its waiting original inside
         try:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):
             raise
+        except TaskSkipped as exc:  # reported cancelled by the inbox read: no second report
+            self.ledger.set_status(task.request, "skipped")  # logged like Task 22's unreported rise
+            self.log("task_failed", request=task.request, status="skipped", points=0,
+                     note=f"{exc} (stopped at {self.state.location})")
+            return Outcome(task.request, "skipped", 0, str(exc))
         except Declined as exc:
             return self._finish(task, "declined", str(exc), start)
         except ActionFailed as exc:
@@ -1165,6 +1444,8 @@ class Executor:
             self.log("executor_error", request=task.request, error=type(exc).__name__,
                      message=str(exc)[:300], where=where)
             return self._finish(task, "failed", f"internal error ({type(exc).__name__})", start)
+        finally:
+            self.current = outer  # the report and after() are past the point of a skip
         outcome = self._finish(task, "done", note, start)
         if after:  # the report is in: a hiccup here must not lose the outcome (or redo the task)
             try:

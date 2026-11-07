@@ -349,9 +349,9 @@ def test_offline_full_night_fits_the_final_call_budget_on_the_17_request_script(
     assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
 
 
-# Task 24 / 2: the calibrated seed-1 night (the 68 live requests, the default fake) is still over the
-# budget (integration review: 1409 calls). The ratchet stops it creeping up; the strict xfail keeps the
-# gap visible and turns into a failure (to be flipped) the day the night fits.
+# Task 24 / 2: the calibrated seed-1 night (the 68 live requests, the default fake) was over the
+# budget (integration review: 1409 calls). Variant 15 (fewer status calls, docks and wet looks) made
+# it fit; the ratchet stops it creeping up, the budget test keeps it under the final's cap.
 CALIBRATED_NIGHT_RATCHET = 1500  # +70: the stale-look rule before corridor steps
 
 
@@ -370,7 +370,6 @@ def test_calibrated_seed1_night_calls_stay_under_the_ratchet(calibrated_night):
     assert len(fake.log) <= CALIBRATED_NIGHT_RATCHET, len(fake.log)
 
 
-@pytest.mark.xfail(strict=True, reason="the calibrated seed-1 night is still over the final's call budget")
 def test_calibrated_seed1_night_fits_the_final_call_budget(calibrated_night):
     fake, _ = calibrated_night
     assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
@@ -383,8 +382,10 @@ def test_loop_reads_the_inbox_only_when_a_message_is_waiting(tmp_path):
     inbox_calls = sum(1 for e in fake.log if e["cmd"] == "inbox")
     assert delivered >= 6  # the welcome and R-001..R-005
     assert inbox_calls <= delivered + 1, (inbox_calls, delivered)
-    cmds = [e["cmd"] for e in fake.log]
-    assert "inbox" not in {b for a, b in pairwise(cmds) if a == "scan"}  # not read after idle scans
+    # an idle scan is followed by an inbox read only when its own reply brought the inbox event
+    for a, b in pairwise(fake.log):
+        if a["cmd"] == "scan" and b["cmd"] == "inbox":
+            assert any(ev["type"] == "inbox" for ev in a["events"]), a
 
 
 # --- Task 18 / I1: a Brain room check never reaches a keycard on a noise text or an unknown room ------
@@ -541,3 +542,47 @@ def test_manager_skip_drops_the_queued_request(tmp_path):
     assert [d["request"] for d in skipped] == ["R-001"] and skipped[0]["was_queued"] is True
     assert skipped[0]["reported"] is True
     assert result["requests_served"] == 1
+
+
+# --- variant 20: a skip read mid-task stops the running task (live seed 5 R-040: 9 min of scans after it) ---
+
+LOST_104 = ("22:03:30", "R-001", "Guest in 104 lost glasses, maybe the ground floor corridor.")
+
+
+def _mid_task_night(skip_at: str) -> FakeWybe:
+    return FakeWybe(requests=[LOST_104, ("22:30:00", "R-002", "106 wants a pillow.")], hidden={},
+                    skips=[(skip_at, "skip", "Skip R-001, 104 checked out. Don't bother with it.")],
+                    end_clock="22:45:00")
+
+
+def _clock_at(tmp_path, result, kind: str) -> str | None:
+    """The sim clock of the last call before the first decision of `kind`."""
+    clock = None
+    for line in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines():
+        x = json.loads(line)
+        if x["type"] == "call":
+            clock = x.get("clock") or clock
+        elif x["type"] == "decision" and x["kind"] == kind:
+            return clock
+    return None
+
+
+def test_skip_read_mid_task_stops_the_search_and_reports_cancelled(tmp_path):
+    fake = _mid_task_night("22:14:00")  # 10.5 min after the request, during the search
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1)
+    assert fake.reports == {"R-001": "cancelled", "R-002": "done"}  # +5, and the next request still served
+    ends = [d for d in _decisions(tmp_path, result, "task_failed") if d["request"] == "R-001"]
+    assert [d["status"] for d in ends] == ["skipped"] and "mid-task" in ends[0]["note"]
+    assert "22:14:00" <= _clock_at(tmp_path, result, "task_failed") <= "22:15:30"  # at the next step
+    assert fake.false_done == [] and not fake.unsafe
+
+
+def test_task_younger_than_any_live_skip_reads_no_inbox_mid_task(tmp_path):
+    fake = FakeWybe(requests=[LOST_104, ("22:05:00", "R-002", "106 wants a pillow.")], hidden={},
+                    end_clock="22:45:00")
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1)
+    reads = [e["clock"] for e in fake.log if e["cmd"] == "inbox" and e.get("clock")]
+    # R-002 waits from 22:05: the search (started 22:03:40) reads it only once 8 min old
+    assert not [c for c in reads if "22:03:41" <= c < "22:11:30"]
+    assert fake.reports.get("R-002") == "done"
+    assert all(d["status"] != "skipped" for d in _decisions(tmp_path, result, "task_failed"))

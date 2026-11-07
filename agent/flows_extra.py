@@ -51,7 +51,7 @@ class Hyp:
 
     def __init__(self, ex: Executor, hid: str, task: Task, **extra):
         self.ex, self.hid, self.task, self.extra = ex, hid, task, extra
-        self.before = ex.score_now()
+        self.before = ex.score_known()  # log fields only (score_at_start)
         self.logged = False
 
     def log(self, action: str, before, after, **extra) -> None:
@@ -76,10 +76,10 @@ def _hypothesis(hid: str):
                 raise
             except Exception as exc:
                 if not h.logged:
-                    h.log(f"failed: {exc}", h.before, ex.score_now())
+                    h.log(f"failed: {exc}", h.before, ex.score_known())
                 raise
             if not h.logged:
-                h.log("ended", h.before, ex.score_now())
+                h.log("ended", h.before, ex.score_known())
             return result
 
         return run
@@ -123,9 +123,9 @@ def named(ex: Executor, task: Task, h: Hyp) -> Result:
     try:
         note, after = BASE_HANDLERS[task.kind](ex, replace(task, room=room, item=item))
     except ActionFailed as exc:
-        h.log(f"{found}; {task.kind.value} failed: {exc}", h.before, ex.score_now())
+        h.log(f"{found}; {task.kind.value} failed: {exc}", h.before, ex.score_known())
         raise
-    h.log(f"{found}; {note}", h.before, ex.score_now())
+    h.log(f"{found}; {note}", h.before, ex.score_known())
     return note, after
 
 
@@ -177,7 +177,7 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
     opened = _open_with_keycard(ex, room)
     if not opened.ok:
         raise ActionFailed(f"keycard did not open {room}: {opened.result}")
-    mid = ex.score_now()
+    mid = ex.score_before()
     placed = ex.cmd("place", item=name, where=room)
     if placed.ok:
         ex.take(name)
@@ -227,7 +227,7 @@ def noise(ex: Executor, task: Task, h: Hyp) -> Result:
     if not rooms:
         ex.work_order("stoy", f"Støyklage nær rom {num}: fant ingen kilde", room=task.room,
                       place=corridor, request=task.request)
-        h.log("nothing named in the look; did not knock", h.before, ex.score_now(), seen=seen)
+        h.log("nothing named in the look; did not knock", h.before, ex.score_known(), seen=seen)
         raise ActionFailed(f"no source of the noise named; saw {seen}")
     target = rooms[0]
     ex.go(_corridor(ex, target))
@@ -236,11 +236,11 @@ def noise(ex: Executor, task: Task, h: Hyp) -> Result:
         why = f"ikke forstyrr-skilt på {target}" if answer == "dnd" else f"kilden {target} svarte ikke"
         ex.work_order("stoy", f"Støyklage nær rom {num}: {why}", room=target, place=corridor,
                       request=task.request)
-        h.log(f"{target}: {answer}; said nothing", h.before, ex.score_now(), seen=seen)
+        h.log(f"{target}: {answer}; said nothing", h.before, ex.score_known(), seen=seen)
         if answer == "dnd":
             raise ActionFailed(f"Do Not Disturb sign on {target}; did not knock. Saw {seen}")
         raise ActionFailed(f"no answer at {target}; saw {seen}")
-    mid = ex.score_now()
+    mid = ex.score_before()
     ex.cmd("say", text=NOISE_SAY)
     after = ex.score_now()
     ex.work_order("stoy", f"Støyklage nær rom {num}: ba rom {target.removeprefix('room-')} dempe seg",
@@ -311,13 +311,13 @@ def spill(ex: Executor, task: Task, h: Hyp) -> Result:
     found, _rest = _find_wet(ex, floor, corridors, seen, known)
     if not found:
         ex.work_order("sol", f"Søl meldt i etasje {floor}: fant ikke vått gulv", request=task.request)
-        h.log("no wet patch seen; sign kept", h.before, ex.score_now(), seen=seen)
+        h.log("no wet patch seen; sign kept", h.before, ex.score_known(), seen=seen)
         raise ActionFailed(f"no wet patch seen on floor {floor}: " + "; ".join(seen))
     signed = {s.split(":")[0] for s in seen if "sign stands" in s.lower()}
     ranked = _rank(found, known, ex.hotel)
     spot = ([s for s in ranked if s not in signed] or ranked)[0]
     ex.go(spot)  # a warned exit: seen, so the robot creeps onto it
-    mid = ex.score_now()
+    mid = ex.score_before()
     placed = ex.cmd("place", item="wet-floor-sign")
     if placed.ok:
         ex.take("wet-floor-sign")
@@ -387,17 +387,17 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
         except ActionFailed as exc:
             ex.log("probe", name="followup_ask", request=task.request, reply=f"failed: {exc}"[:200])
     if orig is None:  # a false claim: declined with the reason scores +5 live (failed 0, done -20)
-        h.log("delivered nothing: no order on record", h.before, ex.score_now(), original=None)
+        h.log("delivered nothing: no order on record", h.before, ex.score_known(), original=None)
         raise Declined(f"No {item} order from {num} on record tonight; nothing was ordered.")
     if orig.status == "done":  # live: a second call about a delivered order declined scored +5 (R-049)
-        h.log(f"delivered nothing: {orig.request} was already done", h.before, ex.score_now(),
+        h.log(f"delivered nothing: {orig.request} was already done", h.before, ex.score_known(),
               original=orig.request)
         raise Declined(f"The {item} for {num} was already delivered under {orig.request}; nothing more to bring.")
     queued = next((t for t in ex.queue if t.request == orig.request), None)
     if queued is not None:  # still waiting: do it now, under its own id
         ex.queue.remove(queued)
         out = ex.run(queued)
-        h.log(f"ran the waiting {orig.request}: {out.status}", h.before, ex.score_now(), original=orig.request)
+        h.log(f"ran the waiting {orig.request}: {out.status}", h.before, ex.score_known(), original=orig.request)
         # Live (scout, 6 of 6): the follow-up itself is declined (+5) while the order is delivered
         # under its own id; a follow-up reported done is a false done.
         if out.status == "done":
@@ -407,10 +407,10 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
     try:
         BASE_HANDLERS[orig.kind](ex, replace(orig.task, room=orig.room))
     except ActionFailed as exc:
-        h.log(f"retried {orig.request}: {exc}", h.before, ex.score_now(), original=orig.request)
+        h.log(f"retried {orig.request}: {exc}", h.before, ex.score_known(), original=orig.request)
         raise Declined(f"The {item} order for {num} is {orig.request}, tried again: {exc}") from None
     ex.ledger.set_status(orig.request, "done")  # served now: another follow-up must not redeliver it
-    h.log(f"redelivered {orig.request}", h.before, ex.score_now(), original=orig.request)
+    h.log(f"redelivered {orig.request}", h.before, ex.score_known(), original=orig.request)
     raise Declined(f"The {item} for {num} is delivered now under {orig.request}; this call needs nothing more.")
 
 

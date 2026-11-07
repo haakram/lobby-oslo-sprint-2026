@@ -47,7 +47,7 @@ def handle(ex: Executor, task: Task) -> Result:
     # (tray-104-7, luggage-313-34; live seed 7: a real second suitcase declined as a duplicate, and
     # the third request then paid -18 for taking it). Nothing there -> declined (0).
     if task.kind not in (Kind.TRAY, Kind.BAGS) and (dup := ex.ledger.duplicate_of(task)):
-        score = ex.score_now()
+        score = ex.score_known()  # log fields only: no status call
         flows_extra.hyp(ex, "H-duplicate", task, f"not redone: same text and room as {dup}", score, score)
         # Live (scout, seed 1): a duplicate reported done is a false done (-30) even though the first
         # copy was delivered; declined is never punished.
@@ -231,7 +231,7 @@ def _leave_at_door(ex: Executor, room: str, item: str, count: int) -> Result:
     """Experiment dnd_leave: a Do Not Disturb room's order is set down in the corridor at the
     door (never a knock, never a keycard) and reported done with that note. A rise on the place
     is proof as usual; without one the report's reply settles the experiment."""
-    before = ex.score_now()
+    before = ex.score_before()
     for placed in range(count):
         reply = ex.cmd("place", item=item)
         if not reply.ok:
@@ -253,7 +253,7 @@ def _deliver(ex: Executor, room: str, item: str, count: int = 1) -> Result:
             _at_open_door(ex, room)
     else:
         _at_open_door(ex, room)
-    before = ex.score_now()
+    before = ex.score_before()
     count = max(1, count)
     for placed in range(count):
         reply = ex.cmd("place", item=item, where=room)
@@ -402,7 +402,7 @@ def _tray(ex: Executor, task: Task) -> Result:
 def message(ex: Executor, task: Task) -> Result:
     _refuse_known_dnd(ex, task.room, task.request)
     _at_open_door(ex, task.room)
-    before = ex.score_now()
+    before = ex.score_before()
     body = (task.message or task.text).strip().rstrip(".!")
     # The message words are what the guest must hear; the full request text is a cheap retry.
     for text in dict.fromkeys([f"Good evening. A message for you: {body}.", task.text]):

@@ -421,6 +421,7 @@ class FakeWybe:
         spill_spots: dict[int, str | None] | None = None,
         wet_spots: list[tuple[str, str]] | None = None,
         people_events: list[tuple[str, str, str]] | None = None,
+        skips: list[tuple[str, str, str]] | None = None,
     ):
         """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`."""
         data = hotel if hotel is not None else json.loads(Path(hotel_path or DEFAULT_MAP).read_text())
@@ -436,6 +437,7 @@ class FakeWybe:
         self._special_desk = special.get("clerk", "front-desk")
         self._kitchen = special.get("kitchen", "kitchen-pass")
         self._specs = list(DEFAULT_REQUESTS if requests is None else requests)
+        self._specs += list(skips or [])  # the manager's ("03:21:21", "skip", "Skip R-032, ...") lines
         self._dnd = set(DEFAULT_DND if dnd_rooms is None else dnd_rooms)
         self._absent = set(DEFAULT_ABSENT if absent_rooms is None else absent_rooms)
         self._wet = {frozenset(w) for w in wet}
@@ -642,6 +644,8 @@ class FakeWybe:
             msg = {"from": "night manager", "at": self._clock(),
                    "text": req.text if req.rid is None else f"{req.rid}: {req.text}"}
             if skip := _SKIP_TEXT.match(req.text):  # a spec like ("22:10:00", "skip", "Skip R-001, ...")
+                if self._skip_dropped(req):
+                    continue
                 msg.update(text=req.text, request=skip.group(1))
                 if (target := self._requests.get(skip.group(1))) is not None:
                     target.skipped = True
@@ -660,6 +664,11 @@ class FakeWybe:
                 self._arrive(req)
             self._unread.append(msg)
             self._events.append(dict(INBOX_EVENT))
+
+    def _skip_dropped(self, req: _Request) -> bool:
+        """[obs] 30 live runs: a request reported before its "Skip R-NNN" clock never gets the skip."""
+        skip = _SKIP_TEXT.match(req.text)
+        return bool(skip) and skip.group(1) in self.reports
 
     def _arrive(self, req: _Request) -> None:
         if req.dup_of:  # [hyp] a repeat brings no second tray or bag
@@ -1052,7 +1061,7 @@ class FakeWybe:
             return False, "Battery is already full."
         # Charges 1 %/min "until full or until a new message arrives" (§ 3), whichever comes first.
         full_at = self._now + math.ceil((100.0 - self._battery) * 60 / CHARGE_PER_MIN)
-        nxt = self._pending[0].due_s if self._pending else None
+        nxt = next((r.due_s for r in self._pending if not self._skip_dropped(r)), None)
         woke = nxt is not None and nxt <= full_at
         until = min(nxt if woke else full_at, self._end_s)
         secs = max(0, until - self._now)

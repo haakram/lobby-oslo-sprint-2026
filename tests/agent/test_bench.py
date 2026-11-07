@@ -351,3 +351,27 @@ def test_other_seeds_vary_metres_and_shuffle_stock_deterministically():
         assert set(hotel["stock"]) == {"storage", "laundry", "front-desk"}
         assert offline_scenario(seed)["hotel"] == hotel
     assert len(seen) >= 2  # the shelves differ between seeds
+
+
+# --- variant 20: the manager's "Skip R-NNN" in the offline nights ---------------------------------------
+
+
+def test_offline_nights_carry_the_managers_skips():
+    one = offline_scenario(1)["skips"]
+    assert [(t, s[:9]) for t, _, s in one] == [
+        ("22:57:58", "Skip R-00"), ("01:42:32", "Skip R-02"), ("03:22:24", "Skip R-03"),
+        ("03:46:48", "Skip R-04"), ("04:54:02", "Skip R-05")]  # [obs] the scout's seed-1 runs
+    total = 0
+    for seed in range(2, 32):
+        sc = offline_scenario(seed)
+        assert sc == offline_scenario(seed)  # deterministic
+        by_id = {rid: (t, text) for t, rid, text in sc["requests"]}
+        for at, rid, text in sc["skips"]:
+            assert rid == "skip"
+            target = text.split()[1].rstrip(",")
+            arrived, req = by_id[target]
+            assert not req.startswith(("Front desk passed on", "Complaint about noise"))
+            assert 8 * 60 <= clock_to_seconds(at) - clock_to_seconds(arrived) <= 30 * 60
+        total += len(sc["skips"])
+        FakeWybe(**sc)
+    assert 0.5 <= total / 30 <= 3  # [obs] 0-5 a night, ~1.4 on average (a lower bound)

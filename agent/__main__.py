@@ -1,4 +1,4 @@
-"""CLI: python -m agent run|final|route|viewer|bench|tune."""
+"""CLI: python -m agent run|final|rehearse|route|viewer|bench|tune."""
 
 from __future__ import annotations
 
@@ -174,6 +174,23 @@ def _drop_final_lock(path: Path) -> None:
         pass
 
 
+def cmd_rehearse(args, settings: Settings, factory: ClientFactory) -> int:
+    from agent.bench import default_max_calls, parse_seeds
+    from agent.rehearse import format_summary, rehearse
+
+    if args.mode != "practice":
+        print("rehearse runs practice shifts only; the final is `final`", file=sys.stderr)
+        return 2
+    seeds = parse_seeds(args.seeds)
+    if not seeds:
+        print("rehearse: no seeds given", file=sys.stderr)
+        return 2
+    summary = rehearse(seeds, settings, factory, brain=_brain(settings), mode=args.mode,
+                       real_time_limit_s=args.minutes * 60, sim_end=args.sim_end)
+    print(format_summary(summary, default_max_calls(settings.max_rps)))
+    return 0 if summary.scores else 1
+
+
 def cmd_route(args, settings: Settings, factory: ClientFactory) -> int:
     from agent.routing import NoRoute, shortest_route
     from agent.world import Hotel
@@ -273,6 +290,12 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.set_defaults(fn=cmd_run)
     p = sub.add_parser("final", help="the 10 scored shifts (live; locked outside the window)")
     p.set_defaults(fn=cmd_final)
+    p = sub.add_parser("rehearse", help="dress rehearsal: LIVE practice seeds through the final's code path (max 4 at once)")
+    p.add_argument("--seeds", required=True, help="e.g. 1-10 or 3,7,12 (each is a counted live practice shift)")
+    p.add_argument("--mode", default="practice", help="practice only; final is refused")
+    p.add_argument("--minutes", type=float, default=44, help="real-time limit per shift (default 44, the final's)")
+    p.add_argument("--sim-end", default=None, help="stop at this sim clock, HH:MM:SS (default: the night's end)")
+    p.set_defaults(fn=cmd_rehearse)
     p = sub.add_parser("route", help="shortest route between two places")
     p.add_argument("src")
     p.add_argument("dst")

@@ -290,6 +290,8 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
         rid = msg["request"]
         text = str(msg.get("text", ""))
         sender = str(msg.get("from", "")).lower()
+        if rid in seen:  # an answer, a skip or a follow-up on a known request: kept for the flows
+            ex.answers.setdefault(rid, []).append(text)
         if (m := _SKIP.match(text)) and "manager" in sender:  # only the manager's inbox instructs
             _skip(ex, m.group(1), text, seen, pending)
             continue
@@ -369,6 +371,7 @@ def run_shift(
                     "requests_served": None, "reason": ""}
     pending: list[Task] = []
     ex.queue = pending  # the same list: a follow-up that runs its original removes it here
+    ex.read_inbox = lambda: _read_inbox(ex, brain, seen, pending)
     seen: set[str] = set()
     retried: set[str] = set()  # tasks put back once after a mid-task server error
     errors = 0

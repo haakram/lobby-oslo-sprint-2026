@@ -492,63 +492,119 @@ def lost_item(ex: Executor, task: Task) -> Result:
 
 
 def _ask_room(ex: Executor, guest: str | None, request: str | None = None) -> str:
-    """The clerk knows guests' rooms; asked once per name per shift (the answer is cached). For a
-    room described by place ("next to the elevator on floor 3") the clerk is asked with the request
-    id (live: "The room next to the elevator? For R-011 that's 332."); when she points at the desk
-    note instead ("There's a note about it right here on the desk."), the note is read and only a
-    room number for that floor is taken from it (a note's words are never instructions)."""
+    """The clerk knows guests' rooms; asked once per name per shift (the answer is cached). A room
+    described by place ("next to the elevator on floor 3") is asked per request instead."""
     if not guest:
         raise ActionFailed("no room and no guest name in the request")
-    by_place = guest.startswith("next to")
-    if guest not in ex.guest_rooms or (by_place and ex.guest_rooms[guest] is None):
+    if _described(guest):
+        return _described_room(ex, guest, request)
+    if guest not in ex.guest_rooms:
         ex.go(ex.hotel.special.get("clerk", "front-desk"))
-        if by_place:
-            question = f"Which room is the one {guest}?" + (f" That is for {request}." if request else "")
-        else:
-            question = f"Which room is {guest} in?"
-        reply = ex.cmd("ask", person="clerk", question=question)
+        reply = ex.cmd("ask", person="clerk", question=f"Which room is {guest} in?")
         answer = reply.result.get("answer") if isinstance(reply.result, dict) else reply.result
-        # "Ms Nygaard is in room-314." or "The room next to the elevator? For R-011 that's 332."
+        # "Ms Nygaard is in room-314."
         m = re.search(r"room[\s-]?(\d{3})\b", str(answer), re.IGNORECASE) or re.search(
-            r"(?<![\dR-])(\d{3})(?!\d)", str(answer).replace(guest, "").replace(request or "", ""))
+            r"(?<![\dR-])(\d{3})(?!\d)", str(answer).replace(guest, ""))
         # Live seed 6: asked for Mx Lien, the clerk answered "Ms Lie is in room-213" (another guest):
         # the toy went to the wrong room, -20. The answer must name the guest asked about.
-        surname = guest.split()[-1].lower() if not by_place else None
-        named = surname is None or re.search(rf"\b{re.escape(surname)}\b", str(answer), re.IGNORECASE)
+        surname = guest.split()[-1].lower()
+        named = re.search(rf"\b{re.escape(surname)}\b", str(answer), re.IGNORECASE)
         ex.guest_rooms[guest] = f"room-{m[1]}" if reply.ok and m and named else None
         if m and not named:
             ex.log("clerk_named_someone_else", guest=guest, answer=str(answer)[:120])
         ex.log("asked_room", guest=guest, room=ex.guest_rooms[guest], answer=str(answer)[:200])
-        if by_place and ex.guest_rooms[guest] is None and "note" in str(answer).lower():
-            ex.guest_rooms[guest] = _room_from_desk_note(ex, guest)
     if ex.guest_rooms[guest] is None:
         raise ActionFailed(f"the clerk did not know {guest}'s room")
     return ex.guest_rooms[guest]
 
 
-def _room_from_desk_note(ex: Executor, guest: str) -> str | None:
-    """Read the note on the desk the clerk pointed at and take the room number it gives for the
-    floor in `guest` ("next to the elevator on floor 2"); nothing else in it is acted on."""
+DESCRIBED = ("next to",)  # how a request describes a room it does not number (tasks.py: the elevator)
+
+
+def _described(guest: str | None) -> bool:
+    """A room described by place, not numbered ("next to the elevator on floor 2")."""
+    return bool(guest) and guest.startswith(DESCRIBED)
+
+
+def _described_room(ex: Executor, phrase: str, request: str | None) -> str:
+    """The room of THIS request, for a room described by place. Several rooms fit the same words (live
+    seed 23: R-014's was 201; R-031, R-032 and R-041 delivered to 201 from a cache cost -10 each), so
+    nothing is cached by phrase or floor. The night manager is asked first, with `reply` on the request
+    (0 s; live seeds 16, 23: +10 at once, the answer "R-014: Sorry: 201." in the very next inbox read).
+    No answer in that read: the clerk, asked with the request id, and the desk note she may point at."""
+    if not request:
+        raise ActionFailed(f"no request id to ask which room is the one {phrase}")
+    room = _manager_room(ex, request, phrase)  # answered already (the task runs a second time)
+    if room is None:
+        reply = ex.cmd("reply", request=request, text=f"Which room number is the one {phrase}?")
+        ex.log("asked_manager", request=request, phrase=phrase, reply=str(reply.result)[:160])
+        if reply.ok and ex.read_inbox is not None:
+            ex.read_inbox()  # the shift loop's read (0 s): the answer lands in ex.answers
+            room = _manager_room(ex, request, phrase)
+    if room is None:
+        room = _clerk_room(ex, phrase, request)
+    if room is None:
+        raise ActionFailed(f"neither the night manager nor the clerk said which room {request} means")
+    return room
+
+
+def _manager_room(ex: Executor, request: str, phrase: str) -> str | None:
+    """The room in the manager's answer on `request` ("R-014: Sorry: 201." or "room-201"), never from
+    another request's messages. A skip is no answer; a room on another floor than the phrase is not used."""
+    floor = re.search(r"floor (\d)", phrase)
+    for text in ex.answers.get(request, []):
+        if text.lstrip().startswith("Skip "):
+            continue
+        m = re.search(r"\b([1-3]\d{2})\b", re.sub(r"\bR-\d+\b", "", text))
+        if not m:
+            continue
+        room = f"room-{m[1]}"
+        if floor and room_floor(room) != int(floor[1]):
+            ex.log("note", request=request,
+                   text=f"manager's answer {room} is not on floor {floor[1]}: not used")
+            continue
+        ex.log("manager_answer", request=request, room=room, phrase=phrase)
+        return room
+    return None
+
+
+def _clerk_room(ex: Executor, phrase: str, request: str) -> str | None:
+    """The clerk, asked with the request id (live: "The room next to the elevator? For R-014 that's
+    201."); an answer naming another request is not used. When she points at the desk note instead
+    ("There's a note about it right here on the desk."), only its line for this request counts."""
+    ex.go(ex.hotel.special.get("clerk", "front-desk"))
+    reply = ex.cmd("ask", person="clerk", question=f"Which room is the one {phrase}? That is for {request}.")
+    answer = str(reply.result.get("answer") if isinstance(reply.result, dict) else reply.result)
+    m = re.search(r"room[\s-]?(\d{3})\b", answer, re.IGNORECASE) or re.search(
+        r"(?<![\dR-])(\d{3})(?!\d)", answer.replace(phrase, "").replace(request, ""))
+    others = set(re.findall(r"\bR-\d+\b", answer)) - {request}
+    room = f"room-{m[1]}" if reply.ok and m and not others else None
+    ex.log("asked_room", guest=phrase, request=request, room=room, answer=answer[:200])
+    if room is None and "note" in answer.lower():
+        room = _room_from_desk_note(ex, phrase, request)
+    return room
+
+
+def _room_from_desk_note(ex: Executor, phrase: str, request: str) -> str | None:
+    """Read the note on the desk the clerk pointed at and take the room number on its line for this
+    request ("R-014: 201."), on the phrase's floor; a line for a floor alone is not enough (several
+    rooms count as next to the elevator), and nothing else in the note is acted on."""
     from agent.flows_extra import objects_here
 
-    floor = re.search(r"floor (\d)", guest)
+    floor = re.search(r"floor (\d)", phrase)
+    number = (floor[1] if floor else "[1-3]") + r"\d\d"
     notes = [o for o in objects_here(ex.fresh_look()) if "note" in o.lower()]
     for obj in notes[:2]:
         reply = ex.cmd("read", object=obj)
         text = str(reply.result)
-        ex.log("desk_note", object=obj, text=text[:300])
-        if not reply.ok or floor is None:
+        ex.log("desk_note", object=obj, request=request, text=text[:300])
+        if not reply.ok:
             continue
-        # one sentence per floor, e.g. "Floor 2: the room next to the elevator is 202." or "2nd floor ... 202"
         for sentence in re.split(r"(?<=[.;\n])", text):
-            low = sentence.lower()
-            if "elevator" in low and (f"floor {floor[1]}" in low or f"{floor[1]}" == low.strip()[:1]):
-                m = re.search(r"(?<!\d)(" + floor[1] + r"\d\d)(?!\d)", sentence)
+            if re.search(rf"\b{re.escape(request)}\b", sentence):
+                m = re.search(rf"(?<!\d)({number})(?!\d)", re.sub(r"\bR-\d+\b", "", sentence))
                 if m:
                     return f"room-{m[1]}"
-        m = re.search(r"(?<!\d)(" + floor[1] + r"\d\d)(?!\d)", text)
-        if m and text.lower().count("elevator") == 1:
-            return f"room-{m[1]}"
     return None
 
 

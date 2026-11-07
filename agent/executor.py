@@ -39,6 +39,11 @@ from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_rou
 from agent.tasks import Entry, Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
 
+NAV_MIN_HOPS = 2  # plain moves in a row that one navigate replaces, once the call pace needs it
+CALL_PROJECTION_LIMIT = 1250  # calls a whole night is heading for before navigate is used (final cap ~1,320)
+NIGHT_S = 8 * 3600
+# Offline seeds 1-3: navigate on 2+ hop legs saves 170-220 calls a night for 10-35 points of slower
+# walking; a night cut by the final's call cap loses 150-200 points of its last hour (live seeds 2, 4).
 WET_LOOK_S = 30 * 60  # a corridor approach looked at longer ago than this is looked at again
 # (offline seed 1: +26 points for +70 calls; 15 min gave the same points for +90 calls)
 DEFAULT_EXPERIMENTS = ("spill_done",)  # live seed 4: two spill reports verified (+43, +63) when
@@ -136,6 +141,7 @@ class Executor:
         names = [n.strip() for n in os.environ.get("NS_EXPERIMENTS", "").split(",") if n.strip()]
         self.experiments: dict[str, bool | None] = {n: None for n in names or DEFAULT_EXPERIMENTS}
         self._look_clock: dict[str, int] = {}  # place -> sim second of the last look there
+        self._visited: set[str] = set()  # places the robot has stood in: navigate works only there
         self._exp_pending: str | None = None
 
     def experiment(self, name: str) -> bool:
@@ -240,6 +246,8 @@ class Executor:
         if not reply.ok or not isinstance(reply.result, dict):
             return {}
         self.state.update_from_status(reply.result)  # first: a bad reply must not get cached
+        if isinstance(self.state.location, str):
+            self._visited.add(self.state.location)
         self._learn_dock(reply.result.get("location"), reply.clock)
         self._status_cache = (reply.result, self._calls, time.monotonic())
         snap = {k: getattr(self.state, k) for k in STATE_FIELDS}
@@ -308,6 +316,7 @@ class Executor:
         if reply.ok:
             self.state.location = result.get("at", to) if isinstance(result.get("at"), str) else to
             self.state.docked = False
+            self._visited.add(self.state.location)
             metres = result.get("metres")
             if isinstance(metres, int | float) and metres > 0:  # a ride reports 0: not an edge
                 self.hotel.set_metres(here, self.state.location, float(metres))
@@ -365,11 +374,22 @@ class Executor:
         Interruptible: stop at the next node once a message is waiting, so the request is planned
         from here; never between call_elevator and its ride (the 45 s call would be wasted)."""
         ride_pending = False
-        for step in route.steps:
+        steps = list(route.steps)
+        i = 0
+        while i < len(steps):
+            step = steps[i]
+            i += 1
             here = self.state.location
             if interruptible and self.inbox_waiting and not ride_pending:
                 self.log("walk_interrupted", at=here, towards=route.path[-1] if route.path else None)
                 return None
+            if step.cmd == "move" and not ride_pending:
+                leg = self._navigable_leg(here, steps, i - 1)
+                if leg and self._navigate(leg):
+                    i += len(leg) - 1
+                    if self._look_on_arrival():
+                        return REPLAN
+                    continue
             if step.cmd == "call_elevator":
                 reply = self.cmd("call_elevator", floor=step.args["floor"])
                 if not reply.ok:
@@ -398,6 +418,75 @@ class Executor:
             if self._look_on_arrival():
                 return REPLAN
         return None
+
+    def _navigable_leg(self, here: str, steps: list, start: int) -> list[str]:
+        """The destinations of the plain moves from steps[start] on (no elevator call or ride in
+        between) when there are NAV_MIN_HOPS or more and every one is a place the robot has stood
+        in, none is a room, no hop is a known wet spot (a creep step by step is the safe way over
+        one) and no edge is a guess: one `navigate` call then replaces them. Live: navigate costs
+        1.25 s/m against 1 s/m for moves, but one call for the leg; the final caps a shift's calls
+        (~1,320) and live nights ran 1,325-1,486 calls, losing the last, dearest hour."""
+        min_hops = self._nav_min_hops()
+        if min_hops is None:
+            return []
+        leg: list[str] = []
+        prev = here
+        for step in steps[start:]:
+            if step.cmd != "move":
+                break
+            to = step.args["to"]
+            kind = self.hotel.nodes.get(to, {}).get("kind")
+            if to not in self._visited or kind in (None, "room", "service"):
+                break
+            if self.hotel.is_wet(prev, to) or frozenset((prev, to)) in self._tentative:
+                break
+            if kind == "elevator" and self.hotel.floor(to) != self.hotel.floor(prev):
+                break  # a ride, not a walk
+            leg.append(to)
+            prev = to
+        if len(leg) < min_hops:
+            return []
+        if self._stale_before_corridor(here, leg[0]):
+            return []  # the fresh look comes first; the next pass may navigate
+        return leg
+
+    def _nav_min_hops(self) -> int | None:
+        """Navigate only when the night's call pace, projected from the first sim hour on, would
+        pass CALL_PROJECTION_LIMIT (NS_NAV_MIN_HOPS forces a leg length; 0 switches navigate off)."""
+        forced = os.environ.get("NS_NAV_MIN_HOPS")
+        if forced is not None and forced.isdigit():
+            return int(forced) or None
+        try:
+            elapsed = clock_to_seconds(self.state.clock) - clock_to_seconds("22:00:00")
+        except (ValueError, AttributeError):
+            return None
+        if elapsed < 0:
+            elapsed += 24 * 3600
+        if elapsed < 3600:
+            return None
+        projected = self.session.calls * NIGHT_S / elapsed
+        return NAV_MIN_HOPS if projected > CALL_PROJECTION_LIMIT else None
+
+    def _navigate(self, leg: list[str]) -> bool:
+        """One navigate to the leg's end; False (nothing moved) when the server declined."""
+        here = self.state.location
+        reply = self.cmd("navigate", to=leg[-1])
+        result = reply.result if isinstance(reply.result, dict) else {}
+        if not reply.ok or not isinstance(result.get("at"), str):
+            self.log("navigate_declined", at=here, to=leg[-1], reply=str(reply.result)[:160])
+            return False
+        self.state.location = result["at"]
+        self.state.docked = False
+        self._visited.add(result["at"])
+        self._moves += len(leg)
+        self._refused_move, self._refused_run = None, 0
+        if any(e.get("type") == "slip" for e in reply.events) or "wet" in str(result.get("notice", "")).lower():
+            self.log("wet_floor", edge=[here, result["at"]], slipped=True, navigated=True)
+            for a, b in zip([here, *leg], leg, strict=False):
+                self.hotel.mark_wet(a, b)  # which hop it was is unknown: creep over all of them
+        if result["at"] != leg[-1]:
+            self.log("navigate_short", at=result["at"], to=leg[-1])
+        return True
 
     def _stale_before_corridor(self, here: str, to: str) -> bool:
         """Step into a corridor whose wetness is unknown and whose approach was last looked at

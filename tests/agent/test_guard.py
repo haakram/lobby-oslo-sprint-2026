@@ -17,6 +17,11 @@ def test_final_refused_when_not_armed():
         check_mode("final", armed=False, now=datetime(2026, 11, 8, 12, 30, tzinfo=OSLO))
 
 
+def test_not_armed_message_says_export_in_shell():
+    with pytest.raises(FinalModeLocked, match="export FINAL_ARMED=1 in the shell"):
+        check_mode("final", armed=False, now=datetime(2026, 11, 8, 12, 30, tzinfo=OSLO))
+
+
 def test_final_refused_outside_window_even_when_armed():
     for t in [
         datetime(2026, 11, 7, 23, 0, tzinfo=OSLO),

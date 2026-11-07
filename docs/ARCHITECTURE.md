@@ -87,6 +87,8 @@ same PR that first reads it.
 | `WYBE_NIGHTSHIFT_KEY` | Track A agent | **yes**: one team, one key | Hamad's `.env`, sent privately |
 | `ANTHROPIC_API_KEY` | Track A agent, Track B server | **yes** | Hamad's `.env`, sent privately |
 | `ANTHROPIC_BUDGET_USD` | everything that calls Claude | no (default 30) | `.env.example` |
+| `NIGHTSHIFT_MAX_RPS` | Track A agent client | no (default 5) | `.env.example` |
+| `FINAL_ARMED` | Track A final-mode lock | no | real environment only, never a file (export in the shell) |
 | `ELEVENLABS_API_KEY` | Track B server | **yes** | Hamad's `.env.local` (written by the ElevenLabs CLI), sent privately |
 
 ## 5. External services

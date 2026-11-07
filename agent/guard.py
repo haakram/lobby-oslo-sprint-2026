@@ -18,7 +18,7 @@ def check_mode(mode: str, *, armed: bool, now: datetime | None = None) -> None:
     if mode != "final":
         raise ValueError(f"unknown mode: {mode!r}")
     if not armed:
-        raise FinalModeLocked("final mode is not armed (FINAL_ARMED=1 is required)")
+        raise FinalModeLocked("final mode is not armed: export FINAL_ARMED=1 in the shell; .env files are ignored for this")
     now = now or datetime.now(OSLO)
     if not (FINAL_START <= now < FINAL_END):
         raise FinalModeLocked("final mode is only allowed 2026-11-08 11:59-13:00 Oslo time")

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
-import { useSession } from "@/features/auth/session";
+import { useSession } from "@/features/auth/SessionProvider";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
 import { groupsFor, isActive, type NavGroup, type NavItem } from "./nav";
@@ -39,9 +39,10 @@ export function AppNav() {
   const pathname = usePathname();
   const { effectiveRole } = useSession();
   const desktop = useSyncExternalStore(subscribe, readDesktop, () => true);
-  const groups = groupsFor(effectiveRole);
 
-  if (pathname === "/login") return null;
+  // Nobody logged in (the login page, the no-access page): no navigation.
+  if (!effectiveRole || pathname.startsWith("/login")) return null;
+  const groups = groupsFor(effectiveRole);
   return desktop ? <Rail groups={groups} pathname={pathname} /> : <Bar groups={groups} pathname={pathname} />;
 }
 

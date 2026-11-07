@@ -1,16 +1,23 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { SessionProvider } from "@/features/auth/SessionProvider";
 import { AppNav } from "./AppNav";
 import { groupsFor } from "./nav";
 
 const path = vi.hoisted(() => ({ current: "/" }));
 vi.mock("next/navigation", () => ({ usePathname: () => path.current }));
 
-// Outside a SessionProvider the stub session is an admin, who sees every screen.
+const ADMIN = { user: { u: "hamad", name: "Hamad", role: "admin" as const }, view: "admin" as const, effectiveRole: "admin" as const, exp: 0 };
+
+function asAdmin(children: ReactNode) {
+  return <SessionProvider session={ADMIN}>{children}</SessionProvider>;
+}
+
 describe("AppNav, grouped by job", () => {
   it("lists the admin's screens in their groups and marks only Oversikt on the home page", () => {
     path.current = "/";
-    render(<AppNav />);
+    render(asAdmin(<AppNav />));
     const labels = screen.getAllByRole("link").map((a) => a.textContent);
     expect(labels).toEqual([
       expect.stringContaining("Lobby"),
@@ -33,22 +40,23 @@ describe("AppNav, grouped by job", () => {
 
   it("does not mark Oversikt on other screens", () => {
     path.current = "/hotell";
-    render(<AppNav />);
+    render(asAdmin(<AppNav />));
     expect(screen.getByRole("link", { name: "Oversikt" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("link", { name: "3D-kart" })).toHaveAttribute("aria-current", "page");
   });
 
   it("shows the user plate with the name and role, and the view switcher for admins", () => {
     path.current = "/";
-    render(<AppNav />);
+    render(asAdmin(<AppNav />));
     expect(screen.getByText("Hamad")).toBeInTheDocument();
     expect(screen.getByRole("button", { expanded: false })).toHaveTextContent("Admin");
   });
 
-  it("hides itself on the login page", () => {
+  it("hides itself on the login page and when nobody is logged in", () => {
     path.current = "/login";
-    const { container } = render(<AppNav />);
-    expect(container).toBeEmptyDOMElement();
+    expect(render(asAdmin(<AppNav />)).container).toBeEmptyDOMElement();
+    path.current = "/";
+    expect(render(<AppNav />).container).toBeEmptyDOMElement();
   });
 });
 

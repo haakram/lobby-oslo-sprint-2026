@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { SessionProvider } from "@/features/auth/SessionProvider";
 import { AppNav, Button, drawLine, EmptyState, fadeRise, Sheet, sheetIn } from "./index";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/resepsjon" }));
@@ -96,7 +97,12 @@ describe("Sheet", () => {
 
 describe("AppNav", () => {
   it("has a Resepsjon link in its own group, marked active on /resepsjon", () => {
-    render(<AppNav />);
+    const admin = { user: { u: "hamad", name: "Hamad", role: "admin" as const }, view: "admin" as const, effectiveRole: "admin" as const, exp: 0 };
+    render(
+      <SessionProvider session={admin}>
+        <AppNav />
+      </SessionProvider>,
+    );
     const link = screen.getByRole("link", { name: "Resepsjon" });
     expect(link).toHaveAttribute("href", "/resepsjon");
     expect(link).toHaveAttribute("aria-current", "page");

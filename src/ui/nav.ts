@@ -1,5 +1,4 @@
-import type { Role } from "@/features/auth/roles";
-import { canAccess } from "@/features/auth/roles";
+import { canAccess, type Role } from "@/features/auth/roles";
 import type { RegenName } from "./icons/regenPaths";
 
 export type NavItem = {

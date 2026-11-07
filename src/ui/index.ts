@@ -17,4 +17,3 @@ export { Sheet } from "./Sheet";
 export { Skeleton } from "./Skeleton";
 export { Stat } from "./Stat";
 export { UserPlate } from "./UserPlate";
-export { ViewingAs } from "./ViewingAs";

@@ -332,3 +332,33 @@ The live seed-1 night (docs/research/wybe-api.md § 12) scored 581 against a lea
 **Tests:** routing avoids a known wet edge when a dry detour is cheaper than the penalty; takes it when no alternative exists; wet marks persist; route-cache invalidation still works when an edge is marked wet. TDD. No network, never `--live`.
 
 **Report:** include the Step-1 table (slip # | clock | edge | known wet before? | dry alternative and its extra metres | repeated?).
+
+### Task 20: Fail fast on rooms known to be Do-Not-Disturb (design task B2)
+
+**Source:** /Users/hamadaliakram/Oslo_Sprint_26/.superpowers/sdd/2026-11-07-nightshift-agent/batching-design.md § 3.3 (read it; values verbatim). Live seed 1: room 208 was DND all night and got 6 requests, 209 once; each trip there is wasted (and can leave a dead tray in the cart).
+
+**Files:** `agent/flows.py` (the shared door-sign helper and `handle`), `agent/tasks.py` (only: add `Ledger.dnd` and its methods), new test file `tests/agent/test_dnd_memory.py`. Other tasks are editing other parts of these files in parallel (Task 18: the rule parser in tasks.py; Task 19: stock/look code in flows.py) — keep your hunks small and local so git merges them.
+
+**Requirements:**
+1. When a door look (the shared door-sign helper) or a knock reply shows DND, record `ledger.dnd[room] = clock` (sim clock string or seconds, as the ledger already uses).
+2. In `flows.handle`, after the duplicate check and after a named guest's room is resolved: if the room is in `ledger.dnd` and was seen within `DND_MEMORY_S = 8 * 3600` (module constant), raise `ActionFailed("Do Not Disturb sign on room-NNN (seen HH:MM:SS); did not disturb")` → a `failed` report with 0 sim seconds spent and nothing picked. Follow-ups keep their own logic. Room checks too: a DND room check fails fast.
+3. Log a decision (`hypothesis`-free; e.g. kind `note` or reuse the existing failure logging) so the run log shows why.
+4. Safety unchanged: never knock or keycard a DND door; "done" only after an observed score rise.
+
+**Tests (TDD):** DND seen once → the next request to that room fails with 0 moves/picks; a different room is unaffected; memory across midnight; a named-guest request resolving to a DND room fails fast; existing knock-safety tests unchanged. Full `tests/agent` + ruff. No network, never `--live`.
+
+### Task 21: Count calls and emulate the final's call cap offline (design task B3)
+
+**Source:** /Users/hamadaliakram/Oslo_Sprint_26/.superpowers/sdd/2026-11-07-nightshift-agent/batching-design.md (§ 5 test plan, § 8 task B3) and the final review's C1 fix item 5 (final-review-report.md in the same folder).
+
+**Why:** in the final, 10 shifts share one rate limiter (5 req/s default) and each stops after 44 real minutes, so a shift gets about `44*60*rps/10` calls (1,320 at 5 rps). Offline benchmarks must show what a shift scores when it is cut at that many calls, or we optimise for a night we'll never finish.
+
+**Files:** `agent/client.py` (only: a per-session call counter; no behaviour change), `agent/bench.py` (only: report calls per night and a budget-truncated score; a `max_calls` option), new test file `tests/agent/test_call_budget.py`. Task 18 edits other parts of client.py (retries) and Task 15 edits other parts of bench.py (scenarios, scoring) in parallel — keep your hunks small and local.
+
+**Requirements:**
+1. `ShiftSession` counts calls it sends (`calls` attribute), all commands included.
+2. `bench` reports, per night: calls, final score, and the **score at the call cap** — the score the shift had when its call count reached `max_calls` (default `44*60*rps/10` with rps from settings, i.e. 1,320 at 5) — plus the sim clock reached at the cap. Mean-drop-worst over seeds for both scores.
+3. `bench`/`tune` accept `max_calls` (CLI flag `--max-calls`, 0 = unlimited); `tune` gains an option to optimise the capped score (default stays as today).
+4. No live calls; no change to what the agent does in a shift.
+
+**Tests (TDD):** counter increments per call; capped score equals the score at the Nth call on a deterministic fake night; clock-at-cap reported; `--max-calls 0` = unlimited. Full `tests/agent` + ruff. No network, never `--live`.

@@ -28,6 +28,11 @@ CART_CAPACITY = 8
 ClientFactory = Callable[..., WybeClient]
 
 
+def default_max_calls(rps: float) -> int:
+    """Calls one final shift gets: 10 shifts share the limiter and stop after 44 real minutes."""
+    return int(44 * 60 * rps / 10)
+
+
 @dataclass
 class BenchResult:
     scores: dict[int, int]
@@ -35,12 +40,21 @@ class BenchResult:
     errors: dict[int, str] = field(default_factory=dict)  # seed -> exception type of a crashed night
     mean: float = field(init=False)
     mean_drop_worst: float = field(init=False)
+    calls: dict[int, int] = field(default_factory=dict)  # seed -> calls the night used
+    capped_scores: dict[int, int] = field(default_factory=dict)  # score when calls reached max_calls
+    cap_clocks: dict[int, str] = field(default_factory=dict)  # sim clock at the cap
+    mean_capped: float = field(init=False)
+    mean_drop_worst_capped: float = field(init=False)
 
     def __post_init__(self) -> None:
         vals = sorted(self.scores.values())
         self.mean = sum(vals) / len(vals) if vals else 0.0
         kept = vals[1:] if len(vals) > 1 else vals  # the final drops the worst night
         self.mean_drop_worst = sum(kept) / len(kept) if kept else 0.0
+        cv = sorted(self.capped_scores.values())
+        self.mean_capped = sum(cv) / len(cv) if cv else 0.0
+        ck = cv[1:] if len(cv) > 1 else cv
+        self.mean_drop_worst_capped = sum(ck) / len(ck) if ck else 0.0
 
 
 def parse_seeds(spec: str) -> list[int]:
@@ -70,6 +84,7 @@ def run_bench(
     parallel: int = 5,
     params: Params | None = None,
     sim_end: str | None = OFFLINE_END,
+    max_calls: int = 0,
 ) -> BenchResult:
     """One shift per seed, `parallel` at a time. A crashed shift scores 0.
 
@@ -80,11 +95,16 @@ def run_bench(
     scores: dict[int, int] = {}
     lock = threading.Lock()
     errors: dict[int, str] = {}
+    calls: dict[int, int] = {}
+    capped: dict[int, int] = {}
+    cap_clocks: dict[int, str] = {}
 
     def work(seed: int) -> None:
+        result: dict = {}
         try:
+            client = _make(client_factory, seed)
             result = run_shift(
-                _make(client_factory, seed), mode="practice", seed=seed, params=used, sim_end=sim_end
+                client, mode="practice", seed=seed, params=used, sim_end=sim_end, call_cap=max_calls
             )
             score = int(result.get("score") or 0)
         except Exception as exc:  # noqa: BLE001 - one dead night must not sink the benchmark
@@ -92,12 +112,20 @@ def run_bench(
             print(f"seed {seed}: crashed with {type(exc).__name__}: {str(exc)[:120]}", flush=True)
             with lock:
                 errors[seed] = type(exc).__name__
+        at_cap = result.get("at_cap")
         with lock:
             scores[seed] = score
+            calls[seed] = int(result.get("calls") or 0)
+            capped[seed] = int(at_cap[0] or 0) if at_cap else score  # cap not reached: the full score
+            if at_cap and at_cap[1]:
+                cap_clocks[seed] = at_cap[1]
 
     with ThreadPoolExecutor(max_workers=max(1, parallel)) as pool:
         list(pool.map(work, seeds))
-    return BenchResult(scores={s: scores[s] for s in seeds}, params=used, errors=errors)
+    return BenchResult(
+        scores={s: scores[s] for s in seeds}, params=used, errors=errors, calls=calls,
+        capped_scores={s: capped[s] for s in seeds}, cap_clocks=cap_clocks,
+    )
 
 
 # --- generated nights ---------------------------------------------------------------------------------
@@ -246,6 +274,10 @@ def _random_params(rng: random.Random, base: Params) -> Params:
     )
 
 
+def _objective(capped: bool) -> Callable[[BenchResult], float]:
+    return (lambda r: r.mean_drop_worst_capped) if capped else (lambda r: r.mean_drop_worst)
+
+
 def tune(
     client_factory: ClientFactory,
     seeds: list[int],
@@ -255,6 +287,8 @@ def tune(
     base: Params | None = None,
     rng_seed: int = 0,
     out_path: Path = DEFAULT_OUT,
+    max_calls: int = 0,
+    capped: bool = False,
 ) -> tuple[Params, list[BenchResult]]:
     """Random search; the baseline (`base`) is result 0. Keeps the best mean-with-worst-dropped."""
     base = base or Params()
@@ -262,10 +296,11 @@ def tune(
     candidates = [base] + [_random_params(rng, base) for _ in range(trials)]
     results: list[BenchResult] = []
     for i, p in enumerate(candidates):
-        r = run_bench(client_factory, seeds, parallel=parallel, params=p)
+        r = run_bench(client_factory, seeds, parallel=parallel, params=p, max_calls=max_calls)
         results.append(r)
-        print(f"trial {i}: mean {r.mean:.1f}  mean_drop_worst {r.mean_drop_worst:.1f}", flush=True)
-    best = max(results, key=lambda r: r.mean_drop_worst)  # ties keep the earliest (the baseline)
+        print(f"trial {i}: mean {r.mean:.1f}  mean_drop_worst {r.mean_drop_worst:.1f}"
+              f"  capped {r.mean_drop_worst_capped:.1f}", flush=True)
+    best = max(results, key=_objective(capped))  # ties keep the earliest (the baseline)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(best.params.to_json() + "\n")

@@ -195,6 +195,8 @@ live-log calibration; plan Tasks 15–19):
 - [ ] Task 19: adapt to the night's real map and stock (practice seed 2: same rooms, other metres, stock moved).
 - [x] Task 20: fail fast on rooms already seen with a Do-Not-Disturb sign (live: room 208 got 6 requests). Reviewed.
       PR: this one.
+- [x] Task 21: calls counted per shift; `bench --max-calls` reports the score at the final's per-shift call cap
+      (44 min × rate ÷ 10 shifts = 1,320 at 5 req/s). Reviewed, 1 fix round. PR: this one.
 - [-] Batching (step 4): dropped: 0 batchable trips on the live replay; the gain is in calls (Task 18).
 
 ### Drift — the 06:00 handover dashboard (team lead, 2026-11-07 ~13:40)

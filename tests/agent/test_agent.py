@@ -529,9 +529,11 @@ def test_setup_failure_after_the_start_still_ends_the_shift(tmp_path, monkeypatc
 
 
 def test_manager_skip_drops_the_queued_request(tmp_path):
+    # The skip arrives with R-001 (live skips come 8-29 min later): var-2's opening loadout already
+    # carries a towel, so a skip 1 s later would be read after the delivery and report "failed".
     fake = FakeWybe(requests=[
         ("22:03:30", "R-001", "104 wants a towel."),
-        ("22:03:31", "skip", "Skip R-001, 104 checked out. Don't bother with it."),
+        ("22:03:30", "skip", "Skip R-001, 104 checked out. Don't bother with it."),
         ("22:03:32", "R-002", "106 wants a pillow."),
     ])
     result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00")

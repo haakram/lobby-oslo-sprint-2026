@@ -259,6 +259,7 @@ def test_wrong_bridge_guess_falls_back_to_known_route(tmp_path):
 
 def test_wait_for_request_idles_with_scans_until_a_request_arrives(tmp_path):
     fake, session, ex = setup(tmp_path, rids={"R-001"})
+    ex._surveyed = True  # the opening's get_cart surveyed at 22:00; not part of this test
     session.cmd("inbox")  # the welcome message
     ex.wait_for_request()
     docks = calls(fake, "dock")
@@ -708,6 +709,7 @@ def test_follow_up_runs_the_pending_original_first(tmp_path):
 def test_duplicate_request_is_reported_failed_not_redone(tmp_path):
     tray = "Bring the tray from the kitchen pass to 322."
     fake, session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", tray), ("22:01:30", "R-002", tray)])
+    ex._surveyed = True  # the opening's get_cart surveyed at 22:00; not part of this test
     got = collect(ex, session, {"R-001", "R-002"})
     ex.ledger.add(got["R-001"])
     ex.ledger.add(got["R-002"])
@@ -777,7 +779,10 @@ def test_bathrobe_man_during_a_keycard_task_gets_a_polite_no_and_no_keycard(
     # The man waits in the corridor of the task's room, next to his own door, while the robot
     # carries a keycard for the task: the keycard opens the task's room and nothing else.
     plea = f'A man in a bathrobe stops the robot: "I\'m locked out of {stranger}. Can you let me in?"'
-    fake, session, ex, task = solo(tmp_path, text, people_events=[("22:00:00", corridor, plea)], **kw)
+    fake, session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", text)],
+                              people_events=[("22:00:00", corridor, plea)], **kw)
+    ex._surveyed = True  # the opening's get_cart surveyed at 22:00; not part of this test
+    task = next_task(ex, session, "R-001")
     assert ex.ensure_item("keycard")
     out = ex.run(task)
     assert out.status == "done", out

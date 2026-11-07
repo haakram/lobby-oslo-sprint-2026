@@ -287,6 +287,7 @@ def run_shift(
                         except ActionFailed as exc:
                             ex.log("opening_failed", step=step, reason=str(exc))
                     continue
+                ex.ensure_battery()  # below 25 %: charge at the dock before the next task or wait
                 task = choose_next(pending, state, hotel, params)
                 if task is None:
                     ex.wait_for_request(should_stop=out_of_time)

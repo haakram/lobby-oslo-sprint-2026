@@ -644,6 +644,9 @@ class Executor:
                 return
             if self.inbox_waiting or (i % IDLE_STATUS_EVERY == 0 and self._request_waiting()):
                 return
+            if not self._surveyed:
+                self.survey()  # the shift's first idle time: look at tonight's stock places once
+                continue  # the survey took time: check the inbox again first
             if self.state.location != dock:
                 try:
                     self.go(dock, interruptible=True)

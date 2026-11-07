@@ -4,11 +4,14 @@ The fake plays a "seed-2-like" hotel: the seed-1 floor plan, other metres and mo
 check of practice seed 2). The executor still loads `hotel_seed1.json` as its belief.
 """
 
+import json
+
 import httpx
 
 from agent.agent import run_shift
 from agent.client import WybeClient
 from agent.executor import ActionFailed
+from agent.planner import Params
 from tests.agent.test_executor import calls, map_file, next_task, settings, setup, solo
 from tests.fakes.fake_wybe import FakeWybe
 
@@ -233,10 +236,11 @@ def test_ensure_battery_stops_when_a_request_wakes_the_robot(tmp_path):
 
 def test_low_battery_is_charged_before_a_trip(tmp_path):
     fake, _session, ex, task = solo(tmp_path, "104 wants a towel.")
-    fake.battery = 20
+    fake.battery = ex.state.battery = 20  # what the loop's refresh before a task reads
+    since = len(fake.log)
     out = ex.run(task)
     assert out.status == "done", out
-    assert calls(fake, "dock")
+    assert calls(fake, "dock", since=since)
 
 
 # --- requirement 7: no route -> look, learn the exits, replan once ---------------------------------
@@ -360,3 +364,47 @@ def test_spill_sign_is_moved_once_when_the_first_patch_does_not_score(tmp_path, 
     assert sign_places(fake) == ["corridor-3a", "corridor-3c"]
     assert len([e for e in calls(fake, "pick") if e["args"] == {"item": "wet-floor-sign"}]) == 2
     assert fake.reports == {"R-001": "done"} and not fake.false_done
+
+
+# --- the two call sites in the shift loop (integration of Tasks 18 and 19) -----------------------
+
+
+def _run_log(tmp_path, result):
+    path = tmp_path / "runs" / f"{result['shift']}.jsonl"
+    return [json.loads(x) for x in path.read_text().splitlines()]
+
+
+def _kinds(lines):
+    return [x["kind"] for x in lines if x["type"] == "decision"]
+
+
+def test_first_idle_of_the_shift_runs_the_survey_once(tmp_path):
+    fake = FakeWybe(requests=[])
+    client = WybeClient(settings(tmp_path), transport=httpx.MockTransport(fake.handler),
+                        sleep=lambda s: None)
+    # No opening get_cart (whose survey would come first): the survey must come from the idle wait.
+    result = run_shift(client, seed=1, params=Params(use_cart=False), sim_end="23:00:00")
+    kinds = _kinds(_run_log(tmp_path, result))
+    assert kinds.count("survey") == 1
+    looked = looked_places(fake)
+    assert {"charging-dock", "storage", "laundry", "front-desk"} <= set(looked)
+    assert len(looked) == len(set(looked))  # once per place, not once per idle wait
+    assert not fake.false_done and not fake.unsafe
+
+
+def test_low_battery_is_charged_before_the_loop_chooses_a_task(tmp_path):
+    fake = FakeWybe(requests=[("22:01:00", "R-001", "104 wants a towel.")])
+
+    def handler(request):
+        reply = fake.handler(request)
+        if json.loads(request.content).get("cmd") == "start_shift":
+            fake.battery = 20  # the shift starts low
+        return reply
+
+    client = WybeClient(settings(tmp_path), transport=httpx.MockTransport(handler), sleep=lambda s: None)
+    result = run_shift(client, seed=1, sim_end="22:40:00")
+    kinds = _kinds(_run_log(tmp_path, result))
+    # flows.handle checks the battery only after task_start: a charge before it is the loop's.
+    assert "battery_low" in kinds and "task_start" in kinds
+    assert kinds.index("battery_low") < kinds.index("charged") < kinds.index("task_start")
+    assert fake.reports == {"R-001": "done"} and not fake.false_done and not fake.unsafe

@@ -23,6 +23,7 @@ def _setup(tmp_path, requests, battery=50):
     ex = Executor(session, Hotel.load(), RobotState())
     session.cmd("inbox")  # the welcome message, read the way the loop does
     ex.inbox_waiting = False
+    ex._surveyed = True  # the opening's get_cart surveyed at 22:00; not part of this test
     fake.battery = battery
     return fake, session, ex
 

@@ -55,7 +55,7 @@ def test_named_guest_resolving_to_dnd_room_fails_fast(tmp_path):
     spent = fake.log[start:]
     assert out.status == "failed" and "Do Not Disturb" in out.note
     assert not {"pick", "knock", "place"} & {e["cmd"] for e in spent}  # only the clerk question is asked
-    assert not [e for e in spent if e["cmd"] == "look" and e["args"]]  # no door look (Task 19 looks at the desk)
+    assert not [e for e in spent if e["cmd"] == "look" and e["args"]]  # no door look (desk look: Task 19)
 
 
 def test_room_check_on_known_dnd_room_fails_fast(tmp_path):

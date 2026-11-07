@@ -20,7 +20,10 @@ from agent.planner import Params
 from agent.world import clock_to_seconds
 
 OFFLINE_END = "02:00:00"
-DEFAULT_OUT = Path("agent/data/params_best.json")
+# The winner goes to a candidate file; params_best.json (auto-loaded by load_params) is only created
+# deliberately, after live validation.
+DEFAULT_OUT = Path("agent/data/params_candidate.json")
+CART_CAPACITY = 8
 
 ClientFactory = Callable[..., WybeClient]
 
@@ -29,6 +32,7 @@ ClientFactory = Callable[..., WybeClient]
 class BenchResult:
     scores: dict[int, int]
     params: Params
+    errors: dict[int, str] = field(default_factory=dict)  # seed -> exception type of a crashed night
     mean: float = field(init=False)
     mean_drop_worst: float = field(init=False)
 
@@ -75,6 +79,7 @@ def run_bench(
     used = params or load_params()
     scores: dict[int, int] = {}
     lock = threading.Lock()
+    errors: dict[int, str] = {}
 
     def work(seed: int) -> None:
         try:
@@ -82,14 +87,17 @@ def run_bench(
                 _make(client_factory, seed), mode="practice", seed=seed, params=used, sim_end=sim_end
             )
             score = int(result.get("score") or 0)
-        except Exception:  # noqa: BLE001 - one dead night must not sink the benchmark
+        except Exception as exc:  # noqa: BLE001 - one dead night must not sink the benchmark
             score = 0
+            print(f"seed {seed}: crashed with {type(exc).__name__}: {str(exc)[:120]}", flush=True)
+            with lock:
+                errors[seed] = type(exc).__name__
         with lock:
             scores[seed] = score
 
     with ThreadPoolExecutor(max_workers=max(1, parallel)) as pool:
         list(pool.map(work, seeds))
-    return BenchResult(scores={s: scores[s] for s in seeds}, params=used)
+    return BenchResult(scores={s: scores[s] for s in seeds}, params=used, errors=errors)
 
 
 # --- generated nights ---------------------------------------------------------------------------------
@@ -168,10 +176,18 @@ def offline_scenario(seed: int, end_clock: str = OFFLINE_END) -> dict:
 _CART_ITEMS = ["towel", "water-bottle", "phone-charger", "toiletry-kit", "pillow"]
 
 
+def _random_stock(rng: random.Random) -> dict[str, int]:
+    """0-4 per item, total at most cart capacity - 1 (one slot stays free for a tray)."""
+    stock = {i: rng.randint(0, 4) for i in _CART_ITEMS}
+    while sum(stock.values()) > CART_CAPACITY - 1:
+        stock[rng.choice([i for i, n in stock.items() if n > 0])] -= 1
+    return stock
+
+
 def _random_params(rng: random.Random, base: Params) -> Params:
     return replace(
         base,
-        cart_stock={i: rng.randint(0, 4) for i in _CART_ITEMS},
+        cart_stock=_random_stock(rng),
         decay_per_min=round(rng.uniform(0.5, 2.0), 2),
         use_cart=rng.random() < 0.8,
         max_scans=rng.randint(3, 8),

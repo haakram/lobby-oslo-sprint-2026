@@ -3,6 +3,7 @@
 import inspect
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import httpx
 import pytest
@@ -111,3 +112,44 @@ def test_cli_tune_rejects_live():
 def test_parse_seeds():
     assert bench.parse_seeds("1-3,7") == [1, 2, 3, 7]
     assert replace(Params(), max_scans=4).max_scans == 4
+
+
+def test_tune_default_output_is_not_the_auto_loaded_file():
+    import inspect as _i
+
+    from agent.agent import PARAMS_FILE
+
+    default = _i.signature(tune).parameters["out_path"].default
+    assert default.name == "params_candidate.json"
+    assert default.resolve() != PARAMS_FILE.resolve()
+    assert Path(bench.DEFAULT_OUT).name != PARAMS_FILE.name
+
+
+def test_load_params_falls_back_to_defaults_without_best_file(tmp_path, monkeypatch):
+    import agent.agent as mod
+
+    monkeypatch.setattr(mod, "PARAMS_FILE", tmp_path / "params_best.json")
+    assert mod.load_params() == Params()
+
+
+def test_tuned_cart_stock_always_leaves_a_slot_for_trays():
+    import random
+
+    rng = random.Random(5)
+    for _ in range(300):
+        stock = bench._random_stock(rng)
+        assert sum(stock.values()) <= 7 and all(0 <= v <= 4 for v in stock.values())
+
+
+def test_tune_candidates_respect_cart_capacity(tmp_path):
+    _, results = tune(factory_for(tmp_path), [1], trials=4, parallel=1, out_path=tmp_path / "c.json")
+    assert all(sum(r.params.cart_stock.values()) <= 7 for r in results[1:])
+
+
+def test_crashed_night_is_recorded_and_printed(tmp_path, capsys):
+    def make(seed: int):
+        raise ValueError("bad factory")
+
+    res = run_bench(make, [1], parallel=1)
+    assert res.scores == {1: 0} and res.errors == {1: "ValueError"}
+    assert "ValueError" in capsys.readouterr().out

@@ -1,1 +1,0 @@
-{"action_seconds": {"amenity": 25, "lost_item": 145, "message": 20, "room_check": 50, "tray": 25}, "base_values": {"amenity": 20, "lost_item": 40, "message": 20, "room_check": 32, "tray": 33}, "cart_stock": {"phone-charger": 4, "pillow": 4, "toiletry-kit": 1, "towel": 3, "water-bottle": 2}, "decay_per_min": 0.71, "max_scans": 3, "use_cart": true}

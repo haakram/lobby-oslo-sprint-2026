@@ -176,7 +176,7 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--trials", type=int, default=12)
     p.add_argument("--parallel", type=int, default=5)
     p.add_argument("--rng-seed", type=int, default=0)
-    p.add_argument("--out", default="agent/data/params_best.json")
+    p.add_argument("--out", default="agent/data/params_candidate.json")
     p.set_defaults(fn=cmd_tune)
     args = ap.parse_args(argv)
     return args.fn(args, load_settings(), client_factory or shift.make_client)

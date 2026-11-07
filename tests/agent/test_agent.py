@@ -4,6 +4,7 @@ import json
 from itertools import pairwise
 
 import httpx
+import pytest
 
 from agent.__main__ import main
 from agent.agent import make_client, run_shift
@@ -340,11 +341,38 @@ def test_full_night_with_the_live_request_types(tmp_path):
 FINAL_CALL_BUDGET = 44 * 60 * 5 // 10  # 44 min at 5 req/s shared by 10 shifts
 
 
-def test_offline_full_night_fits_the_final_call_budget(tmp_path):
+def test_offline_full_night_fits_the_final_call_budget_on_the_17_request_script(tmp_path):
     fake = FakeWybe(requests=TYPES_DEMO_REQUESTS)  # the script it was written on, not the 68
     result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="06:00:00")
     assert fake.false_done == [] and not fake.unsafe
     assert result["score"] >= 250
+    assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
+
+
+# Task 24 / 2: the calibrated seed-1 night (the 68 live requests, the default fake) is still over the
+# budget (integration review: 1409 calls). The ratchet stops it creeping up; the strict xfail keeps the
+# gap visible and turns into a failure (to be flipped) the day the night fits.
+CALIBRATED_NIGHT_RATCHET = 1450
+
+
+@pytest.fixture(scope="module")
+def calibrated_night(tmp_path_factory):
+    fake = FakeWybe()
+    result = run_shift(client_for(tmp_path_factory.mktemp("calibrated"), fake.handler), seed=1,
+                       sim_end="06:00:00")
+    return fake, result
+
+
+def test_calibrated_seed1_night_calls_stay_under_the_ratchet(calibrated_night):
+    fake, result = calibrated_night
+    assert fake.false_done == [] and not fake.unsafe
+    assert result["calls"] == len(fake.log) - 1  # every shift call, not the start
+    assert len(fake.log) <= CALIBRATED_NIGHT_RATCHET, len(fake.log)
+
+
+@pytest.mark.xfail(strict=True, reason="the calibrated seed-1 night is still over the final's call budget")
+def test_calibrated_seed1_night_fits_the_final_call_budget(calibrated_night):
+    fake, _ = calibrated_night
     assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
 
 

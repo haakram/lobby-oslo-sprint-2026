@@ -15,7 +15,8 @@ The final's shifts differ from seed 1 (same plan, other metres, moved stock), so
 belief and what the robot sees is the truth: every look and move updates the world model, each
 non-room place is looked at on the first visit (wet warnings, metres, stock), the stock places are
 surveyed in the first idle time, an item missing where it was believed is sought at the other stock
-places, and the dock is wherever the shift started.
+places, and the dock is wherever the shift started (only a status at the very start of the shift says
+where that is: a shift adopted mid-night after a restart keeps the map's dock).
 
 The per-kind routines live in agent/flows.py (amenity, tray, message, room check, lost item) and
 agent/flows_extra.py (bags, noise, spill, follow-up, named guests: the Task 13 hypotheses).
@@ -46,7 +47,14 @@ PERSON_MEMORY_S = 600  # the same person event within 10 sim-minutes of hearing 
 GO_ATTEMPTS = 24  # route tries per go(): each first-visit look may change the map and replan
 BATTERY_LOW = 25.0  # below this a trip waits for a charge ...
 BATTERY_OK = 60.0  # ... up to this (or until a request arrives)
+BATTERY_CRITICAL = 10.0  # below this the charge goes ahead even while work waits
+DRAIN_PER_MIN = 0.9  # [obs] active battery drain, % per sim minute (413 live intervals)
+DOCK_MARGIN = 5.0  # % kept on top of what the way to the dock drains
 CHARGE_ROUNDS = 10
+DOCK_RETRY_S = 600  # a dock found out of reach from a place is not tried from there for 10 sim-min
+MOVE_REFUSALS_MAX = 3  # the same move refused this many times in a row: given up, its edge dropped
+SHIFT_START = "22:00:00"  # the shift's start clock when the session does not report one
+DOCK_LEARN_S = 120  # the dock is learnt only from a first status this close to the shift's start
 
 
 @dataclass
@@ -101,6 +109,12 @@ class Executor:
         self._stock_places = list(hotel.stock)  # the JSON's stock places: the survey's tour
         self._surveyed = False
         self._dock_known = False  # the dock is where the shift's first status finds the robot
+        self._learnt_dock: str | None = None  # that place, when it overruled the map's dock ...
+        self._map_dock: str | None = None  # ... which a refused dock there reverts to, once
+        self._dock_reverted = False
+        self._dock_out_of_reach: tuple[str, str, int] | None = None  # (from where, dock, sim second)
+        self._refused_move: tuple[str, str, str] | None = None  # the last move, while it was refused
+        self._refused_run = 0  # how many times in a row that same move was refused
         self._moves = 0
         self._in_go = 0
         self.cart_needed = False  # a tray or bags flow: never drop the cart to reach the stairs
@@ -201,7 +215,7 @@ class Executor:
         if not reply.ok or not isinstance(reply.result, dict):
             return {}
         self.state.update_from_status(reply.result)  # first: a bad reply must not get cached
-        self._learn_dock(reply.result.get("location"))
+        self._learn_dock(reply.result.get("location"), reply.clock)
         self._status_cache = (reply.result, self._calls, time.monotonic())
         snap = {k: getattr(self.state, k) for k in STATE_FIELDS}
         snap = {k: list(v) if isinstance(v, list) else v for k, v in snap.items()}
@@ -270,12 +284,48 @@ class Executor:
             metres = result.get("metres")
             if isinstance(metres, int | float) and metres > 0:  # a ride reports 0: not an edge
                 self.hotel.set_metres(here, self.state.location, float(metres))
+            self._refused_move, self._refused_run = None, 0
         slipped = any(e.get("type") == "slip" for e in reply.events)
         if (slipped or "wet" in str(result.get("notice", "")).lower()) and here in self.hotel.nodes:
             self.hotel.mark_wet(here, to)
             self.log("wet_floor", edge=[here, to], slipped=slipped)
             self._wet_seen(to)
+        if not reply.ok:
+            self._move_refused(here, to, str(reply.result))
         return reply
+
+    def _move_refused(self, here: str, to: str, text: str) -> None:
+        """The same move refused MOVE_REFUSALS_MAX times in a row (no move worked in between):
+        whatever loop keeps asking for it is broken out of (ActionFailed), and the edge is dropped
+        from the map so no route plans it again. Live seed 3: one corridor closed for cleaning was
+        tried 125 times until the battery died and the shift ended "stranded" (-200)."""
+        key = (here, to, text)
+        self._refused_run = self._refused_run + 1 if key == self._refused_move else 1
+        self._refused_move = key
+        if self._refused_run < MOVE_REFUSALS_MAX:
+            return
+        closed = self._close_edge(here, to, text)
+        self.log("move_refused_repeatedly", at=here, to=to, times=self._refused_run, reason=text[:200],
+                 edge_dropped=closed)
+        raise ActionFailed(f"the move {here} -> {to} was refused {self._refused_run} times in a row: {text}")
+
+    def _close_edge(self, a: str, b: str, text: str) -> bool:
+        """Drop an edge the server refused, unless a room door or the robot itself (its battery,
+        its cart) is the reason: those ways open again with a keycard, a charge or without the cart."""
+        low = text.lower()
+        if "battery" in low or "cart" in low or "room" in {
+                self.hotel.nodes.get(n, {}).get("kind") for n in (a, b)}:
+            return False
+        self.hotel.forget_edge(a, b)
+        return True
+
+    def _close_refused(self) -> list[str] | None:
+        """Drop the edge of the last refused move (if a move was refused since the last that
+        worked); the edge as [from, to] when it was dropped."""
+        if self._refused_move is None:
+            return None
+        here, to, text = self._refused_move
+        return [here, to] if self._close_edge(here, to, text) else None
 
     def _route(self, dst: str) -> Route:
         return shortest_route(self.hotel, self.state.location, dst, with_cart=self.state.has_cart)
@@ -572,19 +622,48 @@ class Executor:
 
     # --- learning the night's hotel --------------------------------------------------------------
 
-    def _learn_dock(self, location) -> None:
-        """The dock is where the shift's first status finds the robot (before any move). A JSON
-        dock named otherwise is overruled, so waiting and charging go to the real one."""
+    def _learn_dock(self, location, clock) -> None:
+        """The dock is where the shift's first status finds the robot, when that status comes at
+        the very start of the shift (within DOCK_LEARN_S of its start clock) and before any move.
+        A JSON dock named otherwise is then overruled, so waiting and charging go to the real one.
+        A shift adopted mid-night (a restart) finds the robot anywhere: it keeps the map's dock."""
         if self._dock_known:
             return
         self._dock_known = True
         if self._moves or not isinstance(location, str) or not location:
             return
         believed = self.hotel.special.get("dock", "charging-dock")
-        if location != believed:
-            self.hotel.special["dock"] = location
-            self.hotel.add_node(location, self.hotel.nodes.get(believed, {}).get("floor", 1), "place")
-            self.log("dock_learnt", dock=location, believed=believed)
+        if location == believed:
+            return
+        if not self._at_shift_start(clock):
+            self.log("dock_kept", dock=believed, at=location, clock=clock)
+            return
+        self.hotel.special["dock"] = location
+        self.hotel.add_node(location, self.hotel.nodes.get(believed, {}).get("floor", 1), "place")
+        self._learnt_dock, self._map_dock = location, believed
+        self.log("dock_learnt", dock=location, believed=believed)
+
+    def _at_shift_start(self, clock) -> bool:
+        """True when clock is within DOCK_LEARN_S after the shift's start clock (the one the
+        session reports, else SHIFT_START). No usable clock: False (the map's dock is safer)."""
+        start = getattr(self.session, "start_clock", None)
+        try:
+            gap = clock_to_seconds(clock) - clock_to_seconds(start if isinstance(start, str) else SHIFT_START)
+        except (AttributeError, TypeError, ValueError):
+            return False
+        return 0 <= gap <= DOCK_LEARN_S
+
+    def _revert_dock(self, dock: str, text: str) -> bool:
+        """A dock refused at the learnt dock for any reason but a full battery: the learning was
+        wrong (e.g. a restart in the shift's first minutes, after the robot had moved). Back to the
+        map's dock, once per shift; True when the caller should walk there and dock again."""
+        if (self._dock_reverted or self._learnt_dock is None or self._map_dock is None
+                or dock != self._learnt_dock or "full" in text.lower()):
+            return False
+        self._dock_reverted = True
+        self.hotel.special["dock"] = self._map_dock
+        self.log("dock_reverted", dock=self._map_dock, learnt=dock, reason=text[:200])
+        return True
 
     def survey(self) -> None:
         """Once per shift, in the first idle time (or before the first stock trip): look at the dock
@@ -619,23 +698,106 @@ class Executor:
         self.log("survey", from_place=start, looked=sorted(p for p in places if p in self._looked),
                  stock={p: self.hotel.stock.get(p, {}) for p in places})
 
+    def _now_s(self) -> int | None:
+        try:
+            return clock_to_seconds(self.state.clock)
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+    def _reach_dock(self, dock: str, *, interruptible: bool = False) -> bool:
+        """Walk to the dock; True once there (or stopped short for a waiting message). A failed
+        walk is never retried by the same route: one fresh look updates the map, the move the
+        server refused is dropped from it, and the route is planned once more. When that fails
+        too, the dock counts as out of reach from here for DOCK_RETRY_S, so the idle passes
+        between do not walk into the same refusal again (they spend their bounded wait instead)."""
+        here, now = self.state.location, self._now_s()
+        out = self._dock_out_of_reach
+        if (out is not None and out[:2] == (here, dock) and now is not None
+                and 0 <= now - out[2] < DOCK_RETRY_S):
+            return False
+        try:
+            self.go(dock, interruptible=interruptible)
+            return True
+        except ActionFailed as exc:
+            first = str(exc)
+        try:
+            self.look()
+        except ActionFailed as exc:
+            self.log("look_failed", at=self.state.location, reason=str(exc))
+        self.log("dock_replan", at=self.state.location, dock=dock, reason=first[:200],
+                 dropped=self._close_refused())
+        try:
+            self.go(dock, interruptible=interruptible)
+            return True
+        except ActionFailed as exc:
+            self._close_refused()
+            self._dock_out_of_reach = (self.state.location, dock, self._now_s() or 0)
+            self.log("dock_out_of_reach", at=self.state.location, dock=dock, reason=str(exc)[:200])
+            return False
+
+    def _battery(self) -> float | None:
+        battery = self.state.battery
+        if isinstance(battery, int | float) and not isinstance(battery, bool):
+            return float(battery)
+        return None
+
+    def _dock_reserve(self, dock: str) -> float:
+        """% the way to the dock drains (route seconds x DRAIN_PER_MIN) plus DOCK_MARGIN; 0 at the
+        dock, or when no route is known (there is nothing to plan the reserve on)."""
+        if self.state.location == dock:
+            return 0.0
+        seconds = self._seconds_to(dock)
+        if seconds == float("inf"):
+            return 0.0
+        return seconds / 60 * DRAIN_PER_MIN + DOCK_MARGIN
+
+    def _work_waiting(self) -> bool:
+        return self.inbox_waiting or bool(self.queue)
+
     def ensure_battery(self, low: float = BATTERY_LOW, enough: float = BATTERY_OK) -> bool:
-        """Below `low` %: go to the dock and charge until `enough` % (or until a request wakes the
-        robot, or the dock refuses). True when a charge was attempted. Never raises."""
-        if self.state.battery >= low:
+        """Charge at the dock below `low` %, or below what the way to the dock drains plus a margin
+        (a far dock is headed for earlier), up to `enough` % (or until a request wakes the robot,
+        or the dock refuses). Not while work waits (a message, or a queued task: no 40-minute
+        charge in front of it) unless the battery is below BATTERY_CRITICAL or that reserve: a
+        flat battery loses the rest of the night. True when a charge was attempted. Never raises
+        except ShiftEnded and Ctrl-C: the loop calls it before every choice."""
+        try:
+            return self._charge(low, enough)
+        except ShiftEnded:
+            raise
+        except Exception as exc:  # noqa: BLE001 - an odd reply must not block every loop pass
+            self.log("charge_failed", error=type(exc).__name__, reason=str(exc)[:200])
+            return False
+
+    def _charge(self, low: float, enough: float) -> bool:
+        battery = self._battery()
+        if battery is None:
+            self.log("battery_unknown", battery=repr(self.state.battery)[:40])
             return False
         dock = self.hotel.special.get("dock", "charging-dock")
-        self.log("battery_low", battery=self.state.battery, at=self.state.location, dock=dock)
-        try:
-            self.go(dock)
-        except ActionFailed as exc:
-            self.log("charge_failed", reason=str(exc))
-            return True
+        reserve = self._dock_reserve(dock)
+        if battery >= max(low, reserve):
+            return False
+        forced = battery < max(BATTERY_CRITICAL, reserve)
+        if not forced and self._work_waiting():
+            self.log("charge_deferred", battery=battery, queued=len(self.queue), inbox=self.inbox_waiting)
+            return False
+        self.log("battery_low", battery=battery, at=self.state.location, dock=dock,
+                 reserve=round(reserve, 1), forced=forced)
         for _ in range(CHARGE_ROUNDS):
-            if self.state.battery >= enough:
+            battery = self._battery()
+            if battery is None or battery >= enough:
                 break
+            dock = self.hotel.special.get("dock", "charging-dock")
+            if not self._reach_dock(dock):
+                self.log("charge_failed", reason=f"could not reach {dock}")
+                break
+            if not forced and self._work_waiting():
+                break  # a request came in on the way: it goes first
             reply = self.cmd("dock")
             self.state.docked = reply.ok
+            if not reply.ok and self._revert_dock(dock, str(reply.result)):
+                continue  # dock again, at the map's dock
             text = str(reply.result).lower()
             self.refresh()
             if not reply.ok or self.inbox_waiting or "woke" in text or "message" in text:
@@ -679,10 +841,8 @@ class Executor:
                 self.survey()  # the shift's first idle time: look at tonight's stock places once
                 continue  # the survey took time: check the inbox again first
             if self.state.location != dock:
-                try:
-                    self.go(dock, interruptible=True)
-                except ActionFailed as exc:
-                    self.log("wait_failed", reason=str(exc))
+                if not self._reach_dock(dock, interruptible=True):
+                    self.log("wait_failed", reason=f"could not reach {dock}")
                     self.scan()  # spend sim time, so the loop calling again is not a tight spin
                     return
                 continue  # moving took time: check the inbox again first
@@ -690,6 +850,9 @@ class Executor:
             self.state.docked = reply.ok
             text = str(reply.result).lower()
             if not reply.ok and "full" not in text:
+                if self._revert_dock(dock, str(reply.result)):
+                    dock = self.hotel.special["dock"]
+                    continue  # walk to the map's dock and dock there
                 self.log("wait_failed", reason=str(reply.result))
                 self.scan()  # as above: one bounded wait per call instead of an instant return
                 return

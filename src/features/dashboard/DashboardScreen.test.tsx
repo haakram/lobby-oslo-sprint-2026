@@ -100,18 +100,24 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(rooms().getAllByRole("link", { name: /^Rom \d{3}:/ })).toHaveLength(ROOMS.length);
     expect(rooms().getByRole("link", { name: /^Rom 319: Opptatt, avvik/ })).toHaveAttribute("href", "/rom?rom=room-319");
     expect(rooms().getByRole("link", { name: /^Rom 103: Klar/ })).toBeInTheDocument();
-    expect(rooms().getByRole("link", { name: "Åpne" })).toHaveAttribute("href", "/rom");
+    expect(rooms().getByRole("link", { name: "Åpne Rom og renhold" })).toHaveAttribute("href", "/rom");
+    // The tiles say their status with an icon too, not only the tile colour.
+    expect(rooms().getByRole("link", { name: /^Rom 319:/ }).querySelectorAll("svg").length).toBeGreaterThan(0);
   });
 
-  it("lists what needs a person now across the modules, loudest first and at most six rows", async () => {
+  it("lists what needs a person now across the modules, loudest first: six rows with an action, the rest named", async () => {
     route();
     render(as("admin", <DashboardScreen />));
     await rooms().findByRole("link", { name: /^Rom 319/ });
 
     const now = nowBand();
-    const rows = now.getAllByRole("listitem");
+    const all = now.getAllByRole("listitem");
+    const rows = all.filter((row) => !row.textContent?.startsWith("og "));
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.length).toBeLessThanOrEqual(6);
+    // Nothing is cut without a word: the seventh row (the robot) is named under the six, with a link.
+    expect(now.getByText(/^og \d+ til:$/)).toBeInTheDocument();
+    expect(now.getByRole("link", { name: /^Roboten / })).toHaveAttribute("href", "/hotell");
 
     // Vedlikehold: the staff-reported leak and thermostat close two rooms (test data).
     expect(now.getByText("2 rom ute av drift: 107, 213")).toBeInTheDocument();
@@ -161,6 +167,24 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(nowBand().queryByText(notTheirs)).not.toBeInTheDocument();
     for (const entry of WIDGET_MODULES) expect(shown.includes(entry.id) || hidden.includes(entry.id), entry.id).toBe(true);
     expect(shown.every((id) => canAccess(role, MODULES.find((entry) => entry.id === id)!.route))).toBe(true);
+  });
+
+  it("says an empty night is empty, not still loading", async () => {
+    route({ run: "" });
+    render(as("admin", <DashboardScreen />));
+    expect(await rooms().findByText("Ingen natt å vise ennå.")).toBeInTheDocument();
+  });
+
+  it.each<[Role, string[], string[]]>([
+    ["receptionist", ["Belegg i natt", "Klare til salg", "Forespørsler venter", "På vakt nå"], ["Åpne arbeidsordre"]],
+    ["robot", ["Klare til salg", "Må vaskes", "Åpne arbeidsordre", "Forespørsler venter"], ["Belegg i natt", "Ankomster i dag", "På vakt nå"]],
+  ])("shows the %s only the figures of modules they may open", async (role, shown, hidden) => {
+    route();
+    render(as(role, <DashboardScreen />));
+    await rooms().findByRole("link", { name: /^Rom 319/ });
+    const figures = within(screen.getByRole("region", { name: "Hotellet i tall" }));
+    for (const label of shown) expect(figures.getByText(label)).toBeInTheDocument();
+    for (const label of hidden) expect(figures.queryByText(label)).not.toBeInTheDocument();
   });
 
   it("shows the robot as one small widget with the way into the 3D map, not the 3D hotel itself", async () => {
@@ -224,6 +248,11 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(screen.getByRole("region", { name: "Gjester og bookinger" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /^Lager og lin/ })).toBeInTheDocument();
     expect(screen.getByText("Ingen data fra natten")).toBeInTheDocument();
+    // The night's widgets and figures say it isn't there, instead of loading forever.
+    expect(rooms().getByText(/^Ikke lastet/)).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Roboten" })).getByText(/^Ikke lastet/)).toBeInTheDocument();
+    const figures = within(screen.getByRole("region", { name: "Hotellet i tall" }));
+    expect(figures.getByText("Klare til salg").previousElementSibling).toHaveTextContent("–");
 
     route();
     fireEvent.click(screen.getByRole("button", { name: "Prøv igjen" }));

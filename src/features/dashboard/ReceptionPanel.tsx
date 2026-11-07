@@ -1,14 +1,18 @@
 import Link from "next/link";
 import { formatDate, formatDayClock } from "@/features/reception/format";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, Skeleton } from "@/ui";
-import { useReceptionCalls } from "./useReceptionCalls";
+import { type CallsState, useReceptionCalls } from "./useReceptionCalls";
 
 const SHOWN = 4;
 
 /** Resepsjon: the latest calls, bookings and messages from ShirazIQ's receptionist. */
 export function ReceptionPanel({ className }: { className?: string }) {
   const { state, retry } = useReceptionCalls();
+  return <ReceptionPanelView state={state} retry={retry} className={className} />;
+}
 
+/** The panel on calls someone else fetched (Oversikt passes its own, shared with the Nå band). */
+export function ReceptionPanelView({ state, retry, className }: { state: CallsState; retry: () => void; className?: string }) {
   return (
     <section aria-labelledby="reception-heading" data-enter className={className}>
       <Card className="sm:p-6">
@@ -40,6 +44,7 @@ export function ReceptionPanel({ className }: { className?: string }) {
           )}
           {state.kind === "not-set-up" && (
             <EmptyState
+              as="h3"
               title="Resepsjonisten er ikke koblet til ennå"
               body="Når telefonagenten er satt opp, vises samtaler, bookinger og beskjeder her."
               action={
@@ -56,6 +61,7 @@ export function ReceptionPanel({ className }: { className?: string }) {
           )}
           {state.kind === "error" && (
             <ErrorState
+              as="h3"
               title="Fikk ikke hentet samtalene"
               body="Sjekk nettet og prøv igjen."
               action={
@@ -66,7 +72,7 @@ export function ReceptionPanel({ className }: { className?: string }) {
             />
           )}
           {state.kind === "ready" && state.calls.length === 0 && (
-            <EmptyState title="Ingen samtaler ennå" body="Samtaler fra telefonen og nettleseren vises her." />
+            <EmptyState as="h3" title="Ingen samtaler ennå" body="Samtaler fra telefonen og nettleseren vises her." />
           )}
           {state.kind === "ready" && state.calls.length > 0 && (
             <ol aria-label="Siste samtaler">

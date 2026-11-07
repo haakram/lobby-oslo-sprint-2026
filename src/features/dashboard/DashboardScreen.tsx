@@ -32,7 +32,7 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   const role: Role = effectiveRole ?? "admin";
   const { resolved, statusOf } = useOrderStatuses();
   const { run, night, rooms, orders, robot } = useNight(viewerUrl, resolved);
-  const { state: calls } = useReceptionCalls();
+  const { state: calls, retry: retryCalls } = useReceptionCalls();
   const hour = useOsloHour();
 
   const technician = byRole("Vedlikehold").find((member) => member.shift === "dag") ?? null;
@@ -45,6 +45,7 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
     () => ({
       role,
       loading: run.status === "loading",
+      nightStatus: run.status,
       night,
       rooms,
       robot,
@@ -53,11 +54,12 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
       outOfOrder: outOfOrderRooms(maintenance),
       guests,
       calls,
+      retryCalls,
       lowStock: lowStock(),
       shift,
       onShift: onShift(shift),
     }),
-    [role, run.status, night, rooms, robot, requests, maintenance, guests, calls, shift],
+    [role, run.status, night, rooms, robot, requests, maintenance, guests, calls, retryCalls, shift],
   );
   const now = useMemo(() => selectNow(data), [data]);
   const widgets = MODULES.filter((module) => module.widget && canAccess(role, module.route));
@@ -69,8 +71,14 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   return (
     <main className="flex-1">
       <TopBar night={night ? nightLabel(night.startedAt) : null} robot={robot} source={run.source} loading={run.status === "loading"} />
+      {/* The skeletons are silent; this says it in words, and says when the night is in. */}
+      <p role="status" className="sr-only">
+        {run.status === "loading" ? "Henter natten …" : run.status === "ready" ? "Natten er lastet." : ""}
+      </p>
 
       <div ref={scope} className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:gap-8 lg:px-10 lg:py-8">
+        <NowBand items={now} loading={!ready} />
+
         {run.status === "error" && (
           <Card className="sm:p-6">
             <ErrorState
@@ -85,7 +93,6 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
           </Card>
         )}
 
-        <NowBand items={now} loading={!ready} />
         <KpiStrip data={data} />
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:gap-8 xl:grid-cols-3">

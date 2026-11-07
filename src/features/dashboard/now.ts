@@ -3,6 +3,7 @@ import type { GuestDay } from "@/features/guests/testData";
 import type { StockItem } from "@/features/inventory/testData";
 import type { WorkOrderView } from "@/features/maintenance/select";
 import { type ModuleId, moduleById } from "@/features/modules/registry";
+import type { RunStatus } from "@/features/nightshift/useRun";
 import { type RequestView, waiting } from "@/features/requests/select";
 import type { ShiftId, StaffMember } from "@/features/staff/testData";
 import type { RegenName } from "@/ui/icons/regenPaths";
@@ -15,6 +16,8 @@ import type { CallsState } from "./useReceptionCalls";
 export type DashboardData = {
   role: Role;
   loading: boolean;
+  /** Where the night's load stands: a failed or empty night is not "still loading". */
+  nightStatus: RunStatus;
   night: Night | null;
   rooms: RoomView[] | null;
   robot: RobotView | null;
@@ -23,6 +26,8 @@ export type DashboardData = {
   outOfOrder: string[];
   guests: GuestDay;
   calls: CallsState;
+  /** Fetch the calls again (the Resepsjon widget's Prøv igjen; the Nå band reads the same calls). */
+  retryCalls: () => void;
   lowStock: StockItem[];
   shift: ShiftId;
   onShift: StaffMember[];
@@ -40,7 +45,6 @@ export type NowItem = {
 };
 
 const RANK: Record<NowTone, number> = { danger: 0, warning: 1, muted: 2 };
-const MAX_ROWS = 6;
 
 function numbers(rooms: readonly { number: string }[]): string {
   return rooms.map((room) => room.number).join(", ");
@@ -53,7 +57,8 @@ function open(module: ModuleId) {
 
 /**
  * What needs a person now, across every module the role may open, loudest first. The primary action
- * of the whole screen (the cleaning route) is the first row when rooms need cleaning.
+ * of the whole screen (the cleaning route) is the first row when rooms need cleaning. Every row comes
+ * back: the band shows the first six and names the rest, so nothing is dropped without a word.
  */
 export function selectNow(data: DashboardData): NowItem[] {
   const items: NowItem[] = [];
@@ -84,12 +89,14 @@ export function selectNow(data: DashboardData): NowItem[] {
 
   const waits = waiting(data.requests);
   if (waits.length > 0) {
+    // A failed request is what makes the row loud, so the words say it too, not only the colour.
+    const failed = waits.filter((request) => request.status === "feilet").length;
     items.push({
       id: "requests",
       module: "foresporsler",
-      tone: waits.some((request) => request.status === "feilet") ? "danger" : "warning",
+      tone: failed > 0 ? "danger" : "warning",
       icon: "inbox",
-      text: `${waits.length} ${waits.length === 1 ? "forespørsel venter" : "forespørsler venter"} på noen`,
+      text: `${waits.length} ${waits.length === 1 ? "forespørsel venter" : "forespørsler venter"} på noen${failed > 0 ? ` · ${failed} feilet` : ""}`,
       action: open("foresporsler"),
     });
   }
@@ -172,6 +179,5 @@ export function selectNow(data: DashboardData): NowItem[] {
 
   return items
     .filter((item) => canAccess(data.role, moduleById(item.module).route))
-    .sort((a, b) => RANK[a.tone] - RANK[b.tone])
-    .slice(0, MAX_ROWS);
+    .sort((a, b) => RANK[a.tone] - RANK[b.tone]);
 }

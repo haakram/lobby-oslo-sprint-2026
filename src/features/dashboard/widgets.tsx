@@ -6,11 +6,13 @@ import { type ModuleId, moduleById } from "@/features/modules/registry";
 import { SourceNote } from "@/features/modules/SourceNote";
 import { REQUEST_STATUS, SOURCE_WORD, waiting } from "@/features/requests/select";
 import { SHIFTS } from "@/features/staff/testData";
+import type { RunStatus } from "@/features/nightshift/useRun";
 import { Badge, Card, cx, Monogram, RegenIcon, Skeleton } from "@/ui";
+import { AVVIK, ROOM_STATUS } from "@/ui/roomStatus";
 import { percent } from "./format";
 import { placeLabel, STATUS_LOOK, STATUS_ORDER } from "./labels";
 import type { DashboardData } from "./now";
-import { ReceptionPanel } from "./ReceptionPanel";
+import { ReceptionPanelView } from "./ReceptionPanel";
 import { countRooms, floorsOfRooms } from "./selectors";
 import { batteryLow, robotDoing } from "./TopBar";
 
@@ -23,7 +25,20 @@ const SHOWN = 4;
 
 export type WidgetProps = { data: DashboardData; className?: string };
 
-function Frame({ module, children, className, count }: { module: ModuleId; children: React.ReactNode; className?: string; count?: number }) {
+function Frame({
+  module,
+  children,
+  className,
+  count,
+  countLabel,
+}: {
+  module: ModuleId;
+  children: React.ReactNode;
+  className?: string;
+  count?: number;
+  /** What the count counts, for a screen reader ("venter", "under minimum"). */
+  countLabel?: string;
+}) {
   const definition = moduleById(module);
   const id = `widget-${module}`;
   return (
@@ -32,9 +47,18 @@ function Frame({ module, children, className, count }: { module: ModuleId; child
         <div className="flex items-baseline justify-between gap-4">
           <h2 id={id} className="flex items-baseline gap-2 text-lg font-semibold tracking-[-0.01em]">
             {definition.name}
-            {count !== undefined && <span className="text-base font-normal text-muted tabular-nums">{count}</span>}
+            {count !== undefined && (
+              <span className="text-base font-normal text-muted tabular-nums">
+                {count}
+                {countLabel && <span className="sr-only"> {countLabel}</span>}
+              </span>
+            )}
           </h2>
-          <Link href={definition.route} className="flex min-h-11 shrink-0 items-center text-sm font-semibold text-accent-text hover:underline">
+          <Link
+            href={definition.route}
+            aria-label={`Åpne ${definition.name}`}
+            className="flex min-h-11 shrink-0 items-center text-sm font-semibold text-accent-text hover:underline"
+          >
             Åpne
           </Link>
         </div>
@@ -54,7 +78,20 @@ function Rows({ count = 3 }: { count?: number }) {
   );
 }
 
-/** Rom og renhold: the key rack in small, every room a tile in its status colour. */
+/**
+ * The night's part of a widget when there is no night to show: skeletons only while it loads; a
+ * failed or empty night says so, instead of looking like it is still on its way.
+ */
+function NightMissing({ status }: { status: RunStatus }) {
+  if (status === "loading") return <Rows count={3} />;
+  return (
+    <p className="mt-3 text-sm text-muted">
+      {status === "error" ? "Ikke lastet: natteloggen svarte ikke. Prøv igjen øverst på siden." : "Ingen natt å vise ennå."}
+    </p>
+  );
+}
+
+/** Rom og renhold: the key rack in small, every room a tile with its status icon (the word is in its name). */
 function RoomsWidget({ data, className }: WidgetProps) {
   const rooms = data.rooms;
   const counts = rooms ? countRooms(rooms) : null;
@@ -62,19 +99,19 @@ function RoomsWidget({ data, className }: WidgetProps) {
   return (
     <Frame module="rom" className={className}>
       {!rooms || !counts ? (
-        <Rows count={3} />
+        <NightMissing status={data.nightStatus} />
       ) : (
         <>
           <ul aria-label="Rom per status" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {STATUS_ORDER.map((status) => (
               <li key={status} className="flex items-center gap-1.5">
-                <span aria-hidden="true" className={cx("h-1.5 w-4 rounded-full", STATUS_LOOK[status].tag)} />
+                <RegenIcon name={ROOM_STATUS[status].icon} size={14} strokeWidth={2} className={cx("shrink-0", STATUS_LOOK[status].word_class)} />
                 <span className="text-muted">{STATUS_LOOK[status].word}</span>
                 <span className="font-semibold tabular-nums">{counts[status]}</span>
               </li>
             ))}
             <li className="flex items-center gap-1.5">
-              <span aria-hidden="true" className="size-2 rounded-full bg-danger" />
+              <RegenIcon name={AVVIK.icon} size={14} strokeWidth={2} className={cx("shrink-0", AVVIK.ink)} />
               <span className="text-muted">Avvik</span>
               <span className="font-semibold tabular-nums">{counts.avvik}</span>
             </li>
@@ -96,12 +133,16 @@ function RoomsWidget({ data, className }: WidgetProps) {
                             title={`Rom ${room.number}: ${look.word}${avvik ? ", avvik" : ""}`}
                             aria-label={`Rom ${room.number}: ${look.word}${avvik ? ", avvik" : ""}`}
                             className={cx(
-                              "flex h-9 flex-col justify-between rounded-sm p-1 transition-[filter] duration-[120ms] ease-standard hover:brightness-110 focus-visible:outline-offset-[-2px]",
+                              "flex h-11 flex-col justify-between rounded-sm p-1 transition-[filter] duration-[120ms] ease-standard hover:brightness-110 focus-visible:outline-offset-[-2px]",
                               look.tile,
                               avvik && "shadow-[inset_2px_0_0_0_var(--danger)]",
                             )}
                           >
-                            <span aria-hidden="true" className={cx("h-1 w-3 rounded-full", look.tag)} />
+                            {/* The status as a shape too, not only a colour (WCAG 1.4.1): the legend above maps each icon. */}
+                            <span aria-hidden="true" className="flex items-center gap-0.5">
+                              <RegenIcon name={ROOM_STATUS[room.status].icon} size={12} strokeWidth={2} className={look.word_class} />
+                              {avvik && <RegenIcon name={AVVIK.icon} size={12} strokeWidth={2} className={AVVIK.ink} />}
+                            </span>
                             <span className={cx("font-mono text-xs leading-none tabular-nums", look.loud && "font-semibold")}>{room.number}</span>
                           </Link>
                         </li>
@@ -150,7 +191,7 @@ function GuestsWidget({ data, className }: WidgetProps) {
 function RequestsWidget({ data, className }: WidgetProps) {
   const waits = waiting(data.requests);
   return (
-    <Frame module="foresporsler" className={className} count={waits.length}>
+    <Frame module="foresporsler" className={className} count={waits.length} countLabel="venter">
       {data.loading && data.requests.length === 0 ? (
         <Rows />
       ) : waits.length === 0 ? (
@@ -178,7 +219,7 @@ function RequestsWidget({ data, className }: WidgetProps) {
 function MaintenanceWidget({ data, className }: WidgetProps) {
   const open = data.maintenance.filter((order) => order.status !== "lost");
   return (
-    <Frame module="vedlikehold" className={className} count={open.length}>
+    <Frame module="vedlikehold" className={className} count={open.length} countLabel="åpne">
       {data.loading && open.length === 0 ? (
         <Rows />
       ) : open.length === 0 ? (
@@ -205,7 +246,7 @@ function MaintenanceWidget({ data, className }: WidgetProps) {
 function InventoryWidget({ data, className }: WidgetProps) {
   const low = data.lowStock;
   return (
-    <Frame module="lager" className={className} count={low.length}>
+    <Frame module="lager" className={className} count={low.length} countLabel="under minimum">
       {low.length === 0 ? (
         <p className="mt-3 text-sm text-muted">Alt er over minimum.</p>
       ) : (
@@ -216,7 +257,7 @@ function InventoryWidget({ data, className }: WidgetProps) {
                 <span className="font-semibold">{item.item}</span>
                 <span className="text-muted"> · {storeName(item.store)}</span>
               </span>
-              <span className={cx("font-mono text-xs tabular-nums", isLow(item) && "font-semibold text-danger")}>
+              <span className={cx("font-mono text-xs whitespace-nowrap tabular-nums", isLow(item) && "font-semibold text-danger")}>
                 {item.count} / {item.expected}
               </span>
             </li>
@@ -231,7 +272,7 @@ function InventoryWidget({ data, className }: WidgetProps) {
 function StaffWidget({ data, className }: WidgetProps) {
   const shift = SHIFTS.find((entry) => entry.id === data.shift);
   return (
-    <Frame module="ansatte" className={className} count={data.onShift.length}>
+    <Frame module="ansatte" className={className} count={data.onShift.length} countLabel="på vakt">
       <p className="mt-1 text-sm text-muted">
         {shift?.label} {shift?.from}–{shift?.to}
       </p>
@@ -275,7 +316,7 @@ function RobotWidget({ data, className }: WidgetProps) {
           {state && <Badge tone={state.tone}>{state.word}</Badge>}
         </div>
         {!robot ? (
-          <Rows />
+          <NightMissing status={data.nightStatus} />
         ) : (
           <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
             <dt className="text-muted">Sted</dt>
@@ -308,8 +349,9 @@ function RobotWidget({ data, className }: WidgetProps) {
   );
 }
 
-function ReceptionWidget({ className }: WidgetProps) {
-  return <ReceptionPanel className={className} />;
+function ReceptionWidget({ data, className }: WidgetProps) {
+  // The screen's own calls, so Prøv igjen here also refreshes the Nå band's call-back row.
+  return <ReceptionPanelView state={data.calls} retry={data.retryCalls} className={className} />;
 }
 
 export const WIDGETS: Partial<Record<ModuleId, ComponentType<WidgetProps>>> = {

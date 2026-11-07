@@ -9,6 +9,7 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
   return {
     role: "admin",
     loading: false,
+    nightStatus: "ready",
     night: null,
     rooms: null,
     robot: null,
@@ -17,6 +18,7 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
     outOfOrder: [],
     guests: { today: "2026-11-08", arrivals: [], departures: [], inHouse: [], booked: [], withNotes: [], roomsTonight: 0 },
     calls: { kind: "not-set-up" },
+    retryCalls: () => {},
     lowStock: [],
     shift: "dag",
     onShift: [],
@@ -90,6 +92,8 @@ describe("selectNow (the Nå band)", () => {
       ["robot", "warning"],
     ]);
     expect(items[1]).toMatchObject({ icon: "battery-low", text: "Roboten har lavt batteri, 12 %" });
+    // The words say what made the row loud, not only the red.
+    expect(items[0]).toMatchObject({ text: "1 forespørsel venter på noen · 1 feilet" });
   });
 
   it("lists the rooms out of order, the arrivals without a room and the callers to ring back", () => {
@@ -120,7 +124,7 @@ describe("selectNow (the Nå band)", () => {
     expect(selectNow(full).map((item) => item.id)).toEqual(["high", "dirty", "ooo", "callbacks", "stock", "robot"]);
   });
 
-  it("never shows more than six rows", () => {
+  it("returns every row, loudest first, so the band can name what it has no room for", () => {
     const stay = { id: "stay-1", name: "Lukas Brandt", room: null, arrival: "2026-11-08", departure: "2026-11-09", guests: 1, notes: [], source: "pms" as const };
     const items = selectNow(
       data({
@@ -133,7 +137,8 @@ describe("selectNow (the Nå band)", () => {
         robot: ROBOT,
       }),
     );
-    expect(items).toHaveLength(6);
-    expect(items.map((item) => item.id)).not.toContain("robot");
+    // Seven rows: nothing is cut here; the band shows six and an "og 1 til" line (NowBand.test.tsx).
+    expect(items).toHaveLength(7);
+    expect(items.at(-1)?.id).toBe("robot");
   });
 });

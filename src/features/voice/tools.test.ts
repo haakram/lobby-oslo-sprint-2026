@@ -6,7 +6,7 @@ function fakeUi() {
     showProduct: vi.fn(),
     showRoute: vi.fn(),
     showGuide: vi.fn(),
-    proposeTask: vi.fn((_text: string) => true),
+    proposeTask: vi.fn<(text: string) => boolean>(() => true),
   } satisfies VoiceUi;
 }
 

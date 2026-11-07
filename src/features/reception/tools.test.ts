@@ -322,6 +322,24 @@ describe("createCallSink", () => {
   });
 });
 
+/** A tool set whose clock moves 20 s per call, so each haggling step is allowed after the last. */
+function patientTools() {
+  let t = Date.parse("2026-11-07T12:00:00Z");
+  return createReceptionTools({
+    sink: createCallSink((item) => records.push(item)),
+    today: () => TODAY,
+    occupancy: free,
+    newId: () => `id-${++ids}`,
+    now: () => new Date((t += 20_000)),
+  });
+}
+
+async function climb(t: ReturnType<typeof tools>, to: number) {
+  let reply = "";
+  for (let step = 1; step <= to; step++) reply = await t.get_counter_offer({ room: "Dobbeltrom", step });
+  return reply;
+}
+
 describe("haggling", () => {
   it("step 1 keeps the price and offers a free perk", async () => {
     const reply = await tools().get_counter_offer({ room: "Dobbeltrom", step: 1 });
@@ -331,15 +349,17 @@ describe("haggling", () => {
   });
 
   it("step 2 takes 5 % off, step 3 is the last offer at 10 % off", async () => {
-    const t = tools();
-    expect(await t.get_counter_offer({ room: "Dobbeltrom", step: 2 })).toContain("1445");
+    const t = patientTools();
+    expect(await climb(t, 2)).toContain("1445");
     const last = await t.get_counter_offer({ room: "Dobbeltrom", step: 3 });
     expect(last).toContain("1369");
     expect(last).toMatch(/siste tilbud/);
   });
 
   it("never goes below the floor, however high the step", async () => {
-    const reply = await tools().get_counter_offer({ room: "Dobbeltrom", step: 99 });
+    const t = patientTools();
+    await climb(t, 3);
+    const reply = await t.get_counter_offer({ room: "Dobbeltrom", step: 99 });
     expect(reply).toContain("1369");
     expect(reply).toMatch(/siste tilbud/);
   });
@@ -350,6 +370,30 @@ describe("haggling", () => {
       expect((await t.get_counter_offer({ room: "Dobbeltrom", step })).startsWith("Feil:")).toBe(true);
     }
     expect((await t.get_counter_offer({ room: "Penthouse", step: 2 })).startsWith("Feil:")).toBe(true);
+  });
+
+  it("goes one step at a time: no jumping straight to the lowest price", async () => {
+    const t = patientTools();
+    const jump = await t.get_counter_offer({ room: "Dobbeltrom", step: 3 });
+    expect(jump.startsWith("Feil:")).toBe(true);
+    expect(jump).toContain("Neste trinn er 1");
+    expect(jump).not.toContain("1369");
+  });
+
+  it("gives the guest time to answer before the next step", async () => {
+    const t = tools(); // the clock stands still
+    expect(await t.get_counter_offer({ room: "Dobbeltrom", step: 1 })).toContain("1521");
+    const rushed = await t.get_counter_offer({ room: "Dobbeltrom", step: 2 });
+    expect(rushed.startsWith("Feil:")).toBe(true);
+    expect(rushed).not.toContain("1445");
+    // Repeating the offer already made is fine.
+    expect(await t.get_counter_offer({ room: "Dobbeltrom", step: 1 })).toContain("1521");
+  });
+
+  it("starts over with a new tool set (a new call)", async () => {
+    await climb(patientTools(), 3);
+    const fresh = await patientTools().get_counter_offer({ room: "Dobbeltrom", step: 2 });
+    expect(fresh.startsWith("Feil:")).toBe(true);
   });
 
   it("a guest who claims 155 kr elsewhere still pays at least the floor", async () => {

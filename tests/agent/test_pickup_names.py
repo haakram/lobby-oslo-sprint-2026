@@ -85,13 +85,25 @@ def test_another_requests_numbered_object_is_never_taken(tmp_path):
     assert own_object(ex, t["R-035"], ["luggage-205-36"], "luggage-205") is None
 
 
-def test_the_plain_tray_belongs_to_the_earliest_open_order_for_the_room(tmp_path):
+def test_the_plain_tray_belongs_to_the_earliest_order_for_the_room_until_it_is_done(tmp_path):
     _fake, _session, ex = setup(tmp_path, requests=[])
     t = _ledger(ex, ("R-003", TRAY.format(224)), ("R-004", TRAY.format(306)), ("R-022", TRAY.format(224)))
     assert own_object(ex, t["R-022"], ["tray-224"], "tray-224") is None  # R-022's would be tray-224-3
     assert _fewer_objects_than_orders(ex, t["R-022"], ["tray-224"], "tray-224") == "R-003"
-    ex.ledger.set_status("R-003", "failed")  # no earlier open order: the plain one is the fallback
+    for status in ("failed", "declined", "skipped"):  # still R-003's (live seed 7: a declined
+        ex.ledger.set_status("R-003", status)  # request's luggage placed for another cost -18)
+        assert own_object(ex, t["R-022"], ["tray-224"], "tray-224") is None, status
+    ex.ledger.set_status("R-003", "done")  # R-003's went up: a plain one here is the fallback
     assert own_object(ex, t["R-022"], ["tray-224"], "tray-224") == "tray-224"
+
+
+def test_a_failed_orders_kept_tray_is_not_delivered_for_a_later_order(tmp_path):
+    _fake, _session, ex = setup(tmp_path, requests=[])
+    t = _ledger(ex, ("R-001", TRAY.format(104)), ("R-002", TRAY.format(322)), ("R-006", TRAY.format(104)))
+    ex.ledger.set_status("R-001", "failed")  # DND at 104: it kept its tray in the cart
+    ex.state.cart = ["tray-104"]
+    assert own_object(ex, t["R-006"], ex.state.cart, "tray-104") is None
+    assert own_object(ex, t["R-006"], ["tray-104", "tray-104-3"], "tray-104") == "tray-104-3"
 
 
 # --- the flows -----------------------------------------------------------------------------------

@@ -355,13 +355,15 @@ def own_suffix(ex: Executor, task: Task) -> str | None:
 
 
 def _bare_owner(ex: Executor, task: Task, names: list[str], base: str) -> str | None:
-    """The earliest earlier open order of task's kind for its room whose own numbered object is not
-    among `names`: the plain `base` is that order's (the first order for a room gets the plain name)."""
+    """The earliest earlier order of task's kind for its room, not done, whose own numbered object is
+    not among `names`: the plain `base` is that order's (the first order for a room gets the plain
+    name). A failed or declined one still owns it (live seed 7: R-052 placing the declined R-034's
+    luggage-313-34 cost -18)."""
     num = _request_number(task.request)
     if num is None:
         return None
     earlier = sorted(((n, e) for e in ex.ledger.entries.values()
-                      if e.kind is task.kind and e.status == "pending"
+                      if e.kind is task.kind and e.status != "done"
                       and (n := _request_number(e.request)) is not None and n < num), key=lambda ne: ne[0])
     for _n, entry in earlier:
         if (entry.room or ex.guest_rooms.get(entry.task.guest or "")) != task.room:
@@ -375,8 +377,9 @@ def _bare_owner(ex: Executor, task: Task, names: list[str], base: str) -> str | 
 
 def own_object(ex: Executor, task: Task, names: list[str], base: str) -> str | None:
     """This request's tray or bags among `names` (the objects at the pickup, or what is carried):
-    `base-<own suffix>` first; the plain `base` only when no earlier open order for the room owns
-    it; never one numbered for another request (a wrong delivery costs 10-20 and loses that tray)."""
+    `base-<own suffix>` first; the plain `base` only when no earlier order for the room that is not
+    done owns it; never one numbered for another request (a wrong delivery costs 10-20 and loses
+    that tray)."""
     suffix = own_suffix(ex, task)
     if suffix and f"{base}-{suffix}" in names:
         return f"{base}-{suffix}"
@@ -430,8 +433,8 @@ def pick_for_others(ex: Executor, task: Task, kind: Kind, names: Callable[[Task]
 
 def _fewer_objects_than_orders(ex: Executor, task: Task, objects: list[str], want: str) -> str | None:
     """Trays and bags are judged at the pickup, not by text: each order has its own object
-    (own_suffix), and the plain one is the earliest open order's for the room. That earlier order's
-    request when nothing here is this one's but the plain one is here, else None."""
+    (own_suffix), and the plain one is the earliest not-done order's for the room. That earlier
+    order's request when nothing here is this one's but the plain one is here, else None."""
     if own_object(ex, task, objects, want) is not None or want not in objects:
         return None
     return _bare_owner(ex, task, objects, want)

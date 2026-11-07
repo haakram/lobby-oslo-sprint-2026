@@ -7,7 +7,7 @@ import { canAccess, type Role } from "@/features/auth/roles";
 import { SessionProvider } from "@/features/auth/SessionProvider";
 import { selectGuestDay } from "@/features/guests/testData";
 import { lowStock } from "@/features/inventory/testData";
-import { MODULES } from "@/features/modules/registry";
+import { type ModuleId, MODULES } from "@/features/modules/registry";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import { DashboardScreen } from "./DashboardScreen";
 import { placeLabel } from "./labels";
@@ -23,7 +23,7 @@ const ROBOT = selectRobot(NIGHT);
 const GUESTS = selectGuestDay();
 
 /** The widget's heading as the registry names the module; the robot's widget is "Roboten". */
-function widgetName(id: (typeof MODULES)[number]["id"]): RegExp {
+function widgetName(id: ModuleId): RegExp {
   const name = id === "hotell3d" ? "Roboten" : MODULES.find((module) => module.id === id)?.name;
   return new RegExp(`^${name}`);
 }
@@ -148,10 +148,10 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(figures.getByText("Må vaskes")).toBeInTheDocument();
   });
 
-  it.each([
+  it.each<[Role, ModuleId[], ModuleId[], RegExp]>([
     ["receptionist", ["rom", "gjester", "foresporsler", "ansatte", "resepsjon"], ["vedlikehold", "lager", "hotell3d"], /rom ute av drift|varer under minimum/],
     ["robot", ["rom", "foresporsler", "vedlikehold", "lager", "hotell3d"], ["gjester", "ansatte", "resepsjon"], /ankomster i dag uten rom|ringe tilbake/],
-  ] as const)("shows the %s only the modules they may open", async (role, shown, hidden, notTheirs) => {
+  ])("shows the %s only the modules they may open", async (role, shown, hidden, notTheirs) => {
     route();
     render(as(role, <DashboardScreen />));
     await rooms().findByRole("link", { name: /^Rom 319/ });
@@ -159,8 +159,8 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     for (const id of shown) expect(screen.getByRole("region", { name: widgetName(id) })).toBeInTheDocument();
     for (const id of hidden) expect(screen.queryByRole("region", { name: widgetName(id) })).not.toBeInTheDocument();
     expect(nowBand().queryByText(notTheirs)).not.toBeInTheDocument();
-    for (const module of WIDGET_MODULES) expect(shown.includes(module.id) || hidden.includes(module.id)).toBe(true);
-    expect(shown.every((id) => canAccess(role, MODULES.find((module) => module.id === id)!.route))).toBe(true);
+    for (const entry of WIDGET_MODULES) expect(shown.includes(entry.id) || hidden.includes(entry.id), entry.id).toBe(true);
+    expect(shown.every((id) => canAccess(role, MODULES.find((entry) => entry.id === id)!.route))).toBe(true);
   });
 
   it("shows the robot as one small widget with the way into the 3D map, not the 3D hotel itself", async () => {

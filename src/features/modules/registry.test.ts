@@ -31,22 +31,22 @@ describe("the module registry", () => {
   });
 
   it("has a page under src/app for every route", () => {
-    for (const module of MODULES) {
-      const dir = module.route === "/" ? "" : module.route;
-      expect(existsSync(resolve(process.cwd(), `src/app${dir}/page.tsx`)), module.route).toBe(true);
+    for (const entry of MODULES) {
+      const dir = entry.route === "/" ? "" : entry.route;
+      expect(existsSync(resolve(process.cwd(), `src/app${dir}/page.tsx`)), entry.route).toBe(true);
     }
   });
 
   it("has a widget on Oversikt exactly for the modules that say they have one", () => {
-    for (const module of MODULES) expect(Boolean(WIDGETS[module.id]), module.id).toBe(Boolean(module.widget));
+    for (const entry of MODULES) expect(Boolean(WIDGETS[entry.id]), entry.id).toBe(Boolean(entry.widget));
   });
 
   it("drives the route table: admin opens everything, the other roles only their modules", () => {
     expect(PAGES).toEqual(MODULES.map((module) => module.route));
-    for (const module of MODULES) {
-      expect(canAccess("admin", module.route), module.route).toBe(true);
-      expect(canAccess("receptionist", module.route), module.route).toBe(module.roles.includes("receptionist"));
-      expect(canAccess("robot", module.route), module.route).toBe(module.roles.includes("robot"));
+    for (const entry of MODULES) {
+      expect(canAccess("admin", entry.route), entry.route).toBe(true);
+      expect(canAccess("receptionist", entry.route), entry.route).toBe(entry.roles.includes("receptionist"));
+      expect(canAccess("robot", entry.route), entry.route).toBe(entry.roles.includes("robot"));
     }
     expect(moduleRoutesFor("receptionist")).toEqual(["/", "/rom", "/gjester", "/ruter", "/foresporsler", "/ansatte", "/resepsjon"]);
     expect(moduleRoutesFor("robot")).toEqual(["/", "/rom", "/ruter", "/foresporsler", "/vedlikehold", "/lager", "/hotell", "/natteskift", "/oyne", "/stemme"]);
@@ -59,7 +59,7 @@ describe("the module registry", () => {
 
   it("says where every module's figures come from, so test data is never shown as real", () => {
     const sources = new Set(["run-log", "reception", "test", "mixed", "none"]);
-    for (const module of MODULES) expect(sources.has(module.data), module.id).toBe(true);
+    for (const entry of MODULES) expect(sources.has(entry.data), entry.id).toBe(true);
     expect(MODULES.filter((module) => module.data === "test").map((module) => module.id)).toEqual(["lager", "ansatte"]);
   });
 });

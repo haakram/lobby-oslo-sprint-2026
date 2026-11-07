@@ -35,7 +35,7 @@ export async function identifyProduct(
 ): Promise<IdentifyResult> {
   const meter = deps.meter ?? appSpend;
   if (!meter.canSpend()) throw new BudgetExceeded();
-  const client = deps.client ?? new Anthropic({ apiKey: serverEnv().ANTHROPIC_API_KEY });
+  const client = deps.client ?? new Anthropic({ apiKey: serverEnv().ANTHROPIC_API_KEY, maxRetries: 0 });
 
   const response = await client.beta.messages.parse({
     model: "claude-opus-5-5",

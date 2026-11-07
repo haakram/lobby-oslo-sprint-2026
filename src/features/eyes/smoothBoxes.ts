@@ -3,13 +3,20 @@ export type Box = { id: string; x: number; y: number; w: number; h: number; labe
 
 /** A box that no detection matched for this many frames in a row is dropped. */
 export const MAX_MISSED_FRAMES = 10;
-const MIN_IOU = 0.3;
+/** Two boxes overlapping at least this much (IoU) are the same object. */
+export const MIN_IOU = 0.3;
 
 // Frames in a row each box went unmatched, kept out of `Box` so callers see a clean shape.
 const missed = new WeakMap<Box, number>();
 let nextId = 0;
 
-function iou(a: Box, b: Box): number {
+/** Frames in a row this box has gone without a matching detection (0 = seen in the latest frame). */
+export function missedFrames(box: Box): number {
+  return missed.get(box) ?? 0;
+}
+
+/** Intersection over union of two boxes, 0 to 1. */
+export function iou(a: Box, b: Box): number {
   const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
   const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
   if (w <= 0 || h <= 0) return 0;

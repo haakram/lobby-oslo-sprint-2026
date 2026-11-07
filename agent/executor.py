@@ -13,7 +13,9 @@ The per-kind routines (amenity, tray, message, room check, lost item) live in ag
 
 from __future__ import annotations
 
+import traceback
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
@@ -258,6 +260,20 @@ class Executor:
             here[item] = 0  # learnt: nothing left here
         return reply.ok, text
 
+    def pick_or_cart(self, item: str) -> tuple[bool, str]:
+        """pick; if both hands are full and there is no cart, fetch the cart once and retry."""
+        ok, text = self.pick(item)
+        low = text.lower()
+        if ok or self.state.has_cart or f"no {item}".lower() in low or not (
+                "full" in low or "hands" in low):
+            return ok, text
+        here = self.state.location
+        self.log("hands_full", item=item, at=here)
+        if not self.get_cart():
+            return ok, text
+        self.go(here)
+        return self.pick(item)
+
     def take(self, item: str) -> None:
         """The robot let go of item (placed it): mirror the server, hands first."""
         if item in self.state.hands:
@@ -274,7 +290,7 @@ class Executor:
                 raise ActionFailed(f"{item} out of stock")
             self.go(place)
             while self.count(item) < n:
-                ok, text = self.pick(item)
+                ok, text = self.pick_or_cart(item)
                 if not ok:
                     if f"no {item}".lower() not in text.lower():
                         raise ActionFailed(f"could not pick {item}: {text}")
@@ -372,6 +388,7 @@ class Executor:
                     self.go(dock)
                 except ActionFailed as exc:
                     self.log("wait_failed", reason=str(exc))
+                    self.scan()  # spend sim time, so the loop calling again is not a tight spin
                     return
                 continue  # moving took time: check the inbox again first
             reply = self.cmd("dock")
@@ -379,6 +396,7 @@ class Executor:
             text = str(reply.result).lower()
             if not reply.ok and "full" not in text:
                 self.log("wait_failed", reason=str(reply.result))
+                self.scan()  # as above: one bounded wait per call instead of an instant return
                 return
             if self._request_waiting():
                 return
@@ -399,7 +417,10 @@ class Executor:
         except ActionFailed as exc:
             return self._finish(task, "failed", str(exc), start)
         except Exception as exc:  # noqa: BLE001 - an odd reply must not crash the shift
-            self.log("executor_error", request=task.request, error=type(exc).__name__)
+            tb = traceback.extract_tb(exc.__traceback__)
+            where = f"{Path(tb[-1].filename).name}:{tb[-1].lineno} in {tb[-1].name}" if tb else "?"
+            self.log("executor_error", request=task.request, error=type(exc).__name__,
+                     message=str(exc)[:300], where=where)
             return self._finish(task, "failed", f"internal error ({type(exc).__name__})", start)
         outcome = self._finish(task, "done", note, start)
         if after:  # the report is in: a hiccup here must not lose the outcome (or redo the task)

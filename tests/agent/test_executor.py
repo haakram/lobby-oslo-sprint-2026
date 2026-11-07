@@ -324,3 +324,146 @@ def test_go_from_an_unknown_place_looks_once_then_routes(tmp_path):
     ex.go("lobby")
     assert ex.state.location == "lobby"
     assert len([e for e in calls(fake, "look") if not e["args"]]) == 1
+
+
+# --- fix round 1 -----------------------------------------------------------------------------------
+
+
+def test_lost_item_delivered_under_the_name_it_was_found(tmp_path):
+    fake, session, ex = setup(tmp_path, rids={"R-005"}, hidden={"reading-glasses": "corridor-1b"})
+    task = next_task(ex, session, "R-005")
+    fake._requests["R-005"].item = "reading-glasses"  # the server's own name for the lost thing
+    out = ex.run(task)
+    assert out.status == "done", out
+    assert any(e["ok"] and e["args"] == {"item": "reading-glasses", "where": "room-317"}
+               for e in calls(fake, "place"))
+    assert not fake.wrong_deliveries and not fake.false_done
+
+
+def test_item_names_match_on_whole_words():
+    from agent.flows import same_item
+
+    assert same_item("glasses", "reading-glasses") and same_item("reading-glasses", "glasses")
+    assert not same_item("glasses", "sunglasses")
+
+
+def test_two_items_are_both_placed_before_done(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", "Two towels for 212.")])
+    task = next_task(ex, session, "R-001")
+    assert task.count == 2
+    fake._requests["R-001"].count = 1  # a server that already rewards the first towel
+    out = ex.run(task)
+    assert out.status == "done", out
+    places = [e for e in calls(fake, "place") if e["ok"]]
+    assert [e["args"] for e in places] == [{"item": "towel", "where": "room-212"}] * 2
+    assert not fake.wrong_deliveries and not fake.false_done
+
+
+def test_two_towels_scored_on_the_second(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", "Two towels for 212.")])
+    out = ex.run(next_task(ex, session, "R-001"))
+    assert out.status == "done" and len(calls(fake, "place")) == 2 and fake.score > 0
+
+
+def test_room_check_done_only_when_inside_the_room(tmp_path, monkeypatch):
+    fake, session, ex = setup(tmp_path, rids={"R-004"}, absent_rooms={"room-103"})
+    task = next_task(ex, session, "R-004")
+    real_move = ex.move
+
+    def move_but_server_keeps_robot_out(to):  # our state says inside, the server disagrees
+        reply = real_move(to)
+        if to == "room-103":
+            fake._location = "corridor-1a"
+        return reply
+
+    monkeypatch.setattr(ex, "move", move_but_server_keeps_robot_out)
+    out = ex.run(task)
+    assert out.status == "failed" and fake.reports == {"R-004": "failed"} and not fake.false_done
+
+
+def test_internal_error_is_logged_with_message_and_place(tmp_path, monkeypatch):
+    from agent import flows
+    from agent.tasks import Kind
+
+    def broken(ex, task):
+        raise ValueError("odd reply shape")
+
+    monkeypatch.setitem(flows.HANDLERS, Kind.AMENITY, broken)
+    fake, session, ex = setup(tmp_path, rids={"R-001"})
+    out = ex.run(next_task(ex, session, "R-001"))
+    assert out.status == "failed" and fake.reports == {"R-001": "failed"}
+    lines = [json.loads(x) for x in session.log_path.read_text().splitlines()]
+    err = next(x["data"] for x in lines if x["type"] == "decision" and x["kind"] == "executor_error")
+    assert err["error"] == "ValueError" and err["message"] == "odd reply shape"
+    assert "test_executor.py" in err["where"] and "broken" in err["where"]
+
+
+def test_dock_refused_or_unreachable_still_spends_time(tmp_path):
+    for dock in ("lobby", "nowhere"):  # "There's no dock here." / no route at all
+        fake, session, ex = setup(tmp_path, rids={"R-001"})
+        session.cmd("inbox")
+        ex.hotel.special["dock"] = dock
+        before = session.cmd("status").clock
+        ex.wait_for_request()
+        assert len(calls(fake, "scan")) == 1, dock
+        assert session.cmd("status").clock >= "22:01:00" > before, dock
+
+
+def test_full_hands_fetch_the_cart_then_pick(tmp_path):
+    fake, session, ex = setup(tmp_path, rids={"R-001"})
+    task = next_task(ex, session, "R-001")
+    ex.go("storage")
+    assert ex.pick("towel")[0] and ex.pick("towel")[0]  # both hands full, no cart
+    out = ex.run(task)
+    assert out.status == "done", out
+    cmds = [(e["cmd"], e["args"], e["ok"]) for e in fake.log]
+    assert ("use", {"item": "cart"}, True) in cmds
+    assert cmds.index(("pick", {"item": "phone-charger"}, False)) < cmds.index(
+        ("use", {"item": "cart"}, True)) < cmds.index(("pick", {"item": "phone-charger"}, True))
+
+
+def test_no_answer_on_a_delivery_fails_and_keeps_the_item(tmp_path):
+    fake, session, ex, out = run_one(tmp_path, "R-001", absent_rooms={"room-319"})
+    assert out.status == "failed" and "no answer" in out.note
+    assert fake.reports == {"R-001": "failed"} and not calls(fake, "place")
+    assert ex.state.carrying("phone-charger")
+    assert "phone-charger" in session.cmd("status").result["hands"]
+
+
+def test_keycard_out_of_stock_fails_the_room_check(tmp_path):
+    def no_keycards(data):
+        data["stock"]["front-desk"]["keycard"] = 0
+
+    fake, _, _, out = run_one(tmp_path, "R-004", absent_rooms={"room-103"},
+                              hotel_path=map_file(tmp_path, no_keycards))
+    assert out.status == "failed" and "keycard out of stock" in out.note
+    assert fake.reports == {"R-004": "failed"} and not calls(fake, "use")
+
+
+def test_shift_end_propagates_out_of_run(tmp_path):
+    import pytest
+
+    from agent.client import ShiftEnded
+
+    fake, session, ex = setup(tmp_path, rids={"R-001"}, end_clock="22:06:00")
+    task = next_task(ex, session, "R-001")
+    with pytest.raises(ShiftEnded):
+        ex.run(task)
+    assert "R-001" not in fake.reports
+
+
+def test_lost_phone_is_searched_for_not_a_carried_charger(tmp_path):
+    from agent.tasks import Kind, Task
+
+    text = "Guest in 317 lost phone, maybe the ground floor corridor."
+    fake, session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", text)],
+                              hidden={"phone": "corridor-1a"})
+    msg = next_task(ex, session, "R-001")
+    fake._requests["R-001"].item = "phone"
+    assert ex.ensure_item("phone-charger")  # stock item in hand that shares the word "phone"
+    task = Task(request="R-001", kind=Kind.LOST_ITEM, text=text, arrived=msg.arrived,
+                room="room-317", item="phone", area_hint="ground floor corridor")
+    out = ex.run(task)
+    assert out.status == "done", out
+    assert [e["args"]["item"] for e in calls(fake, "place")] == ["phone"]
+    assert not fake.wrong_deliveries

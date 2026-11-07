@@ -93,20 +93,18 @@ def _rose(before: int | None, after: int | None) -> bool:
 
 
 def _deliver(ex: Executor, room: str, item: str, count: int = 1) -> Result:
-    """Knock, place, and accept only a score rise as proof (checked after every place)."""
+    """Knock, place all `count`, then accept only a score rise after the last place as proof."""
     _at_open_door(ex, room)
     before = ex.score_now()
-    for _ in range(max(1, count)):
+    count = max(1, count)
+    for placed in range(count):
         reply = ex.cmd("place", item=item, where=room)
         if not reply.ok:
-            raise ActionFailed(f"could not place {item} in {room}: {reply.result}")
+            raise ActionFailed(f"placed {placed} of {count} {item} in {room}, then: {reply.result}")
         ex.take(item)
-        after = ex.score_now()
-        if _rose(before, after):
-            return f"{item} x{count} delivered to {room}", None
-        if before is not None and after is not None and after < before:
-            raise ActionFailed(f"placed {item} in {room} and the score fell")
-    raise ActionFailed(f"placed {item} in {room} but the score did not rise")
+    if _rose(before, ex.score_now()):
+        return f"{item} x{count} delivered to {room}", None
+    raise ActionFailed(f"placed {item} x{count} in {room} but the score did not rise")
 
 
 # --- the kinds ----------------------------------------------------------------------------------
@@ -169,6 +167,9 @@ def room_check(ex: Executor, task: Task) -> Result:
     if not reply.ok:
         raise ActionFailed(f"could not enter {room}: {reply.result}")
     seen = str(ex.look().get("description") or "").strip() or "nothing to note"
+    where = ex.refresh().get("location")
+    if where != room:  # the look must have been inside the room, or the check is not done
+        raise ActionFailed(f"not inside {room} after entering (status says {where})")
 
     def leave() -> None:
         if not ex.move(corridor).ok:
@@ -183,9 +184,11 @@ def lost_item(ex: Executor, task: Task) -> Result:
         raise ActionFailed("no lost item named")
     room = task.room or _ask_room(ex, task.guest)
     _corridor(ex, room)
-    if not ex.state.carrying(item):
-        _find(ex, item, task.area_hint)
-    return _deliver(ex, room, item)
+    stock = {name for items in ex.hotel.stock.values() for name in items}
+    carried = [c for c in ex.state.hands + (ex.state.cart or [])  # a stock charger is no lost phone
+               if c == item or (c not in stock and same_item(item, c))]
+    name = carried[0] if carried else _find(ex, item, task.area_hint)
+    return _deliver(ex, room, name)  # under the name it was picked up as
 
 
 def _ask_room(ex: Executor, guest: str | None) -> str:
@@ -201,22 +204,29 @@ def _ask_room(ex: Executor, guest: str | None) -> str:
     return f"room-{m[1]}"
 
 
-def _pick_found(ex: Executor, item: str) -> bool:
-    """Pick item where a scan revealed it (now or earlier); True once carried."""
-    name = next((f for f in ex.found if f == item or item in f or f in item), None)
+def same_item(a: str, b: str) -> bool:
+    """Whole hyphen-separated words: glasses ~ reading-glasses, but not sunglasses."""
+    wa, wb = set(a.lower().split("-")), set(b.lower().split("-"))
+    return wa <= wb or wb <= wa
+
+
+def _pick_found(ex: Executor, item: str) -> str | None:
+    """Pick item where a scan revealed it (now or earlier); the name it was picked as, or None."""
+    name = next((f for f in ex.found if same_item(item, f)), None)
     if name is None:
-        return False
+        return None
     place = ex.found.pop(name)
     ex.go(place)
-    ok, text = ex.pick(name)
+    ok, text = ex.pick_or_cart(name)
     if not ok:
         ex.log("found_item_gone", item=name, at=place, reply=text)
-    return ok
+        return None
+    return name
 
 
-def _find(ex: Executor, item: str, hint: str | None) -> None:
-    if _pick_found(ex, item):
-        return
+def _find(ex: Executor, item: str, hint: str | None) -> str:
+    if name := _pick_found(ex, item):
+        return name
     primary, secondary = scan_candidates(ex.hotel, hint)
     scans = 0
     for group in (primary, secondary):
@@ -234,8 +244,8 @@ def _find(ex: Executor, item: str, hint: str | None) -> None:
                 continue
             ex.scan()
             scans += 1
-            if _pick_found(ex, item):
-                return
+            if name := _pick_found(ex, item):
+                return name
     raise ActionFailed(f"{item} not found after {scans} scans")
 
 

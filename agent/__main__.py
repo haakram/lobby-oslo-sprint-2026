@@ -13,7 +13,7 @@ from pathlib import Path
 
 from agent import agent as shift
 from agent.brain import Brain, CostGuard
-from agent.client import WybeClient, WybeError
+from agent.client import ShiftSession, WybeClient, WybeError
 from agent.config import Settings, load_settings
 from agent.guard import OSLO, FinalModeLocked, check_mode
 
@@ -37,8 +37,16 @@ def cmd_run(args, settings: Settings, factory: ClientFactory) -> int:
     client = factory(settings, live=args.live)
     # Offline runs must not spend real Claude budget unless --brain is given.
     brain = _brain(settings) if (args.live or args.brain) else None
+    session = None
+    if getattr(args, "adopt", None):
+        # A live practice shift the server still lists (e.g. left mid-night by an outage): play on.
+        if not args.live:
+            print("--adopt needs --live", file=sys.stderr)
+            return 2
+        session = ShiftSession(client, args.adopt, "practice", args.seed)
+        session.log_decision("adopted_shift", {"shift": args.adopt})
     result = shift.run_shift(
-        client, mode="practice", seed=args.seed, brain=brain, sim_end=args.sim_end
+        client, mode="practice", seed=args.seed, brain=brain, sim_end=args.sim_end, session=session
     )
     print(f"shift {result['shift']}  score {result['score']}  "
           f"served {result['requests_served']}  ({result['reason']})")
@@ -253,6 +261,7 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--sim-end", default=None, help="stop at this sim clock, HH:MM:SS")
     p.add_argument("--live", action="store_true", help="use the real server (counted)")
     p.add_argument("--brain", action="store_true", help="allow Claude offline too (spends budget)")
+    p.add_argument("--adopt", default=None, metavar="SHIFT", help="play on a live practice shift the server lists (with --live)")
     p.set_defaults(fn=cmd_run)
     p = sub.add_parser("final", help="the 10 scored shifts (live; locked outside the window)")
     p.set_defaults(fn=cmd_final)

@@ -28,7 +28,8 @@ from agent.world import Hotel, RobotState, clock_to_seconds
 
 PARAMS_FILE = Path(__file__).parent / "data" / "params_best.json"
 LIVE_RUNS = Path("temp/live_runs.jsonl")
-MAX_CONSECUTIVE_ERRORS = 25  # practice only: a final shift backs off and keeps trying instead
+MAX_CONSECUTIVE_ERRORS = 25  # practice, agent bugs: a final shift backs off and keeps trying instead
+MAX_SERVER_ERRORS = 60  # practice, server/network errors: back off like the final for ~30 real minutes
 ERROR_BACKOFF_MAX_S = 30.0
 FINAL_START_RETRY_S = 120.0  # a final start that fails is retried for about this long
 START_BACKOFF_MAX_S = 15.0
@@ -266,12 +267,19 @@ def run_shift(
     def out_of_time() -> bool:
         return (stop is not None and stop.is_set()) or (deadline is not None and clock() >= deadline)
 
-    def hold_on(errors: int) -> bool:
-        """After an error: True to keep going (after a backoff in the final), False to stop."""
+    def hold_on(errors: int, *, server: bool = False) -> bool:
+        """After an error: True to keep going (after a backoff), False to stop. The final never
+        stops. A practice shift stops after MAX_CONSECUTIVE_ERRORS agent bugs at once, and after
+        MAX_SERVER_ERRORS server/network errors: the sim clock only moves with actions, so an
+        outage costs nothing as long as the shift is still played when the server is back."""
         if deadline is None:
-            return errors < MAX_CONSECUTIVE_ERRORS
+            if not server:
+                return errors < MAX_CONSECUTIVE_ERRORS
+            if errors >= MAX_SERVER_ERRORS:
+                return False
         delay = min(ERROR_BACKOFF_MAX_S, 2.0 ** (errors - 1))
-        delay = min(delay, max(0.0, deadline - clock()))
+        if deadline is not None:
+            delay = min(delay, max(0.0, deadline - clock()))
         if delay > 0:
             pause(delay)
         return True
@@ -326,7 +334,7 @@ def run_shift(
                 session.log_decision("wybe_error", {"error": str(exc)[:200], "streak": errors})
                 if task is not None:
                     _rescue(ex, task, pending, retried, str(exc), time_left=not out_of_time())
-                if not hold_on(errors):
+                if not hold_on(errors, server=True):
                     result["reason"] = "too many errors"
                     break
             except Exception as exc:  # noqa: BLE001 - one odd bug must not kill the shift

@@ -77,8 +77,14 @@ _MESSAGE = re.compile(
 _CHECK = re.compile(r"\b(empty|tidy|occupied|vacant)\b", re.IGNORECASE)
 # An explicit check phrase, never a bare "is"/"are": "210 is vacant now, please ..." is no room check.
 _CHECK_VERB = re.compile(r"\b(check|verify|confirm|see if|see whether|make sure|find out)\b", re.IGNORECASE)
-# A text about noise or a complaint is never a room check (a keycard entry on a false one costs -30).
-_NOT_CHECK = re.compile(r"\b(noise|noisy|loud|music|party|complaints?|complain\w*)\b", re.IGNORECASE)
+# A text about noise or a complaint is never a room check (a keycard entry on a false one costs -30),
+# nor is one about an object in the room ("check the minibar in 305, it is empty" is not the room).
+_NOT_CHECK = re.compile(
+    r"\b(noise|noisy|loud|music|party|complaints?|complain\w*"
+    r"|minibar|mini-bar|fridge|refrigerator|safe|wardrobe|closet|drawer|cupboard|shelf|shelves|bin"
+    r"|kettle|bathtub|sink|toilet|shower)\b",
+    re.IGNORECASE,
+)
 _HINT = re.compile(
     r"\b(?:maybe|probably|perhaps|possibly)\s+(?:somewhere\s+)?(?:around|in|near|at|by)?\s*"
     r"(?:the\s+)?(.+?)\s*[.!]?$",

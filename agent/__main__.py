@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import threading
 from collections.abc import Callable
@@ -18,6 +19,7 @@ from agent.guard import OSLO, FinalModeLocked, check_mode
 
 FINAL_SHIFTS = 10
 FINAL_REAL_TIME_S = 44 * 60
+FINAL_LOCK = Path("temp/final.lock")  # the pid of the one final process allowed at a time
 
 ClientFactory = Callable[..., WybeClient]
 
@@ -49,35 +51,59 @@ def cmd_final(args, settings: Settings, factory: ClientFactory) -> int:
     except FinalModeLocked as exc:
         print(f"final is locked: {exc}", file=sys.stderr)
         return 2
+    other = _take_final_lock(FINAL_LOCK)  # two final processes would play the same shifts
+    if other is not None:
+        print(f"final: another final process (pid {other}) holds {FINAL_LOCK}; not starting a second one",
+              file=sys.stderr)
+        return 2
+    try:
+        return _final(settings, factory)
+    finally:
+        _drop_final_lock(FINAL_LOCK)
+
+
+def _final(settings: Settings, factory: ClientFactory) -> int:
+    from agent.world import Hotel
+
+    try:  # a bad params or map file must fail here, before any shift has started
+        params = shift.load_params()
+        Hotel.load()
+    except Exception as exc:  # noqa: BLE001
+        print(f"final: setup failed before any start ({type(exc).__name__}: {str(exc)[:200]}); "
+              "check agent/data/params_best.json and the hotel map", file=sys.stderr)
+        return 2
     client = factory(settings, live=True)  # one client: its rate limiter is shared by all shifts
+    stop = threading.Event()
     try:  # also the pre-flight: the key and the connection work, and we know what already runs
-        starter = shift.FinalStarter(client, limit=FINAL_SHIFTS)
+        starter = shift.FinalStarter(client, limit=FINAL_SHIFTS, stop=stop)
     except WybeError as exc:
         print(f"final: could not list our shifts, nothing started: {exc}", file=sys.stderr)
         return 2
     _say(f"final: {len(starter.live)} live final shift(s) to adopt, {starter.ended} ended, "
          f"starting {starter.remaining} new (limit {FINAL_SHIFTS})")
     brain = _brain(settings)
-    stop = threading.Event()
     results: list[dict] = [{} for _ in range(FINAL_SHIFTS)]
+
+    def not_started(i: int, label: str, why: str) -> None:
+        results[i] = {"shift": None, "score": None, "reason": f"not started: {why}"}
+        _say(f"{label} {results[i]['reason']}")
 
     def work(i: int) -> None:
         label = f"shift {i + 1}/{FINAL_SHIFTS}"
+        if stop.is_set():
+            return not_started(i, label, "stopped")
         try:
+            hotel = Hotel.load()  # this shift's own map, before its start
             session = starter.session()
         except Exception as exc:  # noqa: BLE001 - one dead shift must not stop the others
-            results[i] = {"shift": None, "score": None,
-                          "reason": f"not started: {type(exc).__name__}: {str(exc)[:120]}"}
-            _say(f"{label} {results[i]['reason']}")
-            return
+            return not_started(i, label, f"{type(exc).__name__}: {str(exc)[:120]}")
         if session is None:
-            results[i] = {"shift": None, "score": None, "reason": "not started: all final starts used"}
-            _say(f"{label} {results[i]['reason']}")
-            return
+            return not_started(i, label, "stopped" if stop.is_set() else "all final starts used")
         _say(f"{label} {session.shift_id} {'adopted' if session.shift_id in starter.live else 'started'}")
         try:
             results[i] = shift.run_shift(
-                client, session=session, brain=brain, real_time_limit_s=FINAL_REAL_TIME_S, stop=stop,
+                client, session=session, params=params, hotel=hotel, brain=brain,
+                real_time_limit_s=FINAL_REAL_TIME_S, stop=stop,
             )
         except Exception as exc:  # noqa: BLE001
             results[i] = {"shift": session.shift_id, "score": None, "reason": f"crashed: {type(exc).__name__}"}
@@ -102,6 +128,41 @@ def cmd_final(args, settings: Settings, factory: ClientFactory) -> int:
 
 def _say(text: str) -> None:
     print(f"[{datetime.now(OSLO):%H:%M:%S}] {text}", flush=True)
+
+
+def _other_final_pid(path: Path) -> int | None:
+    """The pid in the lockfile when it belongs to another process that is still alive."""
+    try:
+        pid = int(path.read_text().strip())
+    except (OSError, ValueError):
+        return None
+    if pid == os.getpid():
+        return None
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return None  # stale: that process is gone
+    except PermissionError:
+        return pid  # alive, another user's
+    return pid
+
+
+def _take_final_lock(path: Path) -> int | None:
+    """Write our pid into the lockfile; returns the other live holder's pid instead when there is one."""
+    other = _other_final_pid(path)
+    if other is not None:
+        return other
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(str(os.getpid()))
+    return None
+
+
+def _drop_final_lock(path: Path) -> None:
+    try:
+        if path.read_text().strip() == str(os.getpid()):
+            path.unlink()
+    except OSError:
+        pass
 
 
 def cmd_route(args, settings: Settings, factory: ClientFactory) -> int:

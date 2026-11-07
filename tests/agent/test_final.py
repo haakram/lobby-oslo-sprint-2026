@@ -182,3 +182,99 @@ def test_ten_final_shifts_share_one_client_and_limiter_and_none_ends_early(tmp_p
     streaks = [x["data"]["streak"] for x in _log(tmp_path, noisy)
                if x["type"] == "decision" and x["kind"] == "wybe_error"]
     assert max(streaks) > mod.MAX_CONSECUTIVE_ERRORS
+
+
+# --- fix round 1 ------------------------------------------------------------------------------------
+
+
+def test_restart_with_an_ambiguous_start_never_exceeds_the_limit(tmp_path, monkeypatch):
+    _arm(monkeypatch)
+    router = MultiFakeWybe(timeout_starts=1)
+    for _ in range(3):
+        router.orphan(ended=True)  # a crashed earlier run played three
+    starter = FinalStarter(_client(tmp_path, router), limit=4, sleep=lambda s: None)
+    assert starter.remaining == 1
+    first = starter.session()  # the start creates #4, the reply is lost, the retry adopts #4
+    assert first is not None and first.shift_id == router.order[3]
+    assert starter.session() is None  # the listing now holds 4 finals: no fifth, ever
+    assert router.final_starts == 4 and len(router.fakes) == 4
+
+
+def test_stop_during_start_backoff_makes_no_further_start(tmp_path, monkeypatch):
+    _arm(monkeypatch)
+    router = MultiFakeWybe(fail_starts=10**6)
+    stop = threading.Event()
+
+    def ctrl_c_during_backoff(seconds):
+        stop.set()
+
+    starter = FinalStarter(_client(tmp_path, router), limit=10, sleep=ctrl_c_during_backoff, stop=stop)
+    assert starter.session() is None
+    assert sum(1 for r in router.requests if r[2] == "start_shift") == 1
+
+
+def _dead_pid() -> int:
+    import os
+
+    for pid in range(99990, 1000, -1):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return pid
+        except PermissionError:
+            continue
+    raise AssertionError("no free pid found")
+
+
+def _cli_final(tmp_path, monkeypatch, n=1, limit_s=0.5):
+    import agent.__main__ as cli
+
+    _arm(monkeypatch)
+    monkeypatch.setenv("FINAL_ARMED", "1")
+    monkeypatch.setenv("WYBE_NIGHTSHIFT_KEY", "test-key")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "FINAL_SHIFTS", n)
+    monkeypatch.setattr(cli, "FINAL_REAL_TIME_S", limit_s)
+    router = MultiFakeWybe(fake_kw=ONE_REQUEST)
+
+    def factory(settings, *, live):
+        return WybeClient(settings, transport=httpx.MockTransport(router.handler), sleep=lambda s: None)
+
+    return cli, router, factory
+
+
+def test_final_refuses_when_another_live_final_process_holds_the_lock(tmp_path, monkeypatch, capsys):
+    import os
+
+    cli, router, factory = _cli_final(tmp_path, monkeypatch)
+    lock = tmp_path / "temp" / "final.lock"
+    lock.parent.mkdir()
+    lock.write_text(str(os.getppid()))  # a live process that is not us
+    assert cli.main(["final"], client_factory=factory) == 2
+    err = capsys.readouterr().err
+    assert "final.lock" in err and str(os.getppid()) in err
+    assert router.final_starts == 0 and not router.requests
+    assert lock.read_text() == str(os.getppid())
+
+
+def test_final_takes_over_a_stale_lock_and_removes_it_on_exit(tmp_path, monkeypatch):
+    cli, router, factory = _cli_final(tmp_path, monkeypatch)
+    lock = tmp_path / "temp" / "final.lock"
+    lock.parent.mkdir()
+    lock.write_text(str(_dead_pid()))
+    assert cli.main(["final"], client_factory=factory) == 0
+    assert router.final_starts == 1 and not lock.exists()
+
+
+def test_final_loads_params_and_the_hotel_before_any_start(tmp_path, monkeypatch, capsys):
+    import agent.agent as mod
+
+    cli, router, factory = _cli_final(tmp_path, monkeypatch)
+
+    def broken():
+        raise RuntimeError("params_best.json is garbage")
+
+    monkeypatch.setattr(mod, "load_params", broken)
+    assert cli.main(["final"], client_factory=factory) == 2
+    assert "params" in capsys.readouterr().err.lower()
+    assert router.final_starts == 0 and not (tmp_path / "temp" / "final.lock").exists()

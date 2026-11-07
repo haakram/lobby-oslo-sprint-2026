@@ -241,6 +241,8 @@ NOT_ROOM_CHECKS = [
     ("Loud music from 312, check if the room is occupied.", Kind.UNKNOWN),
     ("Guest in 205 complains the next room is empty and noisy, check it.", Kind.UNKNOWN),
     ("Take the bags at the desk up to 206. The room is empty, the guest checks in later.", Kind.BAGS),
+    ("Could you check the minibar in 305? It is empty.", Kind.UNKNOWN),  # an object, not the room
+    ("Check whether the fridge in 212 is empty and tidy it up.", Kind.UNKNOWN),
 ]
 
 

@@ -36,6 +36,8 @@ export function useCamera() {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    // The <video> stays mounted for the screen's whole life, so the element read here is the one to clean.
+    const element = video.current;
     let stream: MediaStream | null = null;
     let cancelled = false;
 
@@ -43,9 +45,14 @@ export function useCamera() {
       if (!window.isSecureContext) return setStatus("insecure");
       if (!navigator.mediaDevices?.getUserMedia) return setStatus("error");
       try {
-        stream = await openStream();
-        const element = video.current;
-        if (cancelled || !element) return;
+        const opened = await openStream();
+        // Cleaned up while the browser was still asking (StrictMode, navigating away, Retry):
+        // stop the late stream, or the camera light stays on.
+        if (cancelled || !element) {
+          opened.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        stream = opened;
         element.srcObject = stream;
         await new Promise<void>((resolve) => {
           if (element.readyState >= 1) resolve();
@@ -64,6 +71,7 @@ export function useCamera() {
     return () => {
       cancelled = true;
       stream?.getTracks().forEach((track) => track.stop());
+      if (element) element.srcObject = null;
     };
   }, [attempt]);
 

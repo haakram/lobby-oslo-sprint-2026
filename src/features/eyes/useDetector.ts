@@ -67,6 +67,9 @@ export function useDetector(video: RefObject<HTMLVideoElement | null>, active: b
           result = detector.detectForVideo(element, performance.now());
         } catch {
           // A lost GPU context ends live boxes; the shutter still identifies the whole frame.
+          // Clear the boxes too, so no stale box stays tappable.
+          tracked.current = [];
+          setBoxes([]);
           setStatus("failed");
           return;
         }

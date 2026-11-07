@@ -111,7 +111,9 @@ enough that two people and their subagents can build in parallel.
 - [x] Anthropic key in `.env`; ElevenLabs connected through its CLI (key in `.env.local`). Keys reach
       teammates only through `scripts/secrets.sh`; a guard in the pre-commit hook and `check.sh`
       blocks this machine's own key values from any commit (tested with fake keys). [owner: Hamad]
-- [ ] **Wybe API recon** (a subagent is running it, practice shifts only, never `mode: "final"`):
+- [~] **Wybe API recon:** done in practice mode only (`{"mode":"practice","seed":1}`, 2 shifts, no final
+      call); the subagent died before writing it up, so a second one is writing the reference from
+      the raw log (`temp/wybe/`, gitignored). Original scope:
       every command with its arguments and replies, the task types, the hotel map (floors, rooms,
       lifts), what counts as done, what costs points, and the timing (20 s per action). Written to
       `docs/research/wybe-api.md`. [owner: Hamad, now, to unblock Track A]
@@ -128,7 +130,7 @@ enough that two people and their subagents can build in parallel.
 Each track runs its plan with `superpowers:subagent-driven-development`. Tasks below are the
 outline; the plans hold the detail. Tasks may change after the recon.
 
-### Track A — Night Shift agent [owner: ShirazIQ]
+### Track A — Night Shift agent [owner: ShirazIQ; Hamad leads the design, started 2026-11-07 12:15]
 
 - [ ] **API client** for every discovered command: timeouts, retries, and every request and reply
       logged to `temp/` (gitignored) so a shift can be replayed.

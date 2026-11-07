@@ -59,8 +59,9 @@ normal work, and branch protection still applies on GitHub.
   `check.sh` (the same comparison over the whole history, plus gitleaks); CI's full-history gitleaks
   job; and the repo is private. GitHub's own push protection isn't available for private repos on
   the free plan, which is why the local layers matter. Tested 2026-11-07 with fake keys.
-- **Shared Anthropic key, shared budget:** both of us use one key, so set a USD 30 spend limit on it
-  in the Anthropic Console as well. Our code's cost guard can't see the other person's spend.
+- **Shared Anthropic key, shared budget:** both of us use one key. A USD 30 spend limit is set on it
+  in the Anthropic Console (team lead, 2026-11-07), so the cap holds whoever spends; our code's cost
+  guard still counts its own spend so it can slow down before the limit cuts it off.
 - **Adding a variable:** add it to `.env.example` and `ARCHITECTURE.md` § 4.4 in the same PR; tell the
   team to update their `.env`.
 - **A key leaked into git:** rotate it at the provider first, then remove it from the code. Deleting

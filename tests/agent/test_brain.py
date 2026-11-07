@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent.brain import PRICE_IN_PER_MTOK, PRICE_OUT_PER_MTOK, Brain, CostGuard
+from agent.brain import PRICE_IN_PER_MTOK, PRICE_OUT_PER_MTOK, Brain, CostGuard, LedgerError
 from agent.config import Settings
 
 
@@ -148,7 +148,7 @@ def test_corrupt_ledger_fails_closed(tmp_path, content):
     assert guard.can_spend(0.0001) is False
     assert brain.classify("r1", "x", "02:10") is None
     assert client.calls == []
-    with pytest.raises(Exception):
+    with pytest.raises(LedgerError):
         guard.record(0.5)
     assert ledger.read_text() == content
 
@@ -186,7 +186,7 @@ def test_record_failure_returns_none(tmp_path):
     "count,expected", [('"Infinity"', None), ("Infinity", None), (-3, 1), (10**9, 10), (2, 2)]
 )
 def test_count_is_clamped(tmp_path, count, expected):
-    brain, _, _ = make(tmp_path, '{"kind":"amenity","count":%s}' % count)
+    brain, _, _ = make(tmp_path, f'{{"kind":"amenity","count":{count}}}')
     task = brain.classify("r1", "x", "02:10")
     assert (task.count if task else None) == expected
 

@@ -362,3 +362,24 @@ The live seed-1 night (docs/research/wybe-api.md § 12) scored 581 against a lea
 4. No live calls; no change to what the agent does in a shift.
 
 **Tests (TDD):** counter increments per call; capped score equals the score at the Nth call on a deterministic fake night; clock-at-cap reported; `--max-calls 0` = unlimited. Full `tests/agent` + ruff. No network, never `--live`.
+
+### Task 15: Calibrate the offline fake to the live night (PLAN § Road to #1, step 3)
+
+**Why:** offline tuning and offline benchmarks are only worth something if the fake night looks like the real one. Today it doesn't (more requests, flat rate, ends 02:00, wrong scoring rule, wrong penalties).
+
+**Source of every number:** /Users/hamadaliakram/Oslo_Sprint_26/.superpowers/sdd/2026-11-07-nightshift-agent/calibration-spec.md (measured from the one full live night, seed 1). Use its values verbatim; where it says a value can't be measured, use its suggested default and mark it `[hyp]`. Mark measured values `[obs]` in comments.
+
+**Files:** Modify `agent/offline.py`, `agent/bench.py`; tests `tests/agent/test_fake_wybe.py`, `tests/agent/test_bench.py`. Do not touch `agent/{flows,flows_extra,executor,planner,tasks,agent}.py` (Task 13's fix round is editing them in parallel); if calibration needs a change there, report it as a concern.
+
+**Requirements:**
+1. **Seed 1 replays the live night:** the default script / `offline_scenario(1)` produces the 68 live requests at their measured sim clocks with their phrasings, rooms, items and guest names (the spec's replay list), the night's start clock as measured, end 06:00.
+2. **Other seeds:** generated with the measured rate (~8.5/h), burstiness, kind mix by hour, room concentration (including DND rooms taking ~10 %), false-follow-up share (~8 of 9 false), named-guest share; deterministic per seed.
+3. **Scoring rule:** per-kind base values rising with the hour of the night as fitted (~+7.5 %/h), wait decay as fitted (≈0 within a few minutes; keep a small decay if the spec suggests one), message base as measured.
+4. **Rules:** knocking on a DND door costs 0 (not −30; still counted for visibility if useful but not penalised); delivering for a false follow-up scores 0 (not −10); a false "done" costs −35; a repeated tray request for a room behaves as the spec measured; every slip −15.
+5. **Hazards:** wet spots exist from the start of the night at the measured places and stay wet all night (independent of spill requests); spill requests still point at one; the bathrobe ("let me in") event fires as measured (seed 1: twice, 03:01 and 04:04).
+6. **Bench:** default `sim_end` 06:00 everywhere bench/tune run a night.
+7. Existing behaviour the agent relies on (protocol, costs, cart 8 + hands 2, look/knock/keycard semantics) must not change.
+
+**Tests:** a test that seed 1 yields exactly the 68 requests at the measured clocks; one test per changed rule (DND knock 0, false follow-up 0, false done −35, slip −15 each time, wet spot present before any spill request, bathrobe twice); bench default end 06:00. TDD: failing test first.
+
+**Verify:** full `tests/agent` suite + `ruff check .`; then an offline benchmark of the CURRENT default Params on seeds 1–10 to 06:00 (`python -m agent bench` or the bench API) before/after calibration, reported as mean-drop-worst. Seed 1's offline score with Task 13's code should land in the same range as a realistic live night (the old code scored 581 live; report what the replay gives for this branch's code). Never pass `--live`; no network.

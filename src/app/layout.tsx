@@ -18,8 +18,8 @@ const martian = Martian_Mono({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Fettero", template: "%s | Fettero" },
-  description: "Robotkollegaen som kjenner igjen varen, finner korteste vei og snakker ditt språk.",
+  title: { default: "Lobby", template: "%s | Lobby" },
+  description: "Oversikt over hele hotellet, med AI.",
 };
 
 export const viewport: Viewport = {

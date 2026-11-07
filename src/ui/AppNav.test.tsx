@@ -145,7 +145,10 @@ describe("AppNav on a phone (the bar and Meny)", () => {
     expect(bar.queryAllByRole("link").some((link) => link.getAttribute("aria-current") === "page")).toBe(false);
     fireEvent.click(bar.getByRole("button", { name: "Meny" }));
 
+    // Night steel all the way to the title, with its own close button.
+    expect(screen.getByRole("dialog", { name: "Meny" })).toHaveAttribute("data-surface", "dark");
     const sheet = within(screen.getByRole("dialog", { name: "Meny" }));
+    expect(sheet.getByRole("button", { name: "Lukk" })).toHaveFocus();
     for (const group of ["Hotellet", "Drift", "Roboten"]) expect(sheet.getByText(group)).toBeInTheDocument();
     expect(sheet.queryByText("Resepsjon")).not.toBeInTheDocument();
     const lager = sheet.getByRole("link", { name: /^Lager og lin/ });

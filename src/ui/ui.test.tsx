@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
@@ -96,7 +96,7 @@ function SheetHarness() {
       {/* A new inline onClose on every render, as real callers write it. */}
       <Sheet open={open} onClose={() => setOpen(false)} title="Bekreft oppgave">
         <input aria-label="Notat" value={note} onChange={(event) => setNote(event.target.value)} />
-        <button onClick={() => setOpen(false)}>Lukk</button>
+        <button onClick={() => setOpen(false)}>Ferdig</button>
       </Sheet>
     </>
   );
@@ -109,7 +109,9 @@ describe("Sheet", () => {
     opener.focus();
     fireEvent.click(opener);
 
-    expect(screen.getByRole("dialog", { name: "Bekreft oppgave" })).toHaveFocus();
+    // Focus lands on the sheet's own close button, inside the dialog.
+    const dialog = screen.getByRole("dialog", { name: "Bekreft oppgave" });
+    expect(within(dialog).getByRole("button", { name: "Lukk" })).toHaveFocus();
     expect(document.body.style.overflow).toBe("hidden");
 
     const input = screen.getByRole("textbox", { name: "Notat" });
@@ -118,7 +120,7 @@ describe("Sheet", () => {
     expect(input).toHaveValue("Rom 214");
     expect(input).toHaveFocus();
 
-    fireEvent.click(screen.getByRole("button", { name: "Lukk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ferdig" }));
     expect(opener).toHaveFocus();
     expect(document.body.style.overflow).toBe("");
   });
@@ -128,6 +130,46 @@ describe("Sheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Åpne" }));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(document.body.style.overflow).toBe("");
+  });
+
+  it("closes from its own close button, so a phone without Escape always has a way out", async () => {
+    render(<SheetHarness />);
+    const opener = screen.getByRole("button", { name: "Åpne" });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Lukk" }));
+    expect(opener).toHaveFocus();
+    expect(document.body.style.overflow).toBe("");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("keeps Tab inside the dialog: past the last stop back to the first, and Shift+Tab the other way", () => {
+    render(<SheetHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Åpne" }));
+    const dialog = within(screen.getByRole("dialog"));
+    const close = dialog.getByRole("button", { name: "Lukk" });
+    const done = dialog.getByRole("button", { name: "Ferdig" });
+
+    done.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(done).toHaveFocus();
+
+    // Focus that slipped out (a click on the page behind) is pulled back in on the next Tab.
+    screen.getByRole("button", { name: "Åpne" }).focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(close).toHaveFocus();
+  });
+
+  it("can paint itself on the dark surface (the phone's Meny)", () => {
+    render(
+      <Sheet open onClose={() => {}} title="Meny" surface="dark">
+        <a href="/">Oversikt</a>
+      </Sheet>,
+    );
+    expect(screen.getByRole("dialog", { name: "Meny" })).toHaveAttribute("data-surface", "dark");
   });
 });
 

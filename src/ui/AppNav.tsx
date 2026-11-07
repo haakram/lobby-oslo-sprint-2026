@@ -86,7 +86,8 @@ function RailLink({ item, active }: { item: NavItem; active: boolean }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cx(
-        "relative flex min-h-10 items-center gap-3 rounded-sm px-3 text-sm font-medium",
+        // 40 px with a mouse; 44 px on touch (the rail also shows on an iPad in landscape).
+        "relative flex min-h-10 items-center gap-3 rounded-sm px-3 text-sm font-medium pointer-coarse:min-h-11",
         "transition-colors duration-[120ms] ease-standard focus-visible:outline-offset-[-2px]",
         active ? "bg-sunken text-text" : "text-muted hover:bg-sunken hover:text-text",
       )}
@@ -143,7 +144,7 @@ function Bar({ groups, shown, pathname }: { groups: NavGroup[]; shown: NavItem[]
                 restActive ? "text-text" : "text-muted",
               )}
             >
-              {restActive && <span aria-hidden="true" className="absolute inset-x-4 top-0 h-0.5 rounded-b-sm bg-accent" />}
+              {restActive && <span aria-hidden="true" className="absolute inset-x-4 top-0 h-0.5 rounded-b-sm bg-accent animate-fade" />}
               <RegenIcon name="menu" size={22} className={restActive ? "text-accent-text" : undefined} />
               Meny
             </button>
@@ -151,42 +152,40 @@ function Bar({ groups, shown, pathname }: { groups: NavGroup[]; shown: NavItem[]
         </ul>
       </nav>
 
-      <Sheet open={menu} onClose={() => setMenu(false)} title="Meny">
-        <div data-surface="dark" className="-mx-5 -mt-4 -mb-6 bg-surface px-5 pt-1 pb-6 text-text">
-          <div className="flex flex-col gap-5">
-            {groups.map((group) => (
-              <div key={group.label}>
-                <p className="pb-1 text-xs font-medium text-muted">{group.label}</p>
-                <ul className="flex flex-col">
-                  {group.items.map((item) => {
-                    const active = isActive(item.href, pathname);
-                    return (
-                      <li key={item.href}>
-                        <Link
-                          href={item.href}
-                          aria-current={active ? "page" : undefined}
-                          onClick={() => setMenu(false)}
-                          className={cx(
-                            "flex min-h-12 items-center gap-3 rounded-sm px-2 text-base",
-                            active ? "bg-sunken font-semibold" : "hover:bg-sunken",
-                          )}
-                        >
-                          <RegenIcon name={item.icon} size={22} className={active ? "text-accent-text" : "text-muted"} />
-                          <span className="flex min-w-0 flex-col">
-                            <span>{item.label}</span>
-                            <span className="text-xs text-muted">{item.hint}</span>
-                          </span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </div>
-          <div className="mt-5 border-t border-line pt-3">
-            <UserPlate onSwitched={() => setMenu(false)} />
-          </div>
+      <Sheet open={menu} onClose={() => setMenu(false)} title="Meny" surface="dark">
+        <div className="flex flex-col gap-5">
+          {groups.map((group) => (
+            <div key={group.label}>
+              <p className="pb-1 text-xs font-medium text-muted">{group.label}</p>
+              <ul className="flex flex-col">
+                {group.items.map((item) => {
+                  const active = isActive(item.href, pathname);
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        aria-current={active ? "page" : undefined}
+                        onClick={() => setMenu(false)}
+                        className={cx(
+                          "flex min-h-12 items-center gap-3 rounded-sm px-2 text-base focus-visible:outline-offset-[-2px]",
+                          active ? "bg-sunken font-semibold" : "hover:bg-sunken",
+                        )}
+                      >
+                        <RegenIcon name={item.icon} size={22} className={active ? "text-accent-text" : "text-muted"} />
+                        <span className="flex min-w-0 flex-col">
+                          <span>{item.label}</span>
+                          <span className="text-xs text-muted">{item.hint}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 border-t border-line pt-3">
+          <UserPlate onSwitched={() => setMenu(false)} />
         </div>
       </Sheet>
     </>

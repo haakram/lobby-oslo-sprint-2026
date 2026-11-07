@@ -15,6 +15,8 @@ export default defineConfig([
     "temp/**",
     ".venv/**",
     ".superpowers/**",
+    // Other agents' worktrees and their build output.
+    ".claude/**",
     "node_modules/**",
     "test-results/**",
     "playwright-report/**",

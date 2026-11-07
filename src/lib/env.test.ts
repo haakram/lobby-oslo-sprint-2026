@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { serverEnv } from "./env";
+import { serverEnv, voiceEnv } from "./env";
 
 // Made-up test values, never real keys.
 const ELEVEN = "test-eleven-value-123";
@@ -65,5 +65,32 @@ describe("serverEnv", () => {
     expect(() => serverEnv()).toThrow(/APP_CLAUDE_BUDGET_USD/);
     vi.stubEnv("APP_CLAUDE_BUDGET_USD", "-1");
     expect(() => serverEnv()).toThrow(/APP_CLAUDE_BUDGET_USD/);
+  });
+});
+
+describe("voiceEnv", () => {
+  beforeEach(() => {
+    vi.stubEnv("ANTHROPIC_API_KEY", undefined);
+    vi.stubEnv("ELEVENLABS_API_KEY", ELEVEN);
+    vi.stubEnv("ELEVENLABS_AGENT_ID", AGENT);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("needs only the ElevenLabs variables, not ANTHROPIC_API_KEY", () => {
+    expect(voiceEnv()).toEqual({ ELEVENLABS_API_KEY: ELEVEN, ELEVENLABS_AGENT_ID: AGENT });
+  });
+
+  it("leaves the agent id undefined when unset", () => {
+    vi.stubEnv("ELEVENLABS_AGENT_ID", " ");
+    expect(voiceEnv().ELEVENLABS_AGENT_ID).toBeUndefined();
+  });
+
+  it("names a missing ELEVENLABS_API_KEY without leaking the agent id", () => {
+    vi.stubEnv("ELEVENLABS_API_KEY", undefined);
+    expect(() => voiceEnv()).toThrow(/ELEVENLABS_API_KEY/);
+    expect(() => voiceEnv()).not.toThrow(new RegExp(AGENT));
   });
 });

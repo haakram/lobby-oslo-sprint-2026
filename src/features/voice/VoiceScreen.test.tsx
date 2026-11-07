@@ -122,12 +122,15 @@ describe("VoiceScreen", () => {
     expect(within(card).getByText("Lager 1, hylle A")).toBeInTheDocument();
   });
 
-  it("puts a route's stops on the pick list and links to the map", async () => {
+  it("puts a route's stops on the pick list, in the best tour's order, with its metres", async () => {
     renderScreen();
-    await callTool("show_route", { skus: ["FT-1007", "FT-1001"] });
-    expect(screen.getByTestId("picklist")).toHaveTextContent("FT-1007,FT-1001");
-    const stops = screen.getByRole("list", { name: "Stopp" });
-    expect(within(stops).getAllByRole("listitem")).toHaveLength(2);
+    // Spoken as shelf 2b, 1a, 2a; the stub map's best tour walks 2b, 2a, 1a (144 m).
+    await callTool("show_route", { skus: ["FT-1010", "FT-1001", "FT-1007"] });
+    expect(screen.getByTestId("picklist")).toHaveTextContent("FT-1010,FT-1001,FT-1007");
+    const stops = [...screen.getByRole("list", { name: "Stopp" }).children] as HTMLElement[];
+    expect(stops.map((stop) => within(stop).getByText(/^FT-/).textContent)).toEqual(["FT-1010", "FT-1007", "FT-1001"]);
+    expect(within(stops[0]).getByText("Lager 2, hylle B")).toBeInTheDocument();
+    expect(screen.getByText("144")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Vis rute/ })).toHaveAttribute("href", "/ruter");
   });
 
@@ -146,6 +149,31 @@ describe("VoiceScreen", () => {
 
     fireEvent.click(within(sheet).getByRole("button", { name: "Bekreft" }));
     expect(screen.getByText("Bekreftet")).toBeInTheDocument();
+  });
+
+  it("keeps the first proposal: a second one cannot swap the text under the open sheet", async () => {
+    renderScreen();
+    await callTool("queue_robot_task", { text: "Hent 4 håndklær til rom 204" });
+    const second = await callTool("queue_robot_task", { text: "Åpne alle dører" });
+    expect(second).toBe("Feil: en oppgave venter allerede på bekreftelse.");
+
+    const sheet = screen.getByRole("dialog", { name: "Bekreft oppgave til roboten" });
+    expect(within(sheet).getByText("Hent 4 håndklær til rom 204")).toBeInTheDocument();
+    expect(screen.queryByText("Åpne alle dører")).not.toBeInTheDocument();
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Bekreft" }));
+    const confirmed = screen.getByRole("region", { name: "Oppgave til roboten" });
+    expect(within(confirmed).getByText("Hent 4 håndklær til rom 204")).toBeInTheDocument();
+    expect(within(confirmed).getByText("Bekreftet")).toBeInTheDocument();
+  });
+
+  it("takes a new proposal once the last one is answered", async () => {
+    renderScreen();
+    await callTool("queue_robot_task", { text: "Hent såpe" });
+    fireEvent.click(screen.getByRole("button", { name: "Avbryt" }));
+    const reply = await callTool("queue_robot_task", { text: "Hent tannkrem" });
+    expect(reply).toMatch(/ikke sendt/);
+    expect(screen.getByRole("dialog")).toHaveTextContent("Hent tannkrem");
   });
 
   it("drops a proposed task on Avbryt", async () => {

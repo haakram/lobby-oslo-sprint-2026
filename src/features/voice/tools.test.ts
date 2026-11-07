@@ -6,7 +6,7 @@ function fakeUi() {
     showProduct: vi.fn(),
     showRoute: vi.fn(),
     showGuide: vi.fn(),
-    proposeTask: vi.fn(),
+    proposeTask: vi.fn((_text: string) => true),
   } satisfies VoiceUi;
 }
 
@@ -120,6 +120,13 @@ describe("createClientTools", () => {
       expect(ui.proposeTask).toHaveBeenCalledWith("Hent 4 håndklær til rom 204");
       expect(reply).toMatch(/bekreft/i);
       expect(reply).toMatch(/ikke sendt/i);
+    });
+
+    it("tells the agent when another task is already waiting for confirmation", async () => {
+      const ui = fakeUi();
+      ui.proposeTask.mockReturnValue(false);
+      const reply = await createClientTools(ui).queue_robot_task({ text: "Hent såpe" });
+      expect(reply).toBe("Feil: en oppgave venter allerede på bekreftelse.");
     });
 
     it("refuses text over 200 characters", async () => {

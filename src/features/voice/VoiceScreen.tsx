@@ -3,9 +3,11 @@
 import { ConversationProvider } from "@elevenlabs/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { productBySku, type Product } from "@/features/catalog/products";
 import { usePicklist } from "@/features/picklist/PicklistProvider";
+import { loadRoutes } from "@/features/routes/loadRoutes";
+import { bestTour } from "@/features/routes/tour";
 import { Badge, Button, buttonClasses, Card, ErrorState, fadeRise, MicIcon } from "@/ui";
 import { ConfirmTaskSheet } from "./ConfirmTaskSheet";
 import { GUIDES, type GuideStep } from "./guides";
@@ -41,6 +43,8 @@ function VoiceSession() {
   const addToPicklist = picklist.add;
   const [shown, setShown] = useState<Shown | null>(null);
   const [proposed, setProposed] = useState<string | null>(null);
+  // The pending task, read synchronously: two tool calls in one tick must not both open the sheet.
+  const pending = useRef<string | null>(null);
 
   // Everything the agent can reach. Each only shows something; a task waits for a tap.
   const ui = useMemo<VoiceUi>(
@@ -51,7 +55,12 @@ function VoiceSession() {
         setShown({ kind: "route", skus });
       },
       showGuide: (step) => setShown({ kind: "guide", step }),
-      proposeTask: (text) => setProposed(text),
+      proposeTask: (text) => {
+        if (pending.current !== null) return false;
+        pending.current = text;
+        setProposed(text);
+        return true;
+      },
     }),
     [addToPicklist],
   );
@@ -60,14 +69,17 @@ function VoiceSession() {
   const { tellAgent } = voice;
 
   const confirmTask = useCallback(() => {
-    if (proposed === null) return;
+    const text = pending.current;
+    if (text === null) return;
     // TODO(phase-3): hand the confirmed task to Track A's robot queue once it exposes one.
-    setShown({ kind: "task", text: proposed });
+    pending.current = null;
+    setShown({ kind: "task", text });
     setProposed(null);
     tellAgent("The worker tapped Bekreft: the proposed robot task is confirmed and waiting for the robot.");
-  }, [proposed, tellAgent]);
+  }, [tellAgent]);
 
   const cancelTask = useCallback(() => {
+    pending.current = null;
     setProposed(null);
     tellAgent("The worker tapped Avbryt: the proposed robot task was dropped. Nothing was sent.");
   }, [tellAgent]);
@@ -245,19 +257,51 @@ function ProductView({ product, added, onAdd }: { product: Product; added: boole
   );
 }
 
+type Stop = { location: string; label: string; products: Product[] };
+
+/**
+ * Groups the products by shelf and orders the shelves the way /ruter does: the best tour over the
+ * route matrix. If the map has no route for them, keeps the spoken order and gives no metres.
+ */
+function planStops(skus: string[]): { stops: Stop[]; metres: number | null } {
+  const byShelf = new Map<string, Stop>();
+  for (const product of skus.map(productBySku)) {
+    if (!product) continue;
+    const stop = byShelf.get(product.location) ?? { location: product.location, label: product.locationLabel, products: [] };
+    stop.products.push(product);
+    byShelf.set(product.location, stop);
+  }
+  const loaded = loadRoutes();
+  const tour = loaded.ok ? bestTour(loaded.matrix, [...byShelf.keys()]) : null;
+  if (!tour || "error" in tour) return { stops: [...byShelf.values()], metres: null };
+  return {
+    stops: tour.order.flatMap((location) => byShelf.get(location) ?? []),
+    metres: Math.round(tour.metres),
+  };
+}
+
 function RouteView({ skus }: { skus: string[] }) {
-  const products = skus.map(productBySku).filter((p): p is Product => p !== undefined);
+  const { stops, metres } = useMemo(() => planStops(skus), [skus]);
   return (
     <section aria-labelledby="shown-route" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 id="shown-route" className="text-2xl font-bold tracking-[-0.02em]">
-          {products.length === 1 ? "1 stopp" : `${products.length} stopp`}
-        </h2>
+        <div>
+          <h2 id="shown-route" className="text-2xl font-bold tracking-[-0.02em]">
+            {stops.length === 1 ? "1 stopp" : `${stops.length} stopp`}
+          </h2>
+          {metres !== null && (
+            <p className="mt-1 text-base text-muted">
+              Beste rute, fra start og tilbake:{" "}
+              <span className="font-mono font-medium text-text tabular-nums">{metres}</span>
+              <span className="font-mono text-text"> m</span>
+            </p>
+          )}
+        </div>
         <Badge tone="success">Lagt i plukklisten</Badge>
       </div>
       <ol aria-label="Stopp" className="flex flex-col">
-        {products.map((product, index) => (
-          <li key={product.sku} className="flex items-center gap-4 border-t border-line py-3 first:border-t-0 first:pt-0">
+        {stops.map((stop, index) => (
+          <li key={stop.location} className="flex items-start gap-4 border-t border-line py-3 first:border-t-0 first:pt-0">
             <span
               aria-hidden="true"
               className="grid size-8 shrink-0 place-items-center rounded-sm bg-accent font-mono text-sm font-medium text-on-accent tabular-nums"
@@ -265,10 +309,14 @@ function RouteView({ skus }: { skus: string[] }) {
               {index + 1}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="font-semibold">{product.name}</p>
-              <p className="text-sm text-muted">
-                <span className="font-mono tabular-nums">{product.sku}</span> · {product.locationLabel}
-              </p>
+              <p className="font-semibold">{stop.label}</p>
+              <ul className="mt-1 flex flex-col gap-0.5">
+                {stop.products.map((product) => (
+                  <li key={product.sku} className="text-sm text-muted">
+                    {product.name} · <span className="font-mono tabular-nums">{product.sku}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </li>
         ))}

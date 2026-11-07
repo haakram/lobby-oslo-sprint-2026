@@ -1,5 +1,5 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
-import { serverEnv, type ServerEnv } from "@/lib/env";
+import { voiceEnv, type VoiceEnv } from "@/lib/env";
 
 // A fresh token per request; never cached, never prerendered.
 export const dynamic = "force-dynamic";
@@ -15,11 +15,11 @@ function fail(status: number, error: string) {
  * The API key stays here; the browser only ever sees the token.
  */
 export async function GET(): Promise<Response> {
-  let env: ServerEnv;
+  let env: VoiceEnv;
   try {
-    env = serverEnv();
+    env = voiceEnv();
   } catch {
-    // serverEnv's message names the missing variables, never their values; still, keep it off the wire.
+    // voiceEnv's message names the missing variables, never their values; still, keep it off the wire.
     console.error("voice token: server environment is not set up");
     return fail(503, "Stemmen er ikke satt opp på serveren.");
   }

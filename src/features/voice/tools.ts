@@ -12,7 +12,8 @@ export type VoiceUi = {
   showProduct(product: Product): void;
   showRoute(skus: string[]): void;
   showGuide(step: GuideStep): void;
-  proposeTask(text: string): void;
+  /** Opens the confirm sheet. Returns false when a task already waits there: the first one wins. */
+  proposeTask(text: string): boolean;
 };
 
 export type ClientToolName = "show_product" | "show_route" | "show_guide" | "queue_robot_task";
@@ -47,6 +48,7 @@ const REPLY = {
   badRoute: `Feil: en rute trenger minst én og høyst ${MAX_ROUTE_STOPS} SKU-er, som en liste med tekst.`,
   badGuide: `Feil: velg én av veiledningene ${GUIDE_STEPS.join(", ")}.`,
   badTask: `Feil: beskriv oppgaven i én kort setning, høyst ${MAX_TASK_CHARS} tegn.`,
+  taskPending: "Feil: en oppgave venter allerede på bekreftelse.",
 } as const;
 
 export function createClientTools(ui: VoiceUi): Record<ClientToolName, ClientToolHandler> {
@@ -81,7 +83,7 @@ export function createClientTools(ui: VoiceUi): Record<ClientToolName, ClientToo
     async queue_robot_task(params) {
       const parsed = schemas.queue_robot_task.safeParse(params);
       if (!parsed.success) return REPLY.badTask;
-      ui.proposeTask(parsed.data.text);
+      if (!ui.proposeTask(parsed.data.text)) return REPLY.taskPending;
       return "Oppgaven er ikke sendt. Den står på skjermen og venter på at en person trykker Bekreft.";
     },
   };

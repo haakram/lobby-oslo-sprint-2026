@@ -46,7 +46,14 @@ describe("GET /api/voice/token", () => {
     expect(sdk.getWebrtcToken).not.toHaveBeenCalled();
   });
 
-  it("answers 503 when the server keys are missing", async () => {
+  it("works without ANTHROPIC_API_KEY: voice does not depend on Claude's key", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", undefined);
+    sdk.getWebrtcToken.mockResolvedValue({ token: "short-lived-token", conversationId: "conv_1" });
+    const response = await GET();
+    expect(response.status).toBe(200);
+  });
+
+  it("answers 503 when the ElevenLabs key is missing", async () => {
     vi.stubEnv("ELEVENLABS_API_KEY", undefined);
     const response = await GET();
     expect(response.status).toBe(503);

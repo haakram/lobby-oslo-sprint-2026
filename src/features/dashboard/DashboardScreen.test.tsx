@@ -41,8 +41,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     route();
     render(<DashboardScreen />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "Lobby" })).toBeInTheDocument();
-    expect(screen.getByText("Hotell Nattskift")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Hotell Nattskift" })).toBeInTheDocument();
     await screen.findByRole("button", { name: /^Rom 319/ });
 
     expect(screen.getByText(/^Natt til \p{L}+ \d{1,2}\. \p{L}+ · overlevering 06:00$/u)).toBeInTheDocument();
@@ -61,8 +60,9 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(screen.getByRole("button", { name: "Rom 105: Ikke sjekket" })).toBeInTheDocument();
     expect(ROOMS.find((room) => room.id === "room-208")?.status).toBe("ikke_forstyrr");
 
-    expect(screen.getByRole("link", { name: /Åpne 3D/ })).toHaveAttribute("href", "/hotell");
-    expect(screen.getByRole("img", { name: /^Kart over \d\. etasje\. Roboten er ved / })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Åpne 3D-kart/ })).toHaveAttribute("href", "/hotell");
+    // No WebGL in jsdom: the robot's panel shows B1's 2D plan of the hotel.
+    expect(await screen.findByLabelText("Hotellet som plantegning")).toBeInTheDocument();
   });
 
   it("opens one room's night in a sheet", async () => {

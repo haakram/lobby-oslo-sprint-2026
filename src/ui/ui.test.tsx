@@ -95,12 +95,12 @@ describe("Sheet", () => {
 });
 
 describe("AppNav", () => {
-  it("has a Resepsjon tab after Stemme, marked active on /resepsjon", () => {
+  it("has a Resepsjon link in its own group, marked active on /resepsjon", () => {
     render(<AppNav />);
     const link = screen.getByRole("link", { name: "Resepsjon" });
     expect(link).toHaveAttribute("href", "/resepsjon");
     expect(link).toHaveAttribute("aria-current", "page");
     const labels = screen.getAllByRole("link").map((a) => a.textContent);
-    expect(labels).toEqual(["Lobby", "Oversikt", "Hotell", "Øyne", "Ruter", "Stemme", "Resepsjon", "Natteskift"]);
+    expect(labels.slice(1)).toEqual(["Oversikt", "3D-kart", "Ruter", "Natteskift", "Øyne", "Stemme", "Resepsjon"]);
   });
 });

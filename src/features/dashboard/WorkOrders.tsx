@@ -34,13 +34,13 @@ export function WorkOrders({
     <section aria-labelledby="orders-heading" data-enter className={className}>
       <Card className="sm:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 id="orders-heading" className="text-2xl font-bold tracking-[-0.02em]">
+          <h2 id="orders-heading" className="text-lg font-semibold tracking-[-0.01em]">
             Arbeidsordre
           </h2>
           {orders && orders.length > 0 && (
             <p className="text-sm text-muted">
-              <span className="font-mono tabular-nums">{open}</span> åpne av{" "}
-              <span className="font-mono tabular-nums">{orders.length}</span>
+              <span className="font-semibold tabular-nums">{open}</span> åpne av{" "}
+              <span className="font-semibold tabular-nums">{orders.length}</span>
             </p>
           )}
         </div>
@@ -107,7 +107,7 @@ function OrderRow({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Badge>{orderTypeLabel(order.type)}</Badge>
           <span className="text-base font-semibold">{where}</span>
-          <span className="font-mono text-sm whitespace-nowrap text-muted tabular-nums">{hhmm(order.at)}</span>
+          <span className="text-sm whitespace-nowrap text-muted tabular-nums">{hhmm(order.at)}</span>
         </div>
         <p className="text-base">{humanizeText(order.text)}</p>
         {order.robot && order.request && (

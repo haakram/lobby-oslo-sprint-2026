@@ -13,13 +13,13 @@ export function ReceptionPanel({ className }: { className?: string }) {
     <section aria-labelledby="reception-heading" data-enter className={className}>
       <Card className="sm:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4">
-          <h2 id="reception-heading" className="text-2xl font-bold tracking-[-0.02em]">
+          <h2 id="reception-heading" className="text-lg font-semibold tracking-[-0.01em]">
             Resepsjon
           </h2>
           {state.kind === "ready" && (
             <Link
               href="/resepsjon"
-              className="flex min-h-12 items-center text-sm font-semibold text-accent-text hover:underline"
+              className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline"
             >
               Åpne Resepsjon
             </Link>
@@ -73,7 +73,7 @@ export function ReceptionPanel({ className }: { className?: string }) {
               {state.calls.slice(0, SHOWN).map((call) => (
                 <li key={call.id} className="flex flex-col gap-1 border-t border-line py-3 first:border-t-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-mono text-sm whitespace-nowrap text-muted tabular-nums">
+                    <span className="text-sm whitespace-nowrap text-muted tabular-nums">
                       {formatDayClock(call.startedAt)}
                     </span>
                     <span className="text-base font-semibold">{call.title ?? call.requestType ?? "Samtale"}</span>

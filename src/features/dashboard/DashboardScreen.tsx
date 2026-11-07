@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useHotelReplay } from "@/features/replay";
 import { Button, buttonClasses, Card, EmptyState, ErrorState } from "@/ui";
 import { Cleaning } from "./Cleaning";
 import { DashboardHeader } from "./DashboardHeader";
@@ -26,14 +27,17 @@ import { useEntrance } from "./useEntrance";
 import { WorkOrders } from "./WorkOrders";
 
 /**
- * Oversikt, the app's home: the whole hotel at the 06:00 handover (or live, while a shift runs).
- * Layer cake: the header and four numbers, then rooms and the robot, then what needs a person.
- * On a phone the panels stack in that order; the DOM order is the priority order.
+ * Oversikt, the admin's desk: the whole hotel at the 06:00 handover (or live, while a shift runs).
+ * Layer cake: the header band and five figures, then the key rack and the robot in the hotel,
+ * then what needs a person. On a phone the panels stack in that order; the DOM order is the
+ * priority order.
  */
 export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   const run = useDashboardRun(viewerUrl);
   const ready = run.status === "ready";
   const night = useMemo(() => (ready ? foldNight(run.lines) : null), [ready, run.lines]);
+  // The 3D hotel follows the same night; it stands at the end of it, like the figures.
+  const replay = useHotelReplay(run.source === "live" ? "live" : "demo", { viewerUrl });
 
   // TODO(phase-3): no backend for work orders yet; Tildelt and Løst are kept in this tab only.
   const [statuses, setStatuses] = useState<Record<string, OrderStatus>>({});
@@ -68,7 +72,7 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
         loading={run.status === "loading"}
       />
 
-      <div ref={scope} className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-8 lg:px-12 lg:py-8">
+      <div ref={scope} className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:gap-8 lg:px-10 lg:py-8">
         {run.status === "error" || run.status === "empty" ? (
           <>
             <Card className="sm:p-6">
@@ -99,14 +103,10 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
         ) : (
           <>
             <KpiStrip kpis={kpis} />
-            {/* Desktop: rooms over work orders on the left; robot, cleaning and reception stacked on the right. */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] lg:grid-rows-[auto_auto_1fr] lg:items-start">
-              <RoomBoard
-                rooms={rooms}
-                onOpen={(room) => setSheet({ room, open: true })}
-                className="lg:col-start-1 lg:row-start-1"
-              />
-              <RobotNow robot={robot} rooms={rooms} className="lg:col-start-2 lg:row-start-1" />
+            {/* Desktop: the rack over work orders on the left; the robot, cleaning and reception stacked on the right. */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-8">
+              <RoomBoard rooms={rooms} onOpen={(room) => setSheet({ room, open: true })} className="lg:col-start-1 lg:row-start-1" />
+              <RobotNow robot={robot} replay={replay} className="lg:col-start-2 lg:row-start-1" />
               <Cleaning rooms={rooms} className="lg:col-start-2 lg:row-start-2" />
               <WorkOrders
                 orders={orders}

@@ -14,23 +14,29 @@ export const STATUS_ORDER: readonly RoomStatus[] = ["klar", "ma_vaskes", "opptat
 
 type StatusLook = {
   word: string;
-  /** Tile classes: surface, border and the status word's colour. */
+  /** The pigeonhole: a plane, or an outline for a hanger / an unchecked room. */
   tile: string;
+  /** The key tag along the top edge, in the status colour. */
+  tag: string;
   word_class: string;
-  /** Dark tile: the subtree flips to the dark surface (an occupied room, lights out). */
-  dark?: boolean;
 };
 
 export const STATUS_LOOK: Record<RoomStatus, StatusLook> = {
-  klar: { word: "Klar", tile: "bg-success-soft border-success/40", word_class: "text-success" },
-  ma_vaskes: { word: "Må vaskes", tile: "bg-accent-soft border-accent", word_class: "text-accent-text" },
-  opptatt: { word: "Opptatt", tile: "bg-surface border-line", word_class: "text-muted", dark: true },
+  klar: { word: "Klar", tile: "bg-sunken", tag: "bg-success", word_class: "text-success" },
+  ma_vaskes: { word: "Må vaskes", tile: "bg-sunken", tag: "bg-warning", word_class: "text-warning" },
+  opptatt: { word: "Opptatt", tile: "bg-sunken", tag: "bg-line-strong", word_class: "text-muted" },
   ikke_forstyrr: {
     word: "Ikke forstyrr",
-    tile: "bg-warning-soft border-warning border-2",
-    word_class: "text-warning",
+    tile: "bg-sunken ring-1 ring-inset ring-text/70",
+    tag: "bg-text",
+    word_class: "text-text",
   },
-  ukjent: { word: "Ikke sjekket", tile: "bg-surface border-dashed border-line-strong", word_class: "text-muted" },
+  ukjent: {
+    word: "Ikke sjekket",
+    tile: "border border-dashed border-line-strong",
+    tag: "border border-dashed border-line-strong",
+    word_class: "text-muted",
+  },
 };
 
 export const SOURCE_WORD: Record<string, string> = {

@@ -314,3 +314,41 @@ def test_persistent_429_raises_wybe_error_after_the_retries(tmp_path):
     with pytest.raises(WybeError, match="429"):
         session.cmd("status")
     assert state["n"] == 4
+
+
+# --- Task 18 / C2: a start is never blindly repeated after an ambiguous failure ----------------------
+
+
+def _counting(outcomes):
+    """A handler for start_shift itself: each call takes the next outcome (an exception or response)."""
+    reqs = []
+
+    def handler(request):
+        reqs.append(request)
+        outcome = outcomes[min(len(reqs), len(outcomes)) - 1]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    return handler, reqs
+
+
+def test_start_shift_is_not_retried_after_an_ambiguous_failure(tmp_path):
+    handler, reqs = _counting([httpx.ReadTimeout("gone quiet")])
+    client = make_client(tmp_path, handler)
+    with pytest.raises(WybeError, match="start_shift"):
+        client.start_shift("practice", seed=1)
+    assert len(reqs) == 1  # the server may have started it: the caller checks `shifts` first
+
+    handler, reqs = _counting([httpx.Response(503, text="busy")])
+    client = make_client(tmp_path, handler)
+    with pytest.raises(WybeError):
+        client.start_shift("practice", seed=1)
+    assert len(reqs) == 1
+
+
+def test_start_shift_is_retried_after_a_connect_error(tmp_path):
+    handler, reqs = _counting([httpx.ConnectError("refused"), ok_reply(START)])
+    client = make_client(tmp_path, handler)
+    assert client.start_shift("practice", seed=1).shift_id == "w2-abc"
+    assert len(reqs) == 2

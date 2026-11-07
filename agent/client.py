@@ -105,12 +105,16 @@ class WybeClient:
                 resp = self._http.post(self.settings.url, json=body, headers=headers)
             except httpx.TransportError as exc:
                 last = f"transport error: {type(exc).__name__}"
+                if cmd == "start_shift" and not isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout):
+                    break  # ambiguous: the server may have started it; the caller checks `shifts` first
                 continue
             latency = (time.monotonic() - started) * 1000
             if resp.status_code == 409:
                 raise ShiftEnded(resp.text[:200])
             if resp.status_code >= 500 or (resp.status_code == 403 and "1010" in resp.text):
                 last = f"HTTP {resp.status_code}"
+                if cmd == "start_shift":
+                    break  # as above: never a blind second start
                 continue
             if resp.status_code == 429:  # too fast: back off (Retry-After if given) and retry
                 last = "HTTP 429"

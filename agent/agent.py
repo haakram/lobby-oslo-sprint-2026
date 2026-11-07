@@ -29,6 +29,8 @@ PARAMS_FILE = Path(__file__).parent / "data" / "params_best.json"
 LIVE_RUNS = Path("temp/live_runs.jsonl")
 MAX_CONSECUTIVE_ERRORS = 25  # practice only: a final shift backs off and keeps trying instead
 ERROR_BACKOFF_MAX_S = 30.0
+FINAL_START_RETRY_S = 120.0  # a final start that fails is retried for about this long
+START_BACKOFF_MAX_S = 15.0
 _live_lock = threading.Lock()
 
 
@@ -81,6 +83,81 @@ def make_client(settings: Settings, *, live: bool) -> WybeClient:
 
     client.start_shift = counted_start  # type: ignore[method-assign]
     return client
+
+
+class FinalStarter:
+    """Starts the final's shifts: one start in flight at a time, never more than `limit` final
+    shifts in total (the ones the server already lists count, so a restarted process starts only
+    the missing ones), and never a second shift for a start whose reply was lost: before every
+    attempt `shifts` is read and a live final shift no thread has claimed is adopted instead.
+    A failed start is retried with backoff for about `retry_s` seconds. The final lock still
+    guards every real start (WybeClient checks it on start_shift)."""
+
+    def __init__(
+        self,
+        client: WybeClient,
+        *,
+        limit: int = 10,
+        retry_s: float = FINAL_START_RETRY_S,
+        sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
+    ):
+        self._client = client
+        self.limit = limit
+        self.retry_s = retry_s
+        self._sleep = sleep
+        self._clock = clock
+        self._lock = threading.Lock()
+        self.claimed: set[str] = set()  # shift ids a thread of this process is playing
+        self.started = 0  # real starts made by this process
+        listed = self._retry("list the final shifts", self._shifts)
+        finals = [s for s in listed if s.get("mode") == "final"]
+        self.live = [s["shift"] for s in finals if s.get("status") == "live"]
+        self.ended = len(finals) - len(self.live)
+        self.remaining = max(0, limit - len(finals))
+
+    def _shifts(self) -> list[dict]:
+        reply = self._client.call("shifts")
+        shifts = reply.result.get("shifts") if isinstance(reply.result, dict) else None
+        if not reply.ok or not isinstance(shifts, list):
+            raise WybeError(f"shifts: unusable reply {str(reply.result)[:200]}")
+        return [s for s in shifts if isinstance(s, dict) and isinstance(s.get("shift"), str)]
+
+    def _retry(self, what: str, fn: Callable[[], object]) -> object:
+        deadline: float | None = None
+        attempt = 0
+        while True:
+            try:
+                return fn()
+            except WybeError as exc:
+                last = exc
+            now = self._clock()
+            if deadline is None:
+                deadline = now + self.retry_s  # the budget runs from the first failure
+            if now >= deadline:
+                raise WybeError(f"could not {what} within {self.retry_s:.0f} s: {last}") from last
+            self._sleep(min(START_BACKOFF_MAX_S, 2.0 ** attempt))
+            attempt += 1
+
+    def session(self) -> ShiftSession | None:
+        """A final shift to play: adopted or newly started. None once the limit is used up."""
+        return self._retry("start a final shift", self._adopt_or_start)  # type: ignore[return-value]
+
+    def _adopt_or_start(self) -> ShiftSession | None:
+        with self._lock:  # one start at a time: an unclaimed live final shift can only be an orphan
+            for s in self._shifts():
+                sid = s["shift"]
+                if s.get("mode") == "final" and s.get("status") == "live" and sid not in self.claimed:
+                    self.claimed.add(sid)
+                    session = ShiftSession(self._client, sid, "final", None)
+                    session.log_decision("adopted_shift", {"shift": sid, "started": s.get("started")})
+                    return session
+            if self.started >= self.remaining:
+                return None
+            session = self._client.start_shift("final")
+            self.started += 1
+            self.claimed.add(session.shift_id)
+            return session
 
 
 def _inbox_waiting(ex: Executor, status: dict) -> bool:
@@ -143,12 +220,16 @@ def run_shift(
     stop: threading.Event | None = None,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] | None = None,
+    session: ShiftSession | None = None,
 ) -> dict:
     """One shift from start to the `end` log line. With a real-time limit (the final), an error
     streak never ends the shift: the loop backs off (capped at ERROR_BACKOFF_MAX_S) and keeps
-    trying until the limit; a practice shift stops after MAX_CONSECUTIVE_ERRORS."""
+    trying until the limit; a practice shift stops after MAX_CONSECUTIVE_ERRORS. A session that
+    was started (or adopted) elsewhere, e.g. by FinalStarter, is played instead of a new start."""
     params = params or load_params()
-    session = client.start_shift(mode, seed)
+    if session is None:
+        session = client.start_shift(mode, seed)
+    seed = session.seed
     hotel, state = Hotel.load(), RobotState()
     # Claude classifies unknown requests in ONE place (here), so the executor gets no brain.
     ex = Executor(session, hotel, state, max_scans=params.max_scans)

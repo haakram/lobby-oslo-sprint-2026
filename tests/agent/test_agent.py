@@ -173,29 +173,40 @@ def test_route_command(capsys):
 
 
 def _open_final(monkeypatch, tmp_path, n=3):
-    import agent.__main__ as cli
+    """The final's lock, satisfied only by an injected in-window clock at both layers."""
+    from datetime import datetime
+    from functools import partial
 
+    import agent.__main__ as cli
+    from agent.guard import OSLO, check_mode
+
+    in_window = datetime(2026, 11, 8, 12, 5, tzinfo=OSLO)
     monkeypatch.setenv("FINAL_ARMED", "1")
+    monkeypatch.setenv("WYBE_NIGHTSHIFT_KEY", "test-key")  # a dummy: the fake wants some bearer
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cli, "check_mode", lambda *a, **kw: None)
+    monkeypatch.setattr(cli, "_now", lambda: in_window)
+    monkeypatch.setattr("agent.client.check_mode", partial(check_mode, now=in_window))
     monkeypatch.setattr(cli, "FINAL_SHIFTS", n)
-    monkeypatch.setattr(cli, "FINAL_REAL_TIME_S", 7.0)
+    monkeypatch.setattr(cli, "FINAL_REAL_TIME_S", 1.0)
     return cli
+
+
+def _router_factory(router, made):
+    def factory(settings, *, live):
+        assert live is True
+        made.append(WybeClient(settings, transport=httpx.MockTransport(router.handler), sleep=lambda s: None))
+        return made[-1]
+
+    return factory
 
 
 def test_final_threads_share_client_and_survive_one_crash(tmp_path, monkeypatch, capsys):
     import agent.agent as mod
+    from tests.fakes.multi_wybe import MultiFakeWybe
 
     cli = _open_final(monkeypatch, tmp_path, 3)
-    made = []
-
-    def factory(settings, *, live):
-        assert live is True
-        c = object()
-        made.append(c)
-        return c
-
-    seen, lock = [], __import__("threading").Lock()
+    router, made = MultiFakeWybe(), []
+    real, seen, lock = mod.run_shift, [], __import__("threading").Lock()
 
     def fake_run_shift(client, **kw):
         with lock:
@@ -203,23 +214,24 @@ def test_final_threads_share_client_and_survive_one_crash(tmp_path, monkeypatch,
             seen.append((client, kw))
         if idx == 1:
             raise RuntimeError("shift blew up")
-        return {"shift": f"s{idx}", "seed": None, "score": 10 * idx, "requests_served": 0,
-                "reason": "done"}
+        return real(client, **kw)
 
     monkeypatch.setattr(mod, "run_shift", fake_run_shift)
-    assert main(["final"], client_factory=factory) == 0
+    assert main(["final"], client_factory=_router_factory(router, made)) == 0
     assert len(made) == 1 and len(seen) == 3
     assert all(c is made[0] for c, _ in seen)
     for _, kw in seen:
-        assert kw["mode"] == "final" and kw["seed"] is None and kw["real_time_limit_s"] == 7.0
+        assert kw["session"].mode == "final" and kw["real_time_limit_s"] == 1.0
         assert kw["stop"] is not None
+    assert router.final_starts == 3
     out = capsys.readouterr().out
-    assert out.count("shift ") == 3 and "crashed: RuntimeError" in out
+    assert "crashed: RuntimeError" in out and out.count("\nshift ") == 3
     assert cli.FINAL_SHIFTS == 3
 
 
 def test_final_returns_nonzero_when_every_shift_crashes(tmp_path, monkeypatch, capsys):
     import agent.agent as mod
+    from tests.fakes.multi_wybe import MultiFakeWybe
 
     _open_final(monkeypatch, tmp_path, 2)
 
@@ -227,7 +239,7 @@ def test_final_returns_nonzero_when_every_shift_crashes(tmp_path, monkeypatch, c
         raise RuntimeError("x")
 
     monkeypatch.setattr(mod, "run_shift", boom)
-    assert main(["final"], client_factory=lambda s, *, live: object()) != 0
+    assert main(["final"], client_factory=_router_factory(MultiFakeWybe(), [])) != 0
 
 
 def test_final_armed_but_outside_window_is_refused(tmp_path, monkeypatch, capsys):

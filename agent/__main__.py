@@ -12,7 +12,7 @@ from pathlib import Path
 
 from agent import agent as shift
 from agent.brain import Brain, CostGuard
-from agent.client import WybeClient
+from agent.client import WybeClient, WybeError
 from agent.config import Settings, load_settings
 from agent.guard import OSLO, FinalModeLocked, check_mode
 
@@ -50,18 +50,39 @@ def cmd_final(args, settings: Settings, factory: ClientFactory) -> int:
         print(f"final is locked: {exc}", file=sys.stderr)
         return 2
     client = factory(settings, live=True)  # one client: its rate limiter is shared by all shifts
+    try:  # also the pre-flight: the key and the connection work, and we know what already runs
+        starter = shift.FinalStarter(client, limit=FINAL_SHIFTS)
+    except WybeError as exc:
+        print(f"final: could not list our shifts, nothing started: {exc}", file=sys.stderr)
+        return 2
+    _say(f"final: {len(starter.live)} live final shift(s) to adopt, {starter.ended} ended, "
+         f"starting {starter.remaining} new (limit {FINAL_SHIFTS})")
     brain = _brain(settings)
     stop = threading.Event()
     results: list[dict] = [{} for _ in range(FINAL_SHIFTS)]
 
     def work(i: int) -> None:
+        label = f"shift {i + 1}/{FINAL_SHIFTS}"
+        try:
+            session = starter.session()
+        except Exception as exc:  # noqa: BLE001 - one dead shift must not stop the others
+            results[i] = {"shift": None, "score": None,
+                          "reason": f"not started: {type(exc).__name__}: {str(exc)[:120]}"}
+            _say(f"{label} {results[i]['reason']}")
+            return
+        if session is None:
+            results[i] = {"shift": None, "score": None, "reason": "not started: all final starts used"}
+            _say(f"{label} {results[i]['reason']}")
+            return
+        _say(f"{label} {session.shift_id} {'adopted' if session.shift_id in starter.live else 'started'}")
         try:
             results[i] = shift.run_shift(
-                client, mode="final", seed=None, brain=brain,
-                real_time_limit_s=FINAL_REAL_TIME_S, stop=stop,
+                client, session=session, brain=brain, real_time_limit_s=FINAL_REAL_TIME_S, stop=stop,
             )
-        except Exception as exc:  # noqa: BLE001 - one dead shift must not stop the others
-            results[i] = {"shift": None, "score": None, "reason": f"crashed: {type(exc).__name__}"}
+        except Exception as exc:  # noqa: BLE001
+            results[i] = {"shift": session.shift_id, "score": None, "reason": f"crashed: {type(exc).__name__}"}
+        r = results[i]
+        _say(f"{label} {session.shift_id} ended  score {r.get('score')}  ({r.get('reason')})")
 
     threads = [threading.Thread(target=work, args=(i,), daemon=True) for i in range(FINAL_SHIFTS)]
     for t in threads:
@@ -73,9 +94,14 @@ def cmd_final(args, settings: Settings, factory: ClientFactory) -> int:
         stop.set()
         for t in threads:
             t.join()
+    _say("summary:")
     for r in results:
-        print(f"shift {r.get('shift')}  score {r.get('score')}  ({r.get('reason')})")
-    return 1 if all(str(r.get("reason", "")).startswith("crashed") for r in results) else 0
+        print(f"shift {r.get('shift')}  score {r.get('score')}  ({r.get('reason')})", flush=True)
+    return 0 if any(r.get("score") is not None for r in results) else 1
+
+
+def _say(text: str) -> None:
+    print(f"[{datetime.now(OSLO):%H:%M:%S}] {text}", flush=True)
 
 
 def cmd_route(args, settings: Settings, factory: ClientFactory) -> int:

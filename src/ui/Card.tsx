@@ -1,7 +1,11 @@
 import type { HTMLAttributes } from "react";
 import { cx } from "./cx";
 
-/** A raised panel on the current surface. Flat: a border, no shadow. */
-export function Card({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cx("rounded-lg border border-line bg-surface p-5", className)} {...rest} />;
+/** A plane on the current surface: tone, not a border, sets it apart (DESIGN.md "Finish"). */
+export function Card({
+  tone = "surface",
+  className,
+  ...rest
+}: HTMLAttributes<HTMLDivElement> & { tone?: "surface" | "sunken" }) {
+  return <div className={cx("rounded-md p-5", tone === "sunken" ? "bg-sunken" : "bg-surface", className)} {...rest} />;
 }

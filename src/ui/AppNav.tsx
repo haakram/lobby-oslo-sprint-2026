@@ -1,84 +1,196 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useSyncExternalStore } from "react";
+import { useSession } from "@/features/auth/SessionProvider";
 import { cx } from "./cx";
-import { EyeIcon, MicIcon, MoonIcon, PhoneIcon, RouteIcon } from "./icons";
 import { RegenIcon } from "./icons/RegenIcon";
-import { DURATION, EASE } from "./motion";
+import { groupsFor, isActive, type NavGroup, type NavItem } from "./nav";
+import { Sheet } from "./Sheet";
+import { UserPlate } from "./UserPlate";
 
-// The hotel oversight tabs use Regen icons (DESIGN.md "Hotel oversight additions").
-const OverviewIcon = () => <RegenIcon name="layout-grid" />;
-const HotelIcon = () => <RegenIcon name="layers" />;
+export const HOTEL_NAME = "Hotell Nattskift";
 
-const TABS = [
-  { href: "/", label: "Oversikt", Icon: OverviewIcon },
-  { href: "/hotell", label: "Hotell", Icon: HotelIcon },
-  { href: "/oyne", label: "Øyne", Icon: EyeIcon },
-  { href: "/ruter", label: "Ruter", Icon: RouteIcon },
-  { href: "/stemme", label: "Stemme", Icon: MicIcon },
-  { href: "/resepsjon", label: "Resepsjon", Icon: PhoneIcon },
-  { href: "/natteskift", label: "Natteskift", Icon: MoonIcon },
-] as const;
+/** How many of the role's screens fit on the phone bar before the rest go into Meny. */
+const BAR_ITEMS = 4;
+
+const DESKTOP = "(min-width: 1024px)";
+
+function subscribe(onChange: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia(DESKTOP);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+/** Desktop until the browser says otherwise (the server and jsdom have no media queries). */
+function readDesktop() {
+  return typeof window.matchMedia !== "function" ? true : window.matchMedia(DESKTOP).matches;
+}
 
 /**
- * Bottom tab bar on phones, side rail from 1024 px. Always on the dark surface,
- * like the handle of a scanner. The active tab carries the orange floor tape.
+ * The navigation, grouped by job (Hotellet · Roboten · Resepsjon) and filtered by what the
+ * effective role may open. Desktop: a rail on the Natt surface with the user plate bottom-left.
+ * Phone: a bottom bar with the first screens and Meny, which opens the whole list as a sheet.
+ * Hidden on the login page.
  */
 export function AppNav() {
   const pathname = usePathname();
-  const reduced = useReducedMotion();
+  const { effectiveRole } = useSession();
+  const desktop = useSyncExternalStore(subscribe, readDesktop, () => true);
 
+  // Nobody logged in (the login page, the no-access page): no navigation.
+  if (!effectiveRole || pathname.startsWith("/login")) return null;
+  const groups = groupsFor(effectiveRole);
+  return desktop ? <Rail groups={groups} pathname={pathname} /> : <Bar groups={groups} pathname={pathname} />;
+}
+
+function Rail({ groups, pathname }: { groups: NavGroup[]; pathname: string }) {
   return (
     <nav
       aria-label="Hovedmeny"
       data-surface="dark"
+      className="sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-surface text-text lg:flex"
+    >
+      <Link href="/" className="flex flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
+        <span className="font-display text-xl font-medium leading-none tracking-[-0.01em]">Lobby</span>
+        <span className="mt-1.5 text-xs text-muted">{HOTEL_NAME}</span>
+      </Link>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 pb-4">
+        {groups.map((group) => (
+          <div key={group.label}>
+            <p className="px-3 pb-1 text-xs font-medium text-muted">{group.label}</p>
+            <ul className="flex flex-col gap-0.5">
+              {group.items.map((item) => (
+                <li key={item.href}>
+                  <RailLink item={item} active={isActive(item.href, pathname)} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-line p-2">
+        <UserPlate />
+      </div>
+    </nav>
+  );
+}
+
+function RailLink({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
       className={cx(
-        "fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg pb-[env(safe-area-inset-bottom)]",
-        "lg:sticky lg:top-0 lg:h-dvh lg:w-24 lg:shrink-0 lg:border-t-0 lg:border-r lg:pb-0",
+        "relative flex min-h-10 items-center gap-3 rounded-sm px-3 text-sm font-medium",
+        "transition-colors duration-[120ms] ease-standard focus-visible:outline-offset-[-2px]",
+        active ? "bg-sunken text-text" : "text-muted hover:bg-sunken hover:text-text",
       )}
     >
-      <Link
-        href="/"
-        className="hidden h-20 items-center justify-center text-base font-extrabold tracking-tight focus-visible:outline-offset-[-4px] lg:flex"
+      {active && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-0.5 rounded-r-sm bg-accent animate-fade" />}
+      <RegenIcon name={item.icon} size={20} className={cx("shrink-0", active ? "text-accent-text" : "text-muted")} />
+      {item.label}
+    </Link>
+  );
+}
+
+function Bar({ groups, pathname }: { groups: NavGroup[]; pathname: string }) {
+  const [menu, setMenu] = useState(false);
+  const all = groups.flatMap((group) => group.items);
+  const shown = all.slice(0, BAR_ITEMS);
+  const rest = all.slice(BAR_ITEMS);
+  const restActive = rest.some((item) => isActive(item.href, pathname));
+
+  return (
+    <>
+      <nav
+        aria-label="Hovedmeny"
+        data-surface="dark"
+        className="fixed inset-x-0 bottom-0 z-40 bg-surface pb-[env(safe-area-inset-bottom)] text-text lg:hidden"
       >
-        Lobby
-      </Link>
-      {/* Seven tabs on a phone: each takes its label's width plus an even share of the rest (at least 44 px). */}
-      <ul className="flex h-16 lg:grid lg:h-auto lg:grid-cols-1 lg:gap-1 lg:px-2">
-        {TABS.map(({ href, label, Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
-          return (
-            <li key={href} className="min-w-11 flex-auto lg:min-w-0">
-              <Link
-                href={href}
-                aria-current={active ? "page" : undefined}
-                className={cx(
-                  "relative flex h-16 flex-col items-center justify-center gap-1 text-xs font-medium tracking-[-0.01em]",
-                  "transition-colors duration-150 ease-standard focus-visible:outline-offset-[-4px]",
-                  "lg:h-18 lg:rounded-md",
-                  active ? "text-text" : "text-muted hover:text-text",
-                )}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="nav-tape"
-                    aria-hidden="true"
-                    transition={{ duration: reduced ? 0 : DURATION.base, ease: EASE }}
-                    className={cx(
-                      "absolute inset-x-3 top-0 h-1 rounded-b-sm bg-accent",
-                      "lg:inset-x-auto lg:inset-y-3 lg:-left-2 lg:h-auto lg:w-1 lg:rounded-b-none lg:rounded-r-sm",
-                    )}
-                  />
-                )}
-                <Icon />
-                <span>{label}</span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+        <ul className="flex h-16">
+          {shown.map((item) => {
+            const active = isActive(item.href, pathname);
+            return (
+              <li key={item.href} className="min-w-0 flex-1">
+                <Link
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cx(
+                    "relative flex h-16 flex-col items-center justify-center gap-1 text-xs font-medium",
+                    "transition-colors duration-[120ms] ease-standard focus-visible:outline-offset-[-4px]",
+                    active ? "text-text" : "text-muted",
+                  )}
+                >
+                  {active && <span aria-hidden="true" className="absolute inset-x-4 top-0 h-0.5 rounded-b-sm bg-accent animate-fade" />}
+                  <RegenIcon name={item.icon} size={22} className={active ? "text-accent-text" : undefined} />
+                  <span className="max-w-full truncate px-1">{item.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+          <li className="min-w-0 flex-1">
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={menu}
+              onClick={() => setMenu(true)}
+              className={cx(
+                "relative flex h-16 w-full flex-col items-center justify-center gap-1 text-xs font-medium",
+                "transition-colors duration-[120ms] ease-standard focus-visible:outline-offset-[-4px]",
+                restActive ? "text-text" : "text-muted",
+              )}
+            >
+              {restActive && <span aria-hidden="true" className="absolute inset-x-4 top-0 h-0.5 rounded-b-sm bg-accent" />}
+              <RegenIcon name="menu" size={22} className={restActive ? "text-accent-text" : undefined} />
+              Meny
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      <Sheet open={menu} onClose={() => setMenu(false)} title="Meny">
+        <div data-surface="dark" className="-mx-5 -mt-4 -mb-6 bg-surface px-5 pt-1 pb-6 text-text">
+          <div className="flex flex-col gap-5">
+            {groups.map((group) => (
+              <div key={group.label}>
+                <p className="pb-1 text-xs font-medium text-muted">{group.label}</p>
+                <ul className="flex flex-col">
+                  {group.items.map((item) => {
+                    const active = isActive(item.href, pathname);
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          aria-current={active ? "page" : undefined}
+                          onClick={() => setMenu(false)}
+                          className={cx(
+                            "flex min-h-12 items-center gap-3 rounded-sm px-2 text-base",
+                            active ? "bg-sunken font-semibold" : "hover:bg-sunken",
+                          )}
+                        >
+                          <RegenIcon name={item.icon} size={22} className={active ? "text-accent-text" : "text-muted"} />
+                          <span className="flex min-w-0 flex-col">
+                            <span>{item.label}</span>
+                            <span className="text-xs text-muted">{item.hint}</span>
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 border-t border-line pt-3">
+            <UserPlate onSwitched={() => setMenu(false)} />
+          </div>
+        </div>
+      </Sheet>
+    </>
   );
 }

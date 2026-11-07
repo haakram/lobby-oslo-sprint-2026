@@ -16,11 +16,11 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={cx("flex max-w-md flex-col items-start gap-3", className)}>
-      {icon && <div className="text-muted">{icon}</div>}
-      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+    <div className={cx("flex max-w-md flex-col items-start gap-2", className)}>
+      {icon && <div className="mb-1 text-muted">{icon}</div>}
+      <h2 className="text-lg font-semibold tracking-[-0.01em]">{title}</h2>
       {body && <p className="text-base text-muted">{body}</p>}
-      {action && <div className="pt-2">{action}</div>}
+      {action && <div className="pt-3">{action}</div>}
     </div>
   );
 }

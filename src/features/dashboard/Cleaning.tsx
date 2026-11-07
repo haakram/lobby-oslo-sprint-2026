@@ -4,7 +4,7 @@ import { cleaningHref, type RoomView } from "./selectors";
 
 /**
  * Renhold: the rooms the robot's checks marked "må vaskes", and the screen's one primary action,
- * Send renholderne, which hands them to Ruter for the shortest round across floors.
+ * Lag renholdsrute, which hands them to Ruter for the shortest round across floors.
  */
 export function Cleaning({ rooms, className }: { rooms: RoomView[] | null; className?: string }) {
   const dirty = rooms?.filter((room) => room.status === "ma_vaskes") ?? [];
@@ -13,7 +13,7 @@ export function Cleaning({ rooms, className }: { rooms: RoomView[] | null; class
   return (
     <section aria-labelledby="cleaning-heading" data-enter className={className}>
       <Card className="sm:p-6">
-        <h2 id="cleaning-heading" className="text-2xl font-bold tracking-[-0.02em]">
+        <h2 id="cleaning-heading" className="text-lg font-semibold tracking-[-0.01em]">
           Renhold
         </h2>
 
@@ -42,24 +42,24 @@ export function Cleaning({ rooms, className }: { rooms: RoomView[] | null; class
         ) : (
           <div className="mt-3 flex flex-col gap-4">
             <p className="text-base">
-              <span className="font-mono text-2xl font-medium tabular-nums">{dirty.length}</span>{" "}
+              <span className="font-display text-2xl font-medium tabular-nums">{dirty.length}</span>{" "}
               rom må vaskes
             </p>
             <ul aria-label="Rom som må vaskes" className="flex flex-wrap gap-2">
               {dirty.map((room) => (
                 <li key={room.id}>
-                  <Badge tone="accent">Rom {room.number}</Badge>
+                  <Badge tone="warning">Rom {room.number}</Badge>
                 </li>
               ))}
             </ul>
             <div>
               <Link
                 href={cleaningHref(dirty.map((room) => room.id))}
-                className={cx(buttonClasses("primary", "lg"), "w-full active:scale-[0.97]")}
+                className={cx(buttonClasses("secondary"), "w-full")}
               >
-                Send renholderne
+                Lag renholdsrute
               </Link>
-              <p className="mt-2 text-sm text-muted">Ruter finner korteste runde på tvers av etasjene.</p>
+              <p className="mt-2 text-sm text-muted">Ruter finner korteste runde på tvers av etasjene. Ingen varsles før du deler ruten.</p>
             </div>
           </div>
         )}

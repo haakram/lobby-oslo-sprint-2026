@@ -7,6 +7,7 @@ import { useReducedMotion } from "motion/react";
 import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Badge, cx, RegenIcon } from "@/ui";
 import { floorsOf, placeLabel, roomNumber, type HotelGraph } from "./hotelMap";
+import { ROOM_STATUS } from "@/ui/roomStatus";
 import { STATUS_LABEL, type RoomReport, type RoomStatus } from "./nightRooms";
 import { floorGeometry, labelPoint, pathData, percentOf, runPoints, TILE, type Frame, type Point } from "./planGeometry";
 
@@ -30,13 +31,12 @@ const PIN_S = 0.15;
 const MIN_PX_PER_M = 12;
 const CONNECTOR = 2;
 
-// TODO(phase-2): read from src/ui/roomStatus.ts once the design lead lands it (UX audit X2). Until
-// then these follow that spec's hues: Må vaskes accent, Ikke forstyrr warning, Klar success, Opptatt muted.
+// The one status language every screen shares (src/ui/roomStatus.ts).
 export const STATUS_TONE: Record<RoomStatus, string> = {
-  klar: "bg-success",
-  opptatt: "bg-muted",
-  ma_vaskes: "bg-accent",
-  ikke_forstyrr: "bg-warning",
+  klar: ROOM_STATUS.klar.fill,
+  opptatt: ROOM_STATUS.opptatt.fill,
+  ma_vaskes: ROOM_STATUS.ma_vaskes.fill,
+  ikke_forstyrr: ROOM_STATUS.ikke_forstyrr.fill,
 };
 
 export type PlanPin = { node: string; label: string; /** The route step that ends here; no step = shown at once. */ step?: number };

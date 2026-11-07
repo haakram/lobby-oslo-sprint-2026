@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { safeNext } from "@/features/auth/access";
 import { authConfig } from "@/features/auth/config";
 import { LoginForm } from "@/features/auth/LoginForm";
-import { Card } from "@/ui";
+import { Card, VantaBackdrop } from "@/ui";
 
 export const metadata: Metadata = { title: "Logg inn", robots: { index: false, follow: false } };
 
@@ -10,12 +10,12 @@ export const metadata: Metadata = { title: "Logg inn", robots: { index: false, f
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { next } = await searchParams;
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-12 md:px-8">
-      <div className="w-full max-w-sm">
+    <main className="relative isolate flex flex-1 items-center justify-center overflow-hidden px-4 py-12 md:px-8">
+      <VantaBackdrop />
+      <div className="relative z-10 w-full max-w-sm">
         <header className="mb-8">
-          <span aria-hidden="true" className="mb-5 block h-1 w-12 rounded-sm bg-accent" />
-          <h1 className="text-3xl font-extrabold tracking-[-0.045em]">Lobby</h1>
-          <p className="mt-2 text-base text-muted">Oversikt over hele hotellet, med AI.</p>
+          <h1 className="font-display text-3xl font-medium tracking-[-0.01em]">Lobby</h1>
+          <p className="mt-2 text-base text-muted">Hele hotellet, én pult. Logg inn for natten eller dagen.</p>
         </header>
         <Card className="p-6">
           <LoginForm next={safeNext(typeof next === "string" ? next : undefined)} unavailable={!authConfig().ok} />

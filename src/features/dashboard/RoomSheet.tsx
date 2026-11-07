@@ -1,4 +1,5 @@
-import { Badge, type BadgeTone, Button, Sheet } from "@/ui";
+import Link from "next/link";
+import { Badge, type BadgeTone, Button, buttonClasses, Sheet } from "@/ui";
 import { hhmm } from "./format";
 import {
   humanizeText,
@@ -10,11 +11,11 @@ import {
   SOURCE_WORD,
   STATUS_LOOK,
 } from "./labels";
-import type { RoomNightEntry, RoomView } from "./selectors";
+import { cleaningHref, type RoomNightEntry, type RoomView } from "./selectors";
 
 export const STATUS_TONE: Record<RoomStatus, BadgeTone> = {
   klar: "success",
-  ma_vaskes: "accent",
+  ma_vaskes: "warning",
   opptatt: "neutral",
   ikke_forstyrr: "warning",
   ukjent: "neutral",
@@ -69,7 +70,7 @@ export function RoomSheet({
             <ol aria-label={`Natten i rom ${room.number}`} className="-mx-1 max-h-[55dvh] overflow-y-auto px-1">
               {entries.map((entry, index) => (
                 <li key={index} className="flex gap-4 border-t border-line py-3 first:border-t-0 first:pt-0">
-                  <span className="w-12 shrink-0 font-mono text-sm whitespace-nowrap text-muted tabular-nums">
+                  <span className="w-12 shrink-0 text-sm whitespace-nowrap text-muted tabular-nums">
                     {hhmm(entry.at)}
                   </span>
                   <EntryBody entry={entry} ended={ended} />
@@ -78,9 +79,17 @@ export function RoomSheet({
             </ol>
           )}
 
-          <Button variant="secondary" onClick={onClose} className="self-start">
-            Lukk
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Link href={cleaningHref([room.id])} className={buttonClasses("secondary")}>
+              Legg i renholdsrute
+            </Link>
+            <Link href={`/hotell?rom=${encodeURIComponent(room.id)}`} className={buttonClasses("secondary")}>
+              Vis i 3D-kartet
+            </Link>
+            <Button variant="ghost" onClick={onClose}>
+              Lukk
+            </Button>
+          </div>
         </div>
       )}
     </Sheet>
@@ -103,7 +112,7 @@ function EntryBody({ entry, ended }: { entry: RoomNightEntry; ended: boolean }) 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-base font-semibold">{requestKindLabel(task.kind)}</span>
-            <span className="font-mono text-sm text-muted">{task.request}</span>
+            <span className="font-mono text-xs text-muted">{task.request}</span>
             <Badge tone={outcome.tone}>{outcome.word}</Badge>
           </div>
           {task.item && <span className="text-sm text-muted">Med {itemLabel(task.item)}</span>}

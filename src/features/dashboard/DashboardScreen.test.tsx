@@ -16,6 +16,11 @@ const FIRST_ORDER = NIGHT.workOrders.at(-1);
 
 const fetchMock = vi.fn<typeof fetch>();
 
+/** The key rack. The robot's 2D plan also offers the rooms as buttons, so queries are scoped. */
+function rack() {
+  return within(screen.getByRole("region", { name: "Romstatus" }));
+}
+
 function route({ run = DEMO, runStatus = 200, calls }: { run?: string; runStatus?: number; calls?: Response } = {}) {
   fetchMock.mockImplementation(async (input) => {
     const url = String(input);
@@ -26,8 +31,10 @@ function route({ run = DEMO, runStatus = 200, calls }: { run?: string; runStatus
 }
 
 beforeEach(() => {
-  // A 503 keeps the reception panel quiet for a minute in this tab; each test starts fresh.
+  // A 503 keeps the reception panel quiet for a minute in this tab, and assigned work orders are
+  // kept in localStorage; each test starts fresh.
   sessionStorage.clear();
+  localStorage.clear();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -41,34 +48,38 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     route();
     render(<DashboardScreen />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "Lobby" })).toBeInTheDocument();
     expect(screen.getByText("Hotell Nattskift")).toBeInTheDocument();
-    await screen.findByRole("button", { name: /^Rom 319/ });
+    await screen.findByRole("region", { name: "Romstatus" });
+    await rack().findByRole("button", { name: /^Rom 319/ });
 
+    expect(screen.getByRole("heading", { level: 1, name: "Oversikt" })).toBeInTheDocument();
     expect(screen.getByText(/^Natt til \p{L}+ \d{1,2}\. \p{L}+ · overlevering 06:00$/u)).toBeInTheDocument();
-    expect(screen.getByText("06:00")).toBeInTheDocument();
-    expect(screen.getByText("Skiftet er over")).toBeInTheDocument();
+    expect(screen.getByLabelText("Skiftklokke")).toHaveTextContent("06:00");
+    expect(screen.getAllByText("Skiftet er over").length).toBeGreaterThan(0);
 
     const kpis = screen.getByRole("region", { name: "Natten i tall" });
-    for (const value of [KPIS.roomsReady, KPIS.ordersOpen, KPIS.tasksDone, KPIS.tasksFailed, KPIS.score]) {
+    for (const value of [KPIS.roomsReady, KPIS.roomsDirty, KPIS.ordersOpen, KPIS.tasksDone]) {
       expect(within(kpis).getAllByText(String(value)).length).toBeGreaterThan(0);
     }
+    expect(within(kpis).queryByText(String(KPIS.score))).not.toBeInTheDocument();
 
-    expect(screen.getAllByRole("button", { name: /^Rom \d{3}:/ })).toHaveLength(36);
+    expect(rack().getAllByRole("button", { name: /^Rom \d{3}:/ })).toHaveLength(36);
     // On the seed-1 night: 319 occupied with two guest complaints, 103 ready, 208 behind a DND sign.
-    expect(screen.getByRole("button", { name: "Rom 319: Opptatt, 2 åpne avvik" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rom 103: Klar" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rom 105: Ikke sjekket" })).toBeInTheDocument();
+    expect(rack().getByRole("button", { name: /^Rom 319: Opptatt, 2 åpne avvik/ })).toBeInTheDocument();
+    expect(rack().getByRole("button", { name: /^Rom 103: Klar/ })).toBeInTheDocument();
+    expect(rack().getByRole("button", { name: "Rom 105: Ikke sjekket" })).toBeInTheDocument();
     expect(ROOMS.find((room) => room.id === "room-208")?.status).toBe("ikke_forstyrr");
 
-    expect(screen.getByRole("link", { name: /Åpne 3D/ })).toHaveAttribute("href", "/hotell");
-    expect(screen.getByRole("img", { name: /^Kart over \d\. etasje\. Roboten er ved / })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Åpne 3D-kart/ })).toHaveAttribute("href", "/hotell");
+    // No WebGL in jsdom: the robot's panel shows B1's 2D plan of the hotel.
+    expect(await screen.findByLabelText("Hotellet som plantegning")).toBeInTheDocument();
   });
 
   it("opens one room's night in a sheet", async () => {
     route();
     render(<DashboardScreen />);
-    fireEvent.click(await screen.findByRole("button", { name: /^Rom 319/ }));
+    await screen.findByRole("region", { name: "Romstatus" });
+    fireEvent.click(await rack().findByRole("button", { name: /^Rom 319/ }));
 
     const sheet = screen.getByRole("dialog", { name: "Rom 319" });
     expect(within(sheet).getAllByText("Banket på, gjesten åpnet").length).toBeGreaterThan(0);
@@ -79,7 +90,8 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
   it("lets staff assign and close a work order, which updates the open count", async () => {
     route();
     render(<DashboardScreen />);
-    await screen.findByRole("button", { name: /^Rom 319/ });
+    await screen.findByRole("region", { name: "Romstatus" });
+    await rack().findByRole("button", { name: /^Rom 319/ });
     const kpis = screen.getByRole("region", { name: "Natten i tall" });
 
     // The newest order is listed first, so its buttons come first.
@@ -99,7 +111,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     render(<DashboardScreen />);
 
     expect(await screen.findByText("Ingen rom må vaskes")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Send renholderne" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Lag renholdsrute" })).not.toBeInTheDocument();
     expect(await screen.findByText("Resepsjonisten er ikke koblet til ennå")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Åpne Resepsjon" })).toHaveAttribute("href", "/resepsjon");
   });
@@ -114,9 +126,9 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     route({ run: night.map((line) => JSON.stringify(line)).join("\n") });
     render(<DashboardScreen />);
 
-    const send = await screen.findByRole("link", { name: "Send renholderne" });
+    const [send] = await screen.findAllByRole("link", { name: "Lag renholdsrute" });
     expect(send).toHaveAttribute("href", "/ruter?rom=room-201,room-214");
-    expect(screen.getByRole("button", { name: "Rom 201: Må vaskes" })).toBeInTheDocument();
+    expect(rack().getByRole("button", { name: /^Rom 201: Må vaskes/ })).toBeInTheDocument();
   });
 
   it("lists the receptionist's latest calls when the API answers", async () => {
@@ -155,6 +167,6 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
 
     route();
     fireEvent.click(screen.getByRole("button", { name: "Prøv igjen" }));
-    await waitFor(() => expect(screen.getAllByRole("button", { name: /^Rom \d{3}:/ })).toHaveLength(36));
+    await waitFor(() => expect(rack().getAllByRole("button", { name: /^Rom \d{3}:/ })).toHaveLength(36));
   });
 });

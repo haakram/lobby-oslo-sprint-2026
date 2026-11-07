@@ -4,19 +4,19 @@ import { useEffect, useRef } from "react";
 
 type VantaEffect = { destroy: () => void };
 
-// Night-steel fog: the dark surface tokens (DESIGN.md), so the band never gets brighter than --line.
+// Lamplight fog: the Natt tokens bg → surface → sunken → line, so the band never gets brighter than --line.
 const FOG = {
-  baseColor: 0x121c24,
-  lowlightColor: 0x1a2630,
-  midtoneColor: 0x22313d,
-  highlightColor: 0x2e3e4a,
+  baseColor: 0x16120f,
+  lowlightColor: 0x211b17,
+  midtoneColor: 0x2b231e,
+  highlightColor: 0x3a3029,
   blurFactor: 0.7,
   speed: 0.5,
   zoom: 0.7,
 };
 
 /**
- * The ambient backdrop behind the overview header only (DESIGN.md "Ambient background"). Vanta
+ * The ambient backdrop behind the login page only (DESIGN.md "Motion", ambient). Vanta
  * needs three r134, shipped as `three-vanta`. Off under reduced motion, torn down while the tab is
  * hidden, and silent when WebGL is missing (the band's solid colour stays).
  */

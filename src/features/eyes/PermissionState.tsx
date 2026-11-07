@@ -5,17 +5,17 @@ import type { CameraProblem } from "./useCamera";
 const COPY: Record<CameraProblem, { title: string; body: string; canRetry: boolean }> = {
   denied: {
     title: "Kameraet er blokkert",
-    body: "Gi Fettero tilgang til kameraet: trykk på hengelåsen ved adressen, slå på Kamera, og prøv igjen.",
+    body: "Gi Lobby tilgang til kameraet: trykk på hengelåsen ved adressen, slå på Kamera, og prøv igjen.",
     canRetry: true,
   },
   notfound: {
     title: "Fant ikke noe kamera",
-    body: "Koble til et kamera, eller åpne Fettero på telefonen, og prøv igjen.",
+    body: "Koble til et kamera, eller åpne Lobby på telefonen, og prøv igjen.",
     canRetry: true,
   },
   insecure: {
     title: "Kameraet krever en sikker adresse",
-    body: "Nettleseren slår av kameraet når siden ikke er sikker. Åpne Fettero over https, eller på localhost.",
+    body: "Nettleseren slår av kameraet når siden ikke er sikker. Åpne Lobby over https, eller på localhost.",
     canRetry: false,
   },
   error: {

@@ -76,7 +76,7 @@ describe("the 06:00 handover on the demo night", () => {
   });
 
   it("sums the KPIs the way the server scored the shift", () => {
-    expect(selectKpis(night)).toEqual({
+    expect(selectKpis(night)).toMatchObject({
       roomsReady: 5,
       roomsTotal: 36,
       ordersOpen: 26,

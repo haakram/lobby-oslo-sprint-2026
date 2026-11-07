@@ -6,13 +6,32 @@ import type { OrderStatus, OrderView } from "./selectors";
 
 const SHOWN = 6;
 
-const STATUS: Record<OrderStatus, { word: string; tone: BadgeTone }> = {
-  ny: { word: "Ny", tone: "danger" },
+const STATUS: Record<OrderStatus, { word: string; tone: BadgeTone } | null> = {
+  ny: null,
   tildelt: { word: "Tildelt", tone: "warning" },
   lost: { word: "Løst", tone: "success" },
 };
 
-/** Arbeidsordre: the faults the robot found or handled overnight, newest first, one action each. */
+type Group = { id: string; title: string; orders: OrderView[] };
+
+/** Urgency first: a guest waiting, then the floor (spill, noise), then the rest (UX audit, Oversikt 6). */
+export function groupOrders(orders: readonly OrderView[]): Group[] {
+  const guest: OrderView[] = [];
+  const floor: OrderView[] = [];
+  const rest: OrderView[] = [];
+  for (const order of orders) {
+    if (order.type === "gjesteklage" || order.robot === "failed") guest.push(order);
+    else if (order.type === "sol" || order.type === "stoy") floor.push(order);
+    else rest.push(order);
+  }
+  return [
+    { id: "guest", title: "Gjest venter", orders: guest },
+    { id: "floor", title: "Søl og støy", orders: floor },
+    { id: "rest", title: "Annet", orders: rest },
+  ].filter((group) => group.orders.length > 0);
+}
+
+/** Arbeidsordre: the faults the robot found or handled overnight, grouped by urgency, one action each. */
 export function WorkOrders({
   orders,
   statuses,
@@ -28,19 +47,18 @@ export function WorkOrders({
 }) {
   const [all, setAll] = useState(false);
   const open = orders?.filter((order) => (statuses[order.id] ?? "ny") !== "lost").length ?? 0;
-  const shown = orders ? (all ? orders : orders.slice(0, SHOWN)) : [];
+  const groups = orders ? groupOrders(all ? orders : orders.slice(0, SHOWN)) : [];
 
   return (
     <section aria-labelledby="orders-heading" data-enter className={className}>
       <Card className="sm:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2 id="orders-heading" className="text-2xl font-bold tracking-[-0.02em]">
+          <h2 id="orders-heading" className="scroll-mt-24 text-lg font-semibold tracking-[-0.01em]">
             Arbeidsordre
           </h2>
           {orders && orders.length > 0 && (
             <p className="text-sm text-muted">
-              <span className="font-mono tabular-nums">{open}</span> åpne av{" "}
-              <span className="font-mono tabular-nums">{orders.length}</span>
+              <span className="font-semibold tabular-nums">{open}</span> åpne av <span className="font-semibold tabular-nums">{orders.length}</span>
             </p>
           )}
         </div>
@@ -56,29 +74,33 @@ export function WorkOrders({
             ))}
           </div>
         ) : orders.length === 0 ? (
-          <EmptyState
-            className="mt-4"
-            title="Ingen arbeidsordre i natt"
-            body="Roboten fant ingen feil på rom eller i korridorene."
-          />
+          <EmptyState className="mt-4" title="Ingen arbeidsordre i natt" body="Roboten fant ingen feil på rom eller i korridorene." />
         ) : (
           <>
-            <ol className="mt-2">
-              {shown.map((order) => (
-                <OrderRow
-                  key={order.id}
-                  order={order}
-                  status={statuses[order.id] ?? "ny"}
-                  onAdvance={onAdvance}
-                  onUndo={onUndo}
-                />
-              ))}
-            </ol>
-            {orders.length > SHOWN && (
-              <Button variant="ghost" className="mt-2 -ml-4" onClick={() => setAll((value) => !value)} aria-expanded={all}>
-                {all ? "Vis færre" : `Vis alle ${orders.length}`}
-              </Button>
-            )}
+            {groups.map((group) => (
+              <div key={group.id} className="mt-5 first:mt-3">
+                <h3 className="flex items-baseline gap-2 text-sm font-semibold">
+                  {group.title}
+                  <span className="font-normal text-muted tabular-nums">{group.orders.length}</span>
+                </h3>
+                <ol className="mt-1 divide-y divide-line">
+                  {group.orders.map((order) => (
+                    <OrderRow key={order.id} order={order} status={statuses[order.id] ?? "ny"} onAdvance={onAdvance} onUndo={onUndo} />
+                  ))}
+                </ol>
+              </div>
+            ))}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              {orders.length > SHOWN ? (
+                <Button variant="ghost" size="sm" className="-ml-3" onClick={() => setAll((value) => !value)} aria-expanded={all}>
+                  {all ? "Vis færre" : `Vis alle ${orders.length}`}
+                </Button>
+              ) : (
+                <span />
+              )}
+              {/* TODO(phase-3): no backend yet; Tildelt and Løst are kept in this browser only. */}
+              <p className="text-xs text-muted">Tildelt og løst lagres bare i denne nettleseren.</p>
+            </div>
           </>
         )}
       </Card>
@@ -102,35 +124,32 @@ function OrderRow({
   const action = status === "ny" ? "Tildel" : "Marker løst";
 
   return (
-    <li className="flex flex-col gap-3 border-t border-line py-4 first:border-t-0 sm:flex-row sm:items-center sm:gap-6">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Badge>{orderTypeLabel(order.type)}</Badge>
+    <li className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:gap-6">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="text-base font-semibold">{where}</span>
-          <span className="font-mono text-sm whitespace-nowrap text-muted tabular-nums">{hhmm(order.at)}</span>
+          <span className="text-sm text-muted">{orderTypeLabel(order.type)}</span>
+          <span className="text-sm whitespace-nowrap text-muted tabular-nums">{hhmm(order.at)}</span>
         </div>
         <p className="text-base">{humanizeText(order.text)}</p>
         {order.robot && order.request && (
-          <p className="text-sm text-muted">
-            Robotens oppgave {order.request}: {order.robot === "done" ? "fullført" : order.robot === "failed" ? "feilet" : "pågår"}
+          <p className={order.robot === "failed" ? "text-sm font-semibold text-danger" : "text-sm text-muted"}>
+            Robotens oppgave {order.robot === "done" ? "ble fullført" : order.robot === "failed" ? "feilet, gjesten venter" : "pågår"}
           </p>
         )}
       </div>
       <div className="flex shrink-0 items-center gap-3 sm:w-52 sm:justify-end">
-        <span aria-live="polite">
-          <Badge tone={look.tone}>{look.word}</Badge>
-        </span>
-        {/* TODO(phase-3): no backend yet; Tildelt and Løst live in this browser tab only. */}
+        {look && (
+          <span aria-live="polite">
+            <Badge tone={look.tone}>{look.word}</Badge>
+          </span>
+        )}
         {status === "lost" ? (
-          <Button variant="ghost" onClick={() => onUndo(order.id)} aria-label={`Angre løst: ${where}`}>
+          <Button variant="ghost" size="sm" onClick={() => onUndo(order.id)} aria-label={`Angre løst: ${where}`}>
             Angre
           </Button>
         ) : (
-          <Button
-            variant="secondary"
-            onClick={() => onAdvance(order.id)}
-            aria-label={`${action}: ${orderTypeLabel(order.type)}, ${where}`}
-          >
+          <Button variant="secondary" size="sm" onClick={() => onAdvance(order.id)} aria-label={`${action}: ${orderTypeLabel(order.type)}, ${where}`}>
             {action}
           </Button>
         )}

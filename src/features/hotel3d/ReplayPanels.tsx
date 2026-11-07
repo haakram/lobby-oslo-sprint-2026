@@ -56,7 +56,7 @@ export function RoomCard({
     <Card className={cx("flex flex-col gap-3", className)} aria-labelledby="room-card" data-room={roomId}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 id="room-card" className="text-xl font-bold tracking-[-0.02em]">
+          <h2 id="room-card" className="text-lg font-semibold tracking-[-0.01em]">
             {placeName(roomId)}
           </h2>
           <p className="text-sm text-muted">{nodeFloor(roomId)}. etasje</p>
@@ -143,7 +143,7 @@ export function TaskCard({ snapshot, finished, className }: { snapshot: Snapshot
       </div>
       {task ? (
         <>
-          <p className="text-xl font-bold tracking-[-0.02em]">{task.title}</p>
+          <p className="text-lg font-semibold tracking-[-0.01em]">{task.title.replace(/^[^·]+·\s*/, "")}</p>
           {task.text && <p className="text-base text-muted">«{task.text}»</p>}
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <div>
@@ -160,8 +160,8 @@ export function TaskCard({ snapshot, finished, className }: { snapshot: Snapshot
         </>
       ) : (
         <>
-          <p className="text-xl font-bold tracking-[-0.02em]">
-            {finished ? "Skiftet er ferdig" : robot?.node === "charging-dock" ? "Lader" : "Ingen oppgave nå"}
+          <p className="text-lg font-semibold tracking-[-0.01em]">
+            {finished ? "Skiftet er ferdig" : robot?.node === "charging-dock" ? "Lader" : "Venter på oppgave"}
           </p>
           <p className="text-base text-muted">{robot ? `Roboten står ved ${placeName(robot.node).toLowerCase()}.` : "Venter på skiftet."}</p>
         </>
@@ -198,13 +198,13 @@ export function EventFeed({
 
   return (
     <section aria-labelledby={id} className={className}>
-      <h2 id={id} className="text-xl font-bold tracking-[-0.02em]">
-        {title}
+      <h2 id={id} className={title ? "text-lg font-semibold tracking-[-0.01em]" : "sr-only"}>
+        {title || "Hendelser"}
       </h2>
       {events.length === 0 ? (
         <p className="mt-3 text-base text-muted">{emptyText}</p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-2">
+        <ul className="mt-2 flex flex-col">
           <AnimatePresence initial={false}>
             {events.map((event) => (
               <motion.li
@@ -214,9 +214,9 @@ export function EventFeed({
                 initial="hidden"
                 animate="visible"
                 exit="exit"
-                className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 rounded-md border border-line bg-surface px-4 py-3 sm:grid-cols-[auto_auto_1fr]"
+                className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 border-t border-line px-1 py-3 first:border-t-0 sm:grid-cols-[auto_auto_1fr]"
               >
-                <span className="pt-0.5 font-mono text-xs tabular-nums whitespace-nowrap text-muted">{event.clock}</span>
+                <span className="pt-0.5 text-xs tabular-nums whitespace-nowrap text-muted">{event.clock.slice(0, 5)}</span>
                 <Badge tone={event.tone as BadgeTone} className="justify-self-start">
                   {event.label}
                 </Badge>
@@ -230,13 +230,8 @@ export function EventFeed({
   );
 }
 
-const ORDER_TONE: Record<string, BadgeTone> = {
-  stoy: "warning",
-  sol: "danger",
-  teknisk: "danger",
-  gjesteklage: "warning",
-  annet: "neutral",
-};
+// Categories are neutral; green, amber and red mean state only (DESIGN.md).
+const ORDER_TONE: Record<string, BadgeTone> = {};
 
 /** Overnight faults for the morning: one list, newest first. */
 export function WorkOrderList({ orders, className }: { orders: WorkOrder[]; className?: string }) {
@@ -244,23 +239,22 @@ export function WorkOrderList({ orders, className }: { orders: WorkOrder[]; clas
   return (
     <section aria-labelledby="work-orders" className={className}>
       <div className="flex items-baseline gap-3">
-        <h2 id="work-orders" className="text-xl font-bold tracking-[-0.02em]">
+        <h2 id="work-orders" className="text-lg font-semibold tracking-[-0.01em]">
           Arbeidsordre
         </h2>
-        <span className="font-mono text-sm tabular-nums text-muted">{orders.length}</span>
+        <span className="text-sm tabular-nums text-muted">{orders.length}</span>
       </div>
       {shown.length === 0 ? (
         <p className="mt-3 text-base text-muted">Ingen avvik meldt ennå.</p>
       ) : (
-        <ul className="mt-4 flex flex-col gap-2">
+        <ul className="mt-2 flex flex-col">
           {shown.map((order) => (
-            <li key={order.id} className="flex items-start gap-3 rounded-md border border-line bg-surface px-4 py-3">
-              <RegenIcon name="alert-triangle" className="mt-0.5 size-5 shrink-0 text-danger" />
+            <li key={order.id} className="flex items-start gap-3 border-t border-line py-3 first:border-t-0">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone={ORDER_TONE[order.type] ?? "neutral"}>{workOrderType(order.type)}</Badge>
                   <span className="text-sm text-muted">{placeName(order.room ?? order.place)}</span>
-                  <span className="ml-auto font-mono text-xs tabular-nums whitespace-nowrap text-muted">{order.clock.slice(0, 5)}</span>
+                  <span className="ml-auto text-xs tabular-nums whitespace-nowrap text-muted">{order.clock.slice(0, 5)}</span>
                 </div>
                 <p className="mt-1 text-base break-words">{order.text}</p>
               </div>

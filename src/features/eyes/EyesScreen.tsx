@@ -156,7 +156,7 @@ export function EyesScreen() {
 
       {problem ? (
         <>
-          <h1 className="px-4 pt-10 text-3xl font-extrabold tracking-[-0.03em] sm:px-8 lg:px-12 lg:pt-16">Øyne</h1>
+          <h1 className="px-4 pt-8 font-display text-2xl font-medium tracking-[-0.01em] sm:px-6 lg:px-10 lg:pt-10">Robotens øyne</h1>
           <PermissionState problem={problem} onRetry={retryCamera} />
         </>
       ) : (
@@ -190,7 +190,7 @@ export function EyesScreen() {
 
           <header className="pointer-events-none relative flex flex-col items-start gap-2 p-4 sm:px-8 lg:px-12 lg:pt-8">
             <div className="flex w-full flex-wrap items-center justify-between gap-2">
-              <h1 className="rounded-md bg-bg/75 px-3 py-1 text-xl font-bold tracking-[-0.02em] backdrop-blur-sm">Øyne</h1>
+              <h1 className="rounded-sm bg-bg/75 px-3 py-1 font-display text-xl font-medium tracking-[-0.01em] backdrop-blur-sm">Robotens øyne</h1>
               <div className="flex flex-wrap gap-2">
                 <Switch
                   label="Automatisk gjenkjenning"

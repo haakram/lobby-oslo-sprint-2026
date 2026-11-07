@@ -67,10 +67,10 @@ export function Sheet({
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="relative w-full max-w-xl rounded-t-lg border border-b-0 border-line bg-surface px-5 pt-3 pb-[calc(24px+env(safe-area-inset-bottom))] focus:outline-none"
+            className="relative w-full max-w-xl rounded-t-md bg-surface px-5 pt-3 pb-[calc(24px+env(safe-area-inset-bottom))] focus:outline-none"
           >
-            <div aria-hidden="true" className="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />
-            <h2 id={titleId} className="mb-4 text-xl font-semibold tracking-tight">
+            <div aria-hidden="true" className="mx-auto mb-4 h-1 w-10 rounded-full bg-line-strong" />
+            <h2 id={titleId} className="mb-4 text-lg font-semibold tracking-[-0.01em]">
               {title}
             </h2>
             {children}

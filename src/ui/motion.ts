@@ -1,10 +1,10 @@
 import type { Variants } from "motion/react";
 
 /** Seconds, for motion. Mirrors the CSS durations in DESIGN.md. */
-export const DURATION = { fast: 0.15, base: 0.2, slow: 0.3 } as const;
+export const DURATION = { fast: 0.12, base: 0.18, slow: 0.24 } as const;
 
-/** Decelerate in, never overshoot (no bounce, no springs). */
-export const EASE = [0.2, 0, 0, 1] as const;
+/** A strong ease-out for anything entering or answering a tap; never overshoot (no bounce, no springs). */
+export const EASE = [0.23, 1, 0.32, 1] as const;
 export const EASE_EXIT = [0.4, 0, 1, 1] as const;
 
 const STILL: Variants = { hidden: {}, visible: {}, exit: {} };

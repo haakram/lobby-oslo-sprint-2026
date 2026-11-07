@@ -200,7 +200,13 @@ describe("the demo run", () => {
     expect(summary.tasksFailed).toBeGreaterThan(0);
   });
 
-  it("is what the deployed app serves", () => {
-    expect(read("public/runs/demo.jsonl")).toBe(read("src/features/nightshift/fixtures/sample.jsonl"));
+  it("what the deployed app serves is a clean, finished run log v1 too", () => {
+    // The published demo night is swapped for better live runs; the fixture above stays fixed for the tests.
+    const { lines, skipped } = parseRunLog(read("public/runs/demo.jsonl"));
+    expect(skipped).toBe(0);
+    const summary = summarise(lines);
+    expect(summary.live).toBe(false);
+    expect(summary.shift).toMatch(/^w2-[0-9a-f]{8,64}$/);
+    expect(summary.tasksDone).toBeGreaterThan(0);
   });
 });

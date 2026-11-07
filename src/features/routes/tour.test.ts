@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bestTour, floorRuns, listOrderMetres, savings, tourLegs } from "./tour";
+import { bestTour, elevatorRides, floorRuns, listOrderMetres, savings, tourLegs } from "./tour";
 import type { RouteMatrix } from "./types";
 
 // Five stop nodes (S start, A B D on floor 1, C on floor 2) plus a lift.
@@ -170,5 +170,16 @@ describe("floorRuns", () => {
 
   it("is empty for an empty path", () => {
     expect(floorRuns(FIXTURE, [])).toEqual([]);
+  });
+});
+
+describe("elevatorRides", () => {
+  it("counts each ride between floors, there and back", () => {
+    expect(elevatorRides(FIXTURE, ["S", "A", "B", "L1", "L2", "C", "L2", "L1", "S"])).toBe(2);
+  });
+
+  it("is 0 on one floor and for an empty path", () => {
+    expect(elevatorRides(FIXTURE, ["S", "A", "B", "L1", "S"])).toBe(0);
+    expect(elevatorRides(FIXTURE, [])).toBe(0);
   });
 });

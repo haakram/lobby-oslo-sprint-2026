@@ -40,12 +40,12 @@ function ReceptionSession() {
   const busy = voice.phase === "connecting";
 
   return (
-    <main data-surface="light" className="flex-1 bg-bg px-4 pt-8 pb-12 sm:px-8 lg:px-12 lg:pt-16">
+    <main data-surface="light" className="flex-1 bg-bg px-4 pt-6 pb-12 text-text sm:px-6 lg:px-10 lg:pt-10">
       <header>
-        <h1 className="text-3xl font-extrabold tracking-[-0.03em]">Resepsjon</h1>
-        <p className="mt-3 max-w-[56ch] text-lg text-muted">
-          Resepsjonisten svarer på telefonen døgnet rundt, på gjestens språk. Bookinger og beskjeder havner
-          her til du bekrefter dem.
+        <h1 className="font-display text-2xl font-medium tracking-[-0.01em] sm:text-3xl">Resepsjon</h1>
+        <p className="mt-2 max-w-[56ch] text-base text-muted">
+          AI-resepsjonisten tar telefonen døgnet rundt, på gjestens språk. Bookinger og beskjeder venter her
+          til du bekrefter dem.
         </p>
       </header>
 

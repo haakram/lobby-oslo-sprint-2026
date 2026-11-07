@@ -1,0 +1,744 @@
+{
+ "nodes": {
+  "charging-dock": {
+   "floor": 1,
+   "kind": "hub",
+   "x": -8.0,
+   "z": 0.0
+  },
+  "lobby": {
+   "floor": 1,
+   "kind": "hub",
+   "x": 0.0,
+   "z": 0.0
+  },
+  "front-desk": {
+   "floor": 1,
+   "kind": "hub",
+   "x": 0.0,
+   "z": -7.0
+  },
+  "lobby-bar": {
+   "floor": 1,
+   "kind": "hub",
+   "x": 10.0,
+   "z": 0.0
+  },
+  "elevator-1": {
+   "floor": 1,
+   "kind": "elevator",
+   "x": -6.0,
+   "z": 6.0
+  },
+  "corridor-1a": {
+   "floor": 1,
+   "kind": "corridor",
+   "x": 0.0,
+   "z": 9.0
+  },
+  "corridor-1b": {
+   "floor": 1,
+   "kind": "corridor",
+   "x": 13.0,
+   "z": 9.0
+  },
+  "corridor-1c": {
+   "floor": 1,
+   "kind": "corridor",
+   "x": 26.0,
+   "z": 9.0
+  },
+  "staff-room": {
+   "floor": 1,
+   "kind": "service",
+   "x": -4.0,
+   "z": 13.0
+  },
+  "room-101": {
+   "floor": 1,
+   "kind": "room",
+   "x": -4.0,
+   "z": 5.0
+  },
+  "room-102": {
+   "floor": 1,
+   "kind": "room",
+   "x": -1.0,
+   "z": 13.0
+  },
+  "room-103": {
+   "floor": 1,
+   "kind": "room",
+   "x": -1.0,
+   "z": 5.0
+  },
+  "storage": {
+   "floor": 1,
+   "kind": "service",
+   "x": 9.0,
+   "z": 13.0
+  },
+  "laundry": {
+   "floor": 1,
+   "kind": "service",
+   "x": 9.0,
+   "z": 5.0
+  },
+  "room-104": {
+   "floor": 1,
+   "kind": "room",
+   "x": 12.0,
+   "z": 13.0
+  },
+  "room-105": {
+   "floor": 1,
+   "kind": "room",
+   "x": 12.0,
+   "z": 5.0
+  },
+  "room-106": {
+   "floor": 1,
+   "kind": "room",
+   "x": 15.0,
+   "z": 13.0
+  },
+  "kitchen-pass": {
+   "floor": 1,
+   "kind": "service",
+   "x": 22.0,
+   "z": 13.0
+  },
+  "stairwell-1": {
+   "floor": 1,
+   "kind": "stairwell",
+   "x": 22.0,
+   "z": 5.0
+  },
+  "room-107": {
+   "floor": 1,
+   "kind": "room",
+   "x": 25.0,
+   "z": 13.0
+  },
+  "room-108": {
+   "floor": 1,
+   "kind": "room",
+   "x": 25.0,
+   "z": 5.0
+  },
+  "corridor-2a": {
+   "floor": 2,
+   "kind": "corridor",
+   "x": 0.0,
+   "z": 0.0
+  },
+  "corridor-2b": {
+   "floor": 2,
+   "kind": "corridor",
+   "x": 13.0,
+   "z": 0.0
+  },
+  "corridor-2c": {
+   "floor": 2,
+   "kind": "corridor",
+   "x": 13.0,
+   "z": 16.0
+  },
+  "corridor-2d": {
+   "floor": 2,
+   "kind": "corridor",
+   "x": 0.0,
+   "z": 16.0
+  },
+  "room-201": {
+   "floor": 2,
+   "kind": "room",
+   "x": 3.25,
+   "z": -4.0
+  },
+  "room-202": {
+   "floor": 2,
+   "kind": "room",
+   "x": 6.5,
+   "z": -4.0
+  },
+  "room-203": {
+   "floor": 2,
+   "kind": "room",
+   "x": 9.75,
+   "z": -4.0
+  },
+  "room-204": {
+   "floor": 2,
+   "kind": "room",
+   "x": 17.0,
+   "z": 3.2
+  },
+  "room-205": {
+   "floor": 2,
+   "kind": "room",
+   "x": 17.0,
+   "z": 6.4
+  },
+  "room-206": {
+   "floor": 2,
+   "kind": "room",
+   "x": 17.0,
+   "z": 9.6
+  },
+  "room-207": {
+   "floor": 2,
+   "kind": "room",
+   "x": 17.0,
+   "z": 12.8
+  },
+  "room-208": {
+   "floor": 2,
+   "kind": "room",
+   "x": 9.75,
+   "z": 20.0
+  },
+  "room-209": {
+   "floor": 2,
+   "kind": "room",
+   "x": 6.5,
+   "z": 20.0
+  },
+  "room-210": {
+   "floor": 2,
+   "kind": "room",
+   "x": 3.25,
+   "z": 20.0
+  },
+  "room-211": {
+   "floor": 2,
+   "kind": "room",
+   "x": -4.0,
+   "z": 12.8
+  },
+  "room-212": {
+   "floor": 2,
+   "kind": "room",
+   "x": -4.0,
+   "z": 9.6
+  },
+  "room-213": {
+   "floor": 2,
+   "kind": "room",
+   "x": -4.0,
+   "z": 6.4
+  },
+  "room-214": {
+   "floor": 2,
+   "kind": "room",
+   "x": -4.0,
+   "z": 3.1999999999999993
+  },
+  "elevator-2": {
+   "floor": 2,
+   "kind": "elevator",
+   "x": -4.0,
+   "z": -4.0
+  },
+  "stairwell-2": {
+   "floor": 2,
+   "kind": "stairwell",
+   "x": -4.0,
+   "z": 19.0
+  },
+  "corridor-3a": {
+   "floor": 3,
+   "kind": "corridor",
+   "x": 0.0,
+   "z": 0.0
+  },
+  "corridor-3b": {
+   "floor": 3,
+   "kind": "corridor",
+   "x": 16.0,
+   "z": 0.0
+  },
+  "corridor-3c": {
+   "floor": 3,
+   "kind": "corridor",
+   "x": 16.0,
+   "z": 16.0
+  },
+  "corridor-3d": {
+   "floor": 3,
+   "kind": "corridor",
+   "x": 0.0,
+   "z": 16.0
+  },
+  "room-311": {
+   "floor": 3,
+   "kind": "room",
+   "x": 4.0,
+   "z": -4.0
+  },
+  "room-312": {
+   "floor": 3,
+   "kind": "room",
+   "x": 8.0,
+   "z": -4.0
+  },
+  "room-313": {
+   "floor": 3,
+   "kind": "room",
+   "x": 12.0,
+   "z": -4.0
+  },
+  "room-314": {
+   "floor": 3,
+   "kind": "room",
+   "x": 20.0,
+   "z": 3.2
+  },
+  "room-315": {
+   "floor": 3,
+   "kind": "room",
+   "x": 20.0,
+   "z": 6.4
+  },
+  "room-316": {
+   "floor": 3,
+   "kind": "room",
+   "x": 20.0,
+   "z": 9.6
+  },
+  "room-317": {
+   "floor": 3,
+   "kind": "room",
+   "x": 20.0,
+   "z": 12.8
+  },
+  "room-318": {
+   "floor": 3,
+   "kind": "room",
+   "x": 12.0,
+   "z": 20.0
+  },
+  "room-319": {
+   "floor": 3,
+   "kind": "room",
+   "x": 8.0,
+   "z": 20.0
+  },
+  "room-320": {
+   "floor": 3,
+   "kind": "room",
+   "x": 4.0,
+   "z": 20.0
+  },
+  "room-321": {
+   "floor": 3,
+   "kind": "room",
+   "x": -4.0,
+   "z": 12.8
+  },
+  "room-322": {
+   "floor": 3,
+   "kind": "room",
+   "x": -4.0,
+   "z": 9.6
+  },
+  "room-323": {
+   "floor": 3,
+   "kind": "room",
+   "x": -4.0,
+   "z": 6.4
+  },
+  "room-324": {
+   "floor": 3,
+   "kind": "room",
+   "x": -4.0,
+   "z": 3.1999999999999993
+  },
+  "elevator-3": {
+   "floor": 3,
+   "kind": "elevator",
+   "x": -4.0,
+   "z": -4.0
+  },
+  "stairwell-3": {
+   "floor": 3,
+   "kind": "stairwell",
+   "x": -4.0,
+   "z": 19.0
+  }
+ },
+ "edges": [
+  {
+   "a": "charging-dock",
+   "b": "lobby",
+   "m": 8
+  },
+  {
+   "a": "lobby",
+   "b": "front-desk",
+   "m": 7
+  },
+  {
+   "a": "lobby",
+   "b": "lobby-bar",
+   "m": 10
+  },
+  {
+   "a": "lobby",
+   "b": "elevator-1",
+   "m": 6
+  },
+  {
+   "a": "lobby",
+   "b": "corridor-1a",
+   "m": 9
+  },
+  {
+   "a": "corridor-1a",
+   "b": "corridor-1b",
+   "m": 13
+  },
+  {
+   "a": "corridor-1b",
+   "b": "corridor-1c",
+   "m": 13
+  },
+  {
+   "a": "corridor-1a",
+   "b": "staff-room",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "corridor-1a",
+   "b": "room-101",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-1a",
+   "b": "room-102",
+   "m": 5,
+   "door": true
+  },
+  {
+   "a": "corridor-1a",
+   "b": "room-103",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "corridor-1b",
+   "b": "storage",
+   "m": 5,
+   "door": true
+  },
+  {
+   "a": "corridor-1b",
+   "b": "laundry",
+   "m": 5,
+   "door": true
+  },
+  {
+   "a": "corridor-1b",
+   "b": "room-104",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-1b",
+   "b": "room-105",
+   "m": 5,
+   "door": true
+  },
+  {
+   "a": "corridor-1b",
+   "b": "room-106",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-1c",
+   "b": "kitchen-pass",
+   "m": 5
+  },
+  {
+   "a": "corridor-1c",
+   "b": "stairwell-1",
+   "m": 7
+  },
+  {
+   "a": "corridor-1c",
+   "b": "room-107",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "corridor-1c",
+   "b": "room-108",
+   "m": 5,
+   "door": true
+  },
+  {
+   "a": "corridor-2a",
+   "b": "corridor-2b",
+   "m": 13
+  },
+  {
+   "a": "corridor-2b",
+   "b": "corridor-2c",
+   "m": 18
+  },
+  {
+   "a": "corridor-2c",
+   "b": "corridor-2d",
+   "m": 12
+  },
+  {
+   "a": "corridor-2d",
+   "b": "corridor-2a",
+   "m": 16
+  },
+  {
+   "a": "corridor-2a",
+   "b": "room-201",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-2a",
+   "b": "room-202",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-2a",
+   "b": "room-203",
+   "m": 5,
+   "door": true
+  },
+  {
+   "a": "corridor-2b",
+   "b": "room-204",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "corridor-2b",
+   "b": "room-205",
+   "m": 5,
+   "door": true
+  },
+  {
+   "a": "corridor-2b",
+   "b": "room-206",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-2b",
+   "b": "room-207",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-2c",
+   "b": "room-208",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-2c",
+   "b": "room-209",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-2c",
+   "b": "room-210",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-2d",
+   "b": "room-211",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "corridor-2d",
+   "b": "room-212",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-2d",
+   "b": "room-213",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-2d",
+   "b": "room-214",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "elevator-2",
+   "b": "corridor-2a",
+   "m": 4
+  },
+  {
+   "a": "corridor-2d",
+   "b": "stairwell-2",
+   "m": 6
+  },
+  {
+   "a": "corridor-3a",
+   "b": "corridor-3b",
+   "m": 16
+  },
+  {
+   "a": "corridor-3b",
+   "b": "corridor-3c",
+   "m": 16
+  },
+  {
+   "a": "corridor-3c",
+   "b": "corridor-3d",
+   "m": 16
+  },
+  {
+   "a": "corridor-3d",
+   "b": "corridor-3a",
+   "m": 18
+  },
+  {
+   "a": "corridor-3a",
+   "b": "room-311",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-3a",
+   "b": "room-312",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-3a",
+   "b": "room-313",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-3b",
+   "b": "room-314",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-3b",
+   "b": "room-315",
+   "m": 5,
+   "door": true
+  },
+  {
+   "a": "corridor-3b",
+   "b": "room-316",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "corridor-3b",
+   "b": "room-317",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-3c",
+   "b": "room-318",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-3c",
+   "b": "room-319",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "corridor-3c",
+   "b": "room-320",
+   "m": 5,
+   "door": true
+  },
+  {
+   "a": "corridor-3d",
+   "b": "room-321",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "corridor-3d",
+   "b": "room-322",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "corridor-3d",
+   "b": "room-323",
+   "m": 4,
+   "door": true
+  },
+  {
+   "a": "corridor-3d",
+   "b": "room-324",
+   "m": 3,
+   "door": true
+  },
+  {
+   "a": "elevator-3",
+   "b": "corridor-3a",
+   "m": 6
+  },
+  {
+   "a": "corridor-3d",
+   "b": "stairwell-3",
+   "m": 6
+  },
+  {
+   "a": "stairwell-1",
+   "b": "stairwell-2",
+   "m": 19,
+   "stairs": true
+  },
+  {
+   "a": "stairwell-2",
+   "b": "stairwell-3",
+   "m": 19,
+   "stairs": true
+  }
+ ],
+ "stock": {
+  "storage": {
+   "towel": 8,
+   "toiletry-kit": 6,
+   "water-bottle": 8,
+   "phone-charger": 4,
+   "wet-floor-sign": 3
+  },
+  "laundry": {
+   "cart": 1,
+   "pillow": 5
+  },
+  "front-desk": {
+   "keycard": 2
+  }
+ },
+ "special": {
+  "dock": "charging-dock",
+  "kitchen": "kitchen-pass",
+  "clerk": "front-desk"
+ }
+}

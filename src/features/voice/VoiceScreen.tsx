@@ -87,11 +87,11 @@ function VoiceSession() {
   const busy = voice.phase === "connecting";
 
   return (
-    <main data-surface="light" className="flex-1 bg-bg px-4 pt-8 pb-12 sm:px-8 lg:px-12 lg:pt-16">
+    <main className="flex-1 bg-bg px-4 pt-6 pb-12 sm:px-6 lg:px-10 lg:pt-10">
       <header>
-        <h1 className="text-3xl font-extrabold tracking-[-0.03em]">Stemme</h1>
-        <p className="mt-3 max-w-[48ch] text-lg text-muted">
-          Spør på ditt eget språk. Fettero svarer høyt og viser varen, ruten eller neste steg.
+        <h1 className="font-display text-2xl font-medium tracking-[-0.01em] sm:text-3xl">Snakk gjennom roboten</h1>
+        <p className="mt-2 max-w-[56ch] text-base text-muted">
+          Si det på ditt språk; roboten sier det høyt til gjesten på deres, og tar imot svaret.
         </p>
       </header>
 

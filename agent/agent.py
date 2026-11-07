@@ -189,7 +189,9 @@ def _vet_brain(ex: Executor, original: Task, better: Task) -> Task:
     if better.kind is Kind.ROOM_CHECK and vetted.kind is not Kind.ROOM_CHECK:
         reason = "room check on a noise or complaint text"
     elif vetted.kind is Kind.ROOM_CHECK and vetted.room not in ex.hotel.nodes:
-        reason = f"room check on an unknown room {vetted.room}"
+        floor = flows.room_floor(vetted.room)  # Task 26: another night's numbering? look first
+        if floor is None or not ex.explore_floor(floor, vetted.room):
+            reason = f"room check on an unknown room {vetted.room}"
     if reason is not None:
         ex.log("brain_rejected", request=original.request, kind=better.kind.value, room=better.room,
                reason=reason)

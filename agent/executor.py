@@ -405,6 +405,77 @@ class Executor:
             self._forget_edge(*tuple(key))
         self._tentative.clear()
 
+    def explore_floor(self, floor: int, target: str | None = None, *, max_looks: int = 8) -> bool:
+        """Task 26: a request names a room the map does not know (other nights number and lay out
+        floors differently; live seed 2 lost ~500 points to "unknown room"). Go to that floor and
+        visit its corridors not yet looked at this shift, nearest first (the believed ones, then
+        corridor exits the looks discover), each first visit being a look that teaches the map
+        the rooms off it. Stops as soon as `target` hangs off a looked-at corridor. Bounded: at
+        most `max_looks` corridor visits per call, and a floor swept to the end is not swept again
+        this shift. Exits the world model marks blocked (Task 25 `is_blocked`) are left out.
+        Never raises; True when `target` is known (with a corridor) afterwards."""
+        explored: set[int] = self.__dict__.setdefault("_explored_floors", set())
+        is_blocked = getattr(self.hotel, "is_blocked", None)
+
+        def known() -> bool:
+            if not target or target not in self.hotel.nodes:
+                return False
+            try:
+                self.hotel.room_corridor(target)
+            except KeyError:
+                return False
+            return True
+
+        def unusable(place: str) -> bool:
+            edges = self.hotel.neighbors(place)
+            return bool(edges) and callable(is_blocked) and all(is_blocked(e.b, place) for e in edges)
+
+        def todo() -> list[str]:
+            return [n for n, v in self.hotel.nodes.items()
+                    if v.get("kind") == "corridor" and v.get("floor") == floor
+                    and n not in self._looked and n not in skipped and not unusable(n)]
+
+        if known():
+            return True
+        skipped: set[str] = set()
+        looked: list[str] = []
+        believed = set(todo())
+        if floor in explored:
+            self.log("floor_explored", floor=floor, target=target, looked=looked, found=False,
+                     reason="already swept this shift")
+            return False
+        swept = False
+        while len(looked) < max_looks:
+            candidates = todo()
+            if not candidates:
+                swept = True  # every believed and discovered corridor of the floor was looked at
+                break
+            nxt = min(candidates, key=lambda c: (c not in believed, self._seconds_to(c), c))
+            if self._seconds_to(nxt) == float("inf"):
+                skipped.add(nxt)
+                continue
+            try:
+                self.go(nxt)  # the first visit looks on arrival
+            except ActionFailed as exc:
+                skipped.add(nxt)
+                self.log("explore_skip", place=nxt, reason=str(exc))
+                continue
+            if self.state.location not in self._looked:
+                try:
+                    self.look()
+                except ActionFailed as exc:
+                    self._looked.add(self.state.location)
+                    self.log("look_failed", at=self.state.location, reason=str(exc))
+            looked.append(self.state.location)
+            if known():
+                break
+        found = known()
+        if swept and not found:
+            explored.add(floor)
+        self.log("floor_explored", floor=floor, target=target, looked=looked, found=found,
+                 swept=swept, skipped=sorted(skipped))
+        return found
+
     # --- items and the cart ----------------------------------------------------------------------
 
     def count(self, item: str) -> int:

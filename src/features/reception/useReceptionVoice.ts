@@ -40,7 +40,7 @@ async function fetchToken(): Promise<{ token: string } | VoiceProblem> {
 
 /**
  * The receptionist in the browser: microphone check, server token, ElevenLabs WebRTC session,
- * transcript and the four reception tools. Every booking or message the agent records goes to
+ * transcript and the five reception tools. Every booking or message the agent records goes to
  * `onRecord`; a fresh sink per call drops repeats and caps the count. Use inside `ConversationProvider`.
  */
 export function useReceptionVoice(onRecord: (record: ReceptionRecord) => void) {
@@ -65,6 +65,7 @@ export function useReceptionVoice(onRecord: (record: ReceptionRecord) => void) {
     [newSink],
   );
   useConversationClientTool("get_room_price", tools.get_room_price);
+  useConversationClientTool("get_counter_offer", tools.get_counter_offer);
   useConversationClientTool("check_availability", tools.check_availability);
   useConversationClientTool("record_booking_request", tools.record_booking_request);
   useConversationClientTool("record_message", tools.record_message);

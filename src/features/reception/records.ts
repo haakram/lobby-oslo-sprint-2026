@@ -1,4 +1,4 @@
-import type { RoomTypeId } from "./hotel";
+import type { Perk, RoomTypeId } from "./hotel";
 
 export const MESSAGE_TOPICS = ["booking", "question", "complaint", "lost_item", "other"] as const;
 export type MessageTopic = (typeof MESSAGE_TOPICS)[number];
@@ -15,6 +15,13 @@ export type BookingRecord = {
   guests: number;
   room: RoomTypeId;
   note: string;
+  /** Discount step agreed in the call (0 = the normal direct price; see DISCOUNT_STEPS). */
+  discountStep: number;
+  /** The free extra promised in the call, if any. */
+  perk: Perk | null;
+  /** Agreed price per night, computed by code from the step: never from what the caller said. */
+  pricePerNight: number;
+  /** Agreed total for the stay, breakfast included. */
   directTotal: number;
 };
 

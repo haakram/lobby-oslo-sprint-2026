@@ -1,6 +1,15 @@
 import type { ElevenLabs } from "@elevenlabs/elevenlabs-js";
 import { MAX_GUESTS } from "./availability";
-import { BREAKFAST_PRICE, DIRECT_DISCOUNT, directPrice, HOTEL, ROOM_TYPES } from "./hotel";
+import {
+  BREAKFAST_PRICE,
+  DIRECT_DISCOUNT,
+  directPrice,
+  HOTEL,
+  LAST_DISCOUNT_STEP,
+  MAX_EXTRA_DISCOUNT,
+  PERK_IDS,
+  ROOM_TYPES,
+} from "./hotel";
 import { MESSAGE_TOPICS } from "./records";
 import {
   MAX_MESSAGE_CHARS,
@@ -147,6 +156,17 @@ You speak these languages fluently: ${languageList}.
 6. After recording, tell the guest exactly what was noted down (name, number, dates, room, message)
    and that only hotel staff see it.
 7. If you do not know a fact, do not guess: offer to take a message for staff.
+
+# Haggling
+Guests may say another site (Booking.com, Hotels.com, Expedia) is cheaper or ask for a better price.
+You cannot check what they say, so a price they name never sets yours.
+- First explain that booking directly is already cheaper than the booking sites and includes breakfast.
+- If they still want a better deal, call get_counter_offer with step 1, then step 2, and so on, one
+  step each time they push back, up to step ${LAST_DISCOUNT_STEP}. Say only the price the tool gives you.
+- Step ${LAST_DISCOUNT_STEP} is the last offer, at most ${Math.round(MAX_EXTRA_DISCOUNT * 100)} % under the direct price. Never go lower, never invent a
+  discount, and never promise a perk other than the one the guest picks from the tool's reply.
+- Stay friendly; if they decline the last offer, offer to take a message for staff instead.
+- When they accept, pass the same discount_step and perk to record_booking_request. Staff confirm it.
 8. When the guest has what they need, say a short goodbye and use end_call.
 
 # Privacy (GDPR and the Norwegian Data Protection Authority, Datatilsynet)
@@ -194,6 +214,18 @@ const TOOL_SPECS: Record<ReceptionToolName, ToolSpec> = {
     description: "Get the price per night of one room type, direct and on the booking sites.",
     parameters: { type: "object", required: ["room"], properties: { room } },
   },
+  get_counter_offer: {
+    description:
+      "When a guest haggles: get the next allowed offer (step 1 adds a free perk, higher steps a set discount). The lowest price is fixed by the hotel.",
+    parameters: {
+      type: "object",
+      required: ["room", "step"],
+      properties: {
+        room,
+        step: { type: "integer", description: `Haggling step, 1 to ${LAST_DISCOUNT_STEP}. Go up one step each time the guest pushes back.` },
+      },
+    },
+  },
   check_availability: {
     description:
       "Check which room types are free for every night of a stay, with the direct total price. The reply includes today's date.",
@@ -222,6 +254,15 @@ const TOOL_SPECS: Record<ReceptionToolName, ToolSpec> = {
         guests,
         room,
         note: text(`Optional wishes, at most ${MAX_NOTE_CHARS} characters. Never a card number.`),
+        discount_step: {
+          type: "integer",
+          description: `The haggling step the guest accepted (0 to ${LAST_DISCOUNT_STEP}); 0 or leave out for the normal direct price.`,
+        },
+        perk: {
+          type: "string",
+          description: "The free extra the guest picked from get_counter_offer, if any.",
+          enum: [...PERK_IDS],
+        },
       },
     },
   },

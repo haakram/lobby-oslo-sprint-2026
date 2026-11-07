@@ -19,7 +19,6 @@ from tests.agent.test_executor import calls, decisions, map_file, next_task, set
 from tests.fakes.fake_wybe import FakeWybe
 
 SPILL = "Someone mentioned a spill on floor {}."
-OLD_PATCH = {frozenset({"elevator-3", "corridor-3a"})}  # wet all night; known before the spill
 
 
 def sign_moves(fake) -> list[tuple[str, str]]:
@@ -63,19 +62,55 @@ def test_new_patch_is_signed_reported_done_and_remembered(tmp_path):
     assert ex.signs_placed == {"corridor-3c": "R-001"} and "R-001" in ex.verified
 
 
-def test_only_an_old_patch_is_declined_and_the_sign_kept(tmp_path):
-    # 3a is wet all night and the robot crossed it for R-001; the spill of R-002 made no new patch.
+def test_only_an_old_patch_gets_the_sign_when_the_floor_shows_no_new_one(tmp_path):
+    # 3a is wet from the start and the robot crossed it for R-001; R-002's spill lands on the same,
+    # already wet place. Live seeds 2, 4 and 8: such a sign was credited ("Noted. Thanks." +56..+65)
+    # with the place wet 81-319 min before the message; declining it lost those points.
     requests = [("22:03:30", "R-001", "319 wants a phone charger."),
                 ("22:30:00", "R-002", SPILL.format(3))]
-    fake, session, ex = setup(tmp_path, requests=requests, wet=OLD_PATCH, spill_spots={3: None}, wet_spots=[])
+    fake, session, ex = setup(tmp_path, requests=requests, spill_spots={3: "corridor-3a"},
+                              wet_spots=[("22:00:00", "corridor-3a")])
     assert ex.run(next_task(ex, session, "R-001")).status == "done"
-    assert ex.hotel.is_wet("elevator-3", "corridor-3a")
-    before = fake.score
-    out = ex.run(next_task(ex, session, "R-002"))
-    assert out.status == "declined", out
-    assert "corridor-3a" in out.note and "before" in out.note
-    assert not [m for m in sign_moves(fake) if m[0] == "place"]  # no sign on the old patch
-    assert fake.reports["R-002"] == "declined" and not fake.false_done and fake.score == before
+    assert "corridor-3a" in ex.hotel.wet_spots()
+    task = next_task(ex, session, "R-002")
+    assert ex.wet_first_seen["corridor-3a"] < ex_seconds(task.arrived)  # old by the message's clock
+    out = ex.run(task)
+    assert out.status == "done", out
+    assert sign_moves(fake)[-1] == ("place", "corridor-3a")
+    assert fake.reports["R-002"] == "done" and not fake.false_done and "R-002" in ex.verified
+
+
+def test_of_several_old_patches_the_newest_gets_the_sign(tmp_path):
+    # Live seeds 1 (R-065) and 5 (R-052): with two old patches on the floor the one first seen wet last
+    # was this spill's; the older one answered "Noted." (-30).
+    requests = [("22:03:30", "R-001", "319 wants a phone charger."),
+                ("23:30:00", "R-002", "319 wants a towel."),
+                ("23:50:00", "R-003", SPILL.format(3))]
+    fake, session, ex = setup(tmp_path, requests=requests, spill_spots={3: "corridor-3c"},
+                              wet_spots=[("22:00:00", "corridor-3a"), ("23:00:00", "corridor-3c")])
+    assert ex.run(next_task(ex, session, "R-001")).status == "done"
+    assert ex.run(next_task(ex, session, "R-002")).status == "done"
+    assert ex.wet_first_seen["corridor-3a"] < ex.wet_first_seen["corridor-3c"]
+    out = ex.run(next_task(ex, session, "R-003"))
+    assert out.status == "done", out
+    assert sign_moves(fake)[-1] == ("place", "corridor-3c")
+    assert fake.reports["R-003"] == "done" and not fake.false_done
+
+
+def test_out_of_signs_an_old_patch_is_declined_and_no_credited_sign_moved(tmp_path):
+    # Moving a credited sign is for a new patch only: for an old one (a guess) the fetch is not made.
+    requests = [("22:01:00", "R-001", SPILL.format(2)), ("22:03:30", "R-002", "319 wants a phone charger."),
+                ("22:30:00", "R-003", SPILL.format(3))]
+    fake, session, ex = setup(tmp_path, requests=requests, spill_spots={2: "corridor-2b", 3: "corridor-3a"},
+                              wet_spots=[("22:00:00", "corridor-3a")],
+                              hotel_path=map_file(tmp_path, signs_in_storage(1)))
+    assert ex.run(next_task(ex, session, "R-001")).status == "done"
+    assert ex.run(next_task(ex, session, "R-002")).status == "done"
+    assert ex.movable_signs() == ["corridor-2b"]
+    picks = len(calls(fake, "pick"))
+    out = ex.run(next_task(ex, session, "R-003"))
+    assert out.status == "declined" and "corridor-3a" in out.note and "stock" in out.note, out
+    assert len(calls(fake, "pick")) == picks and ex.signs_placed == {"corridor-2b": "R-001"}
 
 
 def test_no_wet_patch_at_all_is_declined(tmp_path):

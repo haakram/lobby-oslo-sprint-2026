@@ -8,7 +8,7 @@ from agent.__main__ import main
 from agent.agent import make_client, run_shift
 from agent.client import WybeClient
 from agent.config import Settings
-from tests.fakes.fake_wybe import FakeWybe
+from tests.fakes.fake_wybe import TYPES_DEMO_REQUESTS, FakeWybe
 
 
 def settings(tmp_path, **kw) -> Settings:
@@ -308,7 +308,7 @@ def test_follow_up_and_its_order_are_delivered_once_through_the_loop(tmp_path):
 
 
 def test_full_night_with_the_live_request_types(tmp_path):
-    fake = FakeWybe()
+    fake = FakeWybe(requests=TYPES_DEMO_REQUESTS)  # one of every live type by 23:45 (Task 13's script)
     result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="00:30:00")
     assert fake.false_done == [] and not fake.unsafe and not fake.wrong_deliveries
     kinds = {r.rid: r.kind for r in fake._requests.values()}

@@ -170,7 +170,7 @@ every request, then handle it fast. Few live runs: each one answers a specific q
       re-review clean; 332 tests; offline seed-1 night 0 unsafe, 0 false done. PR: this one.
 - [ ] 2. ONE live run on seed 1 (same night, same requests): the score deltas show which hypothesis
       earns points; keep what scores, fix what doesn't. Per-hypothesis table → wybe-api.md § 13.
-- [ ] 3. Calibrate the offline fake to the real night (request mix and rate, cart 8, slips −15, end
+- [x] 3. Calibrate the offline fake to the real night (request mix and rate, cart 8, slips −15, end
       06:00) so offline tuning means something.
 - [ ] 4. Speed = points (a fast delivery ~45, a slow one ~21): **batching** several requests per trip
       with the stocked cart in best-route order; use idle time (restock, wait near the elevator, not
@@ -189,7 +189,9 @@ live-log calibration; plan Tasks 15–19):
       https, viewer Host check, `secrets.sh` umask 077 + clipboard auto-clear. Reviewed, 1 fix round. PR: this one.
 - [x] Task 17: wet floors are per spot (live: each spot slips once, then the robot creeps). The live slips had no
       prior warning, so routing couldn't avoid them; looking on first visit is in Task 19. Reviewed. PR: this one.
-- [ ] Task 15: calibrate the offline fake to the live night (scoring rises ~7.5 %/h, 68 requests, end 06:00).
+- [x] Task 15: offline fake calibrated to the live night: seed 1 replays the 68 live requests; scoring rises
+      ~7.5 %/h; slips once per spot; seed 2 = observed layout; other seeds vary metres and stock. Offline seed-1
+      replay 1,677 vs live 1,513. Reviewed. PR: this one.
 - [ ] Task 18: final readiness: fit a night in the 44-min cap at the shared rate, retry final starts, never end
       a final shift on errors, stricter room checks, the 10-shift topology tested offline.
 - [ ] Task 19: adapt to the night's real map and stock (practice seed 2: same rooms, other metres, stock moved).

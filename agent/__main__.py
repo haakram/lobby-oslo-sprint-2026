@@ -180,7 +180,7 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p = sub.add_parser("bench", help="score many shifts, mean and mean-drop-worst (offline unless --live)")
     p.add_argument("--seeds", default="1-10", help="e.g. 1-10 or 1-3,7")
     p.add_argument("--parallel", type=int, default=5)
-    p.add_argument("--sim-end", default="02:00:00", help="stop at this sim clock, HH:MM:SS")
+    p.add_argument("--sim-end", default="06:00:00", help="stop at this sim clock, HH:MM:SS (the night ends 06:00)")
     p.add_argument("--live", action="store_true", help="use the real server (counted)")
     p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default: the final's, 44*60*rps/10; 0 = none). The capped score is the "
                    "last score the agent observed (status/end replies); retries are not counted")

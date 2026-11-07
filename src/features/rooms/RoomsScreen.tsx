@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
+import { canAccess, useSession } from "@/features/auth";
 import { Cleaning } from "@/features/dashboard/Cleaning";
 import { placeLabel } from "@/features/dashboard/labels";
 import { RoomBoard } from "@/features/dashboard/RoomBoard";
@@ -25,6 +26,9 @@ import { assignRooms } from "./housekeeping";
 export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: string; initialRoom?: string | null }) {
   const { resolved, statusOf } = useOrderStatuses();
   const { run, night, rooms, orders, robot } = useNight(viewerUrl, resolved);
+  // Vedlikehold is the robot manager's: a receptionist would land on "Ingen tilgang", so its link is not shown.
+  const { effectiveRole } = useSession();
+  const maintenanceLink = effectiveRole === null || canAccess(effectiveRole, "/vedlikehold");
   const ready = run.status === "ready";
   const counts = rooms ? countRooms(rooms) : null;
 
@@ -148,9 +152,11 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
                 title="Ute av drift"
                 count={outOfOrder.length}
                 action={
-                  <Link href="/vedlikehold" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
-                    Åpne Vedlikehold
-                  </Link>
+                  maintenanceLink ? (
+                    <Link href="/vedlikehold" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
+                      Åpne Vedlikehold
+                    </Link>
+                  ) : undefined
                 }
               />
               {outOfOrder.length === 0 ? (

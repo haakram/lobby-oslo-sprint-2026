@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { canAccess, useSession } from "@/features/auth";
 import { Badge, type BadgeTone, buttonClasses, Sheet } from "@/ui";
 import { hhmm } from "./format";
 import {
@@ -49,6 +50,9 @@ export function RoomSheet({
   dirtyIds?: readonly string[];
   onClose: () => void;
 }) {
+  // The 3D-kart is the robot manager's: a receptionist would land on "Ingen tilgang", so the link is not shown.
+  const { effectiveRole } = useSession();
+  const map3d = effectiveRole === null || canAccess(effectiveRole, "/hotell");
   return (
     <Sheet open={open && room !== null} onClose={onClose} title={room ? `Rom ${room.number}` : ""}>
       {room && (
@@ -70,9 +74,11 @@ export function RoomSheet({
             <Link href={cleaningHref([...new Set([...dirtyIds, room.id])])} className={buttonClasses("secondary")}>
               Legg i renholdsrute
             </Link>
-            <Link href={`/hotell?rom=${encodeURIComponent(room.id)}`} className={buttonClasses("secondary")}>
-              Vis i 3D-kartet
-            </Link>
+            {map3d && (
+              <Link href={`/hotell?rom=${encodeURIComponent(room.id)}`} className={buttonClasses("secondary")}>
+                Vis i 3D-kartet
+              </Link>
+            )}
           </div>
 
           {entries.length === 0 ? (

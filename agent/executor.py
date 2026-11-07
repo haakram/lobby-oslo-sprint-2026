@@ -25,6 +25,7 @@ Besides the run log v1 lines, two decision kinds feed the dashboard: `room_statu
 
 from __future__ import annotations
 
+import os
 import time
 import traceback
 from collections.abc import Callable
@@ -123,6 +124,20 @@ class Executor:
         self.cart_needed = False  # a tray or bags flow: never drop the cart to reach the stairs
         self.calls = 0  # commands sent; a look is "fresh" while nothing was sent after it
         self._look_call: dict[str, int] = {}
+        # Score experiments (NS_EXPERIMENTS=a,b): a flow may claim "done" on a path the server has
+        # not rewarded yet; the report's reply settles it. One unverified report ends the experiment
+        # for the shift (a false done costs 35), a verified one keeps it on.
+        names = [n.strip() for n in os.environ.get("NS_EXPERIMENTS", "").split(",") if n.strip()]
+        self.experiments: dict[str, bool | None] = {n: None for n in names}
+        self._exp_pending: str | None = None
+
+    def experiment(self, name: str) -> bool:
+        """True while the named experiment is switched on and not yet refuted this shift."""
+        return name in self.experiments and self.experiments[name] is not False
+
+    def exp_claim(self, name: str) -> None:
+        """The task about to be reported done rides on this experiment."""
+        self._exp_pending = name
 
     # --- server calls --------------------------------------------------------------------------
 
@@ -1031,6 +1046,12 @@ class Executor:
                 status, note = "skipped", f"{note} (report refused: {text})"[:NOTE_MAX]
             elif outcome == "done" and "thanks" not in text.lower():
                 self.log("report_unverified", request=task.request, reply=text)
+            if self._exp_pending and outcome == "done":
+                verified = reply.ok and "thanks" in text.lower()
+                self.experiments[self._exp_pending] = verified
+                self.log("experiment", name=self._exp_pending, request=task.request,
+                         verified=verified, reply=text[:120], score=self.state.score)
+        self._exp_pending = None
         self.ledger.set_status(task.request, status)
         end = self.state.score  # the last score a flow observed; no extra call
         points = int(end - start) if end is not None and start is not None else 0

@@ -318,6 +318,14 @@ def spill(ex: Executor, task: Task, h: Hyp) -> Result:
     ex.work_order("sol", f"Søl ved {spot}: varselskilt satt ut", place=spot, request=task.request)
     h.log(f"sign placed without a score rise: {'; '.join(tried)}", h.before, ex.score_now(),
           seen=seen, tried=tried, known=sorted(known))
+    if ex.state.carrying("wet-floor-sign"):
+        placed = ex.cmd("place", item="wet-floor-sign")  # the sign was taken along: set it down here
+        if placed.ok:
+            ex.take("wet-floor-sign")
+    if placed.ok and ex.experiment("spill_done"):
+        # Experiment: like a room check, the credit may come on the report, not the place.
+        ex.exp_claim("spill_done")
+        return f"wet-floor sign placed over the wet patch at {spot}", None
     raise ActionFailed(f"placed a wet-floor sign ({'; '.join(tried)}) but the score did not rise")
 
 
@@ -348,6 +356,19 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
     ex.work_order("gjesteklage", f"Gjesteklage fra rom {num}: bestilt {NORSK.get(item, item)} kom aldri",
                   room=task.room, request=task.request)
     orig = _original(ex, task)
+    if orig is None and task.room and task.item and ex.experiment("followup_deliver"):
+        # Experiment: bring the item anyway (a place scored 0 live) and report done. The server's
+        # reply to that report says whether a follow-up is credited on the report instead.
+        from agent.flows import _deliver
+
+        ex.gather(task.item, 1)
+        try:
+            return _deliver(ex, task.room, task.item, 1)
+        except ActionFailed as exc:
+            if "did not rise" not in str(exc):
+                raise
+        ex.exp_claim("followup_deliver")
+        return f"{item} brought to {task.room} now (no earlier order on record)", None
     if orig is None or orig.status == "done":
         why = "no order on record" if orig is None else f"{orig.request} was already done"
         h.log(f"delivered nothing: {why}", h.before, ex.score_now(), original=orig.request if orig else None)

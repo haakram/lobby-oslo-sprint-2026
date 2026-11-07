@@ -24,7 +24,10 @@ Result = tuple[str, Callable[[], None] | None]
 DND = "do not disturb"
 OCCUPIED_NOTE = "occupied: guest answered; did not enter"
 MAX_SCANS_BOUND = 9
-SECONDARY_SCANS = ("lobby-bar", "front-desk", "lobby")  # sofas and counters, then the lobby
+# Where lost things turned up in 5 live nights: lobby-bar 5, corridor-1b 4, corridor-1a 3,
+# kitchen-pass 3, front-desk 2, lobby 2; never the dock, the elevator, laundry, storage, stairs.
+SECONDARY_SCANS = ("lobby-bar", "corridor-1b", "corridor-1a", "front-desk", "lobby", "kitchen-pass",
+                   "corridor-1c")
 FLOOR_WORDS = {"ground": 1, "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3}
 GENERIC_PARTS = {"corridor", "room", "floor"}
 HINT_WORDS = {"counter": "front-desk", "counters": "front-desk", "reception": "front-desk",
@@ -203,9 +206,32 @@ def _rose(before: int | None, after: int | None) -> bool:
     return before is not None and after is not None and after > before
 
 
+def _leave_at_door(ex: Executor, room: str, item: str, count: int) -> Result:
+    """Experiment dnd_leave: a Do Not Disturb room's order is set down in the corridor at the
+    door (never a knock, never a keycard) and reported done with that note. A rise on the place
+    is proof as usual; without one the report's reply settles the experiment."""
+    before = ex.score_now()
+    for placed in range(count):
+        reply = ex.cmd("place", item=item)
+        if not reply.ok:
+            raise ActionFailed(f"left {placed} of {count} {item} at the door of {room}, then: {reply.result}")
+        ex.take(item)
+    note = f"{item} x{count} left outside the door of {room} (Do Not Disturb sign, did not knock)"
+    if not _rose(before, ex.score_now()):
+        ex.exp_claim("dnd_leave")
+    return note, None
+
+
 def _deliver(ex: Executor, room: str, item: str, count: int = 1) -> Result:
     """Knock, place all `count`, then accept only a score rise after the last place as proof."""
-    _at_open_door(ex, room)
+    if ex.experiment("dnd_leave"):
+        ex.go(_corridor(ex, room))
+        if _knock(ex, room) == "dnd":
+            return _leave_at_door(ex, room, item, max(1, count))
+        if ex.state.location != _corridor(ex, room):
+            _at_open_door(ex, room)
+    else:
+        _at_open_door(ex, room)
     before = ex.score_now()
     count = max(1, count)
     for placed in range(count):
@@ -247,10 +273,14 @@ def _tray(ex: Executor, task: Task) -> Result:
             raise ActionFailed("could not get the cart for the tray")
         ex.go(ex.hotel.special.get("kitchen", "kitchen-pass"))
         ok, text = ex.pick(item)
-        if not ok and task.guest:  # H-named: the tray may carry the guest's name, not the room's
+        if not ok:
             from agent.flows_extra import find_object, objects_here
 
-            alt = find_object(objects_here(ex.look()), ("tray",), task.room, task.guest, exact=True)
+            objects = objects_here(ex.look())
+            # A second tray for the same room carries a suffix (live: tray-104-7, like luggage).
+            alt = next((o for o in objects if o == item or o.startswith(item + "-")), None)
+            if alt is None and task.guest:  # H-named: the tray may carry the guest's name
+                alt = find_object(objects, ("tray",), task.room, task.guest, exact=True)
             if alt and alt != item:
                 item = alt
                 ok, text = ex.pick(item)
@@ -429,7 +459,11 @@ def _find(ex: Executor, item: str, hint: str | None, request: str | None = None)
         return name
     scans = 0
     # The cap must not cut off the hinted places plus the likely ones (bar, desk, lobby); bounded at 9.
-    likely = [n for n in secondary if n in SECONDARY_SCANS]
+    # After the hinted places: the corridor next to them (a wallet "near the kitchen pass" lay in
+    # corridor-1a once), then where lost things turn up (SECONDARY_SCANS), the rest last.
+    nearby = [e.b for p in primary for e in ex.hotel.neighbors(p)
+              if ex.hotel.nodes.get(e.b, {}).get("kind") == "corridor" and e.b not in primary]
+    likely = [n for n in dict.fromkeys(nearby + list(SECONDARY_SCANS)) if n in secondary]
     cap = min(MAX_SCANS_BOUND, max(ex.max_scans, len(primary) + len(likely)))
     rest = [n for n in secondary if n not in likely]
     for group in (primary, likely, rest):

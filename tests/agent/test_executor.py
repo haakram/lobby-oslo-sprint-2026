@@ -329,7 +329,7 @@ def test_scan_candidates_from_hints():
         "corridor-2a", "corridor-2b", "corridor-2c", "corridor-2d"]
     assert scan_candidates(hotel, "corridor 2b")[0] == ["corridor-2b"]
     primary, secondary = scan_candidates(hotel, None)
-    assert primary == [] and secondary[:3] == ["lobby-bar", "front-desk", "lobby"]
+    assert primary == [] and secondary[:3] == ["lobby-bar", "corridor-1b", "corridor-1a"]
 
 
 def test_go_from_an_unknown_place_looks_once_then_routes(tmp_path):

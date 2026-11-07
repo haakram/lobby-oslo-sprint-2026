@@ -1,8 +1,9 @@
-"""CLI: python -m agent run|final|route|viewer|bench|tune."""
+"""CLI: python -m agent run|final|route|viewer|bench|tune|replaybench."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import threading
@@ -253,6 +254,31 @@ def cmd_tune(args, settings: Settings, factory: ClientFactory) -> int:
     return 0
 
 
+def cmd_replaybench(args, settings: Settings, factory: ClientFactory) -> int:
+    """Real nights rebuilt from their live logs, replayed offline (never the live server)."""
+    from agent import replaybed
+    from agent.bench import parse_seeds
+
+    seeds = parse_seeds(args.seeds) if args.seeds else None
+    nights = replaybed.select_nights(args.logs, seeds)
+    if not nights:
+        print("no full live night found", file=sys.stderr)
+        return 1
+    scoring = replaybed.load_scoring(Path(args.scoring)) if args.scoring else replaybed.load_scoring()
+    if args.fit:
+        scoring = replaybed.fit_scoring(replaybed.select_nights())
+        replaybed.SCORING_FILE.write_text(json.dumps(scoring, indent=1, sort_keys=True) + "\n")
+        print(f"scoring refitted on {scoring['fitted_on_nights']} nights -> {replaybed.SCORING_FILE}")
+    rows = replaybed.replay_bench(
+        nights, code_dir=Path(args.code).resolve() if args.code else None,
+        vs_dir=Path(args.vs).resolve() if args.vs else None, fidelity=args.fidelity,
+        code_cache=Path(args.code_cache) if args.code_cache else None, parallel=args.parallel, scoring=scoring,
+        runs_dir=Path(args.runs_dir) if args.runs_dir else None,
+    )
+    print(replaybed.bench_table(rows, show_flags=args.flags))
+    return 0
+
+
 def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m agent")
     sub = ap.add_subparsers(dest="command", required=True)
@@ -291,6 +317,21 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
                    "last score the agent observed (status/end replies); retries are not counted")
     p.add_argument("--optimise-capped", action="store_true", help="pick the best score at the call cap")
     p.set_defaults(fn=cmd_tune)
+    p = sub.add_parser("replaybench", help="replay real live nights offline: does a change help on real nights?")
+    p.add_argument("--logs", default=None, help="a glob, folder or file of run logs; default 'all': every full live "
+                   "night under ~/Oslo_Sprint_26/temp/runs and ~/oslo-wt/*/temp/runs")
+    p.add_argument("--seeds", default=None, help="only these seeds, the newest night of each, e.g. 16,23")
+    p.add_argument("--code", default=None, help="root of another checkout whose agent package plays (default: this one)")
+    p.add_argument("--vs", default=None, help="a second checkout root to replay the same nights with (prints the gain)")
+    p.add_argument("--fidelity", action="store_true", help="replay each night with the commit that played it live "
+                   "(agent/data/replay_codes.json, exported with git archive)")
+    p.add_argument("--code-cache", default=None, help="where --fidelity unpacks old commits (default temp/replay_code)")
+    p.add_argument("--parallel", type=int, default=4)
+    p.add_argument("--scoring", default=None, help="per-kind reward fit (default agent/data/replay_scoring.json)")
+    p.add_argument("--fit", action="store_true", help="refit the reward on every full live night first and save it")
+    p.add_argument("--flags", action="store_true", help="list what each reconstruction had to assume")
+    p.add_argument("--runs-dir", default=None, help="where the replays' run logs go (default temp/replay_runs)")
+    p.set_defaults(fn=cmd_replaybench)
     args = ap.parse_args(argv)
     return args.fn(args, load_settings(), client_factory or shift.make_client)
 

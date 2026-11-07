@@ -41,10 +41,19 @@ from agent.world import DEFAULT_MAP, clock_to_seconds
 REPO = Path(__file__).resolve().parent.parent
 SCORING_FILE = Path(__file__).parent / "data" / "replay_scoring.json"
 # Where the team's live logs live: this checkout, the main checkout and every sibling worktree.
+# NS_REPLAY_HOME overrides the home folder (tests point it at a fixture tree).
+_HOME = Path(os.environ.get("NS_REPLAY_HOME") or Path.home())
 DEFAULT_LOG_GLOBS = [
     str(REPO / "temp" / "runs" / "w2-*.jsonl"),
-    str(REPO.parent / "Oslo_Sprint_26" / "temp" / "runs" / "w2-*.jsonl"),
-    str(REPO.parent / "oslo-wt" / "*" / "temp" / "runs" / "w2-*.jsonl"),
+    str(_HOME / "Oslo_Sprint_26" / "temp" / "runs" / "w2-*.jsonl"),
+    str(_HOME / "oslo-wt" / "*" / "temp" / "runs" / "w2-*.jsonl"),
+]
+# Every live start is appended to temp/live_runs.jsonl (agent/agent.py); offline runs write the same
+# w2-<hex> log names, so only shift ids in one of these ledgers count as real nights.
+LIVE_LEDGER_GLOBS = [
+    str(REPO / "temp" / "live_runs.jsonl"),
+    str(_HOME / "Oslo_Sprint_26" / "temp" / "live_runs.jsonl"),
+    str(_HOME / "oslo-wt" / "*" / "temp" / "live_runs.jsonl"),
 ]
 START_CLOCK = "22:00:00"
 END_CLOCK = "06:00:00"
@@ -69,6 +78,9 @@ _SKIP = re.compile(r"^Skip (R-\d+)\b")
 _ELEV_ROOM = re.compile(r"next to the elevator\? For (R-\d+) that's (\d{3})")
 _LOCKED_OUT = re.compile(r"locked out of (?:room[\s-]?)?(\d{3})")
 _COUNT = re.compile(r"^(.*\S)\s+x(\d+)$")
+_SORRY = re.compile(r"^Sorry: (\d{3})\.$")  # the manager's answer to a reply on a described room
+_DESCRIBED = re.compile(r"next to the elevator on floor (\d)")
+_LOST_NAME = re.compile(rf"^({'|'.join(LOST_BASES)})(?:-(\d+))?$")
 
 
 def _hms(sec: int) -> str:
@@ -99,6 +111,7 @@ class Night:
     calls: int = 0
     agent_played: bool = False  # the agent ran tasks (not a hand-driven probe)
     scores: dict = field(default_factory=dict)  # clock -> score, every status reply (for partial nights)
+    final_score: int | None = None  # the score in the server's shift_over reply
 
 
 def find_logs(extra: list[str] | None = None) -> dict[str, list[str]]:
@@ -159,6 +172,8 @@ def load_night(shift: str, paths: list[str]) -> Night:
                 last_score = r["score"]
                 if e.get("clock"):
                     night.scores[e["clock"]] = last_score
+                if r.get("shift_over") is True:  # the server's own final score (the end line may lag:
+                    night.final_score = r["score"]  # stranded -200 never reached the agent's state)
         elif t == "decision" and e.get("kind") in ("task_start", "task_done"):
             night.agent_played = True
         elif t == "end":
@@ -168,9 +183,64 @@ def load_night(shift: str, paths: list[str]) -> Night:
                 night.live_score = e["score"]
                 night.live_served = e.get("requests_served")
     night.requests = len(rids)
+    if night.final_score is not None:
+        night.live_score = night.final_score
     if night.live_score is None:
         night.live_score = last_score
     return night
+
+
+def live_shift_ids(ledgers: list[str] | None = None) -> set[str]:
+    """Every shift id a live start was logged for (temp/live_runs.jsonl in each checkout)."""
+    ids: set[str] = set()
+    for pattern in ledgers or LIVE_LEDGER_GLOBS:
+        for path in glob.glob(pattern):
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    try:
+                        shift = json.loads(line).get("shift")
+                    except (ValueError, AttributeError):
+                        continue
+                    if isinstance(shift, str):
+                        ids.add(shift)
+    return ids
+
+
+def is_full(night: Night) -> bool:
+    """A night the server ended at 06:00 that the agent played (not a probe, not stranded)."""
+    return night.ended and night.agent_played and night.reason == "server ended: time" \
+        and "05:59:00" <= night.last_clock <= "06:00:59"
+
+
+def started(night: Night) -> float:
+    return float(night.events[0].get("t") or 0) if night.events else 0.0
+
+
+def select_nights(logs: str | None = None, seeds: list[int] | None = None, *,
+                  ledgers: list[str] | None = None) -> list[Night]:
+    """The real nights to replay: `logs` = a glob, a folder or a file of run logs, or None/'all' for
+    every live log in the default places (only shift ids a live ledger lists; offline runs write the same
+    file names). Copies of one shift are merged, only full nights kept; `seeds` keeps the newest night of
+    each listed seed, in that order."""
+    if logs in (None, "all"):
+        found = find_logs()
+        live = live_shift_ids(ledgers)
+        found = {shift: paths for shift, paths in found.items() if shift in live}
+    else:
+        p = Path(logs)
+        paths = glob.glob(str(p / "*.jsonl")) if p.is_dir() else glob.glob(logs)
+        found = collections.defaultdict(list)
+        for path in sorted(paths):
+            found[Path(path).name.removesuffix(".jsonl")].append(path)
+    nights = [n for n in (load_night(shift, paths) for shift, paths in found.items()) if is_full(n)]
+    nights.sort(key=lambda n: (n.seed or 0, started(n)))
+    if seeds:
+        newest = {}
+        for n in nights:
+            if n.seed in seeds and (n.seed not in newest or started(n) > started(newest[n.seed])):
+                newest[n.seed] = n
+        nights = [newest[s] for s in seeds if s in newest]
+    return nights
 
 
 def load_nights(extra: list[str] | None = None, *, min_requests: int = 1) -> list[Night]:
@@ -205,16 +275,17 @@ class Scenario:
     absent_rooms: list[str]
     untidy_rooms: list[str]
     guests: dict[str, str]
-    hidden: dict[str, list]  # item -> [place, clock available]
+    hidden: dict[str, list]  # item -> [place, clock available]; found by scan
     wet_spots: list[list]  # [clock, place]
     spill_spots: dict[str, str]  # request id -> the spot its sign must cover
     blocked: list[list]  # [a, b, from clock, to clock or None]
     people: list[list]  # [clock, place, text]
     noise_sources: dict[str, str | None]
-    elevator_rooms: dict[str, str]  # floor -> room "next to the elevator"
+    elevator_rooms: dict[str, str]  # floor or request id -> room "next to the elevator" (live: per request)
     end_clock: str
     flags: list[str] = field(default_factory=list)
     live: dict = field(default_factory=dict)
+    visible: dict[str, list] = field(default_factory=dict)  # item -> [place, clock]; listed by look
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=1, sort_keys=True)
@@ -231,8 +302,10 @@ class Scenario:
             "hidden": {k: tuple(v) for k, v in self.hidden.items()}, "wet": set(),
             "wet_spots": [tuple(w) for w in self.wet_spots], "spill_spots": dict(self.spill_spots),
             "blocked_edges": [tuple(b) for b in self.blocked], "people_events": [tuple(p) for p in self.people],
-            "noise_sources": dict(self.noise_sources), "elevator_rooms": {int(k): v for k, v in self.elevator_rooms.items()},
+            "noise_sources": dict(self.noise_sources),
+            "elevator_rooms": {(int(k) if str(k).isdigit() else k): v for k, v in self.elevator_rooms.items()},
             "end_clock": self.end_clock, "live_names": True, "scoring": scoring,
+            "visible": {k: tuple(v) for k, v in self.visible.items()}, "live": True,
         }
 
 
@@ -323,20 +396,35 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
     sign_results: dict[str, tuple[str, str]] = {}  # rid -> (sign place, report reply)
     last_place_sign: tuple[str, str] | None = None
     asked_floor: dict[str, int] = {}
+    task_rid: str | None = None  # the request the agent was working on (its task_start decision)
+    pending_place: tuple[str | None, str, str, int] | None = None
+    deliveries: list[tuple[str | None, str, str, int]] = []  # (request, room, item, score delta)
+    first_seen: dict[str, tuple[str, str, str]] = {}  # lost item -> ("look" | "scan", place, clock)
+    picked: set[str] = set()
+    sorry: dict[str, str] = {}  # request -> room, the manager's answer to a reply
+    nav_slips: list[tuple[str, list[str]]] = []  # a slip somewhere on a navigate path
+    visits: list[tuple[str, str]] = []  # (clock, place) every place the robot passed
+    elev_by_rid: dict[str, str] = {}  # request -> room, the clerk's answer
 
     def wet(place: str, when: str) -> None:
         if place and place not in wet_first:
             wet_first[place] = when
 
     for e in night.events:
+        if e.get("type") == "decision" and e.get("kind") == "task_start":
+            task_rid = (e.get("data") or {}).get("request")
         if e.get("type") != "call":
             continue
         cmd, args, r, ok = e.get("cmd"), e.get("args") or {}, e.get("result"), e.get("ok")
+        if isinstance(r, dict) and isinstance(r.get("outcome"), dict | str) and r.get("shift_over"):
+            r = r["outcome"]  # the action that ended the shift
         if e.get("clock"):
             clk = e["clock"]
         for ev in e.get("events") or []:
-            if ev.get("type") == "slip" and cmd in ("move", "navigate") and isinstance(r, dict):
+            if ev.get("type") == "slip" and cmd == "move" and isinstance(r, dict):
                 wet(r.get("at"), clk)
+            elif ev.get("type") == "slip" and cmd == "navigate" and isinstance(r, dict):
+                nav_slips.append((clk, [p for p in r.get("path") or [r.get("at")] if p][1:]))
             if ev.get("type") == "person":
                 where = r.get("at") if isinstance(r, dict) and r.get("at") else loc
                 people[(clk, where, str(ev.get("text")))] = None
@@ -345,6 +433,9 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                 if not isinstance(m, dict) or not m.get("request"):
                     continue
                 key = (m["request"], str(m.get("text", "")))
+                if sm := _SORRY.match(re.sub(r"^R-\d+: ", "", key[1])):
+                    sorry[m["request"]] = f"room-{sm[1]}"
+                    continue
                 if key not in messages:
                     messages[key] = [m.get("at") or clk, m["request"], re.sub(r"^R-\d+: ", "", key[1]),
                                      str(m.get("from") or MANAGER)]
@@ -354,7 +445,14 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                 rid, outcome, reply, before = pending_report
                 reports[rid] = (outcome, reply, r["score"] - before)
                 pending_report = None
+            if pending_place is not None:
+                deliveries.append(pending_place[:3] + (r["score"] - pending_place[3],))
+                pending_place = None
             last_score = r["score"]
+        if cmd == "place" and ok and str(args.get("where", "")).startswith("room-") and last_score is not None:
+            pending_place = (task_rid, str(args["where"]), str(args.get("item")), last_score)
+        if cmd == "pick" and ok:
+            picked.add(str(args.get("item")))
         if cmd == "report" and ok and last_score is not None:
             pending_report = (str(args.get("request")), str(args.get("outcome")), str(r)[:14], last_score)
             if args.get("outcome") == "done" and last_place_sign is not None:
@@ -363,8 +461,10 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
         if cmd in ("move", "navigate") and ok and isinstance(r, dict) and r.get("at"):
             if cmd == "move" and isinstance(r.get("metres"), int | float) and r["metres"] > 0:
                 move_metres[(loc, r["at"])] = int(r["metres"])
-            if "slipped" in str(r.get("notice", "")):
+            if "slipped" in str(r.get("notice", "")) and cmd == "move":
                 wet(r["at"], clk)
+            for p in (r.get("path") or [r["at"]]) if cmd == "navigate" else [r["at"]]:
+                visits.append((clk, p))
             loc = r["at"]
         if cmd == "move" and not ok and "Closed off" in str(r) and args.get("to"):
             blocked_seen[tuple(sorted((loc, str(args["to"]))))].append(clk)
@@ -409,6 +509,9 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                     guests[str(p.get("name"))] = m[1]
             if here not in first_look_objects and not here.startswith("room-"):
                 first_look_objects[here] = _parse_objects(r.get("objects") or [])
+            for name in _parse_objects(r.get("objects") or []):
+                if _LOST_NAME.match(name) and name not in first_seen and name not in picked:
+                    first_seen[name] = ("look", here, clk)
         if cmd == "knock" and ok and isinstance(r, str):
             door = str(args.get("door"))
             if "Do Not Disturb" in r:
@@ -422,12 +525,11 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
             if m := _IS_IN.match(answer):
                 guests[m[1]] = m[2]
             if m := _ELEV_ROOM.search(answer):
-                floor = asked_floor.get(m[1]) or _floor_of(m[2])
-                if floor:
-                    elev_rooms[floor] = f"room-{m[2]}"
+                elev_by_rid.setdefault(m[1], f"room-{m[2]}")
         if cmd == "scan" and ok and isinstance(r, dict):
             for item in r.get("found") or []:
                 scan_found.append((clk, loc, str(item)))
+                first_seen.setdefault(str(item), ("scan", loc, clk))
         if cmd == "place" and args.get("item") == "wet-floor-sign":
             target = str(args.get("where") or loc)
             sign_places.append((clk, target, str(r)))
@@ -435,6 +537,17 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                 last_place_sign = (clk, target)
         if cmd == "use" and ok and args.get("item") == "keycard" and args.get("on"):
             pass
+
+    # a slip during navigate happened somewhere on its path: on the node otherwise known to be wet
+    for clock, path in nav_slips:
+        known = sorted((clock_to_seconds(wet_first[p]), p) for p in path if p in wet_first)
+        spot = known[0][1] if known else next((p for p in reversed(path) if not p.startswith("room-")), None)
+        if spot is None:
+            continue
+        if not known:
+            flags.append(f"slip at {clock} on a navigate {'-'.join(path)}: spot unknown; {spot} assumed")
+        if spot not in wet_first or clock_to_seconds(clock) < clock_to_seconds(wet_first[spot]):
+            wet_first[spot] = clock
 
     # requests, in arrival order
     requests: list[list] = []
@@ -529,26 +642,32 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                 absent.add(room)
                 flags.append(f"{room}: empty assumed (a room check or bags request says so; never knocked)")
 
-    # lost items: the Nth request for an item is item-N; where the scan found it, else the hint
+    # lost items: the Nth request for an item is item-N (failed ones count); it lies where the log first
+    # saw it: listed by a look (visible; a scan there says "Nothing hidden here") or found by a scan
+    # (hidden); never seen -> hidden at the hint
     hidden: dict[str, list] = {}
+    visible: dict[str, list] = {}
     counts: dict[str, int] = collections.Counter()
-    found_by_name = {item: (c, p) for c, p, item in scan_found}
     for clock, rid, text, sender in requests:
         if MANAGER not in sender or " lost " not in f" {text} ":
             continue
         base_item = _lost_base(text)
         counts[base_item] += 1
         name = base_item if counts[base_item] == 1 else f"{base_item}-{counts[base_item]}"
-        if name in found_by_name:
-            hidden[name] = [found_by_name[name][1], clock]
+        if name in first_seen:
+            how, place, seen = first_seen[name]
+            if how == "look":
+                visible[name] = [place, min(clock, seen, key=clock_to_seconds)]
+            else:
+                hidden[name] = [place, clock]
         else:
             place = _hint_place(text) or "lobby"
             hidden[name] = [place, clock]
-            flags.append(f"{rid} {name}: never found by a scan; hidden at the hint ({place})")
-    for item, (c, p) in found_by_name.items():
-        if item not in hidden:
-            hidden[item] = [p, START_CLOCK]
-            flags.append(f"{item} found at {p} ({c}) without a matching request; hidden there from the start")
+            flags.append(f"{rid} {name}: never seen; hidden at the hint ({place})")
+    for item, (how, p, c) in first_seen.items():
+        if item not in hidden and item not in visible:
+            (visible if how == "look" else hidden)[item] = [p, START_CLOCK]
+            flags.append(f"{item} seen at {p} ({c}) without a matching request; there from the start")
 
     # wet spots and the spill requests' own spots
     spill_spots: dict[str, str] = {}
@@ -569,9 +688,11 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                            if p not in claimed and nodes.get(p, {}).get("floor") == floor and clock_to_seconds(c) >= arrived)
             if later and later[0][0] - arrived <= 90 * 60:
                 spot = later[0][1]
-        if spot is None:
-            free = [c for c in corridors_by_floor[floor] if c not in claimed and c not in wet_first]
-            spot = (free or corridors_by_floor[floor])[0]
+        if spot is None:  # never seen: somewhere the robot did not pass after the request arrived
+            passed = {p for c, p in visits if clock_to_seconds(c) >= arrived}
+            places = corridors_by_floor[floor] + [f"elevator-{floor}", f"stairwell-{floor}"]
+            free = [c for c in places if c not in claimed and c not in wet_first and c not in passed and c in nodes]
+            spot = (free or [c for c in places if c not in claimed and c in nodes] or places)[0]
             flags.append(f"{rid} spill on floor {floor}: its spot was never seen; {spot} assumed")
         spill_spots[rid] = spot
         claimed.add(spot)
@@ -602,21 +723,46 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
         else:
             flags.append(f"{rid} noise near {room}: the noisy room was never seen; the fake's default (next room) used")
 
+    # the room "next to the elevator" is per request [obs]: the clerk's or the manager's answer for that
+    # request, else the room a delivery for it scored in; a room where its delivery lost points is not it
+    elevator: dict[str, str] = {}
+    by_floor: dict[int, list[str]] = collections.defaultdict(list)
+    for (rid, room) in list(elev_by_rid.items()) + list(sorry.items()):
+        elevator.setdefault(rid, room)
+        if (f := _floor_of(room)) is not None:
+            by_floor[f].append(room)
+    for clock, rid, text, sender in requests:
+        m = _DESCRIBED.search(text)
+        if MANAGER not in sender or not m or rid in elevator:
+            continue
+        floor = int(m[1])
+        good = [room for r_, room, _, d in deliveries if r_ == rid and d > 0]
+        bad = {room for r_, room, _, d in deliveries if r_ == rid and d < 0}
+        if good:
+            elevator[rid] = good[0]
+            continue
+        options = [room for room in by_floor.get(floor, []) if room not in bad] + \
+            [room for room in room_slots[f"corridor-{floor}a"] if room not in bad]
+        elevator[rid] = options[0]
+        flags.append(f"{rid} next to the elevator on floor {floor}: never answered; {options[0]} assumed"
+                     + (f" (not {', '.join(sorted(bad))}: a delivery there lost points)" if bad else ""))
     for floor in (1, 2, 3):
         if floor not in elev_rooms:
-            elev_rooms[floor] = room_slots[f"corridor-{floor}a"][0]
+            elev_rooms[floor] = (by_floor.get(floor) or room_slots[f"corridor-{floor}a"])[0]
     people_list = sorted(([c, p, t] for (c, p, t) in people), key=lambda x: clock_to_seconds(x[0]))
 
     return Scenario(
         shift=night.shift, seed=night.seed, requests=requests, hotel=hotel, dnd_rooms=sorted(dnd),
         absent_rooms=sorted(absent), untidy_rooms=sorted(untidy), guests=guests, hidden=hidden,
         wet_spots=wet_spots, spill_spots=spill_spots, blocked=blocked, people=people_list,
-        noise_sources=noise_sources, elevator_rooms={str(k): v for k, v in sorted(elev_rooms.items())},
-        end_clock=end_clock, flags=flags,
+        noise_sources=noise_sources,
+        elevator_rooms={**{str(k): v for k, v in sorted(elev_rooms.items())}, **dict(sorted(elevator.items()))},
+        end_clock=end_clock, flags=flags, visible=visible,
         live={"score": night.live_score, "served": night.live_served, "calls": night.calls,
               "last_clock": night.last_clock, "ended": night.ended, "reason": night.reason,
               "requests": night.requests, "agent_played": night.agent_played,
-              "reports": {rid: list(v) for rid, v in reports.items()}},
+              "reports": {rid: list(v) for rid, v in reports.items()},
+              "wrong_deliveries": sum(d < 0 for *_, d in deliveries)},
     )
 
 
@@ -735,7 +881,8 @@ from agent.client import WybeClient
 from agent.config import Settings
 from pathlib import Path
 spec = importlib.util.spec_from_file_location("replay_offline", job["offline_path"])
-offline = importlib.util.module_from_spec(spec); spec.loader.exec_module(offline)
+offline = importlib.util.module_from_spec(spec); sys.modules["replay_offline"] = offline
+spec.loader.exec_module(offline)
 kw = job["fake_kwargs"]
 kw["requests"] = [tuple(r) for r in kw["requests"]]
 for k in ("dnd_rooms", "absent_rooms", "untidy_rooms", "wet"):
@@ -744,7 +891,11 @@ kw["hidden"] = {k: tuple(v) for k, v in kw["hidden"].items()}
 kw["wet_spots"] = [tuple(w) for w in kw["wet_spots"]]
 kw["blocked_edges"] = [tuple(b) for b in kw["blocked_edges"]]
 kw["people_events"] = [tuple(p) for p in kw["people_events"]]
-kw["elevator_rooms"] = {int(k): v for k, v in kw["elevator_rooms"].items()}
+kw["elevator_rooms"] = {(int(k) if str(k).isdigit() else k): v for k, v in kw["elevator_rooms"].items()}
+kw["visible"] = {k: tuple(v) for k, v in kw.get("visible", {}).items()}
+import inspect
+accepted = set(inspect.signature(offline.FakeWybe.__init__).parameters)
+kw = {k: v for k, v in kw.items() if k in accepted}
 fake = offline.FakeWybe(**kw)
 settings = Settings(url="https://replay.invalid/", key="offline", anthropic_key=None, budget_usd=0.0, max_rps=1000.0,
                     final_armed=False, runs_dir=Path(job["runs_dir"]))
@@ -790,7 +941,7 @@ class ReplayResult:
 
 def replay_night(scenario: Scenario, *, code_dir: Path | None = None, scoring: dict | None = None,
                  sim_end: str | None = None, call_cap: int = 0, runs_dir: Path | None = None,
-                 python: str | None = None) -> ReplayResult:
+                 python: str | None = None, env: dict | None = None) -> ReplayResult:
     """One night in a child process; `code_dir` is the checkout whose `agent` package plays."""
     code_dir = Path(code_dir or REPO).resolve()
     runs_dir = Path(runs_dir or REPO / "temp" / "replay_runs")
@@ -805,17 +956,20 @@ def replay_night(scenario: Scenario, *, code_dir: Path | None = None, scoring: d
             "code_dir": str(code_dir), "offline_path": str(Path(__file__).parent / "offline.py"),
             "fake_kwargs": scenario.fake_kwargs(scoring), "seed": scenario.seed, "runs_dir": str(runs_dir),
             "sim_end": sim_end or scenario.end_clock, "call_cap": call_cap,
-        }))
-        env = dict(os.environ)
-        env.pop("FINAL_ARMED", None)
-        env["WYBE_NIGHTSHIFT_KEY"] = "offline"
+        }, default=lambda o: sorted(o) if isinstance(o, set | frozenset) else str(o)))
+        child_env = {k: v for k, v in os.environ.items() if not k.startswith("NS_")}
+        child_env.pop("FINAL_ARMED", None)
+        child_env.pop("ANTHROPIC_API_KEY", None)  # a replay never spends on Claude
+        child_env["WYBE_NIGHTSHIFT_KEY"] = "offline"
+        child_env.update(env or {})
         proc = subprocess.run([python or sys.executable, "-I", str(worker), str(job), str(out)],
-                              cwd=str(code_dir), env=env, capture_output=True, text=True, timeout=1800, check=False)
+                              cwd=str(code_dir), env=child_env, capture_output=True, text=True, timeout=1800,
+                              check=False)
         data = json.loads(out.read_text()) if out.exists() else {"error": (proc.stderr or proc.stdout)[-400:]}
     live = scenario.live.get("score")
-    score = data.get("score")
-    if score is None and data.get("fake_score") is not None:
-        score = data["fake_score"]
+    score = data.get("fake_score")  # the fake's own score: the agent's last status can lag the server's
+    if score is None:
+        score = data.get("score")
     gap = None
     if isinstance(live, int | float) and live and isinstance(score, int | float):
         gap = (score - live) / abs(live)
@@ -859,4 +1013,129 @@ def format_table(results: list[ReplayResult]) -> str:
                      f"{r.replay_score if r.replay_score is not None else '-':>6} {gap:>7} {r.calls or 0:>5} "
                      f"{r.capped_score if r.capped_score is not None else '-':>6} {r.served if r.served is not None else '-':>6} "
                      f"{rep[:28]:28} {pen[:30]:30} {r.seconds:>5.0f}" + (f"  ERROR {r.error}" if r.error else ""))
+    return "\n".join(lines)
+
+
+# --- the bench: real nights, one or two code versions -------------------------------------------------------
+
+CODES_FILE = Path(__file__).parent / "data" / "replay_codes.json"
+CODE_CACHE = REPO / "temp" / "replay_code"
+
+
+def played_by(night: Night, codes: dict | None = None) -> dict | None:
+    """{"commit", "env"?} of the code that played `night` live (agent/data/replay_codes.json), or None."""
+    if codes is None:
+        try:
+            codes = json.loads(CODES_FILE.read_text())
+        except (OSError, ValueError):
+            return None
+    return codes.get(night.shift[:12])
+
+
+def export_code(commit: str, cache: Path | None = None) -> Path:
+    """`git archive <commit> agent/` unpacked into <cache>/<commit> (once): a checkout root for `--code`."""
+    dest = Path(cache or CODE_CACHE) / commit
+    if not (dest / "agent" / "agent.py").exists():
+        dest.mkdir(parents=True, exist_ok=True)
+        archive = subprocess.run(["git", "-C", str(REPO), "archive", commit, "agent/"], capture_output=True,
+                                 check=True).stdout
+        import io
+        import tarfile
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            tar.extractall(dest, filter="data")
+    return dest
+
+
+@dataclass
+class BenchRow:
+    night: Night
+    scenario: Scenario
+    result: ReplayResult | None  # the candidate (--code, default this checkout; the live code with --fidelity)
+    base: ReplayResult | None = None  # --vs
+    code: str = ""
+    note: str = ""
+
+
+def replay_bench(nights: list[Night], *, code_dir: Path | None = None, vs_dir: Path | None = None,
+                 fidelity: bool = False, code_cache: Path | None = None, parallel: int = 4,
+                 scoring: dict | None = None, runs_dir: Path | None = None) -> list[BenchRow]:
+    """Every night reconstructed, then replayed by `code_dir` (default this checkout) and, with
+    `vs_dir`, by a second checkout; with `fidelity`, each by the commit that played it live."""
+    rows = [BenchRow(n, reconstruct(n), None) for n in nights]
+    jobs: list[tuple[BenchRow, str, Path, dict | None]] = []
+    for row in rows:
+        if fidelity:
+            meta = played_by(row.night)
+            if meta is None:
+                row.note = "no commit known for this night (agent/data/replay_codes.json)"
+                continue
+            row.code = meta["commit"] + ("+" + ",".join(f"{k}={v}" for k, v in meta.get("env", {}).items())
+                                         if meta.get("env") else "")
+            jobs.append((row, "result", export_code(meta["commit"], code_cache), meta.get("env")))
+        else:
+            row.code = str(code_dir or "this checkout")
+            jobs.append((row, "result", Path(code_dir or REPO), None))
+            if vs_dir:
+                jobs.append((row, "base", Path(vs_dir), None))
+
+    def run(job: tuple[BenchRow, str, Path, dict | None]) -> None:
+        row, slot, code, env = job
+        setattr(row, slot, replay_night(row.scenario, code_dir=code, scoring=scoring, runs_dir=runs_dir, env=env))
+
+    with ThreadPoolExecutor(max_workers=max(1, parallel)) as pool:
+        list(pool.map(run, jobs))
+    return rows
+
+
+def bench_table(rows: list[BenchRow], *, show_flags: bool = False) -> str:
+    """Per night: seed, live score, replay score, delta; then the means and the mean absolute error."""
+    vs = any(r.base is not None for r in rows)
+    head = f"{'seed':>4}  {'shift':12}  {'live':>6}  {'replay':>6}  {'delta':>6}  {'delta%':>7}"
+    head += f"  {'vs':>6}  {'cand-vs':>7}" if vs else ""
+    head += f"  {'flags':>5}  code"
+    lines = [head]
+    deltas, pct, gains, lives, reps = [], [], [], [], []
+    for r in rows:
+        live = r.night.live_score
+        rep = r.result.replay_score if r.result else None
+        line = f"{r.night.seed if r.night.seed is not None else '?':>4}  {r.night.shift[:12]:12}  {live if live is not None else '-':>6}  "
+        if isinstance(rep, int | float) and isinstance(live, int | float):
+            d = rep - live
+            deltas.append(d)
+            lives.append(live)
+            reps.append(rep)
+            if live:
+                pct.append(d / abs(live))
+            line += f"{rep:>6}  {d:>+6}  {(d / abs(live) * 100 if live else 0):>+6.1f}%"
+        else:
+            line += f"{rep if rep is not None else '-':>6}  {'-':>6}  {'-':>7}"
+        if vs:
+            base = r.base.replay_score if r.base else None
+            if isinstance(base, int | float) and isinstance(rep, int | float):
+                gains.append(rep - base)
+                line += f"  {base:>6}  {rep - base:>+7}"
+            else:
+                line += f"  {'-':>6}  {'-':>7}"
+        line += f"  {len(r.scenario.flags):>5}  {r.code}"
+        for res in (r.result, r.base):
+            if res is not None and res.error:
+                line += f"  ERROR {res.error[:120]!r}"
+            if res is not None and res.penalties.get("stranded"):
+                line += "  STRANDED"
+        if r.note:
+            line += f"  ({r.note})"
+        lines.append(line)
+        if show_flags:
+            lines += [f"        - {f}" for f in r.scenario.flags]
+    if deltas:
+        n = len(deltas)
+        mae = sum(abs(d) for d in deltas) / n
+        worst = max(range(n), key=lambda i: abs(pct[i]) if i < len(pct) else 0)
+        lines.append(f"mean  live {sum(lives) / n:.1f}  replay {sum(reps) / n:.1f}  delta {sum(deltas) / n:+.1f}  "
+                     f"mean abs error {mae:.1f} ({sum(abs(p) for p in pct) / len(pct) * 100:.1f} %)  "
+                     f"within 10 %: {sum(abs(p) <= 0.10 for p in pct)}/{len(pct)}  "
+                     f"worst {pct[worst] * 100:+.1f} %  nights {n}")
+    if gains:
+        lines.append(f"candidate - vs: mean {sum(gains) / len(gains):+.1f} over {len(gains)} nights  "
+                     f"(better on {sum(g > 0 for g in gains)}, worse on {sum(g < 0 for g in gains)})")
     return "\n".join(lines)

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useRef } from "react";
+import { useHotelMap } from "@/features/hotel";
 import { formatClock, formatDate, formatDayClock } from "@/features/reception/format";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, PageHeader, Skeleton, Stat } from "@/ui";
 import { hhmm } from "./format";
@@ -47,8 +48,9 @@ function isToday(iso: string): boolean {
 export function ReceptionDesk({ viewerUrl }: { viewerUrl?: string }) {
   const run = useDashboardRun(viewerUrl);
   const night = useMemo(() => (run.status === "ready" ? foldNight(run.lines) : null), [run.status, run.lines]);
-  const rooms = useMemo(() => (night ? selectRooms(night) : null), [night]);
-  const robot = useMemo(() => (night ? selectRobot(night) : null), [night]);
+  const map = useHotelMap(run.status === "ready" ? run.lines : null);
+  const rooms = useMemo(() => (night ? selectRooms(night, undefined, map) : null), [night, map]);
+  const robot = useMemo(() => (night ? selectRobot(night, map) : null), [night, map]);
   const requests = useMemo(() => (night ? guestRequests(night.tasks) : null), [night]);
   const { state: calls, retry } = useReceptionCalls();
 

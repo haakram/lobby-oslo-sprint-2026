@@ -4,11 +4,12 @@ import { placeLabel, type HotelMap } from "./hotelMap";
 import { STATUS_LABEL, type RoomReport, type RoomStatus } from "./nightRooms";
 import type { TourLeg } from "./types";
 
+// TODO(phase-2): read from src/ui/roomStatus.ts once the design lead lands it (UX audit X2).
 export const STATUS_BADGE: Record<RoomStatus, BadgeTone> = {
   klar: "success",
   opptatt: "neutral",
-  ma_vaskes: "warning",
-  ikke_forstyrr: "danger",
+  ma_vaskes: "accent",
+  ikke_forstyrr: "warning",
 };
 
 function via(map: HotelMap, leg: TourLeg): string {
@@ -60,7 +61,7 @@ export function CleaningStops({
                   {via(map, leg)}
                 </p>
                 {report?.status === "ikke_forstyrr" && (
-                  <p className="mt-1 text-sm text-danger">Skilt på døra i natt. Bank på før du går inn.</p>
+                  <p className="mt-1 text-sm text-warning">Skilt på døra i natt. Bank på før du går inn.</p>
                 )}
               </div>
               <Button

@@ -1,4 +1,4 @@
-import hotel from "@/features/hotel/hotel_seed1.json";
+import { BASE_HOTEL, type HotelMap, nodeFloorIn, roomsOf } from "@/features/hotel";
 import type { RunLine } from "@/features/nightshift/runlog";
 import { KNOWN_STATUSES, type KnownStatus, type RoomStatus, STATUS_ORDER } from "./labels";
 
@@ -9,22 +9,25 @@ import { KNOWN_STATUSES, type KnownStatus, type RoomStatus, STATUS_ORDER } from 
  * always give the same screen, so a replay engine can drive it by moving `upto`.
  */
 
-type HotelNode = { floor: number; kind: string; x: number; z: number };
-export const HOTEL_NODES = hotel.nodes as Record<string, HotelNode>;
-export const HOTEL_EDGES = hotel.edges as { a: string; b: string; m: number }[];
-
 export type HotelRoom = { id: string; number: string; floor: number };
 
-/** Every room on the map, by floor then number. */
-export const HOTEL_ROOMS: readonly HotelRoom[] = Object.entries(HOTEL_NODES)
-  .filter(([, node]) => node.kind === "room")
-  .map(([id, node]) => ({ id, number: id.replace(/^room-/, ""), floor: node.floor }))
-  .sort((a, b) => a.floor - b.floor || a.number.localeCompare(b.number, "nb", { numeric: true }));
+/** Every room on a map, by floor then number. The map is tonight's (`useHotelMap(lines)`). */
+export function roomsOfMap(map: HotelMap): HotelRoom[] {
+  return roomsOf(map)
+    .map((node) => ({ id: node.id, number: node.id.replace(/^room-/, ""), floor: node.floor }))
+    .sort((a, b) => a.floor - b.floor || a.number.localeCompare(b.number, "nb", { numeric: true }));
+}
 
-export const FLOORS: readonly number[] = [...new Set(HOTEL_ROOMS.map((room) => room.floor))].sort((a, b) => a - b);
+export function floorsOfRooms(rooms: readonly HotelRoom[]): number[] {
+  return [...new Set(rooms.map((room) => room.floor))].sort((a, b) => a - b);
+}
 
-export function nodeFloor(node: string | null | undefined): number | null {
-  return (node && HOTEL_NODES[node]?.floor) || null;
+/** The seed-1 base hotel, for screens with no night loaded yet. */
+export const HOTEL_ROOMS: readonly HotelRoom[] = roomsOfMap(BASE_HOTEL);
+export const FLOORS: readonly number[] = floorsOfRooms(HOTEL_ROOMS);
+
+export function nodeFloor(node: string | null | undefined, map: HotelMap = BASE_HOTEL): number | null {
+  return node ? nodeFloorIn(map, node) : null;
 }
 
 export type Outcome = "running" | "done" | "failed";
@@ -252,12 +255,12 @@ export type RoomView = HotelRoom & {
   openOrders: number;
 };
 
-export function selectRooms(night: Night, resolved: ReadonlySet<string> = NONE): RoomView[] {
+export function selectRooms(night: Night, resolved: ReadonlySet<string> = NONE, map: HotelMap = BASE_HOTEL): RoomView[] {
   const open = new Map<string, number>();
   for (const order of night.workOrders) {
     if (order.room && !resolved.has(order.id)) open.set(order.room, (open.get(order.room) ?? 0) + 1);
   }
-  return HOTEL_ROOMS.map((room) => {
+  return roomsOfMap(map).map((room) => {
     const seen = night.rooms.get(room.id);
     return {
       ...room,
@@ -305,13 +308,13 @@ export type Kpis = {
   score: number;
 };
 
-export function selectKpis(night: Night, resolved: ReadonlySet<string> = NONE): Kpis {
-  const rooms = selectRooms(night);
+export function selectKpis(night: Night, resolved: ReadonlySet<string> = NONE, map: HotelMap = BASE_HOTEL): Kpis {
+  const rooms = selectRooms(night, NONE, map);
   const open = selectWorkOrders(night).filter((order) => !resolved.has(order.id));
   return {
     roomsReady: rooms.filter((room) => room.status === "klar").length,
     roomsDirty: rooms.filter((room) => room.status === "ma_vaskes").length,
-    roomsTotal: HOTEL_ROOMS.length,
+    roomsTotal: rooms.length,
     ordersOpen: open.length,
     guestsWaiting: open.filter((order) => order.type === "gjesteklage" || order.robot === "failed").length,
     tasksDone: night.tasksDone,
@@ -337,7 +340,7 @@ export type RobotView = {
   queue: QueuedRequest[];
 };
 
-export function selectRobot(night: Night): RobotView {
+export function selectRobot(night: Night, map: HotelMap = BASE_HOTEL): RobotView {
   const startedTasks = night.started.map((id) => night.tasks.get(id)).filter((task): task is Task => !!task);
   const current = [...startedTasks].reverse().find((task) => task.outcome === "running") ?? null;
   const finished = startedTasks.filter((task) => task.outcome !== "running");
@@ -346,7 +349,7 @@ export function selectRobot(night: Night): RobotView {
   return {
     clock: night.clock,
     location: night.location,
-    floor: nodeFloor(night.location),
+    floor: nodeFloor(night.location, map),
     battery: night.battery,
     hands: night.hands,
     cart: night.cart,

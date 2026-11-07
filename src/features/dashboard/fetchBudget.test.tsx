@@ -10,7 +10,7 @@ import { CALLS_URL, NOT_SET_UP_QUIET_MS } from "./useReceptionCalls";
 
 // The public /api is rate limited (30 requests a minute per IP): the overview must ask little and
 // never loop. These tests count requests over minutes of fake time.
-const DEMO = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+const DEMO = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
 const VIEWER = "http://127.0.0.1:8765";
 const MINUTE = 60_000;
 

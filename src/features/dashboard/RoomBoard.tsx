@@ -1,10 +1,8 @@
 import { Card, cx, Skeleton } from "@/ui";
 import { hhmm } from "./format";
 import { STATUS_LOOK, STATUS_ORDER } from "./labels";
-import { countRooms, FLOORS, HOTEL_ROOMS, type RoomView } from "./selectors";
+import { countRooms, FLOORS, floorsOfRooms, HOTEL_ROOMS, type RoomView } from "./selectors";
 
-/** Top floor first, like the key rack behind the desk. */
-const FLOORS_DOWN = [...FLOORS].reverse();
 
 /**
  * Romstatus, the key rack: every room a pigeonhole on its floor, the floor number big in the
@@ -27,6 +25,8 @@ export function RoomBoard({
   className?: string;
 }) {
   const counts = rooms ? countRooms(rooms) : null;
+  // Top floor first, like the key rack behind the desk. Tonight's floors once the night is in.
+  const floorsDown = [...(rooms ? floorsOfRooms(rooms) : FLOORS)].reverse();
 
   return (
     <section aria-labelledby="rooms-heading" data-enter className={className}>
@@ -57,7 +57,7 @@ export function RoomBoard({
         </ul>
 
         <div className="mt-6 flex flex-col divide-y divide-line">
-          {FLOORS_DOWN.map((floor) => {
+          {floorsDown.map((floor) => {
             const onFloor = rooms
               ? rooms.filter((room) => room.floor === floor)
               : HOTEL_ROOMS.filter((room) => room.floor === floor);

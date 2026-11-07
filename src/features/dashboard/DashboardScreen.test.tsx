@@ -8,7 +8,7 @@ import { foldNight, selectKpis, selectRooms } from "./selectors";
 
 // The home page is the overview now (it replaced the card launcher); these tests cover what it shows.
 // The demo night may be swapped for a better run: the screen must show whatever it holds.
-const DEMO = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+const DEMO = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
 const NIGHT = foldNight(parseRunLog(DEMO).lines);
 const KPIS = selectKpis(NIGHT);
 const ROOMS = selectRooms(NIGHT);

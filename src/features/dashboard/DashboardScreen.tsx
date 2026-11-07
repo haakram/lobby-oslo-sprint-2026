@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHotelMap } from "@/features/hotel";
 import { useHotelReplay } from "@/features/replay";
 import { Button, buttonClasses, Card, EmptyState, ErrorState } from "@/ui";
 import { Cleaning } from "./Cleaning";
@@ -54,6 +55,8 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   const run = useDashboardRun(viewerUrl);
   const ready = run.status === "ready";
   const night = useMemo(() => (ready ? foldNight(run.lines) : null), [ready, run.lines]);
+  // Tonight's hotel, built from the run log: the rooms the night mentions, not a fixed seed.
+  const map = useHotelMap(ready ? run.lines : null);
   // The 3D hotel follows the same night; it stands at the end of it, like the figures.
   const replay = useHotelReplay(run.source === "live" ? "live" : "demo", { viewerUrl });
 
@@ -76,10 +79,10 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   );
   const undo = useCallback((id: string) => setStatuses((current) => ({ ...current, [id]: "tildelt" })), []);
 
-  const rooms = useMemo(() => (night ? selectRooms(night, resolved) : null), [night, resolved]);
+  const rooms = useMemo(() => (night ? selectRooms(night, resolved, map) : null), [night, resolved, map]);
   const orders = useMemo(() => (night ? selectWorkOrders(night) : null), [night]);
-  const kpis = useMemo(() => (night ? selectKpis(night, resolved) : null), [night, resolved]);
-  const robot = useMemo(() => (night ? selectRobot(night) : null), [night]);
+  const kpis = useMemo(() => (night ? selectKpis(night, resolved, map) : null), [night, resolved, map]);
+  const robot = useMemo(() => (night ? selectRobot(night, map) : null), [night, map]);
 
   const [sheet, setSheet] = useState<{ room: string; open: boolean } | null>(null);
   const openRoom = useCallback((room: string | null) => {

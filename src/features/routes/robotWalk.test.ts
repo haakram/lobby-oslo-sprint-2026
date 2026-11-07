@@ -70,6 +70,23 @@ describe("robotWalk", () => {
     expect(second).toMatchObject({ request: "R-002", outcome: "failed", metres: 4, minutes: 19 });
   });
 
+  it("counts a walk into a room the map lacks, and lists that room", () => {
+    const night = robotWalk(
+      parseRunValues([
+        state("22:00:00", "corridor-3a"),
+        move("22:00:05", "room-327", { at: "room-327", metres: 4 }),
+        move("22:00:10", "corridor-3a", { at: "corridor-3a", metres: 4 }),
+      ]).lines,
+      map,
+    );
+    expect(night.metres).toBe(8);
+    expect(night.offMap).toEqual(["room-327"]);
+    expect(night.moves.map((m) => [m.from, m.to])).toEqual([
+      ["corridor-3a", "room-327"],
+      ["room-327", "corridor-3a"],
+    ]);
+  });
+
   it("totals the tasks by kind, most metres first", () => {
     expect(totalsByKind(robotWalk(NIGHT, map).tasks)).toEqual([
       { kind: "amenity", label: "Utstyr til rom", tasks: 1, metres: 14, rides: 1, minutes: 1 },
@@ -78,11 +95,18 @@ describe("robotWalk", () => {
   });
 
   it("is empty for a log without moves", () => {
-    expect(robotWalk([], map)).toEqual({ moves: [], tasks: [], metres: 0, rides: 0, between: { metres: 0, rides: 0 } });
+    expect(robotWalk([], map)).toEqual({
+      moves: [],
+      tasks: [],
+      metres: 0,
+      rides: 0,
+      between: { metres: 0, rides: 0 },
+      offMap: [],
+    });
   });
 
   it("reads the demo night: the task metres and the walks between add up to the whole", () => {
-    const text = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+    const text = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
     const night = robotWalk(parseRunLog(text).lines, map);
     expect(night.moves.length).toBeGreaterThan(100);
     expect(night.tasks.length).toBeGreaterThan(10);

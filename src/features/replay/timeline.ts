@@ -1,5 +1,6 @@
+import { BASE_HOTEL, type HotelMap, hotelForRun, nodeFloorIn, roomsOf } from "@/features/hotel/mapFromRun";
 import type { RunLine } from "@/features/nightshift/runlog";
-import { DOCK_NODE, HOTEL_NODES, HOTEL_ROOMS, itemName, nodeFloor, placeName, roomNumber, taskKindName } from "./hotel";
+import { DOCK_NODE, itemName, placeName, roomNumber, taskKindName } from "./hotel";
 
 /**
  * The replay engine: a run log v1 becomes a timeline over sim time (seconds since 22:00), and a
@@ -88,6 +89,8 @@ export type CarryChange = { t: number; hands: string[]; cart: string[] | null };
 export type StateSample = { t: number; score: number; battery: number | null };
 
 export type Timeline = {
+  /** The hotel this night was played in: the seed-1 base shaped by what the log revealed. */
+  map: HotelMap;
   shift: string | null;
   mode: string | null;
   seed: number | null;
@@ -353,7 +356,9 @@ function moveTarget(args: Record<string, unknown> | null, result: unknown): stri
 }
 
 export function buildTimeline(lines: readonly RunLine[]): Timeline {
+  const map = hotelForRun(lines);
   const timeline: Timeline = {
+    map,
     shift: null,
     mode: null,
     seed: null,
@@ -393,14 +398,14 @@ export function buildTimeline(lines: readonly RunLine[]): Timeline {
   };
 
   const arrive = (t1: number, to: string, metres: number | null) => {
-    if (!HOTEL_NODES[to]) return;
+    if (!map.nodes[to]) return;
     if (node === null) {
       node = to;
       timeline.startNode = to;
       return;
     }
     if (to === node) return;
-    const sameFloor = nodeFloor(node) === nodeFloor(to);
+    const sameFloor = nodeFloorIn(map, node) === nodeFloorIn(map, to);
     const travel = metres !== null ? metres / WALK_METRES_PER_SECOND : sameFloor ? 0 : ELEVATOR_RIDE_SECONDS;
     const t0 = Math.max(lastT, t1 - travel);
     timeline.moves.push({ t0: Math.min(t0, t1), t1, from: node, to });
@@ -531,7 +536,7 @@ export function buildTimeline(lines: readonly RunLine[]): Timeline {
             text: humanise(str(data.text) ?? ""),
             request,
           });
-          if (room && HOTEL_NODES[room]) timeline.roomChanges.push({ t, room, status: "avvik", note: str(data.text) });
+          if (room && map.nodes[room]) timeline.roomChanges.push({ t, room, status: "avvik", note: str(data.text) });
         }
         const described = describeDecision(line.kind, data, requests);
         if (described) pushEvent(t, line.kind, described, request, true);
@@ -594,7 +599,7 @@ export function robotPoseAt(timeline: Timeline, t: number, out: RobotPose): Robo
     out.from = out.to = out.node = timeline.startNode;
     out.progress = 1;
     out.moving = false;
-    out.floor = nodeFloor(timeline.startNode);
+    out.floor = nodeFloorIn(timeline.map, timeline.startNode);
     return out;
   }
   const move = timeline.moves[index];
@@ -609,7 +614,7 @@ export function robotPoseAt(timeline: Timeline, t: number, out: RobotPose): Robo
     out.moving = true;
     out.node = out.progress < 0.5 ? move.from : move.to;
   }
-  out.floor = nodeFloor(out.node);
+  out.floor = nodeFloorIn(timeline.map, out.node);
   return out;
 }
 
@@ -649,7 +654,7 @@ export function snapshotAt(timeline: Timeline, t: number): Snapshot {
   const carry = carryIndex >= 0 ? timeline.carry[carryIndex] : null;
 
   const rooms: Record<string, RoomView> = {};
-  for (const room of HOTEL_ROOMS) rooms[room.id] = { status: "ukjent", note: null, since: null };
+  for (const room of roomsOf(timeline.map ?? BASE_HOTEL)) rooms[room.id] = { status: "ukjent", note: null, since: null };
   for (const change of timeline.roomChanges) {
     if (change.t > t) break;
     rooms[change.room] = { status: change.status, note: change.note, since: change.t };

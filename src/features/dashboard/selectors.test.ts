@@ -18,7 +18,7 @@ import {
 } from "./selectors";
 
 // The demo night (seed 1) the app ships with: the agent's real practice shift, 22:00 to 06:00.
-const DEMO = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
+const DEMO = parseRunLog(readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8")).lines;
 
 function indexOf(predicate: (line: RunLine) => boolean): number {
   const index = DEMO.findIndex(predicate);

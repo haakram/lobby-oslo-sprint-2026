@@ -195,8 +195,8 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
   const robot = snapshot?.robot ?? null;
   const height = compact ? "h-[clamp(300px,52vw,460px)]" : "h-[clamp(400px,60vh,760px)]";
   const modes: Array<{ mode: FloorMode; text: string; name: string }> = [
-    // The visible word starts the name (WCAG 2.5.3), and it is not a second "Følg" next to Følg robot.
-    { mode: "auto", text: "Robotens", name: "Robotens etasje" },
+    // The visible word starts the accessible name (WCAG 2.5.3), so "klikk Følg" reaches it by voice.
+    { mode: "auto", text: "Følg", name: "Følg robotens etasje" },
     ...floors.map((floor) => ({ mode: floor as FloorMode, text: String(floor), name: `${floor}. etasje` })),
     { mode: "all", text: "Alle", name: "Alle etasjer" },
     { mode: "exploded", text: "Spredt", name: "Etasjene spredt" },

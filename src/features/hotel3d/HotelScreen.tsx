@@ -68,7 +68,9 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
   }, [ready, setT]);
 
   return (
-    <main data-surface="dark" className="flex min-h-0 flex-1 flex-col bg-bg text-text lg:h-dvh">
+    // lg:max-h-dvh: flex-1 alone sizes main to its content, so a long drawer (a room's card) would stretch
+    // the page and the map with it; capped, the drawer scrolls on its own beside a map that stays put.
+    <main data-surface="dark" className="flex min-h-0 flex-1 flex-col bg-bg text-text lg:h-dvh lg:max-h-dvh">
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-line px-4 py-2 sm:px-6 lg:px-6">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="text-xl font-bold tracking-[-0.02em]">3D-kart</h1>
@@ -150,7 +152,8 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
             id="hotel-drawer"
             aria-label="Status nå"
             className={cx(
-              "flex min-w-0 flex-col gap-4 overflow-y-auto border-t border-line bg-bg p-4 sm:p-6",
+              // relative: sr-only text inside is positioned against the drawer, so it can't stretch the page.
+              "relative flex min-w-0 flex-col gap-4 overflow-y-auto border-t border-line bg-bg p-4 sm:p-6",
               "lg:w-[400px] lg:shrink-0 lg:border-t-0 lg:border-l lg:p-5",
               !drawer && "lg:hidden",
             )}

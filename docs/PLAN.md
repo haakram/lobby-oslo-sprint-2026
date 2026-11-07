@@ -165,7 +165,9 @@ The #1 team's 3,448 over seed 1's 68 requests is ~50 points per request. We scor
 failed 39 of 68 requests (unknown types), not because we were slow (the robot idled ~60 %). So: handle
 every request, then handle it fast. Few live runs: each one answers a specific question.
 
-- [ ] 1. Review + merge Task 13 (WIP `574f22d` on `hamad/na-t13`): every new request type.
+- [x] 1. Review + merge Task 13: every new request type as a logged hypothesis, door look before every knock,
+      `room_status`/`work_order` lines. Verified: task review (opus) + fix round 1 (12 findings) + scoped
+      re-review clean; 332 tests; offline seed-1 night 0 unsafe, 0 false done. PR: this one.
 - [ ] 2. ONE live run on seed 1 (same night, same requests): the score deltas show which hypothesis
       earns points; keep what scores, fix what doesn't. Per-hypothesis table → wybe-api.md § 13.
 - [ ] 3. Calibrate the offline fake to the real night (request mix and rate, cart 8, slips −15, end
@@ -186,7 +188,7 @@ Design and the 2-minute demo script: `docs/superpowers/specs/2026-11-07-ops-dash
 One story, five beats: the night on the room grid → send the cleaners → count the linen → the guest
 speaks up → close. Every beat solves a named hotel problem and maps to a prize.
 
-- [~] **Track A:** the agent logs `room_status` and `work_order` decisions (in Task 13: WIP 574f22d on hamad/na-t13, awaiting review) (additive run-log
+- [x] **Track A:** the agent logs `room_status` and `work_order` decisions (Task 13, reviewed; shapes in ARCHITECTURE § 4.3) (additive run-log
       `[contract]`, ARCHITECTURE § 4.3). [owner: Hamad]
 - [x] **Track A:** viewer CORS for the app's local origin (Task 14, merged) (`http://localhost:3000`) on `/api/*`, as
       ShirazIQ asked in PR #7. [owner: Hamad]

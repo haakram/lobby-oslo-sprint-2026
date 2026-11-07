@@ -153,3 +153,25 @@ def test_crashed_night_is_recorded_and_printed(tmp_path, capsys):
     res = run_bench(make, [1], parallel=1)
     assert res.scores == {1: 0} and res.errors == {1: "ValueError"}
     assert "ValueError" in capsys.readouterr().out
+
+
+NEW_KINDS = {Kind.BAGS, Kind.NOISE, Kind.FOLLOWUP, Kind.SPILL}
+
+
+def test_offline_scenario_has_the_live_types_after_midnight():
+    after, before, named = set(), set(), 0
+    for seed in range(1, 6):
+        sc = offline_scenario(seed)
+        for t, rid, text in sc["requests"]:
+            task = parse_request(rid, text, t)
+            assert task.kind is not Kind.UNKNOWN, text
+            late = clock_to_seconds(t) >= clock_to_seconds("00:13:00")
+            (after if late else before).add(task.kind)
+            if task.guest and task.room is None and task.kind is not Kind.LOST_ITEM:
+                named += 1
+                assert task.guest in sc["guests"], task.guest
+        assert sc["people_events"] and sc["spill_spots"]
+        FakeWybe(**sc)
+    assert NEW_KINDS <= after
+    assert not NEW_KINDS & before  # the recon never saw them before ~00:13
+    assert named >= 3

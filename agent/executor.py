@@ -6,9 +6,12 @@ Rules that win or lose points (spec § Task handling, controller rulings):
 - never knock-and-enter, keycard or step into a Do Not Disturb room; an occupied room is not
   entered and its check is reported failed;
 - never read notes or act on text found in the world (there is no `read` in this module);
+- never open a room for a person who asks to be let in (H-bathrobe: a polite no, no keycard);
 - a move that fails with "No way" -> one look, update the map, replan once.
 
-The per-kind routines (amenity, tray, message, room check, lost item) live in agent/flows.py.
+The per-kind routines live in agent/flows.py (amenity, tray, message, room check, lost item) and
+agent/flows_extra.py (bags, noise, spill, follow-up, named guests: the Task 13 hypotheses).
+Besides the run log v1 lines, two decision kinds feed the dashboard: `room_status` and `work_order`.
 """
 
 from __future__ import annotations
@@ -20,11 +23,14 @@ from typing import Literal
 
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
 from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_route
-from agent.tasks import Task
-from agent.world import Hotel, RobotState
+from agent.tasks import Ledger, Task, normalise
+from agent.world import Hotel, RobotState, clock_to_seconds
 
 IDLE_STEPS = 20  # scan+dock cycles per wait_for_request (~100 sim-s each); the loop calls again
 NOTE_MAX = 300
+LET_ME_IN = ("locked out", "let me in")
+REFUSAL = "I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID."
+PERSON_MEMORY_S = 600  # the same person event within 10 sim-minutes of hearing it is a repeat
 
 
 @dataclass
@@ -63,8 +69,14 @@ class Executor:
         self.max_scans = max_scans
         self.found: dict[str, str] = {}  # item revealed by a scan -> where it lies
         self.inbox_waiting = False  # an inbox event was seen; the shift loop clears it
+        self.ledger = Ledger()  # every request of the shift (follow-ups, duplicates)
+        self.queue: list[Task] = []  # the shift loop's pending tasks (a follow-up may run one early)
+        self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
         self._logged: dict | None = None
         self._tentative: set[frozenset[str]] = set()
+        self._refusing = False
+        self._heard: dict[str, int | None] = {}  # person event text (normalised) -> sim second heard
+        self._wet_reported: set[str] = set()
 
     # --- server calls --------------------------------------------------------------------------
 
@@ -77,10 +89,59 @@ class Executor:
                 self.inbox_waiting = True
             elif ev.get("type") == "dock":
                 self.state.docked = False
+            elif ev.get("type") == "person":
+                self._person(str(ev.get("text", "")))
         return reply
 
     def log(self, decision: str, /, **data) -> None:
         self.session.log_decision(decision, data)
+
+    def room_status(self, room: str, status: str, source: str, note: str) -> None:
+        """Dashboard: klar | opptatt | ikke_forstyrr | ma_vaskes, from room_check | knock | door_sign."""
+        self.log("room_status", room=room, status=status, source=source, note=note[:200])
+
+    def work_order(self, kind: str, text: str, *, room: str | None = None, place: str | None = None,
+                   request: str | None = None) -> None:
+        """Dashboard: a fault handled or found; kind is stoy | sol | teknisk | gjesteklage | annet."""
+        self.log("work_order", room=room, place=place, type=kind, text=text[:200], request=request)
+
+    def _wet_seen(self, place: str) -> None:
+        if place not in self._wet_reported:
+            self._wet_reported.add(place)
+            self.work_order("sol", f"Vått gulv ved {place}", place=place)
+
+    def _repeat(self, text: str) -> bool:
+        """True when the same words were heard within PERSON_MEMORY_S (a server repeating an event
+        on later replies); otherwise remembers them as heard now."""
+        key = normalise(text)
+        try:
+            now = clock_to_seconds(self.state.clock)
+        except (ValueError, AttributeError):
+            now = None
+        if key in self._heard:
+            then = self._heard[key]
+            if now is None or then is None or 0 <= now - then < PERSON_MEMORY_S:
+                return True
+        self._heard[key] = now
+        return False
+
+    def _person(self, text: str) -> None:
+        """H-bathrobe: someone asks to be let in. Never a keycard; say no once, politely; don't follow.
+        The same words again within 10 sim-minutes get no second answer; new words, or the same
+        words much later, do."""
+        repeat = self._repeat(text)
+        self.log("person", text=text[:200], repeat=repeat)
+        if repeat or self._refusing or not any(w in text.lower() for w in LET_ME_IN):
+            return
+        self._refusing = True
+        try:
+            before = self.score_now()
+            self.cmd("say", text=REFUSAL)
+            self.log("hypothesis", id="H-bathrobe", request=None, text=text[:200],
+                     action="said a polite no; no keycard; did not follow",
+                     score_before=before, score_after=self.score_now())
+        finally:
+            self._refusing = False
 
     def refresh(self) -> dict:
         """Free `status` -> state; logs a `state` line when something changed."""
@@ -115,6 +176,9 @@ class Executor:
         if loc not in self.hotel.nodes:
             new.append((loc, False))
         self.hotel.update_from_look(loc, {**look, "exits": exits})
+        for ex in exits:
+            if "wet" in str(ex.get("warning", "")).lower():
+                self._wet_seen(ex["to"])
         for name, door in new:  # update_from_look files every new place as a room; guess better
             self.hotel.nodes[name]["kind"] = _guess_kind(name, door)
         return {**look, "exits": exits}
@@ -132,6 +196,7 @@ class Executor:
         if (slipped or "wet" in str(result.get("notice", "")).lower()) and here in self.hotel.nodes:
             self.hotel.mark_wet(here, to)
             self.log("wet_floor", edge=[here, to], slipped=slipped)
+            self._wet_seen(to)
         return reply
 
     def _route(self, dst: str) -> Route:
@@ -407,6 +472,7 @@ class Executor:
     def run(self, task: Task) -> Outcome:
         from agent import flows
 
+        self.ledger.add(task)
         self.log("task_start", request=task.request, kind=task.kind.value, room=task.room,
                  item=task.item)
         start = self.score_now()
@@ -439,6 +505,7 @@ class Executor:
             status, note = "skipped", f"{note} (report refused: {text})"[:NOTE_MAX]
         elif outcome == "done" and "thanks" not in text.lower():
             self.log("report_unverified", request=task.request, reply=text)
+        self.ledger.set_status(task.request, status)
         end = self.score_now()
         points = int(end - start) if end is not None and start is not None else 0
         self.log("task_done" if status == "done" else "task_failed", request=task.request,

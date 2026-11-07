@@ -14,7 +14,10 @@ UNREACHABLE_S = 1.0e6
 
 
 def _base_values() -> dict[str, float]:
-    return {"amenity": 20, "message": 20, "tray": 33, "room_check": 32, "lost_item": 40}
+    # bags/noise/spill: Task 13 hypotheses (bags: the false "done" cost 35); a follow-up earns
+    # nothing itself, so it ranks by its tiny cost (it is mostly a report).
+    return {"amenity": 20, "message": 20, "tray": 33, "room_check": 32, "lost_item": 40,
+            "bags": 35, "noise": 25, "spill": 25, "followup": VALUE_FLOOR}
 
 
 def _cart_stock() -> dict[str, int]:
@@ -22,7 +25,8 @@ def _cart_stock() -> dict[str, int]:
 
 
 def _action_seconds() -> dict[str, float]:
-    return {"amenity": 25, "message": 20, "tray": 25, "room_check": 50, "lost_item": 145}
+    return {"amenity": 25, "message": 20, "tray": 25, "room_check": 50, "lost_item": 145,
+            "bags": 50, "noise": 60, "spill": 150, "followup": 1}
 
 
 @dataclass
@@ -39,13 +43,21 @@ class Params:
 
     @classmethod
     def from_json(cls, s: str) -> Params:
-        return cls(**json.loads(s))
+        data = json.loads(s)
+        for key, default in (("base_values", _base_values), ("action_seconds", _action_seconds)):
+            if isinstance(data.get(key), dict):  # older files lack the newer kinds
+                data[key] = {**default(), **data[key]}
+        return cls(**data)
 
 
 def _stops(task: Task, state: RobotState, hotel: Hotel) -> list[str] | None:
     """Ordered places to visit before the action is done; None if impossible."""
     stops: list[str] = []
-    if task.kind is Kind.TRAY and not state.has_cart:
+    if task.kind is Kind.FOLLOWUP:
+        return stops  # mostly a report; a waiting original is planned on its own
+    if task.room is None and task.guest:
+        stops.append(hotel.special.get("clerk", "front-desk"))  # ask the clerk for the room
+    if task.kind in (Kind.TRAY, Kind.BAGS) and not state.has_cart:
         stops.append("laundry")
     if task.kind is Kind.AMENITY and task.item and not state.carrying(task.item):
         place = hotel.stock_location(task.item)
@@ -56,6 +68,17 @@ def _stops(task: Task, state: RobotState, hotel: Hotel) -> list[str] | None:
         stops.append("kitchen-pass")
     if task.kind is Kind.ROOM_CHECK and not state.carrying("keycard"):
         stops.append("front-desk")
+    if task.kind is Kind.BAGS:
+        stops.append(hotel.special.get("clerk", "front-desk"))
+    if task.kind is Kind.SPILL:
+        if not state.carrying("wet-floor-sign"):
+            place = hotel.stock_location("wet-floor-sign")
+            if place is None:
+                return None
+            stops.append(place)
+        landing = next((e for e in hotel.elevators() if hotel.floor(e) == task.floor), None)
+        if landing:
+            stops.append(landing)
     if task.kind is Kind.LOST_ITEM:
         hint = (task.area_hint or "").lower()
         found = next((n for n in sorted(hotel.nodes) if n in hint), None)
@@ -76,8 +99,8 @@ def estimate_seconds(task: Task, state: RobotState, hotel: Hotel, params: Params
     cart = state.has_cart
     here, total = state.location, 0.0
     for i, stop in enumerate(stops):
-        # a tray trip to the laundry is how the robot gets the cart
-        with_cart = cart or (task.kind is Kind.TRAY and i > 0)
+        # a tray (or bags) trip to the laundry is how the robot gets the cart
+        with_cart = cart or (task.kind in (Kind.TRAY, Kind.BAGS) and "laundry" in stops[:i])
         try:
             total += route_seconds(hotel, here, stop, with_cart=with_cart)
         except NoRoute:

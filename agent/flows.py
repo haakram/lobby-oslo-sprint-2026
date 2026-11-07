@@ -268,7 +268,9 @@ def lost_item(ex: Executor, task: Task) -> Result:
     stock = {name for items in ex.hotel.stock.values() for name in items}
     carried = [c for c in ex.state.hands + (ex.state.cart or [])  # a stock charger is no lost phone
                if c == item or (c not in stock and same_item(item, c))]
-    name = carried[0] if carried else _find(ex, item, task.area_hint)
+    carried = [c for c in carried if _verdict(ex, task.request, c) != "other"]
+    name = carried[0] if carried else _find(ex, item, task.area_hint, task.request)
+    _delivered_lost(ex).add(name)
     return _deliver(ex, room, name)  # under the name it was picked up as
 
 
@@ -298,11 +300,47 @@ def same_item(a: str, b: str) -> bool:
     return bool(wa and wb) and (wa <= wb or wb <= wa)
 
 
-def _pick_found(ex: Executor, item: str, near: list[str] = ()) -> str | None:
+def _delivered_lost(ex: Executor) -> set[str]:
+    """Lost items handed over this shift: one item is never delivered to a second request."""
+    if not hasattr(ex, "lost_delivered"):
+        ex.lost_delivered = set()
+    return ex.lost_delivered
+
+
+def _verdict(ex: Executor, request: str | None, name: str) -> str:
+    """Whose is a numbered lost item? Live logs (seeds 1, 2, 5): the Nth lost-item request of an
+    item gets the Nth item: glasses, glasses-2, ... (suffix 1 = no suffix), failed requests count.
+    'match' = it is this request's, 'other' = another known request's (or already delivered),
+    'free' = nobody known owns it."""
+    if name in _delivered_lost(ex):
+        return "other"
+    entries = ex.ledger.entries
+    if request is None or request not in entries:
+        return "free"
+    m = re.fullmatch(r"(.+?)(?:-(\d+))?", name)
+    base, nth = m[1], int(m[2] or 1)
+    ids = sorted((e.request for e in entries.values()
+                  if e.kind is Kind.LOST_ITEM and e.item and same_item(e.item, base)),
+                 key=lambda r: (len(r), r))
+    if nth > len(ids):
+        return "free"
+    return "match" if ids[nth - 1] == request else "other"
+
+
+def _pick_found(ex: Executor, item: str, near: list[str] = (), request: str | None = None) -> str | None:
     """Pick item where a scan revealed it (now or earlier); the name it was picked as, or None.
-    Of several matches (toy-2, toy-3), the one lying where the hint points goes first."""
+    Only this request's item (see _verdict), else the one nobody owns; of several, the one lying
+    where the hint points; if that leaves two, none (a wrong one costs 20)."""
     names = [f for f in ex.found if same_item(item, f)]
-    names.sort(key=lambda f: ex.found[f] not in near)
+    verdicts = {f: _verdict(ex, request, f) for f in names}
+    mine = [f for f in names if verdicts[f] == "match"]
+    free = [f for f in names if verdicts[f] == "free"]
+    if not mine and len(free) > 1:
+        free = [f for f in free if ex.found[f] in near]
+        if len(free) > 1:
+            ex.log("lost_item_ambiguous", item=item, candidates=sorted(free))
+            return None
+    names = mine[:1] or free
     name = names[0] if names else None
     if name is None:
         return None
@@ -315,9 +353,9 @@ def _pick_found(ex: Executor, item: str, near: list[str] = ()) -> str | None:
     return name
 
 
-def _find(ex: Executor, item: str, hint: str | None) -> str:
+def _find(ex: Executor, item: str, hint: str | None, request: str | None = None) -> str:
     primary, secondary = scan_candidates(ex.hotel, hint)
-    if name := _pick_found(ex, item, primary):
+    if name := _pick_found(ex, item, primary, request):
         return name
     scans = 0
     # The cap must not cut off the hinted places plus the likely ones (bar, desk, lobby); bounded at 9.
@@ -339,7 +377,7 @@ def _find(ex: Executor, item: str, hint: str | None) -> str:
                 continue
             ex.scan()
             scans += 1
-            if name := _pick_found(ex, item, primary):
+            if name := _pick_found(ex, item, primary, request):
                 return name
     raise ActionFailed(f"{item} not found after {scans} scans")
 

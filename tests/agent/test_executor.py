@@ -1142,3 +1142,87 @@ def test_lost_toy_hinted_at_the_bar_is_found_as_numbered_toy(tmp_path):
     fake._requests["R-001"].item = "toy-2"
     out = ex.run(task)
     assert out.status == "done", out
+
+
+# --- Task 28: the Nth lost-item request of an item gets the Nth item (live seeds 1, 2, 5) ---------
+
+
+def _lost_shift(tmp_path, texts, hidden):
+    """A shift with several lost-item requests, all in the ledger as the loop would add them."""
+    requests = [(f"22:0{i}:00", f"R-00{i}", t) for i, t in enumerate(texts, 1)]
+    fake, session, ex = setup(tmp_path, requests=requests, hidden=hidden)
+    tasks = [next_task(ex, session, f"R-00{i}") for i in range(1, len(texts) + 1)]
+    for t in tasks:
+        ex.ledger.add(t)
+    return fake, ex, tasks
+
+
+def _placed(fake):
+    return [e["args"]["item"] for e in calls(fake, "place") if e["ok"]]
+
+
+def test_second_glasses_request_gets_glasses_2_not_the_first_ones(tmp_path):
+    # seed 2: R-015's unsuffixed glasses lay in the corridor too; R-017 delivered it and lost 20
+    texts = ["Guest in 317 lost glasses, maybe the ground floor corridor.",
+             "Guest in 207 lost glasses, maybe the ground floor corridor."]
+    fake, ex, (_t1, t2) = _lost_shift(tmp_path, texts,
+                                      {"glasses": "corridor-1a", "glasses-2": "corridor-1b"})
+    out = ex.run(t2)
+    assert out.status == "done", out
+    assert _placed(fake) == ["glasses-2"]
+    assert "glasses" not in [e["args"]["item"] for e in calls(fake, "pick")]
+
+
+def test_first_glasses_request_still_gets_the_unsuffixed_item(tmp_path):
+    texts = ["Guest in 317 lost glasses, maybe the ground floor corridor.",
+             "Guest in 207 lost glasses, maybe the ground floor corridor."]
+    fake, ex, (t1, _t2) = _lost_shift(tmp_path, texts,
+                                      {"glasses": "corridor-1a", "glasses-2": "corridor-1a"})
+    out = ex.run(t1)
+    assert out.status == "done", out
+    assert _placed(fake) == ["glasses"]
+
+
+def test_a_failed_first_request_still_counts_for_the_numbering(tmp_path):
+    # seed 5: R-019's wallet was never found; R-069 (the 2nd wallet request) must not take it
+    texts = ["Guest in 105 lost a wallet, maybe the kitchen pass.",
+             "Mr Aune lost a wallet earlier tonight, probably somewhere around near the kitchen."]
+    fake, ex, (_t1, t2) = _lost_shift(tmp_path, texts, {"wallet": "kitchen-pass"})
+    ex.guest_rooms["Mr Aune"] = "room-213"
+    out = ex.run(t2)
+    assert out.status == "failed" or not _placed(fake), out
+    assert not calls(fake, "pick") and not fake.wrong_deliveries
+
+
+def test_the_carried_wrong_item_is_not_delivered(tmp_path):
+    texts = ["Guest in 105 lost a wallet, maybe the kitchen pass.",
+             "Guest in 213 lost a wallet, maybe the kitchen pass."]
+    fake, ex, (_t1, t2) = _lost_shift(tmp_path, texts,
+                                      {"wallet": "kitchen-pass", "wallet-2": "kitchen-pass"})
+    ex.go("kitchen-pass")
+    ex.scan()
+    ex.pick_or_cart("wallet")  # picked up by an earlier idle scan
+    out = ex.run(t2)
+    assert out.status == "done", out
+    assert _placed(fake) == ["wallet-2"] and not fake.wrong_deliveries
+
+
+def test_one_lost_item_is_never_delivered_twice(tmp_path):
+    texts = ["Guest in 105 lost a wallet, maybe the kitchen pass."]
+    fake, ex, (t1,) = _lost_shift(tmp_path, texts, {"wallet": "kitchen-pass"})
+    assert ex.run(t1).status == "done"
+    t2 = replace(t1, request="R-009", room="room-213")  # not in the ledger: no known owner
+    ex.found["wallet"] = "kitchen-pass"  # a stale memory of the same item
+    ex.max_scans = 1
+    out = ex.run(t2)
+    assert out.status != "done", out
+    assert _placed(fake) == ["wallet"]
+
+
+def test_two_unowned_candidates_away_from_the_hint_deliver_none(tmp_path):
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, task = solo(tmp_path, text,
+                                    hidden={"wallet-3": "lobby-bar", "wallet-4": "lobby-bar"})
+    out = ex.run(task)
+    assert out.status == "failed", out
+    assert not _placed(fake) and not fake.wrong_deliveries

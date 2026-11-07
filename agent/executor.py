@@ -39,6 +39,7 @@ from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_rou
 from agent.tasks import Entry, Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
 
+IDLE_SCANS_WHEN_FULL = 3  # scans between dock tries while the battery is full (each 60 s, ~1 %)
 NAV_MIN_HOPS = 2  # plain moves in a row that one navigate replaces, once the call pace needs it
 CALL_PROJECTION_LIMIT = 1250  # calls a whole night is heading for before navigate is used (final cap ~1,320)
 NIGHT_S = 8 * 3600
@@ -1101,11 +1102,18 @@ class Executor:
         returns as soon as a message is waiting, when should_stop() says so (the final's clock),
         or after max_idle cycles."""
         dock = self.hotel.special.get("dock", "charging-dock")
+        scans_first = 0  # after a dock refused as full: this many scans before the next dock try
         for i in range(max_idle):
             if should_stop is not None and should_stop():
                 return
             if self.inbox_waiting or (i % IDLE_STATUS_EVERY == 0 and self._request_waiting()):
                 return
+            if scans_first and self.state.location == dock:
+                # A full battery refuses the dock (2 s, one call); live nights spent 60-100 calls on
+                # dock/scan pairs. Each scan reply carries the inbox event, so nothing is missed.
+                scans_first -= 1
+                self.scan()
+                continue
             if not self._surveyed:
                 self.survey()  # the shift's first idle time: look at tonight's stock places once
                 continue  # the survey took time: check the inbox again first
@@ -1127,6 +1135,8 @@ class Executor:
                 return
             if self.inbox_waiting:  # a dock that woke on a message brings the inbox event
                 return
+            if not reply.ok:  # full: let the battery dip over a few scans before docking again
+                scans_first = IDLE_SCANS_WHEN_FULL - 1
             self.scan()  # idle time spent usefully; the battery dips so the next dock works
 
     # --- tasks ---------------------------------------------------------------------------------

@@ -113,6 +113,7 @@ def _door_sign(ex: Executor, room: str) -> bool:
 
 
 STAFF_WHO = ("clerk", "maintenance", "housekeeping")
+STAFF_ROLES = ("clerk", "night clerk", "maintenance", "housekeeping", "housekeeper")  # exact titles only
 KEYCARD_WAIT_S = 60  # one `scan` costs this much sim time: the cheapest safe wait
 SOMEONE_NEAR = "someone nearby; did not open"
 
@@ -122,9 +123,10 @@ def _strangers(look: dict) -> list[str]:
     out = []
     for p in look.get("people") or []:
         if not isinstance(p, dict):
+            out.append(f"unreadable entry {p}")  # fail closed: an entry we can't read is a stranger
             continue
-        who, role = str(p.get("who") or "").lower(), str(p.get("role") or "").lower()
-        if who in STAFF_WHO or any(r in role for r in STAFF_WHO):
+        who, role = str(p.get("who") or "").strip().lower(), str(p.get("role") or "").strip().lower()
+        if who in STAFF_WHO or role in STAFF_ROLES:
             continue
         out.append(" ".join(str(p.get(k)) for k in ("name", "state", "role", "who") if p.get(k)) or "someone")
     return out
@@ -144,6 +146,8 @@ def _open_with_keycard(ex: Executor, room: str):
         if who:
             ex.log("keycard_withheld", room=room, who=who, final=True)
             raise ActionFailed(f"{SOMEONE_NEAR} ({room})")
+        if _door_sign(ex, room):  # the wait took time: a sign may have gone up meanwhile
+            raise ActionFailed(f"Do Not Disturb sign on {room} after the wait; did not open it")
     return ex.cmd("use", item="keycard", on=room)
 
 

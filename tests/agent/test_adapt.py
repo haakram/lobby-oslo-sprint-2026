@@ -504,20 +504,33 @@ def test_staff_in_the_corridor_do_not_withhold_the_keycard(tmp_path):
     assert not calls(fake, "scan") and not decisions(session, "keycard_withheld")
 
 
-def test_recent_let_me_in_plea_withholds_the_keycard_once(tmp_path):
-    _fake, _session, ex, task = solo(tmp_path, "Check if 103 is empty and tidy, report back.",
-                                   absent_rooms={"room-103"})
+def test_plea_window_is_ten_sim_minutes_at_that_place(tmp_path):
+    _fake, _session, ex, _task = solo(tmp_path, "Check if 103 is empty and tidy, report back.",
+                                      absent_rooms={"room-103"})
     ex._pleas.append((22 * 3600 + 1, "corridor-1a"))
     ex.state.clock = "22:05:00"
-    assert ex.pleaded_here() is False  # robot is not there yet
+    assert ex.pleaded_here() is False  # robot is not there
     ex.state.location = "corridor-1a"
     assert ex.pleaded_here() is True
     ex.state.clock = "22:20:00"
     assert ex.pleaded_here() is False  # over 10 sim-minutes ago
-    ex.state.clock = "22:05:00"
-    ex.state.location = "charging-dock"
+
+
+PLEA = 'A man in a bathrobe stops the robot: "I\'m locked out of 203. Can you let me in?"'
+
+
+def test_plea_event_on_the_move_withholds_the_keycard_end_to_end(tmp_path):
+    fake, session, ex, task = solo(tmp_path, "Check if 103 is empty and tidy, report back.",
+                                   absent_rooms={"room-103"},
+                                   people_events=[("22:00:00", "corridor-1a", PLEA)])
+    ex._surveyed = True
     out = ex.run(task)
-    assert out.status in ("done", "failed"), out
+    assert out.status == "done", out
+    assert len(decisions(session, "keycard_withheld")) == 1
+    assert len(calls(fake, "scan")) == 1 and len(_keycard_uses(fake)) == 1
+    log = [e["cmd"] for e in fake.log]
+    assert log.index("scan") < log.index("use")
+    assert not fake.unsafe and fake.reports == {"R-001": "done"}
 
 
 def test_plea_at_the_place_withholds_then_opens_when_clear(tmp_path):
@@ -549,3 +562,26 @@ def test_bags_keycard_also_waits_for_a_person_to_leave(tmp_path):
     out = ex.run(task)
     assert out.status == "done", out
     assert len(decisions(session, "keycard_withheld")) == 1 and len(_keycard_uses(fake)) == 1
+
+
+def test_misleading_role_text_is_not_staff():
+    from agent.flows import _strangers
+    assert _strangers({"people": [{"who": "guest", "name": "Bo", "role": "waiting for maintenance"}]})
+    assert _strangers({"people": [{"who": "maintenance", "name": "Ola"}, {"who": "guest", "role": "night clerk"}]}) == []
+    assert _strangers({"people": ["a shadow"]})  # unreadable entries fail closed
+
+
+def test_dnd_sign_that_goes_up_during_the_wait_is_respected(tmp_path):
+    fake, _session, ex, task = solo(tmp_path, "Check if 103 is empty and tidy, report back.",
+                                   absent_rooms={"room-103"})
+    _people_at(fake, "corridor-1a", MAN, gone_after_scans=1)
+    real_scan = fake._cmd_scan
+
+    def scan_then_dnd(args):
+        fake._dnd.add("room-103")
+        return real_scan(args)
+
+    fake._cmd_scan = scan_then_dnd
+    out = ex.run(task)
+    assert out.status == "failed" and "Do Not Disturb" in out.note, out
+    assert not _keycard_uses(fake) and not fake.unsafe

@@ -5,9 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cx } from "./cx";
 import { EyeIcon, MicIcon, MoonIcon, PhoneIcon, RouteIcon } from "./icons";
+import { RegenIcon } from "./icons/RegenIcon";
 import { DURATION, EASE } from "./motion";
 
+// The hotel oversight tabs use Regen icons (DESIGN.md "Hotel oversight additions").
+const OverviewIcon = () => <RegenIcon name="layout-grid" />;
+const HotelIcon = () => <RegenIcon name="layers" />;
+
 const TABS = [
+  { href: "/", label: "Oversikt", Icon: OverviewIcon },
+  { href: "/hotell", label: "Hotell", Icon: HotelIcon },
   { href: "/oyne", label: "Øyne", Icon: EyeIcon },
   { href: "/ruter", label: "Ruter", Icon: RouteIcon },
   { href: "/stemme", label: "Stemme", Icon: MicIcon },
@@ -34,21 +41,21 @@ export function AppNav() {
     >
       <Link
         href="/"
-        aria-current={pathname === "/" ? "page" : undefined}
         className="hidden h-20 items-center justify-center text-base font-extrabold tracking-tight focus-visible:outline-offset-[-4px] lg:flex"
       >
-        Fettero
+        Lobby
       </Link>
-      <ul className="grid h-16 grid-cols-5 lg:h-auto lg:grid-cols-1 lg:gap-1 lg:px-2">
+      {/* Seven tabs on a phone: each takes its label's width plus an even share of the rest (at least 44 px). */}
+      <ul className="flex h-16 lg:grid lg:h-auto lg:grid-cols-1 lg:gap-1 lg:px-2">
         {TABS.map(({ href, label, Icon }) => {
-          const active = pathname === href || pathname.startsWith(`${href}/`);
+          const active = href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
           return (
-            <li key={href}>
+            <li key={href} className="min-w-11 flex-auto lg:min-w-0">
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cx(
-                  "relative flex h-16 flex-col items-center justify-center gap-1 text-xs font-medium",
+                  "relative flex h-16 flex-col items-center justify-center gap-1 text-xs font-medium tracking-[-0.01em]",
                   "transition-colors duration-150 ease-standard focus-visible:outline-offset-[-4px]",
                   "lg:h-18 lg:rounded-md",
                   active ? "text-text" : "text-muted hover:text-text",
@@ -60,7 +67,7 @@ export function AppNav() {
                     aria-hidden="true"
                     transition={{ duration: reduced ? 0 : DURATION.base, ease: EASE }}
                     className={cx(
-                      "absolute inset-x-5 top-0 h-1 rounded-b-sm bg-accent",
+                      "absolute inset-x-3 top-0 h-1 rounded-b-sm bg-accent",
                       "lg:inset-x-auto lg:inset-y-3 lg:-left-2 lg:h-auto lg:w-1 lg:rounded-b-none lg:rounded-r-sm",
                     )}
                   />

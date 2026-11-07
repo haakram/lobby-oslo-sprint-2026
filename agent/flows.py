@@ -82,13 +82,33 @@ def _classify(ex: Executor, task: Task) -> Task:
 # --- shared steps -------------------------------------------------------------------------------
 
 
-def _corridor(ex: Executor, room: str | None) -> str:
+def room_floor(room: str | None) -> int | None:
+    """The floor a room number names: room-326 -> 3, room-104 -> 1 (the digits before the last two)."""
+    if not room or not (m := re.fullmatch(r"room-(\d{3,})", room)):
+        return None
+    return int(m[1][:-2])
+
+
+def _corridor_on_map(ex: Executor, room: str | None) -> str:
     if not room or room not in ex.hotel.nodes:
         raise ActionFailed(f"unknown room {room}")
     try:
         return ex.hotel.room_corridor(room)
     except KeyError:
         raise ActionFailed(f"no corridor known for {room}") from None
+
+
+def _corridor(ex: Executor, room: str | None) -> str:
+    """The corridor the room's door is on. A room the map does not know, or knows without a
+    corridor (another night's numbering, a stale node), gets its floor explored first (Task 26,
+    bounded in the executor) and the lookup retried once; only then does the request fail."""
+    try:
+        return _corridor_on_map(ex, room)
+    except ActionFailed:
+        floor = room_floor(room)
+        if floor is None or not ex.explore_floor(floor, room):
+            raise
+    return _corridor_on_map(ex, room)
 
 
 def _refuse_known_dnd(ex: Executor, room: str | None, request: str | None = None) -> None:

@@ -182,14 +182,19 @@ def _inbox_waiting(ex: Executor, status: dict) -> bool:
 
 
 def _vet_brain(ex: Executor, original: Task, better: Task) -> Task:
-    """The Brain's answer is model output: a room check on a noise/complaint text, or on a room the
-    hotel map does not have, is rejected (the request stays UNKNOWN and is reported failed)."""
+    """The Brain's answer is model output: a room check on a noise/complaint text, or on a room no
+    floor of the hotel map can hold, is rejected (the request stays UNKNOWN and is reported failed).
+    A room the map does not know on a floor it does know is accepted: the task's own corridor
+    lookup explores that floor when it runs (Task 26). No game call here: this is the inbox read."""
     vetted = vet_brain_task(better)
     reason = None
     if better.kind is Kind.ROOM_CHECK and vetted.kind is not Kind.ROOM_CHECK:
         reason = "room check on a noise or complaint text"
     elif vetted.kind is Kind.ROOM_CHECK and vetted.room not in ex.hotel.nodes:
-        reason = f"room check on an unknown room {vetted.room}"
+        floor = flows.room_floor(vetted.room)
+        if floor is None or not any(v.get("kind") == "corridor" and v.get("floor") == floor
+                                    for v in ex.hotel.nodes.values()):
+            reason = f"room check on an unknown room {vetted.room}"
     if reason is not None:
         ex.log("brain_rejected", request=original.request, kind=better.kind.value, room=better.room,
                reason=reason)

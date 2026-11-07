@@ -10,6 +10,7 @@ import {
   type HotelNode,
   itemName,
   placeName,
+  ROOM_STATUS_LABEL,
   type RoomStatus,
   robotPoseAt,
   roomNumber,
@@ -19,12 +20,15 @@ import {
 import { type SceneTokens, STATUS_TOKEN } from "./tokens";
 
 /**
- * The hotel in three.js: floors stacked, rooms as tiles in their status colour, one robot in the
- * accent colour that walks its recorded path. Imperative on purpose: one renderer, geometry built
- * once, nothing allocated per frame. `Hotel3D.tsx` owns it and calls `dispose()` on unmount.
+ * The hotel in three.js: floors stacked (or spread apart), rooms as tiles in their status colour,
+ * one robot in the accent colour that walks its recorded path, and a map you can move through:
+ * orbit, pan and zoom with mouse, touch or keys; click a room or a place. Imperative on purpose: one
+ * renderer, geometry built once, nothing allocated per frame. `Hotel3D.tsx` owns it and calls
+ * `dispose()` on unmount.
  */
 
 export const FLOOR_HEIGHT = 8.5;
+const EXPLODE_EXTRA = 12;
 const ROOM_SIZE = 2.4;
 const ROOM_HEIGHT = 0.5;
 const TILE_HEIGHT = 0.3;
@@ -36,6 +40,10 @@ const DIM_OPACITY = 0.1;
 const FOLLOW_LERP = 0.08;
 const FOCUS_OFFSET = new THREE.Vector3(12, 22, 15);
 const START_OFFSET = new THREE.Vector3(22, 40, 27);
+const CLICK_PX = 6;
+const CLICK_MS = 600;
+const KEY_ORBIT = 0.12;
+const KEY_ZOOM = 0.12;
 
 type FloorParts = {
   floor: number;
@@ -45,12 +53,19 @@ type FloorParts = {
 };
 
 type RoomSlot = { index: number; floor: number; colour: THREE.Color; status: RoomStatus; mesh: THREE.InstancedMesh };
+type Link = { line: THREE.Line; base: THREE.Vector3[] };
+export type Pick = { kind: "room" | "place"; id: string; floor: number };
 
 export type SceneOptions = {
   tokens: SceneTokens;
   reducedMotion: boolean;
   compact: boolean;
+  /** The person took the camera: following stops. */
   onUserOrbit?: () => void;
+  /** A room was tapped (null: the floor between rooms). */
+  onSelectRoom?: (roomId: string | null) => void;
+  /** A place (lift, kitchen, dock …) was tapped; the camera has already flown there. */
+  onSelectPlace?: (nodeId: string) => void;
 };
 
 function floorY(floor: number): number {
@@ -76,23 +91,38 @@ export class HotelScene {
   private readonly ctx: gsap.Context;
   private readonly tokens: SceneTokens;
   private readonly reduced: boolean;
+  private readonly options: SceneOptions;
   private readonly positions = new Map<string, THREE.Vector3>();
   private readonly floors: FloorParts[] = [];
   private readonly rooms = new Map<string, RoomSlot>();
+  private readonly pickables: THREE.Object3D[] = [];
+  private readonly links: Link[] = [];
   private readonly robot = new THREE.Group();
   private readonly cart: THREE.Mesh;
   private readonly robotLabel: HTMLElement;
   private readonly robotTask: HTMLElement;
   private readonly robotCarry: HTMLElement;
+  private readonly hover: HTMLElement;
   private readonly attention: THREE.Mesh;
+  private readonly selection: THREE.LineSegments;
   private attentionTween: gsap.core.Tween | null = null;
   private attentionRoom: string | null = null;
+  private selectedRoom: string | null = null;
   private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly resizeObserver: ResizeObserver;
+  private readonly raycaster = new THREE.Raycaster();
+  private readonly pointer = new THREE.Vector2();
+  private readonly spherical = new THREE.Spherical();
   private readonly pose = { from: "", to: "", progress: 1, node: "", floor: 1, moving: false };
   private readonly robotPos = new THREE.Vector3();
   private readonly tmp = new THREE.Vector3();
   private readonly tmpB = new THREE.Vector3();
+  private readonly spread = { value: 0 };
+  private readonly hoverEnabled: boolean;
+  private pointerPx = { x: 0, y: 0 };
+  private pointerDirty = false;
+  private pointerInside = false;
+  private down: { x: number; y: number; t: number } | null = null;
   private timeline: Timeline | null = null;
   private now: () => number = () => 0;
   private focusFloor: number | null = null;
@@ -106,20 +136,36 @@ export class HotelScene {
     private readonly labelLayer: HTMLElement,
     options: SceneOptions,
   ) {
+    this.options = options;
     this.tokens = options.tokens;
     this.reduced = options.reducedMotion;
+    this.hoverEnabled = typeof matchMedia === "function" && matchMedia("(hover: hover) and (pointer: fine)").matches;
     const { tokens } = this;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setClearColor(new THREE.Color(tokens.bg), 1);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.domElement.style.display = "block";
-    container.appendChild(this.renderer.domElement);
+    const canvas = this.renderer.domElement;
+    canvas.style.display = "block";
+    canvas.style.touchAction = "none";
+    canvas.style.cursor = "grab";
+    canvas.tabIndex = 0;
+    canvas.setAttribute("role", "application");
+    canvas.setAttribute(
+      "aria-label",
+      "Hotellkart. Dra for å snu, rull for å zoome. Piltaster flytter, Shift og piltaster snur, pluss og minus zoomer. Klikk et rom for detaljer.",
+    );
+    container.appendChild(canvas);
 
     this.labelRenderer = new CSS2DRenderer({ element: labelLayer });
 
-    this.scene.fog = new THREE.Fog(new THREE.Color(tokens.bg), 70, 160);
+    this.hover = document.createElement("div");
+    this.hover.className = "h3d-hover";
+    this.hover.hidden = true;
+    labelLayer.appendChild(this.hover);
+
+    this.scene.fog = new THREE.Fog(new THREE.Color(tokens.bg), 70, 180);
 
     const centre = new THREE.Vector3(8, floorY(2), 7);
     this.baseFov = options.compact ? 34 : 38;
@@ -127,19 +173,22 @@ export class HotelScene {
     this.camera.position.copy(centre).add(START_OFFSET);
     this.camera.lookAt(centre);
 
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls = new OrbitControls(this.camera, canvas);
     this.controls.target.copy(centre);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.controls.minDistance = 8;
-    this.controls.maxDistance = 120;
+    this.controls.minDistance = 6;
+    this.controls.maxDistance = 140;
     this.controls.maxPolarAngle = 1.38;
-    this.controls.addEventListener("start", () => {
-      if (this.follow) {
-        this.follow = false;
-        options.onUserOrbit?.();
-      }
-    });
+    this.controls.keyPanSpeed = 16;
+    this.controls.listenToKeyEvents(canvas);
+    this.controls.addEventListener("start", this.onUserTakesCamera);
+
+    canvas.addEventListener("pointerdown", this.onPointerDown);
+    canvas.addEventListener("pointerup", this.onPointerUp);
+    canvas.addEventListener("pointermove", this.onPointerMove);
+    canvas.addEventListener("pointerleave", this.onPointerLeave);
+    canvas.addEventListener("keydown", this.onKeyDown, true);
 
     // Soft light only (DESIGN.md): a sky/ground pair and one key light, no shadow maps.
     const hemi = new THREE.HemisphereLight(new THREE.Color(tokens.text), new THREE.Color(tokens.sunken), 2.4);
@@ -215,6 +264,13 @@ export class HotelScene {
     this.attention.visible = false;
     this.scene.add(this.attention);
 
+    this.selection = new THREE.LineSegments(
+      this.track(new THREE.EdgesGeometry(this.track(new THREE.BoxGeometry(ROOM_SIZE + 0.6, ROOM_HEIGHT + 0.4, ROOM_SIZE + 0.6)))),
+      this.track(new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.text), transparent: true, opacity: 0.95 })),
+    );
+    this.selection.visible = false;
+    this.scene.add(this.selection);
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
@@ -264,8 +320,10 @@ export class HotelScene {
       );
       const slab = new THREE.Mesh(this.track(new THREE.BoxGeometry(maxX - minX, 0.24, maxZ - minZ)), slabMaterial);
       slab.position.set((minX + maxX) / 2, y - 0.12, (minZ + maxZ) / 2);
+      slab.userData.floor = floor;
       group.add(slab);
       materials.push(slabMaterial);
+      this.pickables.push(slab);
 
       const edgeMaterial = this.track(
         new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.lineStrong), transparent: true, opacity: 0.7 }),
@@ -316,6 +374,8 @@ export class HotelScene {
         new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, transparent: true, opacity: 1 }),
       );
       const roomMesh = new THREE.InstancedMesh(roomGeometry, roomMaterial, rooms.length);
+      roomMesh.userData.floor = floor;
+      roomMesh.userData.rooms = rooms.map((room) => room.id);
       rooms.forEach((room, index) => {
         matrix.makeTranslation(room.x, y + ROOM_HEIGHT / 2, room.z);
         roomMesh.setMatrixAt(index, matrix);
@@ -332,6 +392,7 @@ export class HotelScene {
       group.add(roomMesh);
       materials.push(roomMaterial);
       this.disposables.push(roomMesh);
+      this.pickables.push(roomMesh);
 
       // One outline per room, merged into a single line object per floor, so unknown rooms still read.
       const roomEdges = this.track(new THREE.EdgesGeometry(roomGeometry));
@@ -354,7 +415,7 @@ export class HotelScene {
       group.add(new THREE.LineSegments(outlineGeometry, outlineMaterial));
       materials.push(outlineMaterial);
 
-      // Hubs, service rooms, elevators and stairs: tiles with a name.
+      // Hubs, service rooms, lifts and stairs: tiles with a name.
       const tileMaterial = this.track(
         new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.sunken), roughness: 0.9, transparent: true, opacity: 1 }),
       );
@@ -371,7 +432,10 @@ export class HotelScene {
         // Every place is a low tile the robot can stand on; a lift or stairwell adds an open wire frame.
         const mesh = new THREE.Mesh(tileGeometry, vertical ? shaftMaterial : tileMaterial);
         mesh.position.set(node.x, y + TILE_HEIGHT / 2, node.z);
+        mesh.userData.node = node.id;
+        mesh.userData.floor = floor;
         group.add(mesh);
+        this.pickables.push(mesh);
         if (vertical) {
           const frame = new THREE.LineSegments(shaftEdges, shaftLineMaterial);
           frame.position.set(node.x, y + SHAFT_HEIGHT / 2, node.z);
@@ -394,17 +458,45 @@ export class HotelScene {
       this.floors.push({ floor, group, materials, labels });
     }
 
-    // The elevator and the stairs between floors, as a line through their landings.
+    // The lift and the stairs between floors, as a line through their landings.
     const linkMaterial = this.track(
       new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.lineStrong), transparent: true, opacity: 0.55 }),
     );
     for (const prefix of ["elevator-", "stairwell-"]) {
-      const points = HOTEL_FLOORS.map((floor) => this.positions.get(`${prefix}${floor}`))
+      const base = HOTEL_FLOORS.map((floor) => this.positions.get(`${prefix}${floor}`))
         .filter((point): point is THREE.Vector3 => !!point)
         .map((point) => point.clone().setY(point.y + SHAFT_HEIGHT));
-      if (points.length < 2) continue;
-      const geometry = this.track(new THREE.BufferGeometry().setFromPoints(points));
-      this.scene.add(new THREE.Line(geometry, linkMaterial));
+      if (base.length < 2) continue;
+      const geometry = this.track(new THREE.BufferGeometry().setFromPoints(base));
+      const line = new THREE.Line(geometry, linkMaterial);
+      this.scene.add(line);
+      this.links.push({ line, base });
+    }
+  }
+
+  /** Extra height a point at base height `y` gets when the floors are spread apart. */
+  private lift(y: number): number {
+    return (y / FLOOR_HEIGHT) * EXPLODE_EXTRA * this.spread.value;
+  }
+
+  private applySpread = () => {
+    for (const parts of this.floors) parts.group.position.y = this.lift(floorY(parts.floor));
+    for (const { line, base } of this.links) {
+      const attribute = line.geometry.attributes.position as THREE.BufferAttribute;
+      base.forEach((point, index) => attribute.setXYZ(index, point.x, point.y + this.lift(floorY(HOTEL_FLOORS[index] ?? 1)), point.z));
+      attribute.needsUpdate = true;
+    }
+    this.placeMarkers();
+  };
+
+  private placeMarkers() {
+    if (this.attentionRoom) {
+      const at = this.positions.get(this.attentionRoom);
+      if (at) this.attention.position.set(at.x, at.y + this.lift(at.y) + ROOM_HEIGHT + 0.08, at.z);
+    }
+    if (this.selectedRoom) {
+      const at = this.positions.get(this.selectedRoom);
+      if (at) this.selection.position.set(at.x, at.y + this.lift(at.y) + ROOM_HEIGHT / 2, at.z);
     }
   }
 
@@ -425,6 +517,28 @@ export class HotelScene {
 
   setFollow(follow: boolean) {
     this.follow = follow;
+  }
+
+  /** Spreads the floors apart (true) or stacks them (false). Spreading pulls the camera back to see all of it. */
+  setExploded(exploded: boolean) {
+    const value = exploded ? 1 : 0;
+    if (this.spread.value === value) return;
+    this.ctx.add(() => {
+      gsap.killTweensOf(this.spread);
+      if (this.reduced) {
+        this.spread.value = value;
+        this.applySpread();
+      } else {
+        gsap.to(this.spread, { value, duration: 0.6, ease: "power2.inOut", onUpdate: this.applySpread });
+      }
+    });
+    if (exploded) {
+      this.onUserTakesCamera();
+      const midY = floorY(2);
+      const totalLift = (floorY(HOTEL_FLOORS.length) / FLOOR_HEIGHT) * EXPLODE_EXTRA;
+      this.tmp.set(8, midY + totalLift / 2, 7);
+      this.flyTo(this.tmp, START_OFFSET.clone().multiplyScalar(1.45));
+    }
   }
 
   /** Fades every floor but `floor`; null shows them all. */
@@ -450,8 +564,21 @@ export class HotelScene {
   /** Flies the camera to the robot and follows it again. */
   focusRobot() {
     this.follow = true;
-    const target = this.robotPos.clone();
-    const position = target.clone().add(FOCUS_OFFSET);
+    this.flyTo(this.robotPos);
+  }
+
+  /** Flies the camera to a place on the map (a lift, the kitchen, the dock …). Following stops. */
+  focusNode(nodeId: string) {
+    const at = this.positions.get(nodeId);
+    if (!at) return;
+    this.follow = false;
+    this.tmp.set(at.x, at.y + this.lift(at.y), at.z);
+    this.flyTo(this.tmp);
+  }
+
+  private flyTo(point: THREE.Vector3, offset: THREE.Vector3 = FOCUS_OFFSET) {
+    const target = point.clone();
+    const position = target.clone().add(offset);
     if (this.reduced) {
       this.controls.target.copy(target);
       this.camera.position.copy(position);
@@ -461,6 +588,21 @@ export class HotelScene {
       gsap.to(this.controls.target, { x: target.x, y: target.y, z: target.z, duration: 0.7, ease: "power3.inOut", overwrite: true });
       gsap.to(this.camera.position, { x: position.x, y: position.y, z: position.z, duration: 0.7, ease: "power3.inOut", overwrite: true });
     });
+  }
+
+  /** Outlines the chosen room; null clears it. */
+  setSelectedRoom(roomId: string | null) {
+    if (roomId === this.selectedRoom) return;
+    this.selectedRoom = roomId && this.positions.has(roomId) ? roomId : null;
+    this.selection.visible = this.selectedRoom !== null;
+    if (this.selectedRoom) {
+      this.placeMarkers();
+      if (!this.reduced) {
+        this.ctx.add(() => {
+          gsap.fromTo(this.selection.scale, { x: 1.25, y: 1.25, z: 1.25 }, { x: 1, y: 1, z: 1, duration: 0.25, ease: "power2.out", overwrite: true });
+        });
+      }
+    }
   }
 
   /** Room colours, the robot's label and the highlighted room. Called at HUD rate, not per frame. */
@@ -501,7 +643,7 @@ export class HotelScene {
       this.attentionTween?.kill();
       this.attentionTween = null;
       if (at) {
-        this.attention.position.set(at.x, at.y + ROOM_HEIGHT + 0.08, at.z);
+        this.placeMarkers();
         this.attention.scale.setScalar(1);
         this.attention.visible = true;
         const material = this.attention.material as THREE.MeshBasicMaterial;
@@ -536,6 +678,115 @@ export class HotelScene {
     this.camera.updateProjectionMatrix();
   }
 
+  // Picking ---------------------------------------------------------------------------------------
+
+  private readonly onUserTakesCamera = () => {
+    if (this.follow) {
+      this.follow = false;
+      this.options.onUserOrbit?.();
+    }
+  };
+
+  private readonly onPointerDown = (event: PointerEvent) => {
+    this.down = { x: event.clientX, y: event.clientY, t: performance.now() };
+  };
+
+  private readonly onPointerUp = (event: PointerEvent) => {
+    const down = this.down;
+    this.down = null;
+    if (!down) return;
+    const moved = Math.hypot(event.clientX - down.x, event.clientY - down.y);
+    if (moved > CLICK_PX || performance.now() - down.t > CLICK_MS) return;
+    const hit = this.pick(event.clientX, event.clientY);
+    if (hit?.kind === "room") {
+      this.options.onSelectRoom?.(hit.id);
+    } else if (hit?.kind === "place") {
+      this.focusNode(hit.id);
+      this.options.onUserOrbit?.();
+      this.options.onSelectPlace?.(hit.id);
+    } else {
+      this.options.onSelectRoom?.(null);
+    }
+  };
+
+  private readonly onPointerMove = (event: PointerEvent) => {
+    if (!this.hoverEnabled || event.pointerType !== "mouse") return;
+    const rect = this.container.getBoundingClientRect();
+    this.pointerPx = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    this.pointerInside = true;
+    this.pointerDirty = true;
+  };
+
+  private readonly onPointerLeave = () => {
+    this.pointerInside = false;
+    this.hover.hidden = true;
+    this.renderer.domElement.style.cursor = "grab";
+  };
+
+  /** Shift + arrows orbit, plus/minus zoom; plain arrows pan through OrbitControls. */
+  private readonly onKeyDown = (event: KeyboardEvent) => {
+    const { key } = event;
+    const arrow = key === "ArrowLeft" || key === "ArrowRight" || key === "ArrowUp" || key === "ArrowDown";
+    if (arrow && !event.shiftKey) return;
+    if (!arrow && key !== "+" && key !== "=" && key !== "-" && key !== "_") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    this.onUserTakesCamera();
+    this.tmp.subVectors(this.camera.position, this.controls.target);
+    this.spherical.setFromVector3(this.tmp);
+    if (key === "ArrowLeft") this.spherical.theta += KEY_ORBIT;
+    if (key === "ArrowRight") this.spherical.theta -= KEY_ORBIT;
+    if (key === "ArrowUp") this.spherical.phi = Math.max(0.15, this.spherical.phi - KEY_ORBIT);
+    if (key === "ArrowDown") this.spherical.phi = Math.min(this.controls.maxPolarAngle, this.spherical.phi + KEY_ORBIT);
+    if (key === "+" || key === "=") this.spherical.radius = Math.max(this.controls.minDistance, this.spherical.radius * (1 - KEY_ZOOM));
+    if (key === "-" || key === "_") this.spherical.radius = Math.min(this.controls.maxDistance, this.spherical.radius * (1 + KEY_ZOOM));
+    this.tmp.setFromSpherical(this.spherical);
+    this.camera.position.copy(this.controls.target).add(this.tmp);
+  };
+
+  private pick(clientX: number, clientY: number): Pick | null {
+    const rect = this.container.getBoundingClientRect();
+    this.pointer.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    return this.pickAt(this.pointer);
+  }
+
+  private pickAt(ndc: THREE.Vector2): Pick | null {
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hits = this.raycaster.intersectObjects(this.pickables, false);
+    for (const hit of hits) {
+      const floor = hit.object.userData.floor as number | undefined;
+      // A faded floor is not what the person is looking at.
+      if (this.focusFloor !== null && floor !== undefined && floor !== this.focusFloor) continue;
+      const rooms = hit.object.userData.rooms as string[] | undefined;
+      if (rooms && hit.instanceId !== undefined) return { kind: "room", id: rooms[hit.instanceId], floor: floor ?? 1 };
+      const node = hit.object.userData.node as string | undefined;
+      if (node) return { kind: "place", id: node, floor: floor ?? 1 };
+      return null; // the slab: between rooms
+    }
+    return null;
+  }
+
+  private updateHover() {
+    this.pointerDirty = false;
+    if (!this.pointerInside) return;
+    const rect = this.container.getBoundingClientRect();
+    this.pointer.set((this.pointerPx.x / rect.width) * 2 - 1, -(this.pointerPx.y / rect.height) * 2 + 1);
+    const hit = this.pickAt(this.pointer);
+    if (!hit) {
+      this.hover.hidden = true;
+      this.renderer.domElement.style.cursor = this.down ? "grabbing" : "grab";
+      return;
+    }
+    const text =
+      hit.kind === "room" ? `${placeName(hit.id)} · ${ROOM_STATUS_LABEL[this.rooms.get(hit.id)?.status ?? "ukjent"]}` : placeName(hit.id);
+    if (this.hover.textContent !== text) this.hover.textContent = text;
+    this.hover.style.transform = `translate(${Math.round(this.pointerPx.x + 14)}px, ${Math.round(this.pointerPx.y + 16)}px)`;
+    this.hover.hidden = false;
+    this.renderer.domElement.style.cursor = "pointer";
+  }
+
+  // Frame -----------------------------------------------------------------------------------------
+
   private readonly tick = () => {
     if (this.disposed || !this.active) return;
     this.frame = requestAnimationFrame(this.tick);
@@ -551,6 +802,7 @@ export class HotelScene {
           this.tmp.subVectors(to, from);
           if (this.tmp.x !== 0 || this.tmp.z !== 0) this.robot.rotation.y = Math.atan2(this.tmp.x, this.tmp.z);
         }
+        this.robotPos.y += this.lift(this.robotPos.y);
         this.robot.position.copy(this.robotPos);
       }
     }
@@ -566,6 +818,7 @@ export class HotelScene {
     }
 
     this.controls.update();
+    if (this.pointerDirty) this.updateHover();
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);
   };
@@ -575,8 +828,15 @@ export class HotelScene {
     this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
+    const canvas = this.renderer.domElement;
+    canvas.removeEventListener("pointerdown", this.onPointerDown);
+    canvas.removeEventListener("pointerup", this.onPointerUp);
+    canvas.removeEventListener("pointermove", this.onPointerMove);
+    canvas.removeEventListener("pointerleave", this.onPointerLeave);
+    canvas.removeEventListener("keydown", this.onKeyDown, true);
     this.attentionTween?.kill();
     this.ctx.revert();
+    this.controls.stopListenToKeyEvents();
     this.controls.dispose();
     for (const item of this.disposables) item.dispose();
     this.scene.traverse((object) => {
@@ -584,7 +844,7 @@ export class HotelScene {
     });
     this.scene.clear();
     this.renderer.dispose();
-    this.renderer.domElement.remove();
+    canvas.remove();
     this.labelLayer.replaceChildren();
   }
 }

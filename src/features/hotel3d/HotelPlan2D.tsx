@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react";
 import {
   HOTEL_EDGES,
   HOTEL_FLOORS,
@@ -12,8 +13,8 @@ import { cx } from "@/ui";
 import { STATUS_CSS_VAR } from "./tokens";
 
 /**
- * The hotel as a flat plan, one SVG per floor: the same rooms, colours and robot as the 3D scene.
- * Shown when WebGL is missing (and in tests, where it is the only renderer).
+ * The hotel as a flat plan, one SVG per floor: the same rooms, colours, robot and clicks as the 3D
+ * scene. Shown when WebGL is missing (and in tests, where it is the only renderer).
  */
 
 const ROOM = 2.4;
@@ -37,14 +38,29 @@ const PLANS: FloorPlan[] = HOTEL_FLOORS.map((floor) => {
   };
 });
 
+function activate(handler: () => void) {
+  return (event: KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handler();
+    }
+  };
+}
+
 export function HotelPlan2D({
   snapshot,
   variant = "full",
   className,
+  selectedRoom = null,
+  onSelectRoom,
+  onSelectPlace,
 }: {
   snapshot: Snapshot | null;
   variant?: "panel" | "full";
   className?: string;
+  selectedRoom?: string | null;
+  onSelectRoom?: (roomId: string | null) => void;
+  onSelectPlace?: (nodeId: string) => void;
 }) {
   const robot = snapshot?.robot ?? null;
   const from = robot ? HOTEL_NODES[robot.from] : undefined;
@@ -74,7 +90,7 @@ export function HotelPlan2D({
             <svg
               viewBox={`${plan.minX} ${plan.minZ} ${plan.width} ${plan.height}`}
               className="mt-1 h-auto w-full"
-              role="img"
+              role="group"
               aria-label={`${plan.floor}. etasje`}
             >
               {edges.map((edge) => {
@@ -88,7 +104,8 @@ export function HotelPlan2D({
                     y1={a.z}
                     x2={b.x}
                     y2={b.z}
-                    stroke={door ? "var(--line)" : "var(--sunken)"}
+                    stroke={door ? "var(--line)" : "var(--line-strong)"}
+                    strokeOpacity={door ? 0.8 : 0.5}
                     strokeWidth={door ? 0.4 : 1.4}
                     strokeLinecap="round"
                   />
@@ -97,7 +114,15 @@ export function HotelPlan2D({
               {plan.nodes
                 .filter((node) => node.kind !== "corridor" && node.kind !== "room")
                 .map((node) => (
-                  <g key={node.id}>
+                  <g
+                    key={node.id}
+                    role={onSelectPlace ? "button" : undefined}
+                    tabIndex={onSelectPlace ? 0 : undefined}
+                    aria-label={onSelectPlace ? placeName(node.id) : undefined}
+                    onClick={onSelectPlace ? () => onSelectPlace(node.id) : undefined}
+                    onKeyDown={onSelectPlace ? activate(() => onSelectPlace(node.id)) : undefined}
+                    className={cx(onSelectPlace && "cursor-pointer")}
+                  >
                     <rect
                       x={node.x - 1.4}
                       y={node.z - 1.4}
@@ -124,9 +149,20 @@ export function HotelPlan2D({
                 .map((node) => {
                   const status = snapshot?.rooms[node.id]?.status ?? "ukjent";
                   const highlighted = robot?.attention === node.id;
+                  const isSelected = selectedRoom === node.id;
+                  const name = `Rom ${roomNumber(node.id)}: ${ROOM_STATUS_LABEL[status]}`;
                   return (
-                    <g key={node.id}>
-                      <title>{`Rom ${roomNumber(node.id)}: ${ROOM_STATUS_LABEL[status]}`}</title>
+                    <g
+                      key={node.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={name}
+                      aria-pressed={isSelected}
+                      onClick={() => onSelectRoom?.(isSelected ? null : node.id)}
+                      onKeyDown={activate(() => onSelectRoom?.(isSelected ? null : node.id))}
+                      className="cursor-pointer"
+                    >
+                      <title>{name}</title>
                       <rect
                         x={node.x - ROOM / 2}
                         y={node.z - ROOM / 2}
@@ -134,8 +170,8 @@ export function HotelPlan2D({
                         height={ROOM}
                         rx={0.25}
                         fill={STATUS_CSS_VAR[status]}
-                        stroke={highlighted ? "var(--accent)" : "var(--line)"}
-                        strokeWidth={highlighted ? 0.35 : 0.08}
+                        stroke={isSelected ? "var(--text)" : highlighted ? "var(--accent)" : "var(--line-strong)"}
+                        strokeWidth={isSelected || highlighted ? 0.4 : 0.1}
                       />
                       <text
                         x={node.x}
@@ -144,7 +180,7 @@ export function HotelPlan2D({
                         fontSize={1.05}
                         fontWeight={500}
                         fill={status === "ikke_forstyrr" ? "var(--bg)" : "var(--text)"}
-                        style={{ fontFamily: "var(--font-martian), monospace" }}
+                        style={{ fontFamily: "var(--font-martian), monospace", pointerEvents: "none" }}
                       >
                         {roomNumber(node.id)}
                       </text>
@@ -152,7 +188,7 @@ export function HotelPlan2D({
                   );
                 })}
               {active && rx !== null && rz !== null && (
-                <g>
+                <g pointerEvents="none">
                   <circle cx={rx} cy={rz} r={1.5} fill="var(--accent)" opacity={0.25} />
                   <circle cx={rx} cy={rz} r={0.9} fill="var(--accent)" />
                 </g>

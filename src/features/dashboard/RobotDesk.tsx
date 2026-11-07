@@ -131,7 +131,7 @@ export function RobotDesk({ viewerUrl }: { viewerUrl?: string }) {
             </section>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:items-start lg:gap-8">
-              <div className="flex min-w-0 flex-col gap-4" data-enter>
+              <div className="flex min-w-0 flex-col gap-4">
                 <Hotel3D replay={replay} variant="full" />
                 <StatusLegend className="px-1 sm:hidden" />
                 <Card>

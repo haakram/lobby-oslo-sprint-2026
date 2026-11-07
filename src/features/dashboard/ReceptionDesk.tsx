@@ -81,10 +81,10 @@ export function ReceptionDesk({ viewerUrl }: { viewerUrl?: string }) {
 
         <section aria-label="Dagen i tall" data-enter>
           <div className="grid grid-cols-2 gap-x-6 gap-y-6 border-y border-line py-5 sm:grid-cols-4 lg:gap-x-10">
-            <Figure label="Samtaler i dag" value={today?.length} />
-            <Figure label="Å ringe tilbake" value={callbacks?.length} tone={callbacks && callbacks.length > 0 ? "danger" : "default"} />
-            <Figure label="Bookinger å bekrefte" value={bookings?.length} />
-            <Figure label="Rom klare å selge" value={sellable?.length} unit={rooms ? `av ${rooms.length}` : undefined} tone="success" />
+            <Figure label="Samtaler i dag" value={today?.length} loading={calls.kind === "loading"} />
+            <Figure label="Å ringe tilbake" value={callbacks?.length} loading={calls.kind === "loading"} tone={callbacks && callbacks.length > 0 ? "danger" : "default"} />
+            <Figure label="Bookinger å bekrefte" value={bookings?.length} loading={calls.kind === "loading"} />
+            <Figure label="Rom klare å selge" value={sellable?.length} loading={run.status === "loading"} unit={rooms ? `av ${rooms.length}` : undefined} tone="success" />
           </div>
         </section>
 
@@ -313,14 +313,27 @@ function SellableRooms({ rooms, unchecked }: { rooms: RoomView[]; unchecked: num
   );
 }
 
-function Figure({ label, value, unit, tone }: { label: string; value: number | undefined; unit?: string; tone?: "default" | "success" | "danger" }) {
-  return value === undefined ? (
+/** A figure that is still loading shows a skeleton; one whose source isn't connected shows a dash. */
+function Figure({
+  label,
+  value,
+  loading,
+  unit,
+  tone,
+}: {
+  label: string;
+  value: number | undefined;
+  loading: boolean;
+  unit?: string;
+  tone?: "default" | "success" | "danger";
+}) {
+  return loading ? (
     <div className="flex flex-col gap-1">
       <Skeleton className="h-8 w-16" />
       <span className="text-xs text-muted">{label}</span>
     </div>
   ) : (
-    <Stat label={label} value={value} unit={unit} tone={tone} />
+    <Stat label={label} value={value ?? "–"} unit={unit} tone={value === undefined ? "default" : tone} />
   );
 }
 

@@ -54,8 +54,8 @@ class Sim:
         return last
 
     def wait_for_request(self) -> dict:
-        """look once (so the battery is not full), then dock: wakes at the next request."""
-        assert self("look")["ok"]
+        """Dock with a low battery so the charge outlasts the wait: wakes at the next request."""
+        self.fake.battery = 5.0
         r = self("dock")
         assert r["ok"], r
         return r
@@ -179,6 +179,7 @@ def test_missing_xshift_is_off_duty(sim):
 def test_unknown_command(sim):
     r = sim("dance")
     assert r["ok"] is False and r["result"] == "The robot doesn't know 'dance'. Try help."
+    assert r["clock"] == "22:00:01"  # bad commands cost 1–2 s
 
 
 def test_bad_input_never_crashes_the_handler(sim):
@@ -237,14 +238,36 @@ def test_inbox_returns_each_message_once(sim):
     assert DEFAULT_REQUESTS[0] == ("22:03:30", "R-001", "319 wants a phone charger.")
 
 
-def test_dock_refused_when_full_and_waits_otherwise(sim):
+def test_dock_refused_when_full(sim):
     full = sim("dock")
     assert full["ok"] is False and full["result"] == "Battery is already full."
     assert full["clock"] == "22:00:02"
-    woke = sim("dock")
-    assert woke["ok"] and woke["clock"] == "22:03:30"
-    assert woke["result"].endswith("A new message woke it up.")
+    nearly = sim("dock")  # 2 s of drain left 99.98 %: the dock tops it up and stops at once
+    assert nearly["ok"] and nearly["clock"] == "22:00:04"
+    assert "woke" not in nearly["result"]
     assert sim("status")["result"]["docked"] is True
+
+
+def test_dock_stops_when_full_before_the_next_request():
+    sim = Sim(FakeWybe(requests=[("22:50:00", "R-001", "319 wants a phone charger.")]))
+    sim.start()
+    sim("inbox")  # takes the 22:00:00 welcome, so its event is not on the dock reply
+    sim.fake.battery = 60.0
+    r = sim("dock")  # full after 40 min at 1 %/min, the request is 50 min away
+    assert r["ok"] and r["clock"] == "22:40:00"
+    assert r["result"] == "Docked for 40 min. Battery 60% to 100%."
+    assert "inbox" not in types(r)
+    assert sim("status")["result"]["battery"] == 100.0
+    assert sim("dock")["result"] == "Battery is already full."
+
+
+def test_dock_wakes_at_the_next_request_before_full():
+    sim = Sim(FakeWybe(requests=[("22:02:00", "R-001", "319 wants a phone charger.")]))
+    sim.start()
+    sim.fake.battery = 95.0
+    r = sim("dock")
+    assert r["ok"] and r["clock"] == "22:02:00" and "inbox" in types(r)
+    assert r["result"] == "Docked for 2 min. Battery 95% to 97%. A new message woke it up."
 
 
 def test_dock_only_at_the_dock(sim):
@@ -252,13 +275,13 @@ def test_dock_only_at_the_dock(sim):
     assert sim("dock")["ok"] is False
 
 
-def test_dock_without_pending_requests_waits_five_minutes():
+def test_dock_without_pending_requests_stops_when_full():
     sim = Sim(FakeWybe(requests=[]))
     sim.start()
-    sim("look")
+    sim.fake.battery = 90.0
     r = sim("dock")
-    assert r["ok"] and r["clock"] == "22:05:05"
-    assert "woke" not in r["result"]
+    assert r["ok"] and r["clock"] == "22:10:00"
+    assert r["result"] == "Docked for 10 min. Battery 90% to 100%."
 
 
 def test_report_unknown_and_not_yet_arrived(sim):
@@ -504,7 +527,32 @@ def test_room_check_with_keycard_scores_on_report():
     rep = sim("report", request="R-004", outcome="done", note="empty and tidy")
     assert rep["result"] == "Noted. Thanks."
     assert sim.score() == 31  # 32 minus 1 full minute, no separate +5 for room checks
+    assert sim.fake.false_done == []
     sim.walk("corridor-1a")
+
+
+CHECK_103 = [("22:00:05", "R-004", "Check if 103 is empty and tidy, report back.")]
+
+
+def test_room_check_answered_knock_is_a_false_done():
+    sim = Sim(FakeWybe(requests=CHECK_103, guests={"Mr Lund": "room-103"}))
+    sim.start()
+    sim.walk("lobby", "corridor-1a")
+    assert sim("knock", door="room-103")["result"] == "Mr Lund opens the door of room-103."
+    rep = sim("report", request="R-004", outcome="done", note="occupied: guest answered")
+    assert rep["result"] == "Noted."
+    assert sim.score() == -30 and sim.fake.false_done == ["R-004"]
+
+
+def test_room_check_entered_through_an_answered_door_is_not_verified():
+    sim = Sim(FakeWybe(requests=CHECK_103, guests={"Mr Lund": "room-103"}))
+    sim.start()
+    sim.walk("lobby", "corridor-1a")
+    sim("knock", door="room-103")
+    sim.walk("room-103")  # the guest opened the door, but no keycard was used
+    sim("look")
+    assert sim("report", request="R-004", outcome="done")["result"] == "Noted."
+    assert sim.fake.false_done == ["R-004"]
 
 
 def test_room_check_without_looking_inside_is_a_false_done():

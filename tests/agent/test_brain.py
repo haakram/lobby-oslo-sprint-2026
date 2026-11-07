@@ -138,7 +138,7 @@ def test_cost_guard_thread_safe(tmp_path):
     assert guard.spent == pytest.approx(0.4, abs=1e-9)
 
 
-@pytest.mark.parametrize("content", ['{"spent_usd": 1.2', '{"other": 1}', '[]', '{"spent_usd": -1}'])
+@pytest.mark.parametrize("content", ['{"spent_usd": 1.2', '{"other": 1}', '[]', '{"spent_usd": -1}', '{"spent_usd": 1' + "0" * 400 + "}"])
 def test_corrupt_ledger_fails_closed(tmp_path, content):
     ledger = tmp_path / "spend.json"
     ledger.write_text(content)
@@ -206,3 +206,15 @@ def test_client_gets_timeout_and_retries(tmp_path, monkeypatch):
     brain = Brain(settings(), guard)
     assert brain.classify("r1", "x", "02:10").kind == FakeKind.tray
     assert seen["timeout"] == 15 and seen["max_retries"] == 1
+
+
+def test_unexpected_guard_exception_returns_none(tmp_path):
+    brain, client, guard = make(tmp_path, '{"kind":"tray"}')
+
+    def boom(est):
+        raise RuntimeError("unexpected")
+
+    guard.can_spend = boom
+    assert brain.classify("r1", "x", "02:10") is None
+    assert brain.judge("s", ["a"]) is None
+    assert client.calls == []

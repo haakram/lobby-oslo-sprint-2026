@@ -70,7 +70,7 @@ class CostGuard:
             raise LedgerError(f"ledger unreadable ({type(exc).__name__})") from None
         try:
             value = float(json.loads(text)["spent_usd"])
-        except (ValueError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError, OverflowError):
             raise LedgerError("ledger corrupt") from None
         if not value >= 0 or value == float("inf"):
             raise LedgerError("ledger value invalid")
@@ -124,13 +124,13 @@ class Brain:
     def _ask(self, prompt: str) -> str | None:
         if not self.enabled:
             return None
-        # Conservative estimate: ~3 chars per token in, full max_tokens out.
-        tokens_in = (len(SYSTEM_PROMPT) + len(prompt)) // 3 + 1
-        est = (tokens_in * PRICE_IN_PER_MTOK + MAX_TOKENS * PRICE_OUT_PER_MTOK) / 1e6
-        if not self.guard.can_spend(est):
-            log.warning("brain: budget cap reached, skipping Claude call")
-            return None
         try:
+            # Conservative estimate: ~3 chars per token in, full max_tokens out.
+            tokens_in = (len(SYSTEM_PROMPT) + len(prompt)) // 3 + 1
+            est = (tokens_in * PRICE_IN_PER_MTOK + MAX_TOKENS * PRICE_OUT_PER_MTOK) / 1e6
+            if not self.guard.can_spend(est):
+                log.warning("brain: budget cap reached, skipping Claude call")
+                return None
             resp = self._get_client().messages.create(
                 model=MODEL,
                 max_tokens=MAX_TOKENS,

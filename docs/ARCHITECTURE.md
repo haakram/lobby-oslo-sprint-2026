@@ -67,7 +67,14 @@ TBD — entities, fields, relations. A table per entity is enough.
 
 ### 4.3 Shared types and events
 
-TBD — where they live (one file or folder) and their names.
+**Run log v1 (Track A → Track B).** The Night Shift agent writes one JSON object per line to
+`temp/runs/<shift>.jsonl`, `"v": 1` on every line. Types: `start` (shift, mode, seed), `call` (cmd,
+args, ok, clock, result, events, latency_ms, status), `decision` (kind: plan · task_start · task_done ·
+task_failed · brain · note, data), `state` (clock, location, score, battery, hands, cart), `end` (score,
+requests_served, reason). The 3D viewer (`viewer/`, served by `python -m agent viewer`) and anything
+Track B shows about the agent read only this. Hotel map: `agent/data/hotel_seed1.json` (nodes with
+floor, kind, x, z; edges in metres). Shortest routes for the app (Holio 6):
+`python -m agent route <from> <to>`. Details: `docs/superpowers/specs/2026-11-07-nightshift-agent-design.md`.
 
 ### 4.4 Environment variables
 

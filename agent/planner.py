@@ -17,6 +17,11 @@ GROWTH_PER_HOUR = 0.08  # the same request pays ~8 % more per hour of the night 
 BACKLOG_FACTOR = 1.25  # margin on the summed estimates of a queue (they run short live)
 OVERLOAD_DRAIN_PER_MIN = 0.75  # % battery per minute of backlog (the fake drains 0.75 %/min busy)
 OVERLOAD_BATTERY_FLOOR = 10.0  # % the backlog must leave in the battery
+# Overload order only: a lost-item hunt is planned at 145 s plus the walk, but live hunts took ~9 min
+# and found the item ~half the time before the visible-items fix (shorter, and 10 of 12 found on
+# seed 41, after it): ranked as at least this long and worth this share of its value.
+LOST_ITEM_HUNT_S = 420.0
+LOST_ITEM_FOUND_P = 0.7
 
 
 def _base_values() -> dict[str, float]:
@@ -34,6 +39,14 @@ def _decay_by_kind() -> dict[str, float]:
             "amenity": 0.40, "bags": 0.84, "noise": 0.49, "followup": 0.0}
 
 
+def _growth_by_kind() -> dict[str, float]:
+    # share of the base gained per hour since 22:00: ~8 % for every kind but spills, whose pay is
+    # nearly flat (live fit 51.2 + 0.64 per hour)
+    return {"amenity": GROWTH_PER_HOUR, "message": GROWTH_PER_HOUR, "tray": GROWTH_PER_HOUR,
+            "room_check": GROWTH_PER_HOUR, "lost_item": GROWTH_PER_HOUR, "bags": GROWTH_PER_HOUR,
+            "noise": GROWTH_PER_HOUR, "spill": 0.0125, "followup": GROWTH_PER_HOUR}
+
+
 def _cart_stock() -> dict[str, int]:
     return {"towel": 2, "water-bottle": 2, "phone-charger": 1, "toiletry-kit": 1, "pillow": 1}
 
@@ -48,6 +61,7 @@ class Params:
     base_values: dict[str, float] = field(default_factory=_base_values)
     decay_per_min: float = 0.5  # fallback for a kind missing from decay_by_kind
     decay_by_kind: dict[str, float] = field(default_factory=_decay_by_kind)
+    growth_by_kind: dict[str, float] = field(default_factory=_growth_by_kind)
     cart_stock: dict[str, int] = field(default_factory=_cart_stock)
     use_cart: bool = True
     max_scans: int = 6
@@ -61,7 +75,7 @@ class Params:
     def from_json(cls, s: str) -> Params:
         data = json.loads(s)
         for key, default in (("base_values", _base_values), ("action_seconds", _action_seconds),
-                             ("decay_by_kind", _decay_by_kind)):
+                             ("decay_by_kind", _decay_by_kind), ("growth_by_kind", _growth_by_kind)):
             if isinstance(data.get(key), dict):  # older files lack the newer kinds
                 data[key] = {**default(), **data[key]}
         return cls(**data)
@@ -148,15 +162,16 @@ def estimate_value(task: Task, now_s: int, params: Params) -> float:
 
 
 def value_at(task: Task, finish_s: float, params: Params) -> float:
-    """What the server pays for `task` finished at sim second `finish_s`: the kind's base, ~8 % more
-    per hour since 22:00, less the kind's decay per minute waited; at least VALUE_FLOOR, and 0 once
-    the shift is over (06:00)."""
+    """What the server pays for `task` finished at sim second `finish_s`: the kind's base, grown by
+    the kind's share per hour since 22:00 (~8 %; spills ~1 %), less the kind's decay per minute
+    waited; at least VALUE_FLOOR, and 0 once the shift is over (06:00)."""
     if finish_s > SHIFT_END_S:
         return 0.0
     base = params.base_values.get(task.kind.value, VALUE_FLOOR)
     hours = max(0.0, finish_s - SHIFT_START_S) / 3600.0
     waited_min = max(0.0, finish_s - clock_to_seconds(task.arrived)) / 60.0
-    return max(VALUE_FLOOR, base * (1 + GROWTH_PER_HOUR * hours) - _decay(task, params) * waited_min)
+    growth = params.growth_by_kind.get(task.kind.value, GROWTH_PER_HOUR)
+    return max(VALUE_FLOOR, base * (1 + growth * hours) - _decay(task, params) * waited_min)
 
 
 def backlog_seconds(tasks: list[Task], state: RobotState, hotel: Hotel, params: Params) -> float:
@@ -179,6 +194,16 @@ def overloaded(tasks: list[Task], state: RobotState, hotel: Hotel, params: Param
     return battery is not None and battery - backlog / 60.0 * OVERLOAD_DRAIN_PER_MIN < OVERLOAD_BATTERY_FLOOR
 
 
+def _overload_rank(task: Task, secs: float, now: int, params: Params) -> tuple[float, float]:
+    """-(value at the finish per robot-second), then seconds. A lost-item hunt counts as at least
+    LOST_ITEM_HUNT_S and pays LOST_ITEM_FOUND_P of its value (live hunts take minutes, often fail)."""
+    found = 1.0
+    if task.kind is Kind.LOST_ITEM:
+        secs, found = max(secs, LOST_ITEM_HUNT_S), LOST_ITEM_FOUND_P
+    value = value_at(task, now + BACKLOG_FACTOR * secs, params) * found
+    return -value / max(secs, 1.0), secs
+
+
 def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Params,
                 battery: float | None = None, overload: bool | None = None) -> Task | None:
     """Shortest task first while the queue can all be served. Every request loses points while it
@@ -189,7 +214,8 @@ def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Para
     worked out) not everything will be served, and shortest-first starves long, valuable, slowly
     decaying work (live seed 23: four spills, ~52 points and -0.36/min each, never started behind
     newer 2-3 min deliveries); then the order is value at the finish per robot-second, ties by
-    seconds. Unknown kinds go last either way. Params.order = "ratio" keeps the old rule."""
+    seconds (`_overload_rank`: a lost-item hunt is priced as live hunts go). Unknown kinds go last
+    either way. Params.order = "ratio" keeps the old rule."""
     now = clock_to_seconds(state.clock)
     if overload is None:
         overload = params.order != "ratio" and overloaded(tasks, state, hotel, params, battery)
@@ -200,7 +226,7 @@ def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Para
         if params.order == "ratio":
             rank: tuple = (-estimate_value(t, int(now + secs), params) / max(secs, 1.0),)
         elif overload:
-            rank = (-value_at(t, now + BACKLOG_FACTOR * secs, params) / max(secs, 1.0), secs)
+            rank = _overload_rank(t, secs, now, params)
         else:
             rank = (secs,)
         key = (t.kind is Kind.UNKNOWN, *rank, clock_to_seconds(t.arrived), idx)

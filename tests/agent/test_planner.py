@@ -241,8 +241,9 @@ def test_unreachable_tasks_are_left_out_of_the_backlog(hotel):
 
 def _seed23_at_0400():
     """Live seed 23 (2026-11-07 22:45 run): spills that arrived 03:28-05:00 were never started;
-    shortest-first always put the sign fetch and search (~5 min) behind newer 2-3 min deliveries."""
-    st = RobotState(location="corridor-1b", clock="04:00:00", battery=30.0, cart=[])
+    shortest-first always put the sign fetch and search behind newer deliveries. The robot is on
+    floor 2 (where seed 23's was at 03:50): the sign and every item are a trip down to floor 1."""
+    st = RobotState(location="corridor-2b", clock="04:00:00", battery=30.0, cart=[])
     spill = Task(request="R-1", kind=Kind.SPILL, text="", arrived="03:30:00", floor=3)
     ams = [amenity("room-210", "pillow", arrived="03:55:00", req="R-2"),
            amenity("room-319", "toiletry-kit", arrived="03:56:30", req="R-3"),
@@ -261,14 +262,50 @@ def test_overload_rule_starts_the_waiting_spill_before_fresh_deliveries(hotel):
         return value_at(t, int(now + 1.25 * secs), p) / secs
 
     spill_s = estimate_seconds(spill, st, hotel, p)
-    assert 240 <= spill_s <= 320  # sign from storage, the floor-3 landing, the search
-    assert all(150 <= estimate_seconds(a, st, hotel, p) <= 200 for a in ams)
-    assert all(per_second(spill) > per_second(a) for a in ams)  # ~52/300 s beats ~25/180 s
+    assert 330 <= spill_s <= 390  # sign from storage, the floor-3 landing, the search
+    assert all(240 <= estimate_seconds(a, st, hotel, p) <= 300 for a in ams)  # item from floor 1
+    # the spill pays ~56 at 04:00 (nearly flat with the hour), ~43 after its 35 min wait, over ~6 min;
+    # a fresh delivery ~26 over ~4.5 min: ~0.12 against ~0.10 a second
+    assert all(per_second(spill) > per_second(a) for a in ams)
     queue = [*ams, spill]
     assert choose_next(queue, st, hotel, p, battery=30.0, overload=True) is spill
     assert choose_next(queue, st, hotel, p, battery=30.0, overload=False) in ams  # what seed 23 did
-    # On its own this four-task queue (~16 min of backlog) trips the battery test below ~22 %, not at
-    # 30 % (30 - 16 x 0.75 >= 10); live seed 23 got there at ~04:34 (27 %, seven queued, three spills).
+    # On its own this four-task queue (~24 min of backlog) trips the battery test below ~28 %, not at
+    # 30 % (30 - 24 x 0.75 >= 10); live seed 23 got there at ~04:34 (27 %, seven queued, three spills).
     assert not overloaded(queue, st, hotel, p, 30.0)
     assert overloaded(queue, st, hotel, p, 20.0)
     assert choose_next(queue, st, hotel, p, battery=20.0) is spill
+
+
+# --- Task 4 fix round 1: growth per kind, lost-item hunts priced honestly in overload ---------------
+
+def test_growth_is_per_kind_and_older_params_files_get_the_defaults():
+    p = Params()
+    assert p.growth_by_kind["spill"] == 0.0125  # live fit: 51.2 + 0.64 per hour
+    assert all(g == 0.08 for k, g in p.growth_by_kind.items() if k != "spill")
+    spill = Task(request="R-1", kind=Kind.SPILL, text="", arrived="04:00:00", floor=3)
+    am = amenity("room-101", arrived="04:00:00")
+    at = clock_to_seconds("04:00:00")
+    assert value_at(spill, at, p) == pytest.approx(52 * (1 + 0.0125 * 6))  # ~55.9, not 52 x 1.48
+    assert value_at(am, at, p) == pytest.approx(20 * (1 + 0.08 * 6))
+    unk = Task(request="R-3", kind=Kind.UNKNOWN, text="??", arrived="04:00:00")
+    assert value_at(unk, at, Params(base_values={"unknown": 10})) == pytest.approx(10 * 1.48)  # fallback
+    old = Params.from_json('{"decay_per_min": 0.81}')  # a file from before the fix
+    assert old.growth_by_kind == p.growth_by_kind
+    partial = Params.from_json('{"growth_by_kind": {"spill": 0.0}}')
+    assert partial.growth_by_kind == {**p.growth_by_kind, "spill": 0.0}
+    assert Params.from_json(p.to_json()) == p
+
+
+def test_in_overload_a_fresh_lost_item_ranks_behind_a_spill_and_an_amenity(hotel):
+    # a hunt is planned at 145 s plus the walk; live hunts took ~9 min and found the item ~half the
+    # time (10 of 12 after the visible-items fix): priced at LOST_ITEM_HUNT_S and LOST_ITEM_FOUND_P
+    st = RobotState(location="corridor-1b", clock="04:00:00", battery=30.0, cart=[])
+    p = Params()
+    lost = Task(request="R-1", kind=Kind.LOST_ITEM, text="", arrived="03:59:00", item="wallet")
+    spill = Task(request="R-2", kind=Kind.SPILL, text="", arrived="03:40:00", floor=3)
+    am = amenity("room-210", "pillow", arrived="03:58:00", req="R-3")
+    assert estimate_seconds(lost, st, hotel, p) < estimate_seconds(am, st, hotel, p)  # shortest on paper
+    assert choose_next([lost, spill, am], st, hotel, p, overload=True) is spill
+    assert choose_next([lost, am], st, hotel, p, overload=True) is am
+    assert choose_next([lost, spill, am], st, hotel, p, overload=False) is lost  # shortest-first unchanged

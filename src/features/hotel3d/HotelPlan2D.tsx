@@ -1,14 +1,6 @@
-import type { KeyboardEvent } from "react";
-import {
-  HOTEL_EDGES,
-  HOTEL_FLOORS,
-  HOTEL_NODES,
-  type HotelNode,
-  placeName,
-  ROOM_STATUS_LABEL,
-  roomNumber,
-  type Snapshot,
-} from "@/features/replay";
+import { type KeyboardEvent, useMemo } from "react";
+import { BASE_HOTEL, floorsOf, type HotelMap, type HotelNode } from "@/features/hotel/mapFromRun";
+import { placeName, ROOM_STATUS_LABEL, roomNumber, type Snapshot } from "@/features/replay";
 import { cx } from "@/ui";
 import { STATUS_CSS_VAR } from "./tokens";
 
@@ -22,21 +14,23 @@ const MARGIN = 3.2;
 
 type FloorPlan = { floor: number; nodes: HotelNode[]; minX: number; minZ: number; width: number; height: number };
 
-const PLANS: FloorPlan[] = HOTEL_FLOORS.map((floor) => {
-  const nodes = Object.values(HOTEL_NODES).filter((node) => node.floor === floor);
-  const xs = nodes.map((node) => node.x);
-  const zs = nodes.map((node) => node.z);
-  const minX = Math.min(...xs) - MARGIN;
-  const minZ = Math.min(...zs) - MARGIN;
-  return {
-    floor,
-    nodes,
-    minX,
-    minZ,
-    width: Math.max(...xs) + MARGIN - minX,
-    height: Math.max(...zs) + MARGIN - minZ,
-  };
-});
+function plansOf(map: HotelMap): FloorPlan[] {
+  return floorsOf(map).map((floor) => {
+    const nodes = Object.values(map.nodes).filter((node) => node.floor === floor);
+    const xs = nodes.map((node) => node.x);
+    const zs = nodes.map((node) => node.z);
+    const minX = Math.min(...xs) - MARGIN;
+    const minZ = Math.min(...zs) - MARGIN;
+    return {
+      floor,
+      nodes,
+      minX,
+      minZ,
+      width: Math.max(...xs) + MARGIN - minX,
+      height: Math.max(...zs) + MARGIN - minZ,
+    };
+  });
+}
 
 function activate(handler: () => void) {
   return (event: KeyboardEvent) => {
@@ -48,6 +42,7 @@ function activate(handler: () => void) {
 }
 
 export function HotelPlan2D({
+  map = BASE_HOTEL,
   snapshot,
   variant = "full",
   className,
@@ -55,6 +50,8 @@ export function HotelPlan2D({
   onSelectRoom,
   onSelectPlace,
 }: {
+  /** The night's hotel (`timeline.map`); the seed-1 base when omitted. */
+  map?: HotelMap;
   snapshot: Snapshot | null;
   variant?: "panel" | "full";
   className?: string;
@@ -62,9 +59,11 @@ export function HotelPlan2D({
   onSelectRoom?: (roomId: string | null) => void;
   onSelectPlace?: (nodeId: string) => void;
 }) {
+  const plans = useMemo(() => plansOf(map), [map]);
+  const nodesById = map.nodes;
   const robot = snapshot?.robot ?? null;
-  const from = robot ? HOTEL_NODES[robot.from] : undefined;
-  const to = robot ? HOTEL_NODES[robot.to] : undefined;
+  const from = robot ? nodesById[robot.from] : undefined;
+  const to = robot ? nodesById[robot.to] : undefined;
   const robotFloor = robot?.floor ?? null;
   const rx = from && to && robot ? from.x + (to.x - from.x) * robot.progress : (to?.x ?? null);
   const rz = from && to && robot ? from.z + (to.z - from.z) * robot.progress : (to?.z ?? null);
@@ -74,10 +73,10 @@ export function HotelPlan2D({
       aria-label="Hotellet som plantegning"
       className={cx("grid grid-cols-1 gap-3 bg-bg p-3 sm:grid-cols-3", variant === "panel" && "sm:gap-2", className)}
     >
-      {PLANS.map((plan) => {
-        const edges = HOTEL_EDGES.filter((edge) => {
-          const a = HOTEL_NODES[edge.a];
-          const b = HOTEL_NODES[edge.b];
+      {plans.map((plan) => {
+        const edges = map.edges.filter((edge) => {
+          const a = nodesById[edge.a];
+          const b = nodesById[edge.b];
           return a && b && a.floor === plan.floor && b.floor === plan.floor;
         });
         const active = robotFloor === plan.floor;
@@ -94,8 +93,8 @@ export function HotelPlan2D({
               aria-label={`${plan.floor}. etasje`}
             >
               {edges.map((edge) => {
-                const a = HOTEL_NODES[edge.a];
-                const b = HOTEL_NODES[edge.b];
+                const a = nodesById[edge.a];
+                const b = nodesById[edge.b];
                 const door = a.kind === "room" || b.kind === "room";
                 return (
                   <line

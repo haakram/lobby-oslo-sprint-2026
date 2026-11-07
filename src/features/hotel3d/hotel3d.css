@@ -56,7 +56,9 @@
 
 .h3d-room[data-dim],
 .h3d-place[data-dim],
-.h3d-floor[data-dim] {
+.h3d-floor[data-dim],
+.h3d-room[data-quiet],
+.h3d-place[data-quiet] {
   opacity: 0;
 }
 

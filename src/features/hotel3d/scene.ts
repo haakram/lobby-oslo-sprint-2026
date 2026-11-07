@@ -2,12 +2,8 @@ import gsap from "gsap";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { floorsOf, type HotelMap, type HotelNode, roomsOf } from "@/features/hotel/mapFromRun";
 import {
-  HOTEL_EDGES,
-  HOTEL_FLOORS,
-  HOTEL_NODES,
-  HOTEL_ROOMS,
-  type HotelNode,
   itemName,
   placeName,
   ROOM_STATUS_LABEL,
@@ -57,6 +53,8 @@ type Link = { line: THREE.Line; base: THREE.Vector3[] };
 export type Pick = { kind: "room" | "place"; id: string; floor: number };
 
 export type SceneOptions = {
+  /** The night's hotel (`timeline.map`); the scene is built once per map. */
+  map: HotelMap;
   tokens: SceneTokens;
   reducedMotion: boolean;
   compact: boolean;
@@ -92,6 +90,8 @@ export class HotelScene {
   private readonly tokens: SceneTokens;
   private readonly reduced: boolean;
   private readonly options: SceneOptions;
+  private readonly map: HotelMap;
+  private readonly floorIds: number[];
   private readonly positions = new Map<string, THREE.Vector3>();
   private readonly floors: FloorParts[] = [];
   private readonly rooms = new Map<string, RoomSlot>();
@@ -137,6 +137,8 @@ export class HotelScene {
     options: SceneOptions,
   ) {
     this.options = options;
+    this.map = options.map;
+    this.floorIds = floorsOf(options.map);
     this.tokens = options.tokens;
     this.reduced = options.reducedMotion;
     this.hoverEnabled = typeof matchMedia === "function" && matchMedia("(hover: hover) and (pointer: fine)").matches;
@@ -198,7 +200,7 @@ export class HotelScene {
     fill.position.set(-30, 20, -10);
     this.scene.add(hemi, key, fill);
 
-    for (const node of Object.values(HOTEL_NODES)) {
+    for (const node of Object.values(this.map.nodes)) {
       this.positions.set(node.id, new THREE.Vector3(node.x, floorY(node.floor), node.z));
     }
 
@@ -284,8 +286,11 @@ export class HotelScene {
 
   private buildFloors() {
     const { tokens } = this;
+    const allNodes = this.map.nodes;
+    const allEdges = this.map.edges;
+    const allRooms = roomsOf(this.map);
     const nodesByFloor = new Map<number, HotelNode[]>();
-    for (const node of Object.values(HOTEL_NODES)) {
+    for (const node of Object.values(allNodes)) {
       const list = nodesByFloor.get(node.floor) ?? [];
       list.push(node);
       nodesByFloor.set(node.floor, list);
@@ -301,7 +306,7 @@ export class HotelScene {
     const position = new THREE.Vector3();
     const up = new THREE.Vector3(0, 1, 0);
 
-    for (const floor of HOTEL_FLOORS) {
+    for (const floor of this.floorIds) {
       const nodes = nodesByFloor.get(floor) ?? [];
       const group = new THREE.Group();
       const materials: THREE.Material[] = [];
@@ -340,13 +345,13 @@ export class HotelScene {
       const doorMaterial = this.track(
         new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.lineStrong), roughness: 0.9, transparent: true, opacity: 0.35 }),
       );
-      const floorEdges = HOTEL_EDGES.filter((edge) => {
-        const a = HOTEL_NODES[edge.a];
-        const b = HOTEL_NODES[edge.b];
+      const floorEdges = allEdges.filter((edge) => {
+        const a = allNodes[edge.a];
+        const b = allNodes[edge.b];
         return a && b && a.floor === floor && b.floor === floor;
       });
-      const walkways = floorEdges.filter((edge) => HOTEL_NODES[edge.a].kind !== "room" && HOTEL_NODES[edge.b].kind !== "room");
-      const doors = floorEdges.filter((edge) => HOTEL_NODES[edge.a].kind === "room" || HOTEL_NODES[edge.b].kind === "room");
+      const walkways = floorEdges.filter((edge) => allNodes[edge.a].kind !== "room" && allNodes[edge.b].kind !== "room");
+      const doors = floorEdges.filter((edge) => allNodes[edge.a].kind === "room" || allNodes[edge.b].kind === "room");
       const walkMesh = new THREE.InstancedMesh(unit, walkMaterial, walkways.length);
       const doorMesh = new THREE.InstancedMesh(unit, doorMaterial, doors.length);
       const place = (mesh: THREE.InstancedMesh, list: typeof floorEdges, width: number, height: number, lift: number) => {
@@ -369,7 +374,7 @@ export class HotelScene {
       this.disposables.push(walkMesh, doorMesh);
 
       // Rooms: one instanced mesh per floor so a floor can fade on its own.
-      const rooms = HOTEL_ROOMS.filter((room) => room.floor === floor);
+      const rooms = allRooms.filter((room) => room.floor === floor);
       const roomMaterial = this.track(
         new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, transparent: true, opacity: 1 }),
       );
@@ -463,7 +468,7 @@ export class HotelScene {
       new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.lineStrong), transparent: true, opacity: 0.55 }),
     );
     for (const prefix of ["elevator-", "stairwell-"]) {
-      const base = HOTEL_FLOORS.map((floor) => this.positions.get(`${prefix}${floor}`))
+      const base = this.floorIds.map((floor) => this.positions.get(`${prefix}${floor}`))
         .filter((point): point is THREE.Vector3 => !!point)
         .map((point) => point.clone().setY(point.y + SHAFT_HEIGHT));
       if (base.length < 2) continue;
@@ -475,19 +480,49 @@ export class HotelScene {
   }
 
   /** Extra height a point at base height `y` gets when the floors are spread apart. */
-  private lift(y: number): number {
-    return (y / FLOOR_HEIGHT) * EXPLODE_EXTRA * this.spread.value;
+  private lift(y: number, spread = this.spread.value): number {
+    return (y / FLOOR_HEIGHT) * EXPLODE_EXTRA * spread;
   }
 
   private applySpread = () => {
     for (const parts of this.floors) parts.group.position.y = this.lift(floorY(parts.floor));
     for (const { line, base } of this.links) {
       const attribute = line.geometry.attributes.position as THREE.BufferAttribute;
-      base.forEach((point, index) => attribute.setXYZ(index, point.x, point.y + this.lift(floorY(HOTEL_FLOORS[index] ?? 1)), point.z));
+      base.forEach((point, index) => attribute.setXYZ(index, point.x, point.y + this.lift(floorY(this.floorIds[index] ?? 1)), point.z));
       attribute.needsUpdate = true;
     }
     this.placeMarkers();
   };
+
+  /** Frames the whole building (as stacked, or as it will be once spread) and stops following. */
+  fitAll(exploded: boolean) {
+    this.onUserTakesCamera();
+    const spread = exploded ? 1 : 0;
+    const box = new THREE.Box3();
+    for (const point of this.positions.values()) {
+      box.expandByPoint(this.tmp.set(point.x, point.y + this.lift(point.y, spread), point.z));
+      box.expandByPoint(this.tmp.set(point.x, point.y + this.lift(point.y, spread) + SHAFT_HEIGHT, point.z));
+    }
+    box.expandByScalar(SLAB_MARGIN);
+    const centre = box.getCenter(new THREE.Vector3());
+    const radius = box.getSize(new THREE.Vector3()).length() / 2;
+    const vertical = THREE.MathUtils.degToRad(this.camera.fov);
+    const horizontal = 2 * Math.atan(Math.tan(vertical / 2) * this.camera.aspect);
+    const distance = (radius / Math.sin(Math.min(vertical, horizontal) / 2)) * 1.02;
+    const offset = START_OFFSET.clone().normalize().multiplyScalar(Math.min(this.controls.maxDistance, distance));
+    this.flyTo(centre, offset);
+  }
+
+  /** Shows room and place names on one floor only (null: every floor), so stacked floors don't mix. */
+  setLabelFloor(floor: number | null) {
+    for (const parts of this.floors) {
+      const quiet = floor !== null && parts.floor !== floor;
+      for (const element of parts.labels) {
+        if (element.classList.contains("h3d-floor")) continue;
+        element.toggleAttribute("data-quiet", quiet);
+      }
+    }
+  }
 
   private placeMarkers() {
     if (this.attentionRoom) {
@@ -519,7 +554,7 @@ export class HotelScene {
     this.follow = follow;
   }
 
-  /** Spreads the floors apart (true) or stacks them (false). Spreading pulls the camera back to see all of it. */
+  /** Spreads the floors apart (true) or stacks them (false). `fitAll` frames the result. */
   setExploded(exploded: boolean) {
     const value = exploded ? 1 : 0;
     if (this.spread.value === value) return;
@@ -532,13 +567,6 @@ export class HotelScene {
         gsap.to(this.spread, { value, duration: 0.6, ease: "power2.inOut", onUpdate: this.applySpread });
       }
     });
-    if (exploded) {
-      this.onUserTakesCamera();
-      const midY = floorY(2);
-      const totalLift = (floorY(HOTEL_FLOORS.length) / FLOOR_HEIGHT) * EXPLODE_EXTRA;
-      this.tmp.set(8, midY + totalLift / 2, 7);
-      this.flyTo(this.tmp, START_OFFSET.clone().multiplyScalar(1.45));
-    }
   }
 
   /** Fades every floor but `floor`; null shows them all. */

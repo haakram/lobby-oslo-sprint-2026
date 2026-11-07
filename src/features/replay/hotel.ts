@@ -1,36 +1,23 @@
-import seed from "@/features/hotel/hotel_seed1.json";
+import { BASE_HOTEL, floorsOf, type HotelEdge, type HotelMap, type HotelNode, type NodeKind, nodeFloorIn, roomsOf } from "@/features/hotel/mapFromRun";
 
 /**
- * The hotel map the agent routes on (`src/features/hotel/hotel_seed1.json`), typed, plus the
- * Norwegian names the screens use for its places. Read-only; the json is the source of truth.
+ * The hotel's names in Norwegian, plus the seed-1 base map for code that has no run log yet. Screens
+ * with a log draw `hotelForRun(lines)` (`src/features/hotel/mapFromRun.ts`): the replay carries it as
+ * `timeline.map`.
  */
 
-export type NodeKind = "room" | "corridor" | "hub" | "service" | "elevator" | "stairwell";
+export type { HotelEdge, HotelMap, HotelNode, NodeKind };
 
-export type HotelNode = { id: string; floor: number; kind: NodeKind; x: number; z: number };
-export type HotelEdge = { a: string; b: string; m: number; door?: boolean; stairs?: boolean };
+/** The seed-1 base. Prefer `timeline.map` / `useHotelMap(lines)` for the night being shown. */
+export const HOTEL_NODES: Record<string, HotelNode> = BASE_HOTEL.nodes;
+export const HOTEL_EDGES: HotelEdge[] = BASE_HOTEL.edges;
+export const HOTEL_FLOORS: number[] = floorsOf(BASE_HOTEL);
+export const HOTEL_ROOMS: HotelNode[] = roomsOf(BASE_HOTEL);
+export const DOCK_NODE: string = BASE_HOTEL.special.dock ?? "charging-dock";
 
-type Seed = {
-  nodes: Record<string, { floor: number; kind: string; x: number; z: number }>;
-  edges: HotelEdge[];
-  stock: Record<string, Record<string, number>>;
-  special: Record<string, string>;
-};
-
-const data = seed as Seed;
-
-export const HOTEL_NODES: Record<string, HotelNode> = Object.fromEntries(
-  Object.entries(data.nodes).map(([id, node]) => [id, { id, ...node, kind: node.kind as NodeKind }]),
-);
-export const HOTEL_EDGES: HotelEdge[] = data.edges;
-export const HOTEL_FLOORS: number[] = [...new Set(Object.values(HOTEL_NODES).map((node) => node.floor))].sort();
-export const HOTEL_ROOMS: HotelNode[] = Object.values(HOTEL_NODES)
-  .filter((node) => node.kind === "room")
-  .sort((a, b) => a.id.localeCompare(b.id));
-export const DOCK_NODE: string = data.special.dock ?? "charging-dock";
-
-export function nodeFloor(id: string | null | undefined): number {
-  return (id && HOTEL_NODES[id]?.floor) || 1;
+/** The floor of a node in `map` (the base when omitted); a name like "room-327" says 3 on its own. */
+export function nodeFloor(id: string | null | undefined, map: HotelMap = BASE_HOTEL): number {
+  return nodeFloorIn(map, id);
 }
 
 /** "room-319" → "319"; anything else unchanged. */

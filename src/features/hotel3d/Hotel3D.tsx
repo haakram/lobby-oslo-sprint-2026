@@ -2,7 +2,8 @@
 
 import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { HOTEL_FLOORS, type HotelReplay, placeName, ROOM_STATUS_LABEL, type RoomStatus } from "@/features/replay";
+import { BASE_HOTEL, floorsOf } from "@/features/hotel/mapFromRun";
+import { type HotelReplay, placeName, ROOM_STATUS_LABEL, type RoomStatus } from "@/features/replay";
 import { cx, RegenIcon, Skeleton } from "@/ui";
 import { HotelPlan2D } from "./HotelPlan2D";
 import type { HotelScene } from "./scene";
@@ -81,6 +82,9 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
   const compact = variant === "panel";
   const snapshot = replay.snapshot;
   const selected = selectedRoom !== undefined ? selectedRoom : ownSelection;
+  // The night's own hotel: other seeds lay the floors out differently. The scene is rebuilt per map.
+  const map = replay.timeline?.map ?? BASE_HOTEL;
+  const floors = floorsOf(map);
 
   // Callbacks reach the scene through refs, so the scene is built once and never goes stale.
   const callbacks = useRef({ onSelectRoom, onSelectPlace });
@@ -99,6 +103,7 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
     import("./scene").then(({ HotelScene: Scene }) => {
       if (cancelled) return;
       instance = new Scene(host, labels, {
+        map,
         tokens,
         reducedMotion: !!reduced,
         compact,
@@ -116,7 +121,7 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
       instance?.dispose();
       setScene(null);
     };
-  }, [webgl, reduced, compact]);
+  }, [webgl, reduced, compact, map]);
 
   useEffect(() => {
     scene?.setTimeline(replay.timeline);
@@ -143,6 +148,23 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
   useEffect(() => {
     scene?.setExploded(floorMode === "exploded");
   }, [scene, floorMode]);
+
+  // Names on one floor at a time when floors are stacked; on every floor once they are spread.
+  const labelFloor = floorMode === "exploded" ? null : floorMode === "all" ? robotFloor : focusFloor;
+  useEffect(() => {
+    scene?.setLabelFloor(labelFloor);
+  }, [scene, labelFloor]);
+
+  const chooseMode = (mode: FloorMode) => {
+    setFloorMode(mode);
+    if (mode === "all" || mode === "exploded") {
+      setFollow(false);
+      scene?.fitAll(mode === "exploded");
+    } else if (mode === "auto") {
+      setFollow(true);
+      scene?.focusRobot();
+    }
+  };
 
   useEffect(() => {
     scene?.setFollow(follow);
@@ -174,7 +196,7 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
   const height = compact ? "h-[clamp(300px,52vw,460px)]" : "h-[clamp(400px,60vh,760px)]";
   const modes: Array<{ mode: FloorMode; text: string; name: string }> = [
     { mode: "auto", text: "Følg", name: "Robotens etasje" },
-    ...HOTEL_FLOORS.map((floor) => ({ mode: floor as FloorMode, text: String(floor), name: `${floor}. etasje` })),
+    ...floors.map((floor) => ({ mode: floor as FloorMode, text: String(floor), name: `${floor}. etasje` })),
     { mode: "all", text: "Alle", name: "Alle etasjer" },
     { mode: "exploded", text: "Spredt", name: "Etasjene spredt" },
   ];
@@ -187,6 +209,7 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
     >
       {webgl === false ? (
         <HotelPlan2D
+          map={map}
           snapshot={snapshot}
           variant={variant}
           selectedRoom={selected ?? null}
@@ -222,7 +245,7 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
                   aria-pressed={active}
                   aria-label={name}
                   title={name}
-                  onClick={() => setFloorMode(mode)}
+                  onClick={() => chooseMode(mode)}
                   className={cx(
                     "min-h-9 min-w-9 rounded-sm px-2 text-sm font-semibold transition-colors duration-150 ease-standard pointer-coarse:min-h-11 sm:px-2.5",
                     active ? "bg-sunken text-text" : "text-muted hover:text-text",

@@ -1,4 +1,13 @@
 export {
+  BASE_HOTEL,
+  floorsOf,
+  hotelForRun,
+  type HotelMap,
+  nodeFloorIn,
+  roomsOf,
+  useHotelMap,
+} from "@/features/hotel";
+export {
   DOCK_NODE,
   HOTEL_EDGES,
   HOTEL_FLOORS,

@@ -207,6 +207,7 @@ def _vet_brain(ex: Executor, original: Task, better: Task) -> Task:
 
 
 _SKIP = re.compile(r"^\s*Skip (R-\d+)\b")
+_CHECKED_OUT = re.compile(r"(?<!\d)(\d{3}) checked out\b", re.IGNORECASE)  # "309" or "room-309"
 
 
 def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]) -> None:
@@ -224,6 +225,24 @@ def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]
                    note="Skipped as instructed: the guest checked out.")
     ex.log("request_skipped", request=rid, text=text[:120], was_queued=bool(dropped),
            reported=reply.ok, reply=str(reply.result)[:80])
+    if m := _CHECKED_OUT.search(text):
+        _checked_out(ex, f"room-{m[1]}", rid, pending)
+
+
+def _checked_out(ex: Executor, room: str, rid: str, pending: list[Task]) -> None:
+    """Live seed 16: after "Skip R-053, 309 checked out" the robot knocked on 309 for another request
+    (-10); every task for a checked-out room is worth 0. The room is remembered (the flows decline a
+    later request for it before any knock), and its other queued tasks are dropped and reported
+    declined (costs nothing). A task already running finishes; only queued ones are dropped."""
+    ex.checked_out.add(room)
+    dropped = []
+    for task in [t for t in pending if t.room == room and t.request != rid]:
+        ex.cmd("report", request=task.request, outcome="declined",
+               note=f"Guest checked out (manager's skip of {rid})")
+        pending.remove(task)  # after the report: a server error leaves it queued (the flows decline it)
+        ex.ledger.set_status(task.request, "declined")
+        dropped.append(task.request)
+    ex.log("room_checked_out", room=room, request=rid, dropped=dropped)
 
 
 NIGHT_END_S = clock_to_seconds("06:00:00") + 24 * 3600  # the server ends the shift at 06:00

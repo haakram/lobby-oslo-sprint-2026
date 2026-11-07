@@ -24,6 +24,7 @@ from agent.flows import (
     _door_sign,
     _knock,
     _open_with_keycard,
+    _refuse_checked_out,
     _rose,
     carried_like,
     pick_for_others,
@@ -230,6 +231,7 @@ def noise(ex: Executor, task: Task, h: Hyp) -> Result:
         h.log("nothing named in the look; did not knock", h.before, ex.score_now(), seen=seen)
         raise ActionFailed(f"no source of the noise named; saw {seen}")
     target = rooms[0]
+    _refuse_checked_out(ex, target, task.request)  # the look may point at a room whose guest has left
     ex.go(_corridor(ex, target))
     answer = _knock(ex, target)  # looks at the door first
     if answer != "open":

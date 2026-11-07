@@ -117,6 +117,7 @@ class Executor:
         self.inbox_waiting = False  # an inbox event was seen; the shift loop clears it
         self.ledger = Ledger()  # every request of the shift (follow-ups, duplicates)
         self.queue: list[Task] = []  # the shift loop's pending tasks (a follow-up may run one early)
+        self.checked_out: set[str] = set()  # rooms the manager's skip says checked out: nothing is done there
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
         self._logged: dict | None = None
         self._tentative: set[frozenset[str]] = set()

@@ -58,6 +58,7 @@ def handle(ex: Executor, task: Task) -> Result:
                        "manager's instructions are followed, so nothing was changed or delivered")
     if task.kind is Kind.UNKNOWN:
         task = _classify(ex, task)
+    _refuse_checked_out(ex, task.room, task.request)  # every kind: a checked-out room's task is worth 0
     if task.kind not in (Kind.FOLLOWUP, Kind.NOISE):  # those keep their own logic
         _refuse_known_dnd(ex, task.room, task.request)
     ex.ensure_battery()  # a trip starts: below 25 % it charges first (never runs flat)
@@ -132,6 +133,14 @@ def _refuse_known_dnd(ex: Executor, room: str | None, request: str | None = None
     if seen:
         ex.log("note", request=request, room=room, text=f"DND sign on {room} seen {seen}: skipped the trip")
         raise ActionFailed(f"Do Not Disturb sign on {room} (seen {seen}); did not disturb")
+
+
+def _refuse_checked_out(ex: Executor, room: str | None, request: str | None = None) -> None:
+    """Declined, with no trip and nothing picked, for a room the manager's skip said checked out
+    tonight (live seed 16: a knock there cost -10; any task for it is worth 0, declined costs nothing)."""
+    if room and room in ex.checked_out:
+        ex.log("note", request=request, room=room, text=f"{room} checked out tonight: skipped the trip")
+        raise Declined(f"{room} checked out tonight")
 
 
 def _door_sign(ex: Executor, room: str, *, retry: bool = True) -> bool:
@@ -271,6 +280,7 @@ def _deliver(ex: Executor, room: str, item: str, count: int = 1) -> Result:
 def amenity(ex: Executor, task: Task) -> Result:
     if not task.item:
         raise ActionFailed("no item in the request")
+    _refuse_checked_out(ex, task.room, task.request)  # before _corridor: no floor explored for it
     _corridor(ex, task.room)  # an unknown room fails before the trip to the stock room
     _refuse_known_dnd(ex, task.room, task.request)  # a named guest's room is known only here
     had = ex.count(task.item)
@@ -362,6 +372,7 @@ def _fewer_objects_than_orders(ex: Executor, task: Task, objects: list[str], wan
 
 
 def _tray(ex: Executor, task: Task) -> Result:
+    _refuse_checked_out(ex, task.room, task.request)
     _corridor(ex, task.room)
     _refuse_known_dnd(ex, task.room, task.request)
     item = task.item or f"tray-{task.room.removeprefix('room-')}"
@@ -400,6 +411,7 @@ def _tray(ex: Executor, task: Task) -> Result:
 
 
 def message(ex: Executor, task: Task) -> Result:
+    _refuse_checked_out(ex, task.room, task.request)
     _refuse_known_dnd(ex, task.room, task.request)
     _at_open_door(ex, task.room)
     before = ex.score_now()
@@ -462,6 +474,7 @@ def lost_item(ex: Executor, task: Task) -> Result:
     if not item:
         raise ActionFailed("no lost item named")
     room = task.room or _ask_room(ex, task.guest, task.request)
+    _refuse_checked_out(ex, room, task.request)
     _corridor(ex, room)
     _refuse_known_dnd(ex, room, task.request)
     stock = {name for items in ex.hotel.stock.values() for name in items}

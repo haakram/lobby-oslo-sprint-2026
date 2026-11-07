@@ -90,6 +90,9 @@ same PR that first reads it.
 | `ELEVENLABS_API_KEY` | Track B server | **yes** | Hamad's `.env.local` (written by the ElevenLabs CLI), sent privately |
 | `ELEVENLABS_AGENT_ID` | Track B server (`/api/voice/token`), `src/features/voice/setup-agent.ts` | no (blank in `.env.example`; printed by `setup-agent.ts`) | `.env` and Vercel project settings |
 | `APP_CLAUDE_BUDGET_USD` | Track B server (Claude spend meter) | no (default 5) | `.env.example` |
+| `ELEVENLABS_RECEPTION_AGENT_ID` | Track B server (`/api/reception/token`, `/api/reception/calls`), `src/features/reception/setup-agent.ts` | no (blank in `.env.example`; printed by `setup-agent.ts`) | `.env` and Vercel project settings |
+| `RECEPTION_PUBLIC_URL` | `src/features/reception/setup-agent.ts` (webhook mode; `https://` only) | no (blank in `.env.example`) | `.env` when setting up the phone agent |
+| `RECEPTION_TOOL_SECRET` | Track B server (`/api/reception/tools/[tool]`), `src/features/reception/setup-agent.ts` | **yes**: at least 24 characters, also stored at ElevenLabs as a workspace secret | `.env` and Vercel project settings |
 
 ## 5. External services
 

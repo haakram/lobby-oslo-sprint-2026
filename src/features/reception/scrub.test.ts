@@ -6,6 +6,13 @@ describe("scrubText", () => {
     expect(scrubText("Kort 4111 1111 1111 1111 takk", 100)).toBe(`Kort ${CARD_REDACTED} takk`);
     expect(scrubText("4111-1111-1111-1111", 100)).toBe(CARD_REDACTED);
   });
+  it("redacts runs of 13 or more digits, keeps 12", () => {
+    expect(scrubText("1".repeat(12), 100)).toBe("1".repeat(12));
+    expect(scrubText("1".repeat(13), 100)).toBe(CARD_REDACTED);
+    expect(scrubText("1".repeat(19), 100)).toBe(CARD_REDACTED);
+    expect(scrubText("1".repeat(20), 100)).toBe(CARD_REDACTED);
+    expect(scrubText("1234 5678 9012 3456 7890 1234", 100)).toBe(CARD_REDACTED);
+  });
   it("keeps phone numbers", () => {
     expect(scrubText("ring 912 34 567", 100)).toBe("ring 912 34 567");
   });

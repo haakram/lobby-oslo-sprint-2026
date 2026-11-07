@@ -1,6 +1,7 @@
 export const CARD_REDACTED = "[kortnummer fjernet]";
 
-const CARD_RUN = /\d(?:[ -]?\d){12,18}/g;
+// 13 or more digits, with optional single spaces or dashes: a long run is redacted whole.
+const CARD_RUN = /\d(?:[ -]?\d){12,}/g;
 
 /** Cleans free text from a guest: no control characters, no card numbers, bounded length. */
 export function scrubText(value: unknown, maxChars: number): string {

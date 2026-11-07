@@ -39,6 +39,35 @@ const voiceSchema = z.object({
 
 export type VoiceEnv = z.infer<typeof voiceSchema>;
 
+const publicUrl = optional.transform((value, ctx) => {
+  if (!value) return undefined;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    ctx.addIssue({ code: "custom", message: "must be an https:// URL" });
+    return z.NEVER;
+  }
+  if (url.protocol !== "https:") {
+    ctx.addIssue({ code: "custom", message: "must be an https:// URL" });
+    return z.NEVER;
+  }
+  return value.replace(/\/+$/, "");
+});
+
+const toolSecret = optional.refine((value) => value === undefined || value.length >= 24, {
+  message: "must be at least 24 characters",
+});
+
+const receptionSchema = z.object({
+  ELEVENLABS_API_KEY: required,
+  ELEVENLABS_RECEPTION_AGENT_ID: optional,
+  RECEPTION_PUBLIC_URL: publicUrl,
+  RECEPTION_TOOL_SECRET: toolSecret,
+});
+
+export type ReceptionEnv = z.infer<typeof receptionSchema>;
+
 /** Parses, or throws an error that names the variables at fault and never includes a value. */
 function parse<T extends z.ZodType>(schema: T, input: Record<string, string | undefined>): z.infer<T> {
   const parsed = schema.safeParse(input);
@@ -69,5 +98,15 @@ export function voiceEnv(): VoiceEnv {
   return parse(voiceSchema, {
     ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
     ELEVENLABS_AGENT_ID: process.env.ELEVENLABS_AGENT_ID,
+  });
+}
+
+/** What the receptionist needs: its own agent id, and for webhook tools a public URL and a secret. */
+export function receptionEnv(): ReceptionEnv {
+  return parse(receptionSchema, {
+    ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
+    ELEVENLABS_RECEPTION_AGENT_ID: process.env.ELEVENLABS_RECEPTION_AGENT_ID,
+    RECEPTION_PUBLIC_URL: process.env.RECEPTION_PUBLIC_URL,
+    RECEPTION_TOOL_SECRET: process.env.RECEPTION_TOOL_SECRET,
   });
 }

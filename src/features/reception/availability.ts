@@ -1,4 +1,4 @@
-import { addDays, daysBetween, parseIsoDate } from "./dates";
+import { addDays, daysBetween, osloToday, parseIsoDate } from "./dates";
 import {
   directPrice,
   findRoomType,
@@ -103,7 +103,7 @@ export function checkAvailability(
   query: StayQuery,
   options: { today?: string; occupancy?: Occupancy } = {},
 ): AvailabilityResult {
-  const today = options.today ?? new Date().toISOString().slice(0, 10);
+  const today = options.today ?? osloToday();
   const occupancy = options.occupancy ?? defaultOccupancy;
   const fail = (problem: StayProblem): AvailabilityResult => ({ ok: false, today, problem });
 

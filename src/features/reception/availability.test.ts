@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkAvailability,
   defaultOccupancy,
@@ -92,5 +92,23 @@ describe("defaultOccupancy", () => {
     for (const d of FULLY_BOOKED_DATES) {
       for (const room of ROOM_TYPES) expect(defaultOccupancy(d, room.id)).toBe(room.rooms);
     }
+  });
+});
+
+describe("checkAvailability default today", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("uses the Oslo date, not the UTC date", () => {
+    // 23:30 UTC on 7 Nov is already 8 Nov in Oslo.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-07T23:30:00Z"));
+    const r = checkAvailability(
+      { arrival: "2026-11-07", departure: "2026-11-09", guests: 1 },
+      { occupancy: free },
+    );
+    expect(r.today).toBe("2026-11-08");
+    expect(r.ok).toBe(false);
   });
 });

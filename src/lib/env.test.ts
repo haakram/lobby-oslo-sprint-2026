@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { serverEnv, voiceEnv } from "./env";
+import { receptionEnv, serverEnv, voiceEnv } from "./env";
 
 // Made-up test values, never real keys.
 const ELEVEN = "test-eleven-value-123";
@@ -92,5 +92,68 @@ describe("voiceEnv", () => {
     vi.stubEnv("ELEVENLABS_API_KEY", undefined);
     expect(() => voiceEnv()).toThrow(/ELEVENLABS_API_KEY/);
     expect(() => voiceEnv()).not.toThrow(new RegExp(AGENT));
+  });
+});
+
+describe("receptionEnv", () => {
+  // Made-up test values, never real keys.
+  const RECEPTION_AGENT = "test-reception-agent-321";
+  const SECRET = "test-secret-value-abcdefghijklmnop";
+
+  beforeEach(() => {
+    vi.stubEnv("ANTHROPIC_API_KEY", undefined);
+    vi.stubEnv("ELEVENLABS_API_KEY", ELEVEN);
+    vi.stubEnv("ELEVENLABS_RECEPTION_AGENT_ID", RECEPTION_AGENT);
+    vi.stubEnv("RECEPTION_PUBLIC_URL", undefined);
+    vi.stubEnv("RECEPTION_TOOL_SECRET", undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function errorText(): string {
+    try {
+      receptionEnv();
+    } catch (error) {
+      return (error as Error).message;
+    }
+    return "";
+  }
+
+  it("needs only the ElevenLabs key; the rest is optional", () => {
+    vi.stubEnv("ELEVENLABS_RECEPTION_AGENT_ID", "");
+    expect(receptionEnv()).toEqual({
+      ELEVENLABS_API_KEY: ELEVEN,
+      ELEVENLABS_RECEPTION_AGENT_ID: undefined,
+      RECEPTION_PUBLIC_URL: undefined,
+      RECEPTION_TOOL_SECRET: undefined,
+    });
+  });
+
+  it("names a missing ELEVENLABS_API_KEY", () => {
+    vi.stubEnv("ELEVENLABS_API_KEY", undefined);
+    const message = errorText();
+    expect(message).toContain("ELEVENLABS_API_KEY");
+    expect(message).not.toContain(RECEPTION_AGENT);
+  });
+
+  it("requires an https public URL and drops a trailing slash", () => {
+    vi.stubEnv("RECEPTION_PUBLIC_URL", "http://x.no");
+    expect(errorText()).toContain("RECEPTION_PUBLIC_URL");
+    vi.stubEnv("RECEPTION_PUBLIC_URL", "not a url");
+    expect(errorText()).toContain("RECEPTION_PUBLIC_URL");
+    vi.stubEnv("RECEPTION_PUBLIC_URL", "https://fettero.example/");
+    expect(receptionEnv().RECEPTION_PUBLIC_URL).toBe("https://fettero.example");
+  });
+
+  it("requires a secret of at least 24 characters and never prints it", () => {
+    const short = "short-secret-value-12";
+    vi.stubEnv("RECEPTION_TOOL_SECRET", short);
+    const message = errorText();
+    expect(message).toContain("RECEPTION_TOOL_SECRET");
+    expect(message).not.toContain(short);
+    vi.stubEnv("RECEPTION_TOOL_SECRET", SECRET);
+    expect(receptionEnv().RECEPTION_TOOL_SECRET).toBe(SECRET);
   });
 });

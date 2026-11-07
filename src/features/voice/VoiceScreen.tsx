@@ -148,7 +148,12 @@ function VoiceSession({ ready }: { ready: boolean }) {
 
         <div className="flex min-w-0 flex-col gap-4">
           <Card>
-            <Transcript turns={voice.turns} language={voice.language} />
+            <Transcript
+              turns={voice.turns}
+              language={voice.language}
+              // Without the agent there is no Snakk med Fettero to point at.
+              emptyText={ready ? undefined : "Samtalen med Fettero vises her når stemmen er slått på."}
+            />
           </Card>
           <ShownPanel shown={shown} inPicklist={picklist.skus} onAdd={addToPicklist} />
         </div>

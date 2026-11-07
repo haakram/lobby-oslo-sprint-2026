@@ -65,6 +65,9 @@ ROOM_SLOTS = {1: [("corridor-1a", 3), ("corridor-1b", 3), ("corridor-1c", 2)],
               3: [("corridor-3a", 3), ("corridor-3b", 4), ("corridor-3c", 3), ("corridor-3d", 4)]}
 NOTE_OBJECTS = {"note", "staff-note", "sticky-note", "manual"}
 LOST_BASES = ("glasses", "toy", "wallet", "phone", "keys", "scarf", "watch", "book")
+# [obs] where lost items turned up live (scans and looks): the ground floor's public places
+LOST_PLACES = ["lobby", "lobby-bar", "front-desk", "kitchen-pass", "laundry", "storage", "staff-room",
+               "corridor-1a", "corridor-1b", "corridor-1c"]
 HINT_PLACES = [  # [obs] hint text -> the place scans found the item most often
     ("ground floor corridor", "corridor-1b"), ("lobby bar", "lobby-bar"), ("kitchen pass", "kitchen-pass"),
     ("near the kitchen", "kitchen-pass"), ("front desk", "front-desk"), ("laundry", "laundry"),
@@ -382,6 +385,7 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
     no_answer: set[str] = set()
     guests: dict[str, str] = {}
     scan_found: list[tuple[str, str, str]] = []  # (clock, place, item)
+    scans: list[tuple[str, str]] = []  # (clock, place) every scan
     wet_first: dict[str, str] = {}  # place -> first clock seen wet
     sign_places: list[tuple[str, str, str]] = []  # (clock, place, result text)
     blocked_seen: dict[tuple[str, str], list[str]] = collections.defaultdict(list)  # edge -> clocks blocked
@@ -538,6 +542,8 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                 guests[m[1]] = m[2]
             if m := _ELEV_ROOM.search(answer):
                 elev_by_rid.setdefault(m[1], f"room-{m[2]}")
+        if cmd == "scan" and ok:
+            scans.append((clk, loc))
         if cmd == "scan" and ok and isinstance(r, dict):
             for item in r.get("found") or []:
                 scan_found.append((clk, loc, str(item)))
@@ -689,10 +695,15 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                 visible[name] = [place, min(clock, seen, key=clock_to_seconds)]
             else:
                 hidden[name] = [place, clock]
-        else:
-            place = _hint_place(text) or "lobby"
+        else:  # never seen: at the hint unless the robot scanned there after the request, then elsewhere
+            arrived = clock_to_seconds(clock)
+            scanned = {p for c, p in scans if clock_to_seconds(c) >= arrived}
+            hint = _hint_place(text) or "lobby"
+            options = [p for p in [hint] + LOST_PLACES if p not in scanned and p in nodes]
+            place = options[0] if options else "staff-room"
             hidden[name] = [place, clock]
-            flags.append(f"{rid} {name}: never seen; hidden at the hint ({place})")
+            why = "the hint" if place == hint else f"not the hint {hint}: scanned there in vain"
+            flags.append(f"{rid} {name}: never seen; hidden at {place} ({why})")
     for item, (how, p, c) in first_seen.items():
         if item not in hidden and item not in visible:
             (visible if how == "look" else hidden)[item] = [p, START_CLOCK]

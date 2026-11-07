@@ -1500,7 +1500,7 @@ class FakeWybe:
         heard = []
         low = text.lower()
         for room in self._guests_at_doors():
-            delivered = False
+            delivered = quieted = False
             for r in self._open_requests(room):
                 if r.kind == "message" and all(k in low for k in r.keywords):
                     self._complete(r)
@@ -1509,10 +1509,9 @@ class FakeWybe:
                 if (r.kind == "noise" and not r.completed and r.source == room
                         and any(w in low for w in ("noise", "quiet", "keep it down"))):
                     self._complete(r)
-                    delivered = True
+                    delivered = quieted = True
             reply = "Thanks!" if delivered else "Sorry, what was that?"  # [fake] for the second
-            if self.live and delivered and any(r.kind == "noise" and r.source == room and r.completed
-                                               for r in self._requests.values()):
+            if self.live and quieted:
                 heard.append('The music stops. A muffled "sorry!"')  # [obs]
                 continue
             heard.append(f'{self._guest_name(room)} calls back: "{reply}"')

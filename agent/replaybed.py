@@ -1082,7 +1082,7 @@ class ReplayResult:
 
 def replay_night(scenario: Scenario, *, code_dir: Path | None = None, scoring: dict | None = None,
                  sim_end: str | None = None, call_cap: int = 0, runs_dir: Path | None = None,
-                 python: str | None = None, env: dict | None = None) -> ReplayResult:
+                 python: str | None = None, env: dict | None = None, hash_seed: int = 0) -> ReplayResult:
     """One night in a child process; `code_dir` is the checkout whose `agent` package plays."""
     code_dir = Path(code_dir or REPO).resolve()
     runs_dir = Path(runs_dir or REPO / "temp" / "replay_runs")
@@ -1104,8 +1104,12 @@ def replay_night(scenario: Scenario, *, code_dir: Path | None = None, scoring: d
         child_env.pop("FINAL_ARMED", None)
         child_env.pop("ANTHROPIC_API_KEY", None)  # a replay never spends on Claude
         child_env["WYBE_NIGHTSHIFT_KEY"] = "offline"
+        # set iteration order breaks ties in the agent's plans: a fixed hash seed makes a replay repeatable
+        child_env["PYTHONHASHSEED"] = str(hash_seed)
         child_env.update(env or {})
-        proc = subprocess.run([python or sys.executable, "-I", str(worker), str(job), str(out)],
+        child_env.pop("PYTHONPATH", None)
+        # -s -P, not -I: isolated mode would also ignore PYTHONHASHSEED
+        proc = subprocess.run([python or sys.executable, "-s", "-P", str(worker), str(job), str(out)],
                               cwd=str(code_dir), env=child_env, capture_output=True, text=True, timeout=1800,
                               check=False)
         data = json.loads(out.read_text()) if out.exists() else {"error": (proc.stderr or proc.stdout)[-400:]}
@@ -1198,15 +1202,22 @@ class BenchRow:
     base: ReplayResult | None = None  # --vs
     code: str = ""
     note: str = ""
+    runs: dict = field(default_factory=dict)  # "result"/"base" -> every repeat (one per hash seed)
+
+    def score(self, slot: str = "result") -> float | None:
+        """The mean replay score over the repeats (one per PYTHONHASHSEED)."""
+        scores = [r.replay_score for r in self.runs.get(slot, []) if isinstance(r.replay_score, int | float)]
+        return sum(scores) / len(scores) if scores else None
 
 
 def replay_bench(nights: list[Night], *, code_dir: Path | None = None, vs_dir: Path | None = None,
                  fidelity: bool = False, code_cache: Path | None = None, parallel: int = 4,
                  scoring: dict | None = None, runs_dir: Path | None = None, merge: bool = True,
-                 siblings: list[Night] | None = None) -> list[BenchRow]:
+                 siblings: list[Night] | None = None, repeats: int = 1) -> list[BenchRow]:
     """Every night reconstructed (gaps filled from other nights of its seed unless `merge` is off), then
     replayed by `code_dir` (default this checkout) and, with `vs_dir`, by a second checkout; with
-    `fidelity`, each by the commit that played it live."""
+    `fidelity`, each by the commit that played it live. `repeats` > 1 replays each night once per
+    PYTHONHASHSEED 0..repeats-1 (the agent breaks ties by set order) and reports the mean."""
     scenarios = reconstruct_all(nights, siblings=siblings, merge=merge)
     rows = [BenchRow(n, sc, None) for n, sc in zip(nights, scenarios, strict=True)]
     for row in rows:
@@ -1228,12 +1239,18 @@ def replay_bench(nights: list[Night], *, code_dir: Path | None = None, vs_dir: P
             if vs_dir:
                 jobs.append((row, "base", Path(vs_dir), None))
 
-    def run(job: tuple[BenchRow, str, Path, dict | None]) -> None:
-        row, slot, code, env = job
-        setattr(row, slot, replay_night(row.scenario, code_dir=code, scoring=scoring, runs_dir=runs_dir, env=env))
+    def run(job: tuple[BenchRow, str, Path, dict | None, int]) -> tuple[BenchRow, str, int, ReplayResult]:
+        row, slot, code, env, seed = job
+        return row, slot, seed, replay_night(row.scenario, code_dir=code, scoring=scoring, runs_dir=runs_dir,
+                                             env=env, hash_seed=seed)
 
+    expanded = [job + (seed,) for job in jobs for seed in range(max(1, repeats))]
     with ThreadPoolExecutor(max_workers=max(1, parallel)) as pool:
-        list(pool.map(run, jobs))
+        done = list(pool.map(run, expanded))
+    for row, slot, seed, res in sorted(done, key=lambda d: d[2]):
+        row.runs.setdefault(slot, []).append(res)
+        if seed == 0:
+            setattr(row, slot, res)
     return rows
 
 
@@ -1247,7 +1264,8 @@ def bench_table(rows: list[BenchRow], *, show_flags: bool = False) -> str:
     deltas, pct, gains, lives, reps = [], [], [], [], []
     for r in rows:
         live = r.night.live_score
-        rep = r.result.replay_score if r.result else None
+        rep = r.score("result")
+        rep = round(rep) if rep is not None else None
         line = f"{r.night.seed if r.night.seed is not None else '?':>4}  {r.night.shift[:12]:12}  {live if live is not None else '-':>6}  "
         if isinstance(rep, int | float) and isinstance(live, int | float):
             d = rep - live
@@ -1260,18 +1278,23 @@ def bench_table(rows: list[BenchRow], *, show_flags: bool = False) -> str:
         else:
             line += f"{rep if rep is not None else '-':>6}  {'-':>6}  {'-':>7}"
         if vs:
-            base = r.base.replay_score if r.base else None
+            base = r.score("base")
+            base = round(base) if base is not None else None
             if isinstance(base, int | float) and isinstance(rep, int | float):
                 gains.append(rep - base)
                 line += f"  {base:>6}  {rep - base:>+7}"
             else:
                 line += f"  {'-':>6}  {'-':>7}"
         line += f"  {len(r.scenario.flags):>5}  {r.code}"
-        for res in (r.result, r.base):
-            if res is not None and res.error:
-                line += f"  ERROR {res.error[:120]!r}"
-            if res is not None and res.penalties.get("stranded"):
-                line += "  STRANDED"
+        for slot in ("result", "base"):
+            runs = r.runs.get(slot, [])
+            if errors := [x.error for x in runs if x.error]:
+                line += f"  ERROR {errors[0][:120]!r}"
+            if stranded := sum(bool(x.penalties.get("stranded")) for x in runs):
+                line += "  STRANDED" + (f" {stranded}/{len(runs)}" if len(runs) > 1 else "")
+            scores = [x.replay_score for x in runs if isinstance(x.replay_score, int | float)]
+            if len(scores) > 1:
+                line += f"  [{slot} {min(scores)}..{max(scores)}]"
         if r.note:
             line += f"  ({r.note})"
         lines.append(line)

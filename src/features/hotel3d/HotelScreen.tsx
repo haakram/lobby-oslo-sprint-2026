@@ -41,10 +41,12 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
     roomCard.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [room]);
 
-  // Only a local app can reach the local viewer server; the deployed app never probes it.
+  // The live viewer is asked for only when NEXT_PUBLIC_VIEWER_URL names it (as on Oversikt and Natteskift);
+  // unset, the recorded night plays and nothing knocks on a closed port (a red line in the console).
+  const configured = Boolean(viewerUrl?.trim());
   useEffect(() => {
     let cancelled = false;
-    detectViewer(base).then((up) => {
+    detectViewer(base, configured).then((up) => {
       if (cancelled) return;
       setViewerUp(up);
       if (up) setSource("live");
@@ -52,7 +54,7 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
     return () => {
       cancelled = true;
     };
-  }, [base]);
+  }, [base, configured]);
 
   const replay = useHotelReplay(source, { viewerUrl: base });
   const ready = replay.status === "ready";
@@ -196,10 +198,12 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
   );
 }
 
-async function detectViewer(base: string): Promise<boolean> {
+/** Only a configured viewer, and from a deployed (https) page only an https one: the browser blocks the rest. */
+async function detectViewer(base: string, configured: boolean): Promise<boolean> {
+  if (!configured) return false;
   const host = window.location.hostname;
   const local = host === "localhost" || host === "127.0.0.1" || /^(10|192\.168)\./.test(host);
-  return local ? probeViewer(base) : false;
+  return local || base.startsWith("https://") ? probeViewer(base) : false;
 }
 
 function SourceBadge({ source, live, playing, ready }: { source: ReplaySource; live: boolean; playing: boolean; ready: boolean }) {

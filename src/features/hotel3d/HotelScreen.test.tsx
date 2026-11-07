@@ -61,4 +61,23 @@ describe("HotelScreen", () => {
     expect(screen.queryByRole("heading", { name: "Rom 319" })).not.toBeInTheDocument();
     expect(select).toHaveValue("");
   });
+
+  it("asks no viewer server when NEXT_PUBLIC_VIEWER_URL is unset: the recording plays and the console stays clean", async () => {
+    await renderReady();
+    const asked = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
+    expect(asked).toEqual(["/runs/demo.jsonl"]);
+    expect(screen.queryByRole("button", { name: "Direkte" })).not.toBeInTheDocument();
+  });
+
+  it("asks the configured viewer server from a local page and switches to it when it answers", async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/runs/demo.jsonl")) return new Response(SAMPLE);
+      if (url === "http://127.0.0.1:8765/api/runs") return Response.json([]);
+      throw new TypeError("Failed to fetch");
+    });
+    render(<HotelScreen viewerUrl="http://127.0.0.1:8765" />);
+    expect(await screen.findByRole("button", { name: "Direkte" })).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.map(([input]) => String(input))).toContain("http://127.0.0.1:8765/api/runs");
+  });
 });

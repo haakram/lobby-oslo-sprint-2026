@@ -102,6 +102,10 @@ _SPILL = re.compile(r"\bspill\b.*?\bfloor (\d+|ground|first|second|third)\b", re
 _NAMED_WANTS = re.compile(rf"^({_TITLED}) (?:would like|wants|needs|asked for)\b")
 _NAMED_TRAY = re.compile(rf"\broom service for ({_TITLED})", re.IGNORECASE)
 _NAMED_MESSAGE = re.compile(rf"^(?:[Pp]lease\s+)?(?:[Ll]et|[Tt]ell) ({_TITLED})(?: know)?(?: that)?\s+(.+?)\s*[.!]?$")
+# Live seeds 7-8: "The guest in the room next to the elevator on floor 3 wants a pillow." / "Tell the
+# guest in the room next to the elevator on floor 2 their wake-up call ...": the clerk names the room.
+_BY_ELEVATOR = re.compile(r"^(?:(?:[Pp]lease\s+)?([Tt]ell|[Ll]et)\s+)?[Tt]he guest in the room next to the elevator"
+                          r" on floor (\d)\s+(?:know\s+)?(?:that\s+)?(.+?)\s*[.!]?$")
 _LOST_WHAT = re.compile(
     r"\blost\s+(?:(?:a|an|the|her|his|their|my|some)\s+)?(.+?)"
     r"(?=,|\s+(?:earlier|maybe|probably|perhaps|possibly|somewhere|tonight|near|in|at|by|around)\b|[.!?]|$)",
@@ -157,6 +161,12 @@ def parse_request(request_id: str, text: str, arrived: str) -> Task:
     if m := _SPILL.search(body):
         word = m.group(1).lower()
         return Task(kind=Kind.SPILL, floor=_SPILL_FLOORS.get(word) or int(word), **base)
+    if not room and (m := _BY_ELEVATOR.match(body)):
+        guest, rest = f"next to the elevator on floor {m.group(2)}", m.group(3)
+        if m.group(1):
+            return Task(kind=Kind.MESSAGE, guest=guest, message=rest, **base)
+        if re.match(r"(?:wants|would like|needs|asked for)\b", rest) and (item := _item(rest)):
+            return Task(kind=Kind.AMENITY, guest=guest, item=item, count=_count(rest), **base)
     if not room and (m := _NAMED_WANTS.match(body)) and (item := _item(body)):
         return Task(kind=Kind.AMENITY, guest=m.group(1), item=item, count=_count(body), **base)
     if not room and (m := _NAMED_TRAY.search(body)):

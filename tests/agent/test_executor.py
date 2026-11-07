@@ -800,14 +800,16 @@ def test_bathrobe_man_during_a_keycard_task_gets_a_polite_no_and_no_keycard(
 # Lost items
 
 
-def test_lost_toy_found_under_a_numbered_name(tmp_path):
+def test_lost_toy_numbered_beyond_the_known_requests_is_left_where_it_lies(tmp_path):
+    # Live seed 5: wallet-3 handed to the 2nd wallet request cost 20; the 3rd request came minutes
+    # later. An item numbered past the requests known so far belongs to a request not seen yet.
     text = "Guest in 320 lost a child's toy, maybe the ground floor corridor."
     fake, _session, ex, task = solo(tmp_path, text, hidden={"toy-2": "corridor-1a"})
     assert task.item == "toy"
     fake._requests["R-001"].item = "toy-2"
     out = ex.run(task)
-    assert out.status == "done", out
-    assert any(e["ok"] and e["args"] == {"item": "toy-2", "where": "room-320"} for e in calls(fake, "place"))
+    assert out.status == "failed", out
+    assert not any(e["args"].get("item") == "toy-2" for e in calls(fake, "place"))
 
 
 def test_scan_candidates_map_hint_words_then_the_rest_of_floor_one():
@@ -1136,10 +1138,9 @@ def test_scan_count_stays_bounded_when_the_item_is_nowhere(tmp_path):
     assert 3 + 3 <= len(scan_places(fake)) <= 9
 
 
-def test_lost_toy_hinted_at_the_bar_is_found_as_numbered_toy(tmp_path):
+def test_lost_toy_hinted_at_the_bar_is_found_when_its_number_is_this_request(tmp_path):
     text = "Guest in 320 lost a child's toy, maybe the lobby bar."
-    fake, _session, ex, task = solo(tmp_path, text, hidden={"toy-2": "lobby-bar"})
-    fake._requests["R-001"].item = "toy-2"
+    _fake, _session, ex, task = solo(tmp_path, text, hidden={"toy": "lobby-bar"})
     out = ex.run(task)
     assert out.status == "done", out
 

@@ -383,10 +383,17 @@ def _ask_room(ex: Executor, guest: str | None) -> str:
         raise ActionFailed("no room and no guest name in the request")
     if guest not in ex.guest_rooms:
         ex.go(ex.hotel.special.get("clerk", "front-desk"))
-        reply = ex.cmd("ask", person="clerk", question=f"Which room is {guest} in?")
+        question = f"Which room is {guest}?" if guest.startswith("next to") else f"Which room is {guest} in?"
+        reply = ex.cmd("ask", person="clerk", question=question)
         answer = reply.result.get("answer") if isinstance(reply.result, dict) else reply.result
         m = re.search(r"room[\s-]?(\d{3})", str(answer), re.IGNORECASE)
-        ex.guest_rooms[guest] = f"room-{m[1]}" if reply.ok and m else None
+        # Live seed 6: asked for Mx Lien, the clerk answered "Ms Lie is in room-213" (another guest):
+        # the toy went to the wrong room, -20. The answer must name the guest asked about.
+        surname = guest.split()[-1].lower() if not guest.startswith("next to") else None
+        named = surname is None or re.search(rf"\b{re.escape(surname)}\b", str(answer), re.IGNORECASE)
+        ex.guest_rooms[guest] = f"room-{m[1]}" if reply.ok and m and named else None
+        if m and not named:
+            ex.log("clerk_named_someone_else", guest=guest, answer=str(answer)[:120])
         ex.log("asked_room", guest=guest, room=ex.guest_rooms[guest], answer=str(answer)[:200])
     if ex.guest_rooms[guest] is None:
         raise ActionFailed(f"the clerk did not know {guest}'s room")
@@ -442,8 +449,10 @@ def _pick_found(ex: Executor, item: str, near: list[str] = (), request: str | No
     mine = [f for f in names if verdicts[f] == "match"]
     free = [f for f in names if verdicts[f] == "free"]
     beyond = [f for f in names if verdicts[f] == "beyond"]
-    if not mine and not free and len(beyond) == 1 and len(names) == 1:
-        free = beyond
+    # "beyond" is not delivered: live seed 5 gave wallet-3 to the 2nd wallet request (-20); the
+    # 3rd request arrived minutes later. The item stays where it lies for its owner.
+    if beyond:
+        ex.log("lost_item_beyond", item=item, candidates=sorted(beyond), request=request)
     if not mine and len(free) > 1:
         free = [f for f in free if ex.found[f] in near]
         if len(free) > 1:

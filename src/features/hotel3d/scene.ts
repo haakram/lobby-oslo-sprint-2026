@@ -156,7 +156,7 @@ export class HotelScene {
     canvas.setAttribute("role", "application");
     canvas.setAttribute(
       "aria-label",
-      "Hotellkart. Dra for å snu, rull for å zoome. Piltaster flytter, Shift og piltaster snur, pluss og minus zoomer. Klikk et rom for detaljer.",
+      "Hotellkart. Dra for å snu, rull for å zoome. Piltaster flytter, Shift og piltaster snur, pluss og minus zoomer. Klikk et rom, eller velg det i listen Velg rom, for detaljer.",
     );
     container.appendChild(canvas);
 

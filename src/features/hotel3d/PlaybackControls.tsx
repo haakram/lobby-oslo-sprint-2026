@@ -16,14 +16,13 @@ export function PlaybackControls({ replay, compact = false, className }: { repla
   return (
     <div className={cx("flex flex-col gap-3", className)}>
       <div className="flex flex-wrap items-center gap-3">
-        <Button size={compact ? "md" : "lg"} onClick={replay.toggle} disabled={!ready} aria-pressed={replay.playing}>
+        {/* No aria-pressed: the label itself flips (Spill av / Pause), so it would be announced twice. */}
+        <Button size={compact ? "md" : "lg"} onClick={replay.toggle} disabled={!ready}>
           <RegenIcon name={replay.playing ? "pause" : "play"} className="size-5" />
           {label}
         </Button>
-        <span
-          className={cx("font-mono font-medium tabular-nums whitespace-nowrap", compact ? "text-lg" : "text-xl")}
-          aria-label="Klokke i natt"
-        >
+        <span className={cx("font-mono font-medium tabular-nums whitespace-nowrap", compact ? "text-lg" : "text-xl")}>
+          <span className="sr-only">Klokke i natt: </span>
           {ready ? simToClock(replay.t, false) : "--:--"}
         </span>
         {replay.live && (
@@ -35,10 +34,10 @@ export function PlaybackControls({ replay, compact = false, className }: { repla
               replay.setFollowLive(true);
               replay.setT(replay.duration);
             }}
-            className="inline-flex min-h-9 items-center gap-2 rounded-md border border-line px-3 text-sm font-semibold transition-colors duration-150 ease-standard hover:bg-sunken"
+            className="inline-flex min-h-10 items-center gap-2 rounded-md border border-line px-3 text-sm font-semibold transition-colors duration-150 ease-standard hover:bg-sunken pointer-coarse:min-h-11"
           >
             <span aria-hidden="true" className={cx("size-2 rounded-full", replay.followLive ? "bg-danger" : "bg-line-strong")} />
-            {replay.followLive ? "Følger live" : "Gå til nå"}
+            {replay.followLive ? "Følger direkte" : "Gå til nå"}
           </button>
         )}
         <div role="group" aria-label="Fart" className="ml-auto inline-flex gap-0.5 rounded-md border border-line bg-surface p-0.5">
@@ -49,7 +48,7 @@ export function PlaybackControls({ replay, compact = false, className }: { repla
               aria-pressed={replay.speed === speed}
               onClick={() => replay.setSpeed(speed as Speed)}
               className={cx(
-                "min-h-9 rounded-sm px-2.5 font-mono text-sm tabular-nums transition-colors duration-150 ease-standard pointer-coarse:min-h-11",
+                "min-h-10 rounded-sm px-2.5 font-mono text-sm tabular-nums transition-colors duration-150 ease-standard pointer-coarse:min-h-11",
                 replay.speed === speed ? "bg-sunken text-text" : "text-muted hover:text-text",
               )}
             >
@@ -72,7 +71,7 @@ export function PlaybackControls({ replay, compact = false, className }: { repla
           onChange={(event) => replay.setT(Number(event.currentTarget.value))}
           className="block h-11 w-full cursor-pointer accent-accent disabled:cursor-not-allowed"
         />
-        <div className="relative h-5 text-xs text-muted" aria-hidden="true">
+        <div className="relative h-5 text-sm text-muted sm:text-xs" aria-hidden="true">
           {ticks.map((tick) => (
             <span
               key={tick.t}

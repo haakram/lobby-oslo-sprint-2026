@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { probeViewer, type ReplaySource, resolveViewerUrl, useHotelReplay } from "@/features/replay";
 import { Badge, Button, cx, EmptyState, ErrorState, RegenIcon, Skeleton, Stat } from "@/ui";
 import { Hotel3D, StatusLegend } from "./Hotel3D";
 import { PlaybackControls } from "./PlaybackControls";
 import { forManagers } from "@/features/nightshift/eventFilter";
 import { EventFeed, RoomCard, TaskCard } from "./ReplayPanels";
+import { RoomPicker } from "./RoomPicker";
 
 /** Where the robot's events a manager can read come from; the full log lives on Natteskift. */
 const RECENT_SHOWN = 8;
@@ -27,6 +28,18 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("rom"),
   );
   const [drawer, setDrawer] = useState(true);
+  const roomCard = useRef<HTMLDivElement>(null);
+  const scrollToRoom = useRef(false);
+  // A room chosen on the map or in the list: its card comes into view (on a phone it sits under the map).
+  const chooseRoom = useCallback((roomId: string | null) => {
+    scrollToRoom.current = roomId !== null;
+    setRoom(roomId);
+  }, []);
+  useEffect(() => {
+    if (!room || !scrollToRoom.current) return;
+    scrollToRoom.current = false;
+    roomCard.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [room]);
 
   // Only a local app can reach the local viewer server; the deployed app never probes it.
   useEffect(() => {
@@ -64,10 +77,13 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
         </div>
         <div className="flex items-center gap-2">
           {viewerUp && <SourceTabs source={source} onChange={setSource} />}
-          <Button variant="ghost" size="sm" aria-pressed={drawer} aria-controls="hotel-drawer" onClick={() => setDrawer((value) => !value)} className="hidden lg:inline-flex">
-            <RegenIcon name={drawer ? "sidebar-right-close" : "sidebar-right-open"} size={18} />
-            {drawer ? "Skjul panel" : "Vis panel"}
-          </Button>
+          {/* The drawer only closes beside the map (lg); on a phone it is the page below, so no button. */}
+          <div className="hidden lg:block">
+            <Button variant="ghost" size="sm" aria-pressed={drawer} aria-controls="hotel-drawer" onClick={() => setDrawer((value) => !value)}>
+              <RegenIcon name={drawer ? "sidebar-right-close" : "sidebar-right-open"} size={18} />
+              {drawer ? "Skjul panel" : "Vis panel"}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -120,8 +136,9 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
       {(replay.status === "loading" || ready) && (
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="relative min-h-[56dvh] flex-1 lg:min-h-0">
-              <Hotel3D replay={replay} variant="full" selectedRoom={room} onSelectRoom={setRoom} className="h-full! max-h-none! min-h-0! rounded-none! border-0!" />
+            {/* Below lg the column has no height of its own, so the map gets one (h-full would be 0 px). */}
+            <div className="relative flex-1 lg:min-h-0">
+              <Hotel3D replay={replay} variant="full" selectedRoom={room} onSelectRoom={chooseRoom} className="h-[56dvh]! max-h-none! min-h-0! rounded-none! border-0! lg:h-full!" />
             </div>
             <StatusLegend className="px-4 pt-2 sm:hidden" />
             <div className="border-t border-line bg-surface px-4 py-3 sm:px-6">
@@ -140,7 +157,12 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
           >
             {ready && snapshot ? (
               <>
-                {room && <RoomCard roomId={room} snapshot={snapshot} timeline={replay.timeline} onClose={() => setRoom(null)} />}
+                <RoomPicker map={replay.timeline?.map} snapshot={snapshot} value={room} onChange={chooseRoom} />
+                {room && (
+                  <div ref={roomCard} className="scroll-mt-4">
+                    <RoomCard roomId={room} snapshot={snapshot} timeline={replay.timeline} onClose={() => setRoom(null)} />
+                  </div>
+                )}
                 <TaskCard snapshot={snapshot} finished={snapshot.finished} />
                 <section role="group" aria-label="Natten i tall" className="grid grid-cols-2 gap-x-6 gap-y-4 border-y border-line py-4">
                   <Stat label="Fullført" value={snapshot.tasksDone} tone="success" />
@@ -189,16 +211,15 @@ function SourceTabs({ source, onChange }: { source: ReplaySource; onChange: (sou
     { id: "demo", label: "Opptak" },
   ];
   return (
-    <div role="tablist" aria-label="Kilde" className="inline-flex gap-0.5 rounded-sm bg-sunken p-0.5">
+    <div role="group" aria-label="Kilde" className="inline-flex gap-0.5 rounded-sm bg-sunken p-0.5">
       {tabs.map(({ id, label }) => (
         <button
           key={id}
           type="button"
-          role="tab"
-          aria-selected={source === id}
+          aria-pressed={source === id}
           onClick={() => onChange(id)}
           className={cx(
-            "min-h-9 rounded-sm px-3 text-sm font-semibold transition-colors duration-[120ms] ease-standard pointer-coarse:min-h-11",
+            "min-h-10 rounded-sm px-3 text-sm font-semibold transition-colors duration-[120ms] ease-standard pointer-coarse:min-h-11",
             source === id ? "bg-surface text-text" : "text-muted hover:text-text",
           )}
         >

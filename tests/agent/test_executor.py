@@ -1622,3 +1622,82 @@ def test_no_pre_block_before_two_with_two_queued_in_a_task_or_switched_off(tmp_p
     fake, _session, ex = _at_two(tmp_path, [], battery=46)
     assert ex.ensure_battery() is False  # over 45 %
     assert not calls(fake, "dock")
+
+
+# --- late-night capacity Task 3 (5): a floor-1 top-up before a ride up ----------------------------
+
+
+@pytest.fixture
+def top_on(monkeypatch):
+    """The floor-1 top-up switched on (TOP_UP_BEFORE_UP)."""
+    from agent import executor
+
+    monkeypatch.setattr(executor, "TOP_UP_BEFORE_UP", True)
+
+
+def test_top_up_is_off_by_default():
+    from agent.executor import TOP_UP_BEFORE_UP, TOP_UP_BELOW, TOP_UP_DOCK_M
+
+    assert TOP_UP_BEFORE_UP is False  # bench: scale 1.0 -20, 1.3 -3 with it (stress 1.6 +10, 2.0 +50)
+    assert (TOP_UP_BELOW, TOP_UP_DOCK_M) == (70.0, 25.0)
+
+
+def _upstairs_trip(tmp_path, battery, *, at="lobby", running=True, requests=None):
+    fake, session, ex = setup(tmp_path, requests=requests or [("22:05:00", "R-001", "104 wants a towel.")])
+    ex.cmd("inbox")
+    ex.inbox_waiting = False
+    ex._looked.update(ex.hotel.nodes)  # no first-visit looks
+    ex.go(at)
+    fake.battery = battery
+    ex.refresh()
+    if running:
+        ex.current = parse_request("R-900", "319 wants a towel.", "22:00:00")
+    return fake, session, ex
+
+
+def _cmds(fake, since=0):
+    return [e["cmd"] for e in fake.log[since:]]
+
+
+def test_top_up_docks_before_leaving_the_docks_floor(tmp_path, top_on):
+    fake, session, ex = _upstairs_trip(tmp_path, 60)
+    since = len(fake.log)
+    ex.go("corridor-3a")
+    cmds = _cmds(fake, since)
+    assert "dock" in cmds and cmds.index("dock") < cmds.index("call_elevator"), cmds
+    assert ex.state.location == "corridor-3a"
+    [top] = decisions(session, "top_up")
+    assert top["from"] == 60 and top["to"] > 60 and top["woken"] is True
+
+
+def test_no_top_up_when_full_enough_far_not_running_same_floor_or_off(tmp_path, top_on, monkeypatch):
+    from agent import executor
+
+    fake, _s, ex = _upstairs_trip(tmp_path, 75)  # 70 % or more: no top-up
+    ex.go("corridor-3a")
+    assert not calls(fake, "dock")
+    fake, _s, ex = _upstairs_trip(tmp_path, 60, at="corridor-1b")  # the dock is over 25 m away
+    assert ex._seconds_to("charging-dock") > 25
+    ex.go("corridor-3a")
+    assert not calls(fake, "dock")
+    fake, _s, ex = _upstairs_trip(tmp_path, 60, running=False)  # no task: an idle walk
+    ex.go("corridor-3a")
+    assert not calls(fake, "dock")
+    fake, _s, ex = _upstairs_trip(tmp_path, 60)  # the way does not leave floor 1
+    ex.go("storage")
+    assert not calls(fake, "dock")
+    monkeypatch.setattr(executor, "TOP_UP_BEFORE_UP", False)
+    fake, _s, ex = _upstairs_trip(tmp_path, 60)
+    ex.go("corridor-3a")
+    assert not calls(fake, "dock")
+
+
+def test_top_up_reads_a_waiting_message_before_docking(tmp_path, top_on):
+    fake, _session, ex = _upstairs_trip(tmp_path, 60, requests=[("22:00:05", "R-001", "104 wants a towel."),
+                                                              ("22:09:00", "R-002", "105 wants a towel.")])
+    reads = _inbox_hook(ex)
+    assert ex.inbox_waiting  # R-001 came on the walk to the lobby
+    unread = _unread_at_docks(fake)
+    ex.go("corridor-3a")
+    assert unread == [0] and reads == [1]
+    assert [t.request for t in ex.queue] == ["R-001"]

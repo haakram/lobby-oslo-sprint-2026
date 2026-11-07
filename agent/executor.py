@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Literal
 
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
-from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_route
+from agent.routing import MOVE_S_PER_M, NoRoute, Route, best_tour, route_seconds, shortest_route
 from agent.tasks import Entry, Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
 
@@ -85,6 +85,13 @@ PRE_BLOCK_BELOW = 45.0
 PRE_BLOCK_TARGET = 40.0
 PRE_BLOCK_QUEUE = 2
 PRE_BLOCK_MAX_S = 15 * 60
+# Floor-1 top-up: a task's way about to leave the dock's floor by elevator, with the battery under
+# TOP_UP_BELOW and the dock within TOP_UP_DOCK_M, docks first (the dock ends on the next message).
+# Offline bench (seeds 2-13), off -> on: scale 1.0 1648.7 -> 1628.8, 1.3 2021.2 -> 2018.1 (stress:
+# 1.6 2170.2 -> 2180.5, 2.0 2208.4 -> 2258.0); under 50 % instead of 70 %: 1643.3, 2024.2, 2201.2, 2266.8.
+TOP_UP_BEFORE_UP = False
+TOP_UP_BELOW = 70.0
+TOP_UP_DOCK_M = 25.0
 DOCK_RETRY_S = 600  # a dock found out of reach from a place is not tried from there for 10 sim-min
 MOVE_REFUSALS_MAX = 3  # the same move refused this many times in a row: given up, its edge dropped
 SHIFT_START = "22:00:00"  # the shift's start clock when the session does not report one
@@ -173,6 +180,7 @@ class Executor:
         self._look_clock: dict[str, int] = {}  # place -> sim second of the last look there
         self._visited: set[str] = set()  # places the robot has stood in: navigate works only there
         self._exp_pending: str | None = None
+        self._topping_up = False
 
     def experiment(self, name: str) -> bool:
         """True while the named experiment is switched on and not yet refuted this shift."""
@@ -567,6 +575,7 @@ class Executor:
         A move refused as closed off (cleaning) closes that edge for BLOCK_S and plans again from
         here (live seed 3: 125 retries of one closed move stranded the robot).
         Interruptible walks (the way back to the dock) may stop short once a message is waiting."""
+        self._top_up_before_up(dst)
         looked = False
         self._in_go += 1
         try:
@@ -614,6 +623,47 @@ class Executor:
             self._in_go -= 1
             if not self._in_go:
                 self._drop_tentative()
+
+    def _top_up_before_up(self, dst: str) -> None:
+        """TOP_UP_BEFORE_UP: a running task's walk (the outermost go) about to leave the dock's floor
+        by elevator, with the battery under TOP_UP_BELOW and the dock within TOP_UP_DOCK_M: one dock
+        first, never with a message unread (the inbox is read first). It ends on the next message.
+        One `top_up` decision line. Never raises but ShiftEnded and ActionFailed from the walk."""
+        if not TOP_UP_BEFORE_UP or self.current is None or self._in_go or self._topping_up:
+            return
+        battery = self._battery()
+        here = self.state.location
+        dock = self.hotel.special.get("dock", "charging-dock")
+        if battery is None or battery >= TOP_UP_BELOW or here in (dst, dock):
+            return
+        try:
+            if self.hotel.floor(here) != self.hotel.floor(dock):
+                return
+            route = self._route(dst)
+        except (KeyError, NoRoute):
+            return
+        if not any(step.cmd == "call_elevator" for step in route.steps):
+            return
+        if self._seconds_to(dock) > TOP_UP_DOCK_M * MOVE_S_PER_M:
+            return
+        self._topping_up = True
+        try:
+            start_s = self._now_s()
+            if not self._reach_dock(dock):
+                return
+            if self.inbox_waiting:
+                self._inbox_now()
+            reply = self.cmd("dock")
+            self.state.docked = reply.ok
+            text = str(reply.result).lower()
+            self.refresh()
+            end_s = self._now_s()
+            self.log("top_up", **{"from": battery}, to=self._battery(), to_place=dst,
+                     minutes=round((end_s - start_s) / 60, 1) if end_s is not None and start_s is not None else None,
+                     woken=reply.ok and (self.inbox_waiting or "woke" in text), queued=len(self.queue),
+                     request=self.current.request if self.current is not None else None)
+        finally:
+            self._topping_up = False
 
     def _recover(self, failed_to: str | None) -> None:
         """One look: the look is the truth about this place's exits (look() drops stale edges, adds

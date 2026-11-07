@@ -159,6 +159,27 @@ Also a **3D hotel viewer** to watch shifts live or replayed (plan Task 11), whic
       watches, what to do if one stops.
 - [ ] **Matches the brief** · [ ] **Seen working** (on the practice leaderboard; 10-shift dry run)
 
+#### Road to #1 on the Wybe leaderboard (team lead, 2026-11-07 ~14:00) [owner: Hamad]
+
+The #1 team's 3,448 over seed 1's 68 requests is ~50 points per request. We scored 581 because we
+failed 39 of 68 requests (unknown types), not because we were slow (the robot idled ~60 %). So: handle
+every request, then handle it fast. Few live runs: each one answers a specific question.
+
+- [ ] 1. Review + merge Task 13 (WIP `574f22d` on `hamad/na-t13`): every new request type.
+- [ ] 2. ONE live run on seed 1 (same night, same requests): the score deltas show which hypothesis
+      earns points; keep what scores, fix what doesn't. Per-hypothesis table → wybe-api.md § 13.
+- [ ] 3. Calibrate the offline fake to the real night (request mix and rate, cart 8, slips −15, end
+      06:00) so offline tuning means something.
+- [ ] 4. Speed = points (a fast delivery ~45, a slow one ~21): **batching** several requests per trip
+      with the stocked cart in best-route order; use idle time (restock, wait near the elevator, not
+      the far dock). Tune offline.
+- [ ] 5. Validate on other nights: 1–2 live runs on seed 2 (and 3) so we don't overfit seed 1 — the
+      final's 10 shifts are secret.
+- [ ] 6. Sun 11:00 freeze, 10-shift offline dry run; 12:00 `FINAL_ARMED=1 .venv/bin/python -m agent final`,
+      watch in the viewer.
+
+Target: past the median (~2,400) after steps 1–2; steps 3–5 decide the top. Live runs: ~4–5 total.
+
 ### Drift — the 06:00 handover dashboard (team lead, 2026-11-07 ~13:40)
 
 Design and the 2-minute demo script: `docs/superpowers/specs/2026-11-07-ops-dashboard-design.md`.

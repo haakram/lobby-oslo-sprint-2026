@@ -277,7 +277,7 @@ class Scenario:
     guests: dict[str, str]
     hidden: dict[str, list]  # item -> [place, clock available]; found by scan
     wet_spots: list[list]  # [clock, place]
-    spill_spots: dict[str, str]  # request id -> the spot its sign must cover
+    spill_spots: dict[str, str | None]  # request id -> the spot its sign must cover (None: none to be found)
     blocked: list[list]  # [a, b, from clock, to clock or None]
     people: list[list]  # [clock, place, text]
     noise_sources: dict[str, str | None]
@@ -408,6 +408,7 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
     visits: list[tuple[str, str]] = []  # (clock, place) every place the robot passed
     elev_by_rid: dict[str, str] = {}  # request -> room, the clerk's answer
     signs: dict[str, list[tuple[str, bool]]] = collections.defaultdict(list)  # room -> (clock, DND sign seen)
+    clean: dict[str, list[str]] = collections.defaultdict(list)  # place -> clocks it was seen or crossed dry
 
     def wet(place: str, when: str) -> None:
         if place and place not in wet_first:
@@ -466,6 +467,8 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                 move_metres[(loc, r["at"])] = int(r["metres"])
             if "slipped" in str(r.get("notice", "")) and cmd == "move":
                 wet(r["at"], clk)
+            if cmd == "move" and not r.get("notice") and not any(ev.get("type") == "slip" for ev in e.get("events") or []):
+                clean[r["at"]].append(clk)
             for p in (r.get("path") or [r["at"]]) if cmd == "navigate" else [r["at"]]:
                 visits.append((clk, p))
             loc = r["at"]
@@ -482,6 +485,8 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
             desc = str(r.get("description") or "")
             if "wet patch" in desc:
                 wet(here, clk)
+            else:
+                clean[here].append(clk)
             if m := _MUSIC.search(desc):
                 music.append((clk, here, m[1]))
             if here.startswith("room-"):
@@ -504,6 +509,8 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                     open_seen[key].append(clk)
                 if "wet" in str(x.get("warning", "")).lower():
                     wet(to, clk)
+                elif not x.get("blocked"):
+                    clean[to].append(clk)
             if rooms_here and not here.startswith("room-"):
                 corridor_rooms[here] = sorted(rooms_here)
             for p in r.get("people") or []:
@@ -709,15 +716,28 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                            if p not in claimed and nodes.get(p, {}).get("floor") == floor and clock_to_seconds(c) >= arrived)
             if later and later[0][0] - arrived <= 90 * 60:
                 spot = later[0][1]
-        if spot is None:  # never seen: somewhere the robot did not pass after the request arrived
+        if spot is None:  # never seen: somewhere the robot neither passed nor saw dry after the request
             passed = {p for c, p in visits if clock_to_seconds(c) >= arrived}
+            passed |= {p for p, clocks in clean.items() if any(clock_to_seconds(c) >= arrived for c in clocks)}
             places = corridors_by_floor[floor] + [f"elevator-{floor}", f"stairwell-{floor}"]
             free = [c for c in places if c not in claimed and c not in wet_first and c not in passed and c in nodes]
-            spot = (free or [c for c in places if c not in claimed and c in nodes] or places)[0]
-            flags.append(f"{rid} spill on floor {floor}: its spot was never seen; {spot} assumed")
+            if free:
+                spot = free[0]
+                flags.append(f"{rid} spill on floor {floor}: its spot was never seen; {spot} assumed")
+            else:  # every place on the floor was seen dry: no new patch the robot could have found
+                flags.append(f"{rid} spill on floor {floor}: every place on the floor was seen dry after it; no patch")
+                spill_spots[rid] = None
+                continue
         spill_spots[rid] = spot
         claimed.add(spot)
-    wet_spots = [[c, p] for p, c in sorted(wet_first.items(), key=lambda kv: clock_to_seconds(kv[1])) if p not in claimed]
+    # a patch exists from just after the last time that place was seen dry (its first wet contact is only
+    # an upper bound: a navigate slip is reported at the end of the walk)
+    appear = {}
+    for p, c in wet_first.items():
+        dry = [clock_to_seconds(x) for x in clean.get(p, []) if clock_to_seconds(x) < clock_to_seconds(c)]
+        appear[p] = _hms(max(dry) + 1) if dry else START_CLOCK
+    wet_spots = [[appear[p], p] for p, c in sorted(wet_first.items(), key=lambda kv: clock_to_seconds(kv[1]))
+                 if p not in claimed]
 
     # corridors closed off for cleaning
     blocked: list[list] = []
@@ -980,7 +1000,9 @@ def replay_night(scenario: Scenario, *, code_dir: Path | None = None, scoring: d
             "fake_kwargs": scenario.fake_kwargs(scoring), "seed": scenario.seed, "runs_dir": str(runs_dir),
             "sim_end": sim_end or scenario.end_clock, "call_cap": call_cap,
         }, default=lambda o: sorted(o) if isinstance(o, set | frozenset) else str(o)))
-        child_env = {k: v for k, v in os.environ.items() if not k.startswith("NS_")}
+        # the agent's own NS_* switches never leak into a replay (only the night's recorded env); the
+        # replay bed's NS_REPLAY_* settings do
+        child_env = {k: v for k, v in os.environ.items() if not k.startswith("NS_") or k.startswith("NS_REPLAY_")}
         child_env.pop("FINAL_ARMED", None)
         child_env.pop("ANTHROPIC_API_KEY", None)  # a replay never spends on Claude
         child_env["WYBE_NIGHTSHIFT_KEY"] = "offline"

@@ -322,13 +322,17 @@ ROOM_UNTIDY = "Nobody is here. The bed is unmade and there are towels on the flo
 
 # --- replay realism (``FakeWybe(live=True)``, used by agent/replaybed.py), measured on the live nights ----
 # Battery: drain is per action, not per minute [obs, least squares on 5,976 status-to-status intervals of
-# 46 live nights, rmse 0.07 %, the fitted values kept: a 2 % bias strands a night that ran close to 0 %]:
+# 46 live nights (rmse 0.07 %), walking, look, knock and call_elevator refined on 1,923 trips between two
+# charges to 100 % (the dock's minutes give the exact battery; rmse 0.011 %); the fitted values are kept:
+# a 2 % bias strands a night that ran close to 0 %]:
 # walking 0.02 %/m (navigate 0.025 %/m), scan 1 %, look 0.1 %, call_elevator 0.14 %, pick/place 0.2 %,
 # use 0.11 %; say, ask, read, report, inbox and status cost nothing.
-LIVE_DRAIN = {"look": 0.0953, "scan": 0.9968, "call_elevator": 0.1419, "pick": 0.2008, "place": 0.1993,
-              "use": 0.1113, "knock": 0.0055, "drop": 0.2}  # drop [hyp]
-LIVE_WALK_DRAIN_PER_M = 0.0204
+LIVE_DRAIN = {"look": 0.101, "scan": 1.0, "call_elevator": 0.137, "pick": 0.2008, "place": 0.1993,
+              "use": 0.1113, "knock": 0.0095, "drop": 0.2}  # drop [hyp]
+LIVE_WALK_DRAIN_PER_M = 0.0192
+LIVE_MOVE_DRAIN = 0.0091  # per move, on top of the metres
 LIVE_NAV_DRAIN_PER_M = 0.0254
+LIVE_DRAIN_SCALE = float(__import__("os").environ.get("NS_REPLAY_DRAIN_SCALE", "1.0"))  # calibration experiments
 LIVE_STAIRS_DRAIN_PER_M = 0.06  # [hyp] stairs take 3 s/m
 LOW_BATTERY_EVENTS = [(15.0, "Battery below 15%."), (5.0, "Battery below 5%. The robot is slowing down.")]  # [obs]
 SLOW_BELOW = 5.0
@@ -509,8 +513,8 @@ class FakeWybe:
         `live=True` switches on everything measured on the live nights that changes the default behaviour
         (the replay bed uses it): per-action battery drain with the low-battery events, the slowdown and the
         -200 stranding, the live wordings, per-kind false-done and wrong-delivery penalties, the manager's
-        `reply` answers (+10 on a described room), the clerk's answers, a dock with unread mail returning at
-        once, a knock on a checked-out room (-10), spills credited on the report, the 06:00 reply."""
+        `reply` answers (+10 on a described room), the clerk's answers, a knock on a checked-out room (-10),
+        spills credited on the report, signed wet patches safe to cross, the 06:00 reply."""
         data = hotel if hotel is not None else json.loads(Path(hotel_path or DEFAULT_MAP).read_text())
         self._nodes: dict[str, dict] = data["nodes"]
         self._adj: dict[str, dict[str, dict]] = {}
@@ -748,7 +752,7 @@ class FakeWybe:
             ok, result = getattr(self, f"_cmd_{cmd}")(args)
         if self.live and not self._ended:
             if ok and cmd in LIVE_DRAIN:
-                self._battery = max(0.0, self._battery - LIVE_DRAIN[cmd])
+                self._battery = max(0.0, self._battery - LIVE_DRAIN[cmd] * LIVE_DRAIN_SCALE)
             for level, text in LOW_BATTERY_EVENTS:
                 if battery >= level > self._battery and level not in self._low_warned:
                     self._low_warned.add(level)
@@ -792,7 +796,8 @@ class FakeWybe:
 
     def _walk_drain(self, metres: float, stairs_m: float, per_m: float) -> None:
         if self.live:
-            self._battery = max(0.0, self._battery - (metres - stairs_m) * per_m - stairs_m * LIVE_STAIRS_DRAIN_PER_M)
+            drain = (metres - stairs_m) * per_m + stairs_m * LIVE_STAIRS_DRAIN_PER_M
+            self._battery = max(0.0, self._battery - drain * LIVE_DRAIN_SCALE)
 
     def _slow(self) -> float:
         return SLOW_WALK_FACTOR if self.live and self._battery < SLOW_BELOW else 1.0
@@ -859,7 +864,7 @@ class FakeWybe:
         elif req.kind == "bags" and req.item:  # [fake] name; the agent looks for "bag" in the objects
             self._add_object(self._special_desk, req.item)
         if req.kind == "spill":
-            spot = self._spill_spots.get(req.rid) or self._spill_spots.get(req.floor)
+            spot = self._spill_spots[req.rid] if req.rid in self._spill_spots else self._spill_spots.get(req.floor)
             if spot in self._nodes:
                 req.spot = spot
                 self._spots.add(spot)
@@ -1199,6 +1204,8 @@ class FakeWybe:
             walk -= DOOR_S if edge["door"] else 0  # [obs] stepping into a room takes its metres only
         stairs_m = edge["m"] if edge["stairs"] else 0
         self._walk_drain(edge["m"], stairs_m, LIVE_WALK_DRAIN_PER_M)
+        if self.live:
+            self._battery = max(0.0, self._battery - LIVE_MOVE_DRAIN * LIVE_DRAIN_SCALE)
         self._spend(walk * self._slow() + extra, stairs_m=stairs_m)
         self._location, self._elevator_ready = to, None
         self._visited.add(to)
@@ -1239,6 +1246,8 @@ class FakeWybe:
             extra += self._wet_extra(a, b)[0]
         self._undock()
         self._walk_drain(metres, stairs_m, LIVE_NAV_DRAIN_PER_M)
+        if self.live:  # [obs] 1,402 of 1,427 live navigates took 1.25 s per metre (+-1), doors cost nothing
+            base = metres + (STAIRS_S_PER_M - 1) * stairs_m
         self._spend(base * NAVIGATE_FACTOR * self._slow() + extra, stairs_m=stairs_m)
         self._location, self._elevator_ready = to, None
         self._visited.update(path)
@@ -1297,8 +1306,9 @@ class FakeWybe:
         # Charges 1 %/min "until full or until a new message arrives" (§ 3), whichever comes first.
         full_at = self._now + math.ceil((100.0 - self._battery) * 60 / CHARGE_PER_MIN)
         nxt = self._pending[0].due_s if self._pending else None
-        if self.live and self._unread:  # [obs] unread mail wakes it at once: "Docked for 0 min."
-            nxt = self._now
+        # Not modelled: "a dock with unread mail returns at once". 98 live docks began with mail unread
+        # and none returned at once (82 lasted a minute or more, until the NEXT message); no live dock
+        # took 0 s. "Docked for 0 min" is a dock under a minute (the minutes are truncated).
         woke = nxt is not None and nxt <= full_at
         until = min(nxt if woke else full_at, self._end_s)
         secs = max(0, until - self._now)
@@ -1306,7 +1316,8 @@ class FakeWybe:
         self._now += secs
         self._battery = min(100.0, before + secs / 60 * CHARGE_PER_MIN)
         self._docked = True
-        text = f"Docked for {round(secs / 60)} min. Battery {round(before)}% to {round(self._battery)}%."
+        mins = secs // 60 if self.live else round(secs / 60)  # [obs] live truncates the minutes
+        text = f"Docked for {mins} min. Battery {round(before)}% to {round(self._battery)}%."
         if woke and until == nxt:
             text += " A new message woke it up."
         elif self.live:

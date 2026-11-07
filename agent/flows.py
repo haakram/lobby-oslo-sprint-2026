@@ -205,9 +205,14 @@ def _open_with_keycard(ex: Executor, room: str):
     return ex.cmd("use", item="keycard", on=room)
 
 
-def _knock(ex: Executor, room: str) -> str:
-    """'dnd' | 'no_answer' | 'open'. Looks at the door first: a DND door is never knocked on."""
-    if _door_sign(ex, room):
+LOOK_BEFORE_KNOCK = False  # True: every knock is preceded by a door look (5 s); switch back in one line
+
+
+def _knock(ex: Executor, room: str, *, look: bool | None = None) -> str:
+    """'dnd' | 'no_answer' | 'open'. A plain knock does not look at the door first: the reply itself
+    names a DND sign (0 points in 5 of 5 live cases) and a known-DND room is refused before the trip.
+    `look=True` (room checks, where a keycard may follow) or LOOK_BEFORE_KNOCK looks first."""
+    if (LOOK_BEFORE_KNOCK if look is None else look) and _door_sign(ex, room):
         return "dnd"
     reply = ex.cmd("knock", door=room)
     text = str(reply.result)
@@ -428,7 +433,7 @@ def room_check(ex: Executor, task: Task) -> Result:
     room = task.room
     corridor = _corridor(ex, room)
     ex.go(corridor)
-    answer = _knock(ex, room)  # looks at the door first
+    answer = _knock(ex, room, look=True)  # keycard path: looks at the door first
     if answer == "dnd":
         raise ActionFailed(f"Do Not Disturb sign on {room}; did not knock or enter")
     if answer == "open":

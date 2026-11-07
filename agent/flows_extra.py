@@ -233,7 +233,7 @@ def noise(ex: Executor, task: Task, h: Hyp) -> Result:
     target = rooms[0]
     _refuse_checked_out(ex, target, task.request)  # the look may point at a room whose guest has left
     ex.go(_corridor(ex, target))
-    answer = _knock(ex, target)  # looks at the door first
+    answer = _knock(ex, target)  # a plain knock: the reply names a DND sign
     if answer != "open":
         why = f"ikke forstyrr-skilt på {target}" if answer == "dnd" else f"kilden {target} svarte ikke"
         ex.work_order("stoy", f"Støyklage nær rom {num}: {why}", room=target, place=corridor,

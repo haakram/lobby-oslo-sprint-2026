@@ -273,19 +273,57 @@ def tray(ex: Executor, task: Task) -> Result:
         ex.cart_needed = False
 
 
+def carried_like(ex: Executor, item: str) -> str | None:
+    """The carried item named `item` or `item-<suffix>` (a second tray or bag for a room)."""
+    for name in [*ex.state.hands, *(ex.state.cart or [])]:
+        if name == item or name.startswith(item + "-"):
+            return name
+    return None
+
+
+def pick_for_others(ex: Executor, task: Task, kind: Kind, names: Callable[[Task], str | None],
+                    objects: list[str]) -> None:
+    """One trip for several: while here, pick what other pending tasks of this kind (room known,
+    no DND seen lately) need, while the cart has room. Each task still delivers and verifies on
+    its own; it just finds its item carried. Live seed 5: 79 requests, a request waited 165 s on
+    average for the robot to be free, at about 1 point a minute."""
+    from agent.flows_extra import CART_SLOTS
+
+    for other in list(ex.queue):
+        if len(ex.state.cart or []) >= CART_SLOTS - 1:
+            return
+        if other.kind is not kind or other.request == task.request or not other.room:
+            continue
+        if ex.ledger.dnd_seen(other.room, ex.state.clock, DND_MEMORY_S):
+            continue
+        want = names(other)
+        if not want or carried_like(ex, want):
+            continue
+        here = next((o for o in objects if o == want or o.startswith(want + "-")), None)
+        if here is None:
+            continue
+        ok, _text = ex.pick(here)
+        if ok:
+            objects.remove(here)
+            ex.log("picked_for_later", request=other.request, item=here, during=task.request)
+
+
 def _tray(ex: Executor, task: Task) -> Result:
     _corridor(ex, task.room)
     _refuse_known_dnd(ex, task.room, task.request)
     item = task.item or f"tray-{task.room.removeprefix('room-')}"
-    if not ex.state.carrying(item):
+    carried = carried_like(ex, item)
+    if carried:
+        item = carried
+    else:
         if not ex.get_cart():
             raise ActionFailed("could not get the cart for the tray")
         ex.go(ex.hotel.special.get("kitchen", "kitchen-pass"))
         ok, text = ex.pick(item)
-        if not ok:
-            from agent.flows_extra import find_object, objects_here
+        from agent.flows_extra import find_object, objects_here
 
-            objects = objects_here(ex.look())
+        objects = objects_here(ex.fresh_look())
+        if not ok:
             # A second tray for the same room carries a suffix (live: tray-104-7, like luggage).
             alt = next((o for o in objects if o == item or o.startswith(item + "-")), None)
             if alt is None and task.guest:  # H-named: the tray may carry the guest's name
@@ -295,6 +333,10 @@ def _tray(ex: Executor, task: Task) -> Result:
                 ok, text = ex.pick(item)
         if not ok:
             raise ActionFailed(f"could not pick {item}: {text}")
+        if item in objects:
+            objects.remove(item)
+        pick_for_others(ex, task, Kind.TRAY,
+                        lambda t: t.item or f"tray-{t.room.removeprefix('room-')}", objects)
     return _deliver(ex, task.room, item)
 
 

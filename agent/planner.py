@@ -55,6 +55,10 @@ def cart_place(hotel: Hotel) -> str:
     return hotel.stock_location("cart") or hotel.special.get("laundry", "laundry")
 
 
+def _carried_like(state: RobotState, item: str) -> bool:
+    return any(n == item or n.startswith(item + "-") for n in [*state.hands, *(state.cart or [])])
+
+
 def _stops(task: Task, state: RobotState, hotel: Hotel) -> list[str] | None:
     """Ordered places to visit before the action is done; None if impossible."""
     stops: list[str] = []
@@ -69,11 +73,11 @@ def _stops(task: Task, state: RobotState, hotel: Hotel) -> list[str] | None:
         if place is None:
             return None
         stops.append(place)
-    if task.kind is Kind.TRAY:
+    if task.kind is Kind.TRAY and not _carried_like(state, task.item or f"tray-{(task.room or '')[5:]}"):
         stops.append(hotel.special.get("kitchen", "kitchen-pass"))
     if task.kind is Kind.ROOM_CHECK and not state.carrying("keycard"):
         stops.append(hotel.stock_location("keycard") or hotel.special.get("clerk", "front-desk"))
-    if task.kind is Kind.BAGS:
+    if task.kind is Kind.BAGS and not _carried_like(state, f"luggage-{(task.room or '')[5:]}"):
         stops.append(hotel.special.get("clerk", "front-desk"))
     if task.kind is Kind.SPILL:
         if not state.carrying("wet-floor-sign"):

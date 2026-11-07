@@ -17,7 +17,17 @@ from dataclasses import replace
 from agent.client import ShiftEnded, WybeError
 from agent.executor import ActionFailed, Executor
 from agent.flows import HANDLERS as BASE_HANDLERS
-from agent.flows import Result, _ask_room, _corridor, _door_sign, _knock, _open_with_keycard, _rose
+from agent.flows import (
+    Result,
+    _ask_room,
+    _corridor,
+    _door_sign,
+    _knock,
+    _open_with_keycard,
+    _rose,
+    carried_like,
+    pick_for_others,
+)
 from agent.routing import NoRoute, best_tour
 from agent.tasks import Kind, Task
 
@@ -140,11 +150,17 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
         raise ActionFailed("the cart is full: no room for the bags (dropped nothing)")
     if not ex.get_cart():  # bags are heavy, like trays
         raise ActionFailed("could not get the cart for the bags")
-    ex.go(ex.hotel.special.get("clerk", "front-desk"))
-    name = find_object(objects_here(ex.fresh_look()), BAG_WORDS, room) or "bags"
-    ok, text = ex.pick(name)
-    if not ok:
-        raise ActionFailed(f"could not pick {name}: {text}")
+    name = carried_like(ex, f"luggage-{room.removeprefix('room-')}")
+    if name is None:
+        ex.go(ex.hotel.special.get("clerk", "front-desk"))
+        objects = objects_here(ex.fresh_look())
+        name = find_object(objects, BAG_WORDS, room) or "bags"
+        ok, text = ex.pick(name)
+        if not ok:
+            raise ActionFailed(f"could not pick {name}: {text}")
+        if name in objects:
+            objects.remove(name)
+        pick_for_others(ex, task, Kind.BAGS, lambda t: f"luggage-{t.room.removeprefix('room-')}", objects)
     if not ex.state.carrying("keycard"):
         ex.gather("keycard")
     ex.go(corridor)

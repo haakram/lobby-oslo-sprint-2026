@@ -103,7 +103,7 @@ export function LoginForm({ next, unavailable }: { next: string; unavailable: bo
             onClick={() => setShowPassword((shown) => !shown)}
             aria-controls="login-password"
             aria-label={showPassword ? "Skjul passord" : "Vis passord"}
-            className="absolute inset-y-1 right-1 min-w-14 rounded-sm px-3 text-sm font-semibold text-muted transition-colors duration-150 ease-standard hover:bg-sunken hover:text-text"
+            className="absolute inset-y-0.5 right-0.5 min-w-14 rounded-sm px-3 text-sm font-semibold text-muted transition-colors duration-150 ease-standard hover:bg-sunken hover:text-text"
           >
             {showPassword ? "Skjul" : "Vis"}
           </button>

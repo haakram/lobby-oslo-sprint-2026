@@ -322,6 +322,22 @@ def spill(ex: Executor, task: Task, h: Hyp) -> Result:
         placed = ex.cmd("place", item="wet-floor-sign")  # the sign was taken along: set it down here
         if placed.ok:
             ex.take("wet-floor-sign")
+    if ex.experiment("spill_use") and ex.state.location == spot:
+        # Probe: is `use` (not `place`) the verb that sets a sign up over a spill?
+        mid = ex.score_now()
+        ok, _ = ex.pick("wet-floor-sign")
+        used = ex.cmd("use", item="wet-floor-sign") if ok else None
+        if used is not None and used.ok:
+            ex.take("wet-floor-sign")
+        after = ex.score_now()
+        ex.log("probe", name="spill_use", request=task.request, spot=spot, picked=ok,
+               reply=str(used.result if used else "")[:200], before=mid, after=after)
+        if used is not None and used.ok and _rose(mid, after):
+            return f"wet-floor sign set up over the spill at {spot} (use)", None
+        if used is not None and not used.ok and ok:
+            put = ex.cmd("place", item="wet-floor-sign")
+            if put.ok:
+                ex.take("wet-floor-sign")
     if placed.ok and ex.experiment("spill_done"):
         # Experiment: like a room check, the credit may come on the report, not the place.
         ex.exp_claim("spill_done")
@@ -369,6 +385,17 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
                 raise
         ex.exp_claim("followup_deliver")
         return f"{item} brought to {task.room} now (no earlier order on record)", None
+    if orig is None and ex.experiment("followup_probe"):
+        # Probe: does the manager or the clerk know more about an order we have no record of?
+        asked = ex.cmd("reply", request=task.request,
+                       text=f"No order for a {item} from {num} is on record tonight. Should I bring one now?")
+        ex.log("probe", name="followup_reply", request=task.request, reply=str(asked.result)[:300])
+        try:
+            ex.go(ex.hotel.special.get("clerk", "front-desk"))
+            answer = ex.cmd("ask", person="clerk", question=f"Did room {num} order a {item} tonight?")
+            ex.log("probe", name="followup_ask", request=task.request, reply=str(answer.result)[:300])
+        except ActionFailed as exc:
+            ex.log("probe", name="followup_ask", request=task.request, reply=f"failed: {exc}"[:200])
     if orig is None or orig.status == "done":
         why = "no order on record" if orig is None else f"{orig.request} was already done"
         h.log(f"delivered nothing: {why}", h.before, ex.score_now(), original=orig.request if orig else None)

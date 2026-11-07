@@ -122,9 +122,11 @@ def _refuse_known_dnd(ex: Executor, room: str | None, request: str | None = None
         raise ActionFailed(f"Do Not Disturb sign on {room} (seen {seen}); did not disturb")
 
 
-def _door_sign(ex: Executor, room: str) -> bool:
+def _door_sign(ex: Executor, room: str, *, retry: bool = True) -> bool:
     """Look at the door before any knock or keycard: True on a Do Not Disturb sign (logged for the
-    dashboard). A door that can't be seen raises: acting on an unseen sign would be a gamble."""
+    dashboard). A door that can't be seen raises: acting on an unseen sign would be a gamble.
+    "Nothing called 'room-322' in sight" means the map's corridor for the room is another night's
+    (live seed 5, R-002): that link is dropped, the floor explored and the door looked at once more."""
     door = ex.cmd("look", at=room)
     text = str(door.result)
     if DND in text.lower():
@@ -132,6 +134,13 @@ def _door_sign(ex: Executor, room: str) -> bool:
         ex.room_status(room, "ikke_forstyrr", "door_sign", "Do Not Disturb sign")
         return True
     if not door.ok:
+        floor = room_floor(room)
+        if retry and "nothing called" in text.lower() and floor is not None:
+            ex.hotel.forget_edge(room, ex.state.location)
+            ex.log("stale_room_link", room=room, corridor=ex.state.location)
+            if ex.explore_floor(floor, room):
+                ex.go(_corridor_on_map(ex, room))
+                return _door_sign(ex, room, retry=False)
         raise ActionFailed(f"could not see the door of {room}: {text}")
     return False
 

@@ -145,6 +145,10 @@ class ShiftSession:
         runs_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = runs_dir / f"{shift_id}.jsonl"
         self._log_lock = threading.Lock()
+        self.calls = 0  # commands sent in this shift (the final caps a shift's total)
+        self.call_cap: int | None = None  # bench only: snapshot (score, clock) when calls reaches it
+        self.at_cap: tuple[Any, str | None] | None = None
+        self._last_score: Any = 0
         self._write({"type": "start", "shift": shift_id, "mode": mode, "seed": seed})
 
     def _write(self, entry: dict) -> None:
@@ -153,6 +157,7 @@ class ShiftSession:
             fh.write(line + "\n")
 
     def cmd(self, name: str, **args: Any) -> Reply:
+        self.calls += 1
         try:
             reply, latency = self._client._post(name, args or None, self.shift_id)
         except ShiftEnded as exc:
@@ -163,6 +168,10 @@ class ShiftSession:
                 name, args, reply.ok, reply.clock, reply.result, reply.events, latency, reply.status
             )
         )
+        if isinstance(reply.result, dict) and "score" in reply.result:
+            self._last_score = reply.result["score"]
+        if self.call_cap and self.calls == self.call_cap and self.at_cap is None:
+            self.at_cap = (self._last_score, reply.clock)
         if isinstance(reply.result, dict) and reply.result.get("shift_over") is True:
             raise ShiftEnded(str(reply.result.get("reason", "shift over")))
         return reply

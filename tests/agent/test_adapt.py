@@ -530,16 +530,39 @@ def test_charge_trip_through_a_closed_corridor_finds_the_other_way(tmp_path):
 
 
 def test_the_same_move_refused_three_times_in_a_row_breaks_the_loop(tmp_path):
+    # A refusal Task 25's "Closed off" handling does not know: only the breaker can stop the loop.
     fake, session, ex = at_3b_with_3a_closed(tmp_path)
+    generic = "You can't go that way."
+    real_move = fake._cmd_move
+
+    def move(args):
+        if {fake._location, args.get("to")} == {"corridor-3a", "corridor-3b"}:
+            fake._spend(3)
+            return False, generic
+        return real_move(args)
+
+    fake._cmd_move = move
     for _ in range(10):  # any loop that keeps asking for the same walk
         try:
             ex.go("corridor-3a")
             break
         except ActionFailed:
             continue
-    assert refused_moves(fake) == [("corridor-3a", CLOSED)] * 3
+    assert refused_moves(fake) == [("corridor-3a", generic)] * 3
     assert ex.state.location == "corridor-3a"  # the fourth try went round by 3c and 3d
     assert decisions(session, "move_refused_repeatedly")
+
+
+def test_a_closed_off_move_is_not_retried_more_than_once(tmp_path):
+    fake, _session, ex = at_3b_with_3a_closed(tmp_path)
+    for _ in range(10):
+        try:
+            ex.go("corridor-3a")
+            break
+        except ActionFailed:
+            continue
+    assert refused_moves(fake) == [("corridor-3a", CLOSED)]
+    assert ex.state.location == "corridor-3a"  # replanned around the blocked edge
 
 
 def test_a_room_door_refused_three_times_keeps_its_edge(tmp_path):

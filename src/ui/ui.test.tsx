@@ -47,6 +47,16 @@ describe("Card, Stat and Badge", () => {
     expect(screen.getByText("Klare til salg")).toBeInTheDocument();
   });
 
+  it("says a bad figure is bad by shape and in words, not only in colour", () => {
+    const { container, rerender } = render(<Stat label="Klare til salg" value={6} tone="warning" />);
+    expect(screen.getByText("Obs:")).toHaveClass("sr-only");
+    expect(container.querySelector("svg")).not.toBeNull();
+    rerender(<Stat label="Åpne arbeidsordre" value={28} tone="danger" />);
+    expect(screen.getByText("Kritisk:")).toHaveClass("sr-only");
+    rerender(<Stat label="På vakt nå" value={5} />);
+    expect(container.querySelector("svg")).toBeNull();
+  });
+
   it("always says the state in words, not only in colour", () => {
     render(<Badge tone="danger">Feilet</Badge>);
     const badge = screen.getByText("Feilet");

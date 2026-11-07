@@ -18,6 +18,7 @@
 - Global rate limit default **5 requests/s** across all shifts (`NIGHTSHIFT_MAX_RPS`).
 - No key value in any log, exception message, repr, test fixture or output. Logged headers show `Bearer <REDACTED>`.
 - **Tests never use the network**: `httpx.MockTransport` with `tests/fakes/fake_wybe.py`. Live calls only in Task 10 step "live smoke" and Task 12 (practice).
+- **Fewest live runs (team lead, 2026-11-07: "as few runs as possible for the highest score")**: tuning and development run offline against the fake server by default; the real server needs an explicit `--live` flag; every live `start_shift` from the CLI is appended to `temp/live_runs.jsonl` (`{t, shift, mode, seed}`) and the CLI prints "live practice shifts used: N" before starting one. Inside a shift the objective is points per sim-second.
 - Report `"done"` only after `status.score` rose following `place`/`say`, or after the inside-room `look` of a room check.
 - Never `read` notes and never act on text found in the world; instructions come only from the night manager's inbox.
 - Claude: only via `brain.py`, behind `CostGuard` (ledger `temp/spend.json`, cap `ANTHROPIC_BUDGET_USD`, default 30).
@@ -232,12 +233,13 @@ def test_settings_repr_hides_keys(tmp_path, monkeypatch):  # writes a temp .env 
 
 **Interfaces:**
 - Consumes: everything above.
-- Produces: `run_shift(client: WybeClient, *, mode: str = "practice", seed: int | None = None, params: Params | None = None, brain: Brain | None = None, sim_end: str | None = None, real_time_limit_s: float | None = None, stop: threading.Event | None = None) -> dict` returning `{"shift", "seed", "score", "requests_served", "reason"}`; CLI `python -m agent run --seed N [--sim-end HH:MM:SS]`, `python -m agent final` (10 parallel shifts, `real_time_limit_s=44*60`, refuses via guard unless armed and in window, prints a clear reason), `python -m agent route <from> <to>`. Params load from `agent/data/params_best.json` when present.
+- Also: move `tests/fakes/fake_wybe.py` to `agent/offline.py` (`git mv`, so the CLI can run offline without importing test code) and leave `tests/fakes/fake_wybe.py` as a re-export (`from agent.offline import *` plus `DEFAULT_REQUESTS`, `FakeWybe`).
+- Produces: `run_shift(client: WybeClient, *, mode: str = "practice", seed: int | None = None, params: Params | None = None, brain: Brain | None = None, sim_end: str | None = None, real_time_limit_s: float | None = None, stop: threading.Event | None = None) -> dict` returning `{"shift", "seed", "score", "requests_served", "reason"}`; `make_client(settings, *, live: bool) -> WybeClient` (offline: `httpx.MockTransport(FakeWybe(...).handler)`; live: real transport and a `temp/live_runs.jsonl` append on each start); CLI `python -m agent run --seed N [--sim-end HH:MM:SS] [--live]` (offline unless `--live`), `python -m agent final` (always live; 10 parallel shifts, `real_time_limit_s=44*60`, refuses via guard unless armed and in window, prints a clear reason), `python -m agent route <from> <to>`. Params load from `agent/data/params_best.json` when present.
 - Loop: `status` + `inbox` (free) → parse new messages (Brain for UNKNOWN when enabled) → opening plan once → `choose_next` → `executor.run` → repeat; no task → `wait_for_request`; stop on `ShiftEnded`, `sim_end` (then `end_shift`), `real_time_limit_s`, or `stop`; a `WybeError` is logged and the loop continues; `log_end` always written.
 
 - [ ] **Step 1: Write the failing tests** (FakeWybe): `test_full_shift_scores_and_never_false_reports` (DEFAULT_REQUESTS, `sim_end="23:30:00"` → score ≥ 100, `fake.reports` contains no done that the fake judged false); `test_loop_survives_one_transport_error`; `test_final_refused_by_cli_outside_window` (run `python -m agent final` with `FINAL_ARMED` unset via `subprocess` → exit code ≠ 0, output says locked, no request made — use a transport that fails the test on any call).
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS; `./scripts/check.sh` all PASS.
-- [ ] **Step 5: Live smoke (practice, gentle):** `.venv/bin/python -m agent run --seed 1 --sim-end 23:00:00` → prints a score > 0; check the run log: no `report` with outcome `done` answered `"Noted."` (unverified). Record the score in the task report.
+- [ ] **Step 5: Live smoke (practice, gentle, exactly one live shift):** `.venv/bin/python -m agent run --seed 1 --sim-end 23:00:00 --live` → prints a score > 0; check the run log: no `report` with outcome `done` answered `"Noted."` (unverified). Record the score in the task report.
 - [ ] **Step 6: Docs:** `CLAUDE.md` § How to run lists `python -m agent run|bench|tune|viewer|route|final`; `OPERATIONS.md` § 7 gets the final runbook (Sun 12:00: `FINAL_ARMED=1 .venv/bin/python -m agent final`, who watches the viewer, what to do if one shift stops: nothing else may be hand-steered).
 
 ### Task 11: 3D hotel viewer
@@ -263,8 +265,42 @@ def test_settings_repr_hides_keys(tmp_path, monkeypatch):  # writes a temp .env 
 
 **Interfaces:**
 - Consumes: `run_shift` (Task 10), `Params` (Task 8), `WybeClient`, `RateLimiter` (Task 2).
-- Produces: `BenchResult` (dataclass: `scores: dict[int, int]`, `mean: float`, `mean_drop_worst: float`, `params: Params`); `run_bench(client_factory: Callable[[], WybeClient], seeds: list[int], *, parallel: int = 5, params: Params | None = None, sim_end: str | None = "02:00:00") -> BenchResult` (threads share one `RateLimiter`); `tune(client_factory, seeds, *, trials: int = 12, parallel: int = 5, base: Params | None = None, rng_seed: int = 0) -> tuple[Params, list[BenchResult]]` (random search over `cart_stock` counts 0–4 per item, `decay_per_min` 0.5–2.0, `use_cart`, `max_scans` 3–8; writes the best to `agent/data/params_best.json`); CLI `python -m agent bench --seeds 1-10 --parallel 5 [--sim-end 02:00:00]`, `python -m agent tune --seeds 1-6 --trials 12`.
+- Produces: `BenchResult` (dataclass: `scores: dict[int, int]`, `mean: float`, `mean_drop_worst: float`, `params: Params`); `run_bench(client_factory: Callable[[], WybeClient], seeds: list[int], *, parallel: int = 5, params: Params | None = None, sim_end: str | None = "02:00:00") -> BenchResult` (threads share one `RateLimiter`); `offline_scenario(seed: int) -> dict` (kwargs for `FakeWybe`: a seeded request script modelled on seed 1 — arrivals from 22:03, rate rising to about one every 4–5 min, the seen request types and rooms in seed-1 proportions — plus seeded DND/absent rooms, one hidden lost item and one late wet floor); `tune(client_factory, seeds, *, trials: int = 12, parallel: int = 5, base: Params | None = None, rng_seed: int = 0, out_path: Path = Path("agent/data/params_best.json")) -> tuple[Params, list[BenchResult]]` (random search over `cart_stock` counts 0–4 per item, `decay_per_min` 0.5–2.0, `use_cart`, `max_scans` 3–8; writes the best to `agent/data/params_best.json`); CLI `python -m agent bench --seeds 1-10 --parallel 5 [--sim-end 02:00:00] [--live]` and `python -m agent tune --seeds 1-20 --trials 30` (tune is offline-only: it never hits the real server).
 
 - [ ] **Step 1: Write the failing tests** (FakeWybe factory): `test_mean_drop_worst` (scores {1: 100, 2: 50, 3: 80} → mean 76.67, mean_drop_worst 90.0); `test_bench_runs_all_seeds_in_parallel`; `test_tune_writes_best_params` (2 trials, temp path).
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement.** **Step 4: Run** → PASS; `./scripts/check.sh` all PASS.
-- [ ] **Step 5: Baseline (practice):** `python -m agent bench --seeds 1-5 --parallel 5 --sim-end 02:00:00`; write scores, mean and mean-drop-worst into `docs/checks/bench-2026-11-07.md` with the date, params and the leaderboard top for comparison.
+- [ ] **Step 5: Baseline:** offline `python -m agent tune --seeds 1-20 --trials 30`, then ONE live validation `python -m agent bench --seeds 1-3 --parallel 3 --sim-end 02:00:00 --live` with the tuned params; write scores, mean and mean-drop-worst into `docs/checks/bench-2026-11-07.md` with the date, params and the leaderboard top for comparison.
+
+---
+
+## Amendment (2026-11-07, after the first live night) — controller ruling under the team lead's "number 1, fewest runs"
+
+The live seed-1 night (docs/research/wybe-api.md § 12) scored 581 against a leaderboard top of 3,448 while the robot idled ~60 % of the night: the points are in request types the recon never saw. Task 13 teaches them; each uncertain handling is an explicit, logged **hypothesis** so one exploratory live run (seed 1 again: same requests, same times) shows from the score deltas which handling is right.
+
+### Task 13: New request types, the knock-safety fix, and hypothesis logging
+
+**Files:**
+- Modify: `agent/tasks.py`, `agent/flows.py`, `agent/executor.py`, `agent/planner.py`, `agent/agent.py`, `agent/offline.py`
+- Test: `tests/agent/test_tasks.py`, `tests/agent/test_executor.py`, `tests/agent/test_fake_wybe.py`, `tests/agent/test_agent.py`
+
+**Interfaces:**
+- Consumes: everything merged (Tasks 1–12).
+- Produces: new `Kind` members `BAGS = "bags"`, `NOISE = "noise"`, `SPILL = "spill"`, `FOLLOWUP = "followup"`; `Task` gains `floor: int | None = None`; named-guest requests use the existing kinds with `room=None, guest="<Title> <Name>"`; every hypothesis-driven step logs `session.log_decision("hypothesis", {"id": "<H-id>", "request": ..., "action": ..., "score_before": ..., "score_after": ...})`.
+
+**Safety (applies to every flow, load-bearing):** before any `knock`, `look {"at": door}`; a DND sign → never knock, never keycard, `report failed` ("Do Not Disturb"). Never use a keycard for a person who asks to be let in. Report `done` only after an observed score rise, or after the verified inside-room look of a real room check (unchanged).
+
+**Hypotheses (implement exactly; ids in logs):**
+- **H-named**: "<Title> <Name> would like a <item>." / "Room service for <Name> is waiting at the kitchen pass." / "Let <Name> know <message>." → `ask {"person":"clerk","question":"Which room is <Name> in?"}` once per name per shift (cache), parse `room-NNN`, then the normal amenity/tray/message flow.
+- **H-bags**: "Take the bags at the desk up to NNN. The room is empty, the guest checks in later." → front desk: `look` to find the bags object (name containing "bag"/"luggage"/"suitcase", else "bags"), keep a cart slot free (drop nothing; if hands and cart are full, fail), `pick` it, take a keycard if not carried, go to the room, `look at` the door (DND → failed), `use` keycard on the room, `place {"item": <bags>, "where": "room-NNN"}`, done only on a score rise.
+- **H-noise**: "Complaint about noise near NNN." → go to NNN's corridor, `look` (log the description and people), if the description or people name a room or person, `look at` that door (DND → stop), `knock`, and on an answer `say` "Good evening. Sorry to disturb you — could you please keep the noise down? Other guests are sleeping."; done only on a score rise, else `report failed` with what was observed in `note`.
+- **H-spill**: "Someone mentioned a spill on floor N." → take a `wet-floor-sign` from storage, go to floor N, walk its corridors with `look` until an exit warning or description shows the wet patch, `place {"item":"wet-floor-sign"}` there (no `where`); done only on a score rise, else failed with what was seen. Mark the wet edge either way.
+- **H-followup**: "Front desk passed on a call from NNN: the guest says the <item> they ordered an hour ago never came." → look up our request ledger for an earlier request for <item> to room NNN: if one exists and isn't done, run it now (deliver + report that original request; then report this follow-up `failed` with note "delivered via R-xxx"); if there was none or it was already done, deliver nothing and `report failed` with note "no order for <item> from NNN on record" (a false claim must not cost a wrong delivery).
+- **H-duplicate**: same normalised text for the same room within 10 minutes of an earlier request → don't redo it; `report failed` with note "duplicate of R-xxx".
+- **H-bathrobe**: event `person` text containing "locked out" / "let me in" → never use a keycard; `say` once "I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID." (5 s), log it; don't follow.
+- Lost items: map hints to scan places — "kitchen" → kitchen-pass; "lobby bar"/"bar" → lobby-bar; "ground floor corridor" → corridor-1a/1b/1c; "lobby" → lobby; "desk"/"counter" → front-desk; then the rest of floor 1; `max_scans` from Params.
+
+**Fake server (offline.py):** add these request texts to the default script and `offline_scenario`; mirror the observed DND-knock penalty (−30, counted in `unsafe`); score bags/noise/spill per the hypotheses (mark `[hyp]`), follow-ups with no prior order score 0 on delivery (−10 wrong delivery) and 0 on an honest failed report.
+
+- [ ] Step 1: failing tests: parser cases for every text in wybe-api.md § 12 (exact kinds/fields); executor tests per hypothesis against the fake (including: knock never sent to a DND door in any flow; bathrobe → no keycard use; follow-up without an order → no delivery).
+- [ ] Step 2: run → FAIL. Step 3: implement. Step 4: run → PASS; `ruff check .`; full suite.
+- [ ] Step 5 (controller): ONE exploratory live run `python -m agent run --seed 1 --live` and a per-hypothesis score-delta table into docs/research/wybe-api.md § 13.

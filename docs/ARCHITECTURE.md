@@ -8,12 +8,12 @@
 | Layer | Choice | Why |
 |---|---|---|
 | Frontend | TBD | |
-| Backend / API | TBD | |
+| Backend / API | Track A agent: Python 3.12 + httpx | Plays the Wybe Night Shift over HTTP. |
 | Database | TBD | |
 | Auth | TBD (or "none: seeded demo user") | |
-| AI / LLM | TBD | |
+| AI / LLM | Claude via `anthropic` (Python SDK) | Track A brain, capped at USD 30 (R7.7). |
 | Hosting | TBD | |
-| Package manager | TBD | One per language; the lockfile is committed. |
+| Package manager | pip + requirements files (Track A, `.venv`) | Versions pinned with `==`. |
 
 ## 2. Folder layout
 
@@ -87,6 +87,9 @@ same PR that first reads it.
 | `WYBE_NIGHTSHIFT_KEY` | Track A agent | **yes**: one team, one key | Hamad's `.env`, sent privately |
 | `ANTHROPIC_API_KEY` | Track A agent, Track B server | **yes** | Hamad's `.env`, sent privately |
 | `ANTHROPIC_BUDGET_USD` | everything that calls Claude | no (default 30) | `.env.example` |
+| `NIGHTSHIFT_MAX_RPS` | Track A agent client | no (default 5) | `.env.example` |
+| `VIEWER_ALLOWED_ORIGINS` | Track A viewer server (CORS on `/api/*`) | no (default `http://localhost:3000,http://127.0.0.1:3000`) | `.env.example` |
+| `FINAL_ARMED` | Track A final-mode lock | no | real environment only, never a file (export in the shell) |
 | `ELEVENLABS_API_KEY` | Track B server | **yes** | Hamad's `.env.local` (written by the ElevenLabs CLI), sent privately |
 
 ## 5. External services

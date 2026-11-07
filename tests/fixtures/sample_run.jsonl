@@ -1,0 +1,27 @@
+{"v": 1, "t": 1794000000.4, "type": "start", "shift": "w2-5eed00d1a2b3c4d5", "mode": "practice", "seed": 1}
+{"v": 1, "t": 1794000000.8, "type": "state", "clock": 0, "location": "charging-dock", "score": 0, "battery": 100, "hands": [], "cart": []}
+{"v": 1, "t": 1794000001.2, "type": "decision", "kind": "plan", "data": {"summary": "Inbox: 2 requests. Order: towels to 311, then pillow to 215."}}
+{"v": 1, "t": 1794000001.6, "type": "decision", "kind": "task_start", "data": {"task": "Deliver 2 towels to room-311", "requester": "night manager"}}
+{"v": 1, "t": 1794000002.0, "type": "call", "cmd": "navigate", "args": {"to": "storage"}, "ok": true, "clock": 35, "result": {"at": "storage", "path": ["charging-dock", "lobby", "corridor-1a", "corridor-1b", "storage"], "metres": 35}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000002.4, "type": "state", "clock": 35, "location": "storage", "score": 0, "battery": 96, "hands": [], "cart": []}
+{"v": 1, "t": 1794000002.8, "type": "call", "cmd": "pick", "args": {"item": "towel", "n": 2}, "ok": true, "clock": 45, "result": {"picked": "towel x2"}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000003.2, "type": "state", "clock": 45, "location": "storage", "score": 0, "battery": 95, "hands": ["towel", "towel"], "cart": []}
+{"v": 1, "t": 1794000003.6, "type": "call", "cmd": "navigate", "args": {"to": "elevator-1"}, "ok": true, "clock": 78, "result": {"at": "elevator-1", "path": ["storage", "corridor-1b", "corridor-1a", "lobby", "elevator-1"], "metres": 33}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000004.0, "type": "call", "cmd": "elevator", "args": {"floor": 3}, "ok": true, "clock": 138, "result": {"at": "elevator-3"}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000004.4, "type": "state", "clock": 138, "location": "elevator-3", "score": 0, "battery": 90, "hands": ["towel", "towel"], "cart": []}
+{"v": 1, "t": 1794000004.8, "type": "decision", "kind": "note", "data": {"text": "Door of room-311 is closed: knock first."}}
+{"v": 1, "t": 1794000005.2, "type": "call", "cmd": "navigate", "args": {"to": "room-311"}, "ok": true, "clock": 151, "result": {"at": "room-311", "path": ["elevator-3", "corridor-3a", "room-311"], "metres": 10}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000005.6, "type": "call", "cmd": "knock", "args": {"door": "room-311"}, "ok": true, "clock": 166, "result": {"answer": "Come in"}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000006.0, "type": "call", "cmd": "place", "args": {"item": "towel", "n": 2}, "ok": true, "clock": 176, "result": {"placed": "towel x2"}, "events": ["guest says thanks"], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000006.4, "type": "state", "clock": 176, "location": "room-311", "score": 3, "battery": 88, "hands": [], "cart": []}
+{"v": 1, "t": 1794000006.8, "type": "decision", "kind": "task_done", "data": {"task": "Deliver 2 towels to room-311", "reward": 3}}
+{"v": 1, "t": 1794000007.2, "type": "call", "cmd": "report", "args": {"id": "req-1", "outcome": "done"}, "ok": true, "clock": 176, "result": {"ok": true}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000007.6, "type": "decision", "kind": "task_start", "data": {"task": "Bring a pillow to room-215"}}
+{"v": 1, "t": 1794000008.0, "type": "call", "cmd": "navigate", "args": {"to": "elevator-3"}, "ok": true, "clock": 186, "result": {"at": "elevator-3", "path": ["room-311", "corridor-3a", "elevator-3"], "metres": 10}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000008.4, "type": "call", "cmd": "elevator", "args": {"floor": 1}, "ok": true, "clock": 246, "result": {"at": "elevator-1"}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000008.8, "type": "call", "cmd": "navigate", "args": {"to": "storage"}, "ok": true, "clock": 279, "result": {"at": "storage", "path": ["elevator-1", "lobby", "corridor-1a", "corridor-1b", "storage"], "metres": 33}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000009.2, "type": "call", "cmd": "pick", "args": {"item": "pillow"}, "ok": false, "clock": 289, "result": {"ok": false}, "events": [], "latency_ms": 140, "status": {}}
+{"v": 1, "t": 1794000009.6, "type": "state", "clock": 289, "location": "storage", "score": 3, "battery": 80, "hands": [], "cart": []}
+{"v": 1, "t": 1794000010.0, "type": "decision", "kind": "task_failed", "data": {"task": "Bring a pillow to room-215", "reason": "out of stock"}}
+{"v": 1, "t": 1794000010.4, "type": "decision", "kind": "brain", "data": {"question": "Unknown request: 'something for a headache'", "answer": "Report failed: no medical items."}}
+{"v": 1, "t": 1794000010.8, "type": "end", "score": 3, "requests_served": 1, "reason": "shift over"}

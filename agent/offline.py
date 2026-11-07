@@ -176,9 +176,12 @@ FAILED_DOCK_S = 2
 DOOR_OPEN_S = 300  # [fake] "open for a few minutes"
 
 # --- battery (§ 4): charges 1 %/min on the dock ----------------------------------------------------
-DRAIN_PER_MIN = 0.9  # [obs] active drain ~0.9 %/min over 413 live intervals (never bound live)
+DRAIN_PER_MIN = 0.75  # [obs] active drain 0.70-0.76 %/sim-min, duration-weighted over every full live night
 STAIRS_DRAIN_PER_M = 0.03  # [fake]
 CHARGE_PER_MIN = 1.0
+# [obs] Live seeds 3 and 4 (2026-11-07): the action that emptied the battery still completed, then the
+# shift ended "stranded" and the score dropped by exactly 200 (128 -> -72, 388 -> 188).
+STRANDED_POINTS = -200
 
 # --- scoring (calibration-spec.md § 2, fitted on the 25 rewards of the live night, rmse 1.5) ---------
 #   gain = round(base[kind] * (1 + GROWTH_PER_HOUR * h) - WAIT_DECAY_PER_MIN * wait_min), floor MIN_POINTS
@@ -204,6 +207,8 @@ _SKIP_TEXT = re.compile(r"^Skip (R-\d+)\b")  # [obs] "Skip R-040, 323 checked ou
 UNDOCK_EVENT = {"type": "dock", "text": "The robot undocks."}
 SLIP_EVENT = {"type": "slip", "text": "The robot slipped on a wet floor and lost a minute."}
 SHIFT_EVENT = {"type": "shift", "text": "Shift ended. The day shift takes over."}
+STRANDED_EVENT = {"type": "stranded",  # [obs] verbatim, live seeds 3 and 4
+                  "text": "The battery is dead. Someone has to carry the robot back. Shift over."}
 WET_WARNING = "the floor that way looks wet"
 WET_HERE = "A wet patch on the floor here."
 WELCOME = ("Evening. I'll send requests here as they come in. Each one has an id like R-001. "
@@ -401,7 +406,7 @@ class FakeWybe:
 
     Inspect after a run: ``score``, ``reports`` (request -> outcome as sent), ``false_done`` (requests
     reported done that the fake could not verify), ``wrong_deliveries``, ``unsafe`` (keycard on or
-    entering a Do Not Disturb room), ``log`` (every call), ``final_starts``.
+    entering a Do Not Disturb room), ``log`` (every call), ``final_starts``, ``end_reason``.
     """
 
     def __init__(
@@ -567,6 +572,8 @@ class FakeWybe:
         self.dnd_knocks: list[str] = []  # knocks on Do Not Disturb doors: free live, kept for visibility
         self.unsafe: list[str] = []
         self._ended = False
+        self.end_reason: str | None = None  # "time" (06:00), "ended" (end_shift) or "stranded"
+        self._dead = False  # the battery ran out during the current action
         self._now = clock_to_seconds(START_CLOCK)
         self._events: list[dict] = []
         self._location = self._dock
@@ -610,12 +617,26 @@ class FakeWybe:
         else:
             ok, result = getattr(self, f"_cmd_{cmd}")(args)
         self._deliver()
-        if not self._ended and self._now >= self._end_s:
+        if self._dead and not self._ended:
+            result = self._strand(result)
+        elif not self._ended and self._now >= self._end_s:
             self._finish()
         return self._body(ok, result, self._clock(), self._events)
 
-    def _finish(self, event: bool = True) -> None:
+    def _strand(self, outcome: object) -> dict:
+        """[obs] The battery died during this action: -200 and the shift is over. The reply wraps the
+        action's own result, like the live end replies (the client raises ShiftEnded on it); every
+        later call gets HTTP 409."""
+        self.score += STRANDED_POINTS
+        served = sum(r.completed for r in self._requests.values())
+        self._events.append(dict(STRANDED_EVENT))
+        self._finish(event=False, reason="stranded")
+        return {"outcome": outcome, "shift_over": True, "reason": "stranded", "score": self.score,
+                "requests_served": served, "clock": self._clock()}
+
+    def _finish(self, event: bool = True, reason: str = "time") -> None:
         self._ended = True
+        self.end_reason = reason
         self._ended_ids.add(self._shift_id)
         for h in self._history:
             if h["shift"] == self._shift_id:
@@ -631,6 +652,8 @@ class FakeWybe:
         s = min(max(0, round(seconds)), max(0, self._end_s - self._now))
         self._now += s
         self._battery = max(0.0, self._battery - s / 60 * DRAIN_PER_MIN - stairs_m * STAIRS_DRAIN_PER_M)
+        if self._battery <= 0 and (s > 0 or stairs_m > 0):
+            self._dead = True  # [obs] stranded once this action is done (_robot)
 
     def _deliver(self) -> None:
         """Requests become visible on the reply whose action crosses their scheduled time."""
@@ -866,7 +889,7 @@ class FakeWybe:
         served = sum(r.completed for r in self._requests.values())
         result = {"shift_over": True, "reason": "ended", "score": self.score, "requests_served": served,
                   "clock": self._clock()}
-        self._finish()
+        self._finish(reason="ended")
         return True, result
 
     # --- looking ---------------------------------------------------------------------------------------
@@ -1050,6 +1073,10 @@ class FakeWybe:
         if self._battery >= 100:
             self._spend(FAILED_DOCK_S)
             return False, "Battery is already full."
+        if self._unread:  # [obs] a message already waiting wakes it at once: 0 min, no charge, no time
+            self._docked = True
+            pct = round(self._battery)
+            return True, f"Docked for 0 min. Battery {pct}% to {pct}%. A new message woke it up."
         # Charges 1 %/min "until full or until a new message arrives" (§ 3), whichever comes first.
         full_at = self._now + math.ceil((100.0 - self._battery) * 60 / CHARGE_PER_MIN)
         nxt = self._pending[0].due_s if self._pending else None

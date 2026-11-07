@@ -65,7 +65,9 @@ class Sim:
         return last
 
     def wait_for_request(self) -> dict:
-        """Dock with a low battery so the charge outlasts the wait: wakes at the next request."""
+        """Read the inbox (a dock with a message unread returns at once), then dock with a low battery
+        so the charge outlasts the wait: wakes at the next request."""
+        self("inbox")
         self.fake.battery = 5.0
         r = self("dock")
         assert r["ok"], r
@@ -250,10 +252,11 @@ def test_inbox_returns_each_message_once(sim):
 
 
 def test_dock_refused_when_full(sim):
+    sim("inbox")  # the welcome, so the second dock is not woken by it at once
     full = sim("dock")
     assert full["ok"] is False and full["result"] == "Battery is already full."
     assert full["clock"] == "22:00:02"
-    nearly = sim("dock")  # 2 s of drain left 99.98 %: the dock tops it up and stops at once
+    nearly = sim("dock")  # 2 s of drain left 99.975 %: the dock tops it up and stops at once
     assert nearly["ok"] and nearly["clock"] == "22:00:04"
     assert "woke" not in nearly["result"]
     assert sim("status")["result"]["docked"] is True
@@ -275,6 +278,7 @@ def test_dock_stops_when_full_before_the_next_request():
 def test_dock_wakes_at_the_next_request_before_full():
     sim = Sim(FakeWybe(requests=[("22:02:00", "R-001", "319 wants a phone charger.")]))
     sim.start()
+    sim("inbox")  # the welcome: an unread message would wake the dock at once
     sim.fake.battery = 95.0
     r = sim("dock")
     assert r["ok"] and r["clock"] == "22:02:00" and "inbox" in types(r)
@@ -289,6 +293,7 @@ def test_dock_only_at_the_dock(sim):
 def test_dock_without_pending_requests_stops_when_full():
     sim = Sim(FakeWybe(requests=[]))
     sim.start()
+    sim("inbox")  # the welcome: an unread message would wake the dock at once
     sim.fake.battery = 90.0
     r = sim("dock")
     assert r["ok"] and r["clock"] == "22:10:00"
@@ -1054,3 +1059,113 @@ def test_hotel_override_changes_metres_and_stock():
     assert sim("move", to="lobby")["clock"] == "22:00:06"
     sim.walk("corridor-1a", "corridor-1b", "laundry")
     assert "water-bottle x8" in sim("look")["result"]["objects"]
+
+
+# --- battery: the live facts (late-night capacity plan, Task 1) -------------------------------------
+
+STRANDED_TEXT = "The battery is dead. Someone has to carry the robot back. Shift over."  # [obs] verbatim
+
+
+def test_battery_drains_three_quarters_a_minute_on_every_timed_action(sim):
+    """[obs] 0.70-0.76 %/sim-min while not docked (the fake: 0.75): scans, looks, refused actions,
+    waiting for the elevator and the ride all drain; free commands do not."""
+    drained = []
+
+    def step(cmd: str, **args) -> dict:
+        before = sim.fake.battery
+        reply = sim(cmd, **args)
+        drained.append((cmd, round(before - sim.fake.battery, 4)))
+        return reply
+
+    step("scan")  # 60 s
+    step("look")  # 5 s
+    step("move", to="nowhere")  # refused, 1 s
+    step("status")  # free
+    step("report", request="R-099", outcome="done")  # free, refused
+    sim.walk("lobby", "elevator-1")
+    step("call_elevator", floor=3)  # 45 s waiting for the car
+    step("move", to="elevator-3")  # the ride, 15 s
+    assert drained == [("scan", 0.75), ("look", 0.0625), ("move", 0.0125), ("status", 0.0), ("report", 0.0),
+                       ("call_elevator", 0.5625), ("move", 0.1875)]
+
+
+def test_dead_battery_strands_the_robot_minus_200_and_ends_the_shift(sim):
+    sim("inbox")
+    sim.fake.battery = 0.5
+    before = sim.score()
+    r = sim("scan")  # 60 s drains 0.75 %: the battery dies during the scan, which still completes
+    assert r["ok"] is True and r["clock"] == "22:01:00"
+    assert r["result"] == {"outcome": "Nothing hidden here.", "shift_over": True, "reason": "stranded",
+                           "score": before - 200, "requests_served": 0, "clock": "22:01:00"}
+    assert {"type": "stranded", "text": STRANDED_TEXT} in r["events"]
+    assert "shift" not in types(r)  # [obs] only the stranded event
+    assert sim.fake.score == before - 200 and sim.fake.end_reason == "stranded"
+    later = sim.raw("status")
+    assert later.status_code == 409 and later.json()["result"] == ENDED
+    shifts = sim.raw("shifts", shift=False).json()["result"]["shifts"]
+    assert shifts[-1]["status"] == "ended" and shifts[-1]["score"] == before - 200
+
+
+def test_a_refused_action_on_an_empty_battery_strands_too(sim):
+    sim.fake.battery = 0.01
+    r = sim("move", to="nowhere")  # refused, but its 1 s still drains the last 0.0125 %
+    assert r["ok"] is False
+    assert r["result"]["shift_over"] is True and r["result"]["reason"] == "stranded"
+    assert r["result"]["outcome"].startswith("No way to nowhere from here.")
+    assert sim.raw("look").status_code == 409
+
+
+def test_free_commands_and_the_dock_never_strand(sim):
+    sim.fake.battery = 0.0
+    assert sim("status")["ok"] and sim("inbox")["ok"] and sim("help")["ok"]  # the inbox: dock really charges
+    assert sim.fake.end_reason is None
+    docked = sim("dock")  # at the dock an empty battery charges instead
+    assert docked["ok"] and sim.fake.battery > 0 and sim.fake.end_reason is None
+
+
+def test_time_end_and_end_shift_keep_their_reasons():
+    sim = Sim(FakeWybe(end_clock="22:00:20"))
+    sim.start()
+    sim.walk("lobby", "corridor-1a")
+    sim("move", to="corridor-1b")
+    assert sim.fake.end_reason == "time" and sim.fake.score == 0
+    sim.start()
+    assert sim.fake.end_reason is None
+    sim("end_shift")
+    assert sim.fake.end_reason == "ended"
+
+
+def test_stranding_reaches_the_client_as_shift_ended(tmp_path):
+    from agent.client import ShiftEnded, WybeClient
+    from agent.config import Settings
+
+    fake = FakeWybe(requests=[])
+    settings = Settings(url="https://nightshift.test/", key="test-key", anthropic_key=None, budget_usd=30.0,
+                        max_rps=1000.0, final_armed=False, runs_dir=tmp_path / "runs")
+    client = WybeClient(settings, transport=httpx.MockTransport(fake.handler), sleep=lambda s: None)
+    session = client.start_shift("practice", seed=1)
+    session.cmd("status")
+    fake.battery = 0.5
+    with pytest.raises(ShiftEnded, match="stranded"):
+        session.cmd("scan")
+    assert session.final_score == -200 and session.min_battery == 0.0
+    with pytest.raises(ShiftEnded):  # HTTP 409 from now on
+        session.cmd("status")
+    assert session.cmd_counts == {"status": 2, "scan": 1}
+
+
+def test_dock_with_a_message_already_unread_returns_at_once():
+    """A dock lasts only until the next message; one already unread wakes the robot at once:
+    0 min, no charge, the clock does not move (controller's amendment, live logs)."""
+    sim = Sim(FakeWybe(requests=[("22:30:00", "R-001", "319 wants a phone charger.")]))
+    sim.start()
+    sim("look")  # 22:00:05: the welcome arrives and stays unread
+    sim.fake.battery = 60.0
+    assert sim("status")["result"]["unread_messages"] == 1
+    r = sim("dock")
+    assert r["ok"] and r["clock"] == "22:00:05"
+    assert r["result"] == "Docked for 0 min. Battery 60% to 60%. A new message woke it up."
+    assert sim.fake.battery == 60.0 and sim("status")["result"]["docked"] is True
+    sim("inbox")
+    later = sim("dock")  # nothing unread: charges until R-001 arrives
+    assert later["clock"] == "22:30:00" and later["result"].endswith("A new message woke it up.")

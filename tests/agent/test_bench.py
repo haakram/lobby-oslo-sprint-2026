@@ -186,13 +186,13 @@ def test_bench_and_tune_default_to_a_full_night_ending_06(monkeypatch, capsys):
     assert inspect.signature(run_bench).parameters["sim_end"].default == "06:00:00"
     seen = {}
 
-    def fake_bench(factory, seeds, *, parallel=5, params=None, sim_end="bad", max_calls=None):
-        seen["sim_end"] = sim_end
+    def fake_bench(factory, seeds, *, parallel=5, params=None, sim_end="bad", max_calls=None, hourly_scale=None):
+        seen["sim_end"], seen["hourly_scale"] = sim_end, hourly_scale
         return BenchResult(scores={s: 1 for s in seeds}, capped_scores={s: 1 for s in seeds}, params=params or Params())
 
     monkeypatch.setattr(bench, "run_bench", fake_bench)
     assert main(["bench", "--seeds", "1-2"]) == 0
-    assert seen["sim_end"] == "06:00:00"
+    assert seen["sim_end"] == "06:00:00" and seen["hourly_scale"] == 1.0
     capsys.readouterr()
 
 
@@ -351,3 +351,115 @@ def test_other_seeds_vary_metres_and_shuffle_stock_deterministically():
         assert set(hotel["stock"]) == {"storage", "laundry", "front-desk"}
         assert offline_scenario(seed)["hotel"] == hotel
     assert len(seen) >= 2  # the shelves differ between seeds
+
+
+# --- late-night capacity, Task 1: rich nights (--hourly-scale) and what the bench prints -----------------
+
+
+def _client(tmp_path, fake: FakeWybe) -> WybeClient:
+    s = Settings(
+        url="https://nightshift.test/", key="offline", anthropic_key=None, budget_usd=30.0,
+        max_rps=1000.0, final_armed=False, runs_dir=tmp_path / "runs",
+    )
+    return WybeClient(s, transport=httpx.MockTransport(fake.handler), sleep=lambda x: None)
+
+
+def test_hourly_scale_gives_rich_nights_and_leaves_seed_1_alone():
+    assert offline_scenario(1, hourly_scale=1.3) == offline_scenario(1)  # the live replay never changes
+    rich = []
+    for seed in range(2, 14):
+        assert offline_scenario(seed, hourly_scale=1.0) == offline_scenario(seed)
+        sc = offline_scenario(seed, hourly_scale=1.3)
+        assert sc == offline_scenario(seed, hourly_scale=1.3)  # deterministic
+        rids = [rid for _, rid, _ in sc["requests"]]
+        assert len(set(rids)) == len(rids)
+        assert all(parse_request(rid, text, t).kind is not Kind.UNKNOWN for t, rid, text in sc["requests"])
+        rich.append(len(sc["requests"]))
+        if seed <= 5:
+            assert rich[-1] >= 80, (seed, rich[-1])
+    assert 84 <= sum(rich) / len(rich) <= 93, rich  # live seeds 10/16/23 had 82-85
+    assert all(len(offline_scenario(s)["requests"]) < n for s, n in zip(range(2, 14), rich, strict=True))
+
+
+def test_run_bench_hands_the_hourly_scale_to_a_two_argument_factory(tmp_path):
+    seen = []
+    good = factory_for(tmp_path)
+
+    def make(seed: int, hourly_scale: float) -> WybeClient:
+        seen.append((seed, hourly_scale))
+        return good(seed)
+
+    run_bench(make, [2], parallel=1, sim_end="22:05:00", hourly_scale=1.3)
+    assert seen == [(2, 1.3)]
+    with pytest.raises(ValueError, match="hourly_scale"):  # a factory that cannot take it: say so up front
+        run_bench(good, [2], parallel=1, sim_end="22:05:00", hourly_scale=1.3)
+
+
+def test_tune_passes_the_hourly_scale_to_every_bench(monkeypatch, tmp_path):
+    scales = []
+
+    def fake_bench(factory, seeds, *, parallel=5, params=None, max_calls=0, hourly_scale=1.0, **_):
+        scales.append(hourly_scale)
+        return BenchResult(scores={s: 1 for s in seeds}, capped_scores={s: 1 for s in seeds}, params=params)
+
+    monkeypatch.setattr(bench, "run_bench", fake_bench)
+    tune(factory_for(tmp_path), [2], trials=2, out_path=tmp_path / "p.json", hourly_scale=1.3)
+    assert scales == [1.3, 1.3, 1.3]
+
+
+def test_bench_records_requests_served_min_battery_and_dock_calls(tmp_path):
+    res = run_bench(factory_for(tmp_path), [1], parallel=1, sim_end="23:00:00")
+    log = next((tmp_path / "runs").glob("*.jsonl"))
+    lines = [json.loads(x) for x in log.read_text().splitlines()]
+    calls = [x for x in lines if x["type"] == "call"]
+    statuses = [x["result"]["battery"] for x in calls if x["cmd"] == "status" and x["ok"]]
+    requests = {x["data"]["request"] for x in lines if x["type"] == "decision" and x["kind"] == "request"}
+    assert res.requests[1] == len(requests) >= 3
+    assert res.served[1] == lines[-1]["requests_served"] >= 1
+    assert res.min_battery[1] == min(statuses) < 100
+    assert res.dock_calls[1] == sum(x["cmd"] == "dock" for x in calls)
+
+
+def test_a_stranded_night_counts_the_servers_minus_200(tmp_path, monkeypatch):
+    monkeypatch.setattr("agent.offline.DRAIN_PER_MIN", 50.0)  # dead within minutes, whatever the agent does
+    fakes: list[FakeWybe] = []
+
+    def make(seed: int) -> WybeClient:
+        fakes.append(FakeWybe(**offline_scenario(seed)))
+        return _client(tmp_path, fakes[-1])
+
+    res = run_bench(make, [1], parallel=1, max_calls=0)
+    assert fakes[0].end_reason == "stranded"
+    assert res.scores[1] == fakes[0].score  # the -200 is in the bench score, not the last status seen
+    assert res.min_battery[1] == 0.0
+
+
+def test_cli_bench_prints_the_new_columns_and_takes_the_scale(capsys):
+    assert main(["bench", "--seeds", "2", "--parallel", "1", "--sim-end", "22:10:00", "--max-calls", "0",
+                 "--hourly-scale", "1.3"]) == 0
+    out = capsys.readouterr().out
+    line = next(x for x in out.splitlines() if x.startswith("seed 2 "))
+    for column in ("score ", "calls ", "capped ", "requests ", "served ", "min_battery ", "docks "):
+        assert column in line, (column, line)
+
+
+def test_cli_hourly_scale_is_offline_only(capsys):
+    def no_live(*a, **k):
+        raise AssertionError("no live client may be built")
+
+    assert main(["bench", "--live", "--hourly-scale", "1.3"], client_factory=no_live) == 2
+    assert "offline" in capsys.readouterr().err
+
+
+def test_cli_tune_takes_the_scale(monkeypatch, tmp_path, capsys):
+    seen = {}
+
+    def fake_tune(factory, seeds, **kw):
+        seen.update(kw)
+        r = BenchResult(scores={s: 1 for s in seeds}, capped_scores={s: 1 for s in seeds}, params=Params())
+        return r.params, [r]
+
+    monkeypatch.setattr(bench, "tune", fake_tune)
+    assert main(["tune", "--seeds", "2", "--out", str(tmp_path / "p.json"), "--hourly-scale", "1.3"]) == 0
+    assert seen["hourly_scale"] == 1.3
+    capsys.readouterr()

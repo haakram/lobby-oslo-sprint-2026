@@ -423,10 +423,14 @@ def run_shift(
             session.log_decision("wybe_error", {"error": str(exc)[:200], "during": "end_shift"})
         except Exception as exc:  # noqa: BLE001 - the end line below must still be written
             session.log_decision("end_failed", {"error": type(exc).__name__})
-        result["score"] = state.score
+        final = session.final_score  # the server's own score when it ended the shift (stranded: -200)
+        result["score"] = final if isinstance(final, int | float) and not isinstance(final, bool) else state.score
         result["calls"] = session.calls
         result["at_cap"] = session.at_cap  # (score, clock) when calls reached call_cap, else None
         result["requests_served"] = ex.ledger.served()  # also originals a follow-up ran or redelivered
+        result["requests"] = len(ex.ledger.entries)  # requests received this shift
+        result["min_battery"] = session.min_battery
+        result["dock_calls"] = session.cmd_counts.get("dock", 0)
         session.log_end(result)
     return result
 

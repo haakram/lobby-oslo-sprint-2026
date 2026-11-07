@@ -172,6 +172,9 @@ class ShiftSession:
         self.call_cap: int | None = None  # bench only: snapshot (score, clock) when calls reaches it
         self.at_cap: tuple[Any, str | None] | None = None
         self._last_score: Any = 0
+        self.cmd_counts: dict[str, int] = {}  # commands sent, by name (the bench counts dock calls)
+        self.min_battery: float | None = None  # the lowest battery a reply showed; 0 once stranded
+        self.final_score: Any = None  # the score on the server's shift_over reply (end, 06:00, stranded)
         self._write({"type": "start", "shift": shift_id, "mode": mode, "seed": seed})
 
     def _write(self, entry: dict) -> None:
@@ -181,6 +184,7 @@ class ShiftSession:
 
     def cmd(self, name: str, **args: Any) -> Reply:
         self.calls += 1
+        self.cmd_counts[name] = self.cmd_counts.get(name, 0) + 1
         try:
             reply, latency = self._client._post(name, args or None, self.shift_id)
         except ShiftEnded as exc:
@@ -194,10 +198,19 @@ class ShiftSession:
         )
         if isinstance(reply.result, dict) and "score" in reply.result:
             self._last_score = reply.result["score"]
+        self._note_battery(reply.result)
         self._snapshot(reply.clock)
         if isinstance(reply.result, dict) and reply.result.get("shift_over") is True:
+            self.final_score = reply.result.get("score")
+            if reply.result.get("reason") == "stranded":
+                self.min_battery = 0.0  # "The battery is dead": the reply carries no battery
             raise ShiftEnded(str(reply.result.get("reason", "shift over")))
         return reply
+
+    def _note_battery(self, result: Any) -> None:
+        battery = result.get("battery") if isinstance(result, dict) else None
+        if isinstance(battery, int | float) and not isinstance(battery, bool):
+            self.min_battery = battery if self.min_battery is None else min(self.min_battery, battery)
 
     def _snapshot(self, clock: str | None) -> None:
         if self.call_cap and self.calls == self.call_cap and self.at_cap is None:

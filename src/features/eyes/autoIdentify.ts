@@ -1,3 +1,4 @@
+import { isProductClass } from "./cocoLabels";
 import type { IdentifyResult } from "./schema";
 import { MIN_IOU, iou, type Box } from "./smoothBoxes";
 
@@ -39,11 +40,15 @@ export function trackFirstSeen(prev: ReadonlyMap<string, number>, boxes: Box[], 
   return new Map(boxes.map((box) => [box.id, prev.get(box.id) ?? now]));
 }
 
-/** Which box to recognise now, if any: reuse a recent nearby match for free, else one request. */
+/**
+ * Which box to recognise now, if any: only product-like classes qualify; reuse a recent nearby
+ * match for free, else one request.
+ */
 export function nextAutoIdentify(input: AutoInput): AutoDecision {
   if (input.paused) return null;
 
   const candidates = input.boxes
+    .filter((box) => isProductClass(box.label))
     .filter((box) => !input.attempted.has(box.id))
     .filter((box) => input.now - (input.firstSeen.get(box.id) ?? input.now) >= STABLE_MS)
     .sort((a, b) => b.w * b.h - a.w * a.h);

@@ -97,6 +97,20 @@ describe("nextAutoIdentify", () => {
     expect(result).toEqual({ kind: "identify", box: large });
   });
 
+  it("never sends people, furniture or other non-product classes", () => {
+    const person = box("a", { label: "person" });
+    expect(nextAutoIdentify(input({ boxes: [person] }))).toBeNull();
+    const chair = box("a", { label: "chair" });
+    expect(nextAutoIdentify(input({ boxes: [chair], recent: [{ box: box("old"), result: shampoo, at: NOW }] }))).toBeNull();
+  });
+
+  it("skips a large non-product box and takes the product-like one", () => {
+    const table = box("a", { label: "dining table", w: 600, h: 400 });
+    const cup = box("b", { label: "cup", x: 700 });
+    const result = nextAutoIdentify(input({ boxes: [table, cup], firstSeen: new Map([["a", 0], ["b", 0]]) }));
+    expect(result).toEqual({ kind: "identify", box: cup });
+  });
+
   describe("reuse", () => {
     const recent = (over: Partial<RecentResult> = {}): RecentResult[] => [
       { box: box("old"), result: shampoo, at: NOW - 1000, ...over },

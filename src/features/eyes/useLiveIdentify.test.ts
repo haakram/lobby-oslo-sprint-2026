@@ -7,8 +7,11 @@ import { useLiveIdentify } from "./useLiveIdentify";
 const box: Box = { id: "box-1", x: 0, y: 0, w: 100, h: 100, label: "bottle", score: 0.9 };
 const video = { current: null };
 
+const onQuota = vi.fn();
+
 function setup() {
-  return renderHook(() => useLiveIdentify(video, [], { auto: true, paused: false }));
+  onQuota.mockClear();
+  return renderHook(() => useLiveIdentify(video, [], { auto: true, paused: false, stopped: false, onQuota }));
 }
 
 describe("useLiveIdentify", () => {
@@ -25,7 +28,7 @@ describe("useLiveIdentify", () => {
     expect(hook.current.busy["box-1"]).toBeUndefined();
   });
 
-  it("switches live recognition off after a 429 and keeps the server's copy", async () => {
+  it("reports the shared quota after a 429 and keeps the server's copy", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: QUOTA_COPY }, { status: 429 })));
     const { result: hook } = setup();
     await act(async () => {
@@ -34,6 +37,6 @@ describe("useLiveIdentify", () => {
         quota: true,
       });
     });
-    expect(hook.current.quotaReached).toBe(true);
+    expect(onQuota).toHaveBeenCalledTimes(1);
   });
 });

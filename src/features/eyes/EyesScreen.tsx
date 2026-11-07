@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, ErrorState, Sheet, Skeleton, cx } from "@/ui";
+import { Badge, Button, ErrorState, Sheet, Skeleton, cx } from "@/ui";
 import { BoxOverlay, type BoxLabel } from "./BoxOverlay";
+import { cocoLabel, isProductClass } from "./cocoLabels";
 import { cropFrame } from "./cropFrame";
 import { PermissionState } from "./PermissionState";
 import { ProductCard } from "./ProductCard";
@@ -12,12 +13,15 @@ import type { Box } from "./smoothBoxes";
 import { useCamera } from "./useCamera";
 import { useDetector } from "./useDetector";
 import { useLiveIdentify } from "./useLiveIdentify";
+import { useScene } from "./useScene";
 
 /**
  * What the sheet shows. For a box, the result lives in `useLiveIdentify` (shared with live
  * recognition); for the whole frame (shutter), it is kept here.
  */
 type SheetContent = {
+  /** A box we never send to Claude (person, chair …): the card shows its class name only. */
+  objectLabel?: string;
   boxId: string | null;
   image: string | null;
   result?: IdentifyResult;
@@ -33,10 +37,25 @@ export function EyesScreen() {
   const [sheet, setSheet] = useState<SheetContent | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [autoOn, setAutoOn] = useState(true);
+  const [sceneOn, setSceneOn] = useState(true);
+  // Identify and scene share one budget: a 429 from either stops both.
+  const [quotaReached, setQuotaReached] = useState(false);
+  const onQuota = useCallback(() => setQuotaReached(true), []);
   const request = useRef<AbortController | null>(null);
 
   const detector = useDetector(video, cameraStatus === "ready" && !sheetOpen);
-  const { results, busy, quotaReached, send } = useLiveIdentify(video, detector.boxes, { auto: autoOn, paused: sheetOpen });
+  const { results, busy, send } = useLiveIdentify(video, detector.boxes, {
+    auto: autoOn,
+    paused: sheetOpen,
+    stopped: quotaReached,
+    onQuota,
+  });
+  const scene = useScene(video, {
+    on: sceneOn && cameraStatus === "ready",
+    paused: sheetOpen,
+    stopped: quotaReached,
+    onQuota,
+  });
 
   useEffect(() => () => request.current?.abort(), []);
 
@@ -46,7 +65,9 @@ export function EyesScreen() {
       const result = results[box.id];
       if (busy[box.id]) next[box.id] = { text: "Gjenkjenner …", state: "busy" };
       else if (result?.product) next[box.id] = { text: result.product.name, state: "known" };
-      else if (result) next[box.id] = { text: "Ikke i katalogen", state: "unknown" };
+      // Not in the catalogue: Claude's own name for it ("Kaffekopp"); the card says "Ikke i katalogen".
+      else if (result) next[box.id] = { text: result.name, state: "product" };
+      else next[box.id] = { text: cocoLabel(box.label), state: isProductClass(box.label) ? "product" : "object" };
     }
     return next;
   }, [detector.boxes, results, busy]);
@@ -76,8 +97,12 @@ export function EyesScreen() {
 
   const select = useCallback(
     (box: Box) => {
-      // Already recognised (or being recognised live): open the card without a new request.
-      if (results[box.id] || busy[box.id]) {
+      if (!isProductClass(box.label) && !results[box.id]) {
+        // People, furniture and the like are never sent: a small card with the class name, for free.
+        setSheet({ boxId: null, image: null, objectLabel: cocoLabel(box.label) });
+        setSheetOpen(true);
+      } else if (results[box.id] || busy[box.id]) {
+        // Already recognised (or being recognised live): open the card without a new request.
         setSheet({ boxId: box.id, image: null });
         setSheetOpen(true);
       } else {
@@ -114,8 +139,10 @@ export function EyesScreen() {
   const sheetError =
     sheet?.error ?? (!sheetResult && !sheetBusy ? { title: "Fikk ikke kjent igjen varen", quota: false } : undefined);
   let sheetTitle = "Ser på varen";
-  if (sheetResult) sheetTitle = sheetResult.product ? "Vare funnet" : "Ukjent vare";
+  if (sheet?.objectLabel) sheetTitle = "Gjenstand";
+  else if (sheetResult) sheetTitle = sheetResult.product ? "Vare funnet" : "Ukjent vare";
   else if (sheetError) sheetTitle = "Ingen svar";
+  const seenLabels = [...new Set(scene.landmarks.map((mark) => mark.label))];
 
   return (
     <main data-surface="dark" className="relative flex flex-1 flex-col overflow-hidden bg-bg">
@@ -145,7 +172,14 @@ export function EyesScreen() {
           )}
 
           {ready && videoSize && (
-            <BoxOverlay boxes={detector.boxes} videoSize={videoSize} labels={labels} onSelect={select} />
+            <BoxOverlay
+              boxes={detector.boxes}
+              landmarks={scene.landmarks}
+              now={scene.now}
+              videoSize={videoSize}
+              labels={labels}
+              onSelect={select}
+            />
           )}
 
           {!ready && (
@@ -157,14 +191,37 @@ export function EyesScreen() {
           <header className="pointer-events-none relative flex flex-col items-start gap-2 p-4 sm:px-8 lg:px-12 lg:pt-8">
             <div className="flex w-full flex-wrap items-center justify-between gap-2">
               <h1 className="rounded-md bg-bg/75 px-3 py-1 text-xl font-bold tracking-[-0.02em] backdrop-blur-sm">Øyne</h1>
-              <AutoSwitch on={autoActive} disabled={quotaReached} onToggle={() => setAutoOn((on) => !on)} />
+              <div className="flex flex-wrap gap-2">
+                <Switch
+                  label="Automatisk gjenkjenning"
+                  on={autoActive}
+                  disabled={quotaReached}
+                  onToggle={() => setAutoOn((on) => !on)}
+                />
+                <Switch
+                  label="Omgivelser"
+                  on={sceneOn && !quotaReached}
+                  disabled={quotaReached}
+                  onToggle={() => setSceneOn((on) => !on)}
+                />
+              </div>
             </div>
             <p aria-live="polite" className="rounded-md bg-bg/75 px-3 py-1 text-sm text-text backdrop-blur-sm">
               {hint}
             </p>
+            {seenLabels.length > 0 && (
+              <p className="flex flex-wrap items-center gap-1.5 rounded-md bg-bg/75 px-3 py-1 text-sm backdrop-blur-sm">
+                <span className="text-muted">Ser:</span>
+                {seenLabels.map((label) => (
+                  <span key={label} className="rounded-sm border border-dashed border-text px-1.5 font-semibold">
+                    {label}
+                  </span>
+                ))}
+              </p>
+            )}
             {quotaReached && (
               <p role="status" className="rounded-md bg-warning-soft px-3 py-1 text-sm font-semibold text-warning">
-                {QUOTA_COPY} Automatisk gjenkjenning er slått av.
+                {QUOTA_COPY} Automatisk gjenkjenning og omgivelser er slått av.
               </p>
             )}
           </header>
@@ -188,7 +245,9 @@ export function EyesScreen() {
       )}
 
       <Sheet open={sheetOpen} onClose={close} title={sheetTitle}>
-        {sheetResult ? (
+        {sheet?.objectLabel ? (
+          <ObjectCard label={sheet.objectLabel} />
+        ) : sheetResult ? (
           <ProductCard result={sheetResult} />
         ) : sheetError ? (
           <ErrorState
@@ -212,8 +271,31 @@ export function EyesScreen() {
   );
 }
 
-/** Live recognition on or off, so a demo can stop it spending. */
-function AutoSwitch({ on, disabled, onToggle }: { on: boolean; disabled: boolean; onToggle: () => void }) {
+/** A thing the detector names for free, which never goes to Claude. */
+function ObjectCard({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <Badge>Ikke en vare</Badge>
+      <p className="text-2xl font-bold tracking-[-0.02em]">{label}</p>
+      <p className="text-base text-muted">
+        Fettero kjenner igjen dette selv. Bare varer sendes til gjenkjenning, så dette kostet ingenting.
+      </p>
+    </div>
+  );
+}
+
+/** A live feature on or off, so a demo can stop it spending. */
+function Switch({
+  label,
+  on,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  on: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
   return (
     <button
       type="button"
@@ -237,7 +319,7 @@ function AutoSwitch({ on, disabled, onToggle }: { on: boolean; disabled: boolean
           )}
         />
       </span>
-      Automatisk gjenkjenning
+      {label}
     </button>
   );
 }

@@ -16,11 +16,21 @@ const TICK_MS = 200;
 export function useLiveIdentify(
   video: RefObject<HTMLVideoElement | null>,
   boxes: Box[],
-  { auto, paused }: { auto: boolean; paused: boolean },
+  {
+    auto,
+    paused,
+    stopped,
+    onQuota,
+  }: { auto: boolean; paused: boolean; stopped: boolean; onQuota: () => void },
 ) {
   const [results, setResults] = useState<Record<string, IdentifyResult>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
-  const [quotaReached, setQuotaReached] = useState(false);
+
+  // Latest options for the timer and callbacks. `stopped`: the shared quota ran out (here or in the scene scan).
+  const outside = useRef({ paused: paused || !auto, stopped, onQuota });
+  useEffect(() => {
+    outside.current = { paused: paused || !auto, stopped, onQuota };
+  }, [paused, auto, stopped, onQuota]);
 
   const latestBoxes = useRef(boxes);
   useEffect(() => {
@@ -69,7 +79,7 @@ export function useLiveIdentify(
       } catch (error) {
         if (error instanceof IdentifyError && error.quota) {
           state.stopped = true;
-          setQuotaReached(true);
+          outside.current.onQuota();
         }
         throw error;
       } finally {
@@ -80,10 +90,7 @@ export function useLiveIdentify(
     [record, setBusyFor],
   );
 
-  const pausedRef = useRef(paused || !auto);
-  useEffect(() => {
-    pausedRef.current = paused || !auto;
-  }, [paused, auto]);
+
 
   useEffect(() => {
     const controller = new AbortController();
@@ -99,14 +106,14 @@ export function useLiveIdentify(
         attempted: state.attempted,
         inFlight: state.inFlight > 0,
         lastRequestAt: state.lastRequestAt,
-        paused: pausedRef.current || document.visibilityState === "hidden",
-        stopped: state.stopped,
+        paused: outside.current.paused || document.visibilityState === "hidden",
+        stopped: state.stopped || outside.current.stopped,
         recent: state.recent,
       });
       if (decision?.kind === "reuse") record(decision.box, decision.result);
       if (decision?.kind === "identify" && video.current) {
         const image = cropFrame(video.current, decision.box);
-        // A failed live attempt stays quiet: the box keeps "trykk" and a tap tries again.
+        // A failed live attempt stays quiet: the box keeps its class name and a tap tries again.
         send(image, decision.box, controller.signal).catch(() => {});
       }
     }, TICK_MS);
@@ -116,5 +123,5 @@ export function useLiveIdentify(
     };
   }, [video, record, send]);
 
-  return { results, busy, quotaReached, send };
+  return { results, busy, send };
 }

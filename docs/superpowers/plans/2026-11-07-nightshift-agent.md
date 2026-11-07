@@ -304,3 +304,31 @@ The live seed-1 night (docs/research/wybe-api.md § 12) scored 581 against a lea
 - [ ] Step 1: failing tests: parser cases for every text in wybe-api.md § 12 (exact kinds/fields); executor tests per hypothesis against the fake (including: knock never sent to a DND door in any flow; bathrobe → no keycard use; follow-up without an order → no delivery).
 - [ ] Step 2: run → FAIL. Step 3: implement. Step 4: run → PASS; `ruff check .`; full suite.
 - [ ] Step 5 (controller): ONE exploratory live run `python -m agent run --seed 1 --live` and a per-hypothesis score-delta table into docs/research/wybe-api.md § 13.
+
+### Task 16: Track A hardening from the security review
+
+**Source:** /Users/hamadaliakram/Oslo_Sprint_26/.superpowers/sdd/2026-11-07-nightshift-agent/security-review.md (findings tagged [Track A — Hamad]). An ethical hacker on the jury will read this code.
+
+**Files:** `agent/brain.py`, `agent/config.py`, `agent/viewer_server.py`, `scripts/secrets.sh`, and their tests under `tests/agent/` (find the existing test files for brain, config and the viewer server). Nothing else.
+
+**Requirements:**
+1. **Brain output validation** (`brain.classify` and the judgement call): `kind` must be one of the allowed kinds else `unknown`; `room` must normalise to `room-NNN` (accept "319" or "room-319", 3 digits) else `None`; `count` an int clamped to 1..10; `item`, `message`, `area_hint` stripped and capped (item 60, area_hint 60, message 300 characters); any field of the wrong type → `None`. The judgement call's chosen option must be one of the offered options else the safe default. Before embedding untrusted text in a prompt, neutralise the closing delimiter (`</untrusted_text>` in any case/spacing) so world text can't break out of the block.
+2. **Endpoint pin** (`config.load_settings`): `WYBE_NIGHTSHIFT_URL` must use `https://`; plain `http://` is allowed only for `localhost`/`127.0.0.1` (tests). Anything else raises a clear config error at load (no key value in the message).
+3. **Viewer Host check** (DNS rebinding): the viewer server answers only requests whose `Host` header is `127.0.0.1:<port>` or `localhost:<port>`; others get 403 (keep the existing CORS allowlist behaviour unchanged).
+4. **secrets.sh**: `umask 077` at the top so files it writes are 600; after `paste`, `chmod 600` the env file it wrote; after `copy`, clear the sender's clipboard after 60 s in the background, only if the clipboard still holds what the script put there. Never print a key value (unchanged rule). Keep it POSIX/bash 3.2-compatible (macOS).
+
+**Tests:** unit tests for each validation rule (bad room, oversize fields, wrong types, out-of-range count, injected `</untrusted_text>`), the URL pin (https ok, http localhost ok, http other host refused), the Host check (good host 200, bad host 403). For secrets.sh, a shell-level check is enough if the repo has none (e.g. run it with a temp HOME and a fake clipboard command if feasible; otherwise describe the manual check you ran). TDD: failing test first. No network.
+
+### Task 17: Stop slipping on known wet floors
+
+**Why:** the live night (seed 1) lost 5 × −15 = −75 points to slips. A calibration analysis found all 5 slips came from wet spots that exist from early in the night and stay wet all night, independent of spill requests. The router charges a known wet edge only `WET_KNOWN_S = 10.0` extra seconds (`agent/routing.py:16`, applied at :46), far less than what −15 points is worth (the night earns roughly 0.1 point per sim-second, so −15 ≈ 150 s).
+
+**Step 1 — analyse (read-only):** in the live log /Users/hamadaliakram/Oslo_Sprint_26/temp/runs/w2-95461e83aef3e02e217ee4ae5c7dfa93.jsonl (JSON lines; `call` entries have cmd, args, result, events; `decision` kind `wet_floor` has the edge and whether it slipped), for each `slip` event find: the edge; whether that edge (or that spot) had already been marked wet earlier (a `wet_floor` decision or a "wet" notice/exit warning in an earlier `look`/`move` result); whether a dry alternative route existed in the map (`agent/data/hotel_seed1.json`); whether the same spot slipped more than once. Also check docs/research/wybe-api.md for how wet floors are announced and whether any careful-step option exists. Calibration detail: /Users/hamadaliakram/Oslo_Sprint_26/.superpowers/sdd/2026-11-07-nightshift-agent/calibration-spec.md.
+
+**Step 2 — fix, smallest change that would have prevented those slips:** e.g. raise the known-wet cost to reflect the penalty (make it a named constant with the reasoning in a comment, ~150–200 s) so routes avoid a known wet edge whenever a dry alternative costs less than the penalty; make sure wet marks persist for the whole shift; and, if the analysis shows warnings were visible in `look`/`move` replies before the slip but not recorded, record them in the world model (`agent/world.py`). Keep route timing estimates honest: the planner's time estimates should not treat the penalty-cost as real seconds if that would distort value-per-second (if separating "route choice cost" from "time estimate" is needed, do it minimally and say so).
+
+**Files:** `agent/routing.py`, `agent/world.py`, `tests/agent/test_routing.py` (and the world-model test file). Do NOT edit `agent/{executor,flows,flows_extra,planner,tasks,agent,offline,bench}.py` — other tasks are editing them in parallel; if the fix needs a change there, describe it precisely as a concern.
+
+**Tests:** routing avoids a known wet edge when a dry detour is cheaper than the penalty; takes it when no alternative exists; wet marks persist; route-cache invalidation still works when an edge is marked wet. TDD. No network, never `--live`.
+
+**Report:** include the Step-1 table (slip # | clock | edge | known wet before? | dry alternative and its extra metres | repeated?).

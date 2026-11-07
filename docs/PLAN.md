@@ -182,6 +182,19 @@ every request, then handle it fast. Few live runs: each one answers a specific q
 
 Target: past the median (~2,400) after steps 1–2; steps 3–5 decide the top. Live runs: ~4–5 total.
 
+Added from the Sat-afternoon reviews (final whole-branch review, seed-generalisation audit, security review,
+live-log calibration; plan Tasks 15–19):
+
+- [x] Task 16: hardening: Claude output validated (kind, `room-NNN` ASCII, caps, int count), endpoint pinned to
+      https, viewer Host check, `secrets.sh` umask 077 + clipboard auto-clear. Reviewed, 1 fix round. PR: this one.
+- [x] Task 17: wet floors are per spot (live: each spot slips once, then the robot creeps). The live slips had no
+      prior warning, so routing couldn't avoid them; looking on first visit is in Task 19. Reviewed. PR: this one.
+- [ ] Task 15: calibrate the offline fake to the live night (scoring rises ~7.5 %/h, 68 requests, end 06:00).
+- [ ] Task 18: final readiness: fit a night in the 44-min cap at the shared rate, retry final starts, never end
+      a final shift on errors, stricter room checks, the 10-shift topology tested offline.
+- [ ] Task 19: adapt to the night's real map and stock (practice seed 2: same rooms, other metres, stock moved).
+- [-] Batching (step 4): dropped: 0 batchable trips on the live replay; the gain is in calls (Task 18).
+
 ### Drift — the 06:00 handover dashboard (team lead, 2026-11-07 ~13:40)
 
 Design and the 2-minute demo script: `docs/superpowers/specs/2026-11-07-ops-dashboard-design.md`.

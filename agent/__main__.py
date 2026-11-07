@@ -182,7 +182,8 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--parallel", type=int, default=5)
     p.add_argument("--sim-end", default="02:00:00", help="stop at this sim clock, HH:MM:SS")
     p.add_argument("--live", action="store_true", help="use the real server (counted)")
-    p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default final's, 0 = none)")
+    p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default: the final's, 44*60*rps/10; 0 = none). The capped score is the "
+                   "last score the agent observed (status/end replies); retries are not counted")
     p.set_defaults(fn=cmd_bench)
     p = sub.add_parser("tune", help="offline parameter search; writes the best params (never live)")
     p.add_argument("--seeds", default="1-20")
@@ -190,7 +191,8 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--parallel", type=int, default=5)
     p.add_argument("--rng-seed", type=int, default=0)
     p.add_argument("--out", default="agent/data/params_candidate.json")
-    p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default final's, 0 = none)")
+    p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default: the final's, 44*60*rps/10; 0 = none). The capped score is the "
+                   "last score the agent observed (status/end replies); retries are not counted")
     p.add_argument("--optimise-capped", action="store_true", help="pick the best score at the call cap")
     p.set_defaults(fn=cmd_tune)
     args = ap.parse_args(argv)

@@ -38,7 +38,9 @@ def test_full_shift_scores_and_never_false_reports(tmp_path):
     assert fake.score >= 100
     assert fake.false_done == []
     assert not fake.unsafe
-    assert set(result) == {"shift", "seed", "score", "requests_served", "reason"}
+    assert set(result) == {
+        "shift", "seed", "score", "requests_served", "reason", "calls", "at_cap",
+    }
     lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
     assert lines[0]["type"] == "start" and lines[-1]["type"] == "end"
     assert sum(1 for x in lines if x["type"] == "end") == 1

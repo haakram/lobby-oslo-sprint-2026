@@ -100,30 +100,22 @@ def run_bench(
     cap_clocks: dict[int, str] = {}
 
     def work(seed: int) -> None:
-        sessions: list = []
+        result: dict = {}
         try:
             client = _make(client_factory, seed)
-            start = client.start_shift
-
-            def start_counted(*a, **kw):  # the session counts calls and watches the cap
-                sess = start(*a, **kw)
-                sess.call_cap = max_calls or None
-                sessions.append(sess)
-                return sess
-
-            client.start_shift = start_counted  # type: ignore[method-assign]
-            result = run_shift(client, mode="practice", seed=seed, params=used, sim_end=sim_end)
+            result = run_shift(
+                client, mode="practice", seed=seed, params=used, sim_end=sim_end, call_cap=max_calls
+            )
             score = int(result.get("score") or 0)
         except Exception as exc:  # noqa: BLE001 - one dead night must not sink the benchmark
             score = 0
             print(f"seed {seed}: crashed with {type(exc).__name__}: {str(exc)[:120]}", flush=True)
             with lock:
                 errors[seed] = type(exc).__name__
-        sess = sessions[-1] if sessions else None
+        at_cap = result.get("at_cap")
         with lock:
             scores[seed] = score
-            calls[seed] = sess.calls if sess else 0
-            at_cap = sess.at_cap if sess else None
+            calls[seed] = int(result.get("calls") or 0)
             capped[seed] = int(at_cap[0] or 0) if at_cap else score  # cap not reached: the full score
             if at_cap and at_cap[1]:
                 cap_clocks[seed] = at_cap[1]

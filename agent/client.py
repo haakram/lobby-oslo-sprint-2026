@@ -161,6 +161,7 @@ class ShiftSession:
         try:
             reply, latency = self._client._post(name, args or None, self.shift_id)
         except ShiftEnded as exc:
+            self._snapshot(None)
             self._write(self._call_entry(name, args, False, None, str(exc), [], 0.0, 409))
             raise
         self._write(
@@ -170,11 +171,14 @@ class ShiftSession:
         )
         if isinstance(reply.result, dict) and "score" in reply.result:
             self._last_score = reply.result["score"]
-        if self.call_cap and self.calls == self.call_cap and self.at_cap is None:
-            self.at_cap = (self._last_score, reply.clock)
+        self._snapshot(reply.clock)
         if isinstance(reply.result, dict) and reply.result.get("shift_over") is True:
             raise ShiftEnded(str(reply.result.get("reason", "shift over")))
         return reply
+
+    def _snapshot(self, clock: str | None) -> None:
+        if self.call_cap and self.calls == self.call_cap and self.at_cap is None:
+            self.at_cap = (self._last_score, clock)
 
     @staticmethod
     def _call_entry(cmd, args, ok, clock, result, events, latency, status) -> dict:

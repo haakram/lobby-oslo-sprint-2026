@@ -1558,7 +1558,7 @@ class FakeWybe:
                 floor = re.search(r"floor (\d)", q)
                 on_floor = [r for r in arrived if not floor or self._nodes.get(r.room, {}).get("floor") == int(floor[1])]
                 req = max(on_floor, key=lambda r: r.arrived_s or 0, default=None)
-            if req is None:
+            if req is None or req.replied:  # [obs] 5 of 5: once the manager was asked, the clerk deflects
                 return CLERK_PANEL
             return CLERK_ELEVATOR.format(req.rid, req.room.removeprefix("room-"))
         if (m := re.search(r"\b(\d{3})\b", q)) and "order" in q:

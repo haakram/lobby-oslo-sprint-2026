@@ -467,8 +467,9 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
                 move_metres[(loc, r["at"])] = int(r["metres"])
             if "slipped" in str(r.get("notice", "")) and cmd == "move":
                 wet(r["at"], clk)
-            if cmd == "move" and not r.get("notice") and not any(ev.get("type") == "slip" for ev in e.get("events") or []):
-                clean[r["at"]].append(clk)
+            if not r.get("notice") and not any(ev.get("type") == "slip" for ev in e.get("events") or []):
+                for p in (r.get("path") or [r["at"]])[1:] if cmd == "navigate" else [r["at"]]:
+                    clean[p].append(clk)  # crossed dry (or already known wet: only contacts before the first wet one count)
             for p in (r.get("path") or [r["at"]]) if cmd == "navigate" else [r["at"]]:
                 visits.append((clk, p))
             loc = r["at"]

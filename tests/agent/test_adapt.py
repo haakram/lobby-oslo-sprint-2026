@@ -4,12 +4,14 @@ The fake plays a "seed-2-like" hotel: the seed-1 floor plan, other metres and mo
 check of practice seed 2). The executor still loads `hotel_seed1.json` as its belief.
 """
 
+import itertools
+
 import httpx
 
 from agent.agent import run_shift
 from agent.client import WybeClient
 from agent.executor import ActionFailed
-from tests.agent.test_executor import calls, map_file, next_task, settings, setup, solo
+from tests.agent.test_executor import calls, decisions, map_file, next_task, settings, setup, solo
 from tests.fakes.fake_wybe import FakeWybe
 
 SEED2_STOCK = {
@@ -347,15 +349,53 @@ def test_spill_sign_goes_on_the_patch_not_known_when_the_task_started(tmp_path):
     assert fake.reports["R-002"] == "done" and not fake.false_done
 
 
-def test_spill_sign_is_moved_once_when_the_first_patch_does_not_score(tmp_path, monkeypatch):
-    # Ambiguous: two candidates (an old wet patch at 3a the fake does not credit, the spill at 3c).
-    from agent import flows_extra
-
-    monkeypatch.setattr(flows_extra, "_find_wet", lambda *a, **k: ["corridor-3a", "corridor-3c"])
+def test_spill_sign_is_moved_once_when_the_first_patch_does_not_score(tmp_path):
+    # Fix round 1 (reviewer's scenario): nothing on floor 3 is known, an unrelated wet patch at the
+    # landing/3a is met first and does not score; the walk resumes and the sign ends on the spill.
     fake, _session, ex, task = solo(tmp_path, "Someone mentioned a spill on floor 3.",
-                                   wet={frozenset({"corridor-3a", "room-311"})}, spill_spots={3: "corridor-3c"})
+                                    wet=OLD_PATCH, spill_spots={3: "corridor-3c"})
     out = ex.run(task)
     assert out.status == "done", out
-    assert sign_places(fake) == ["corridor-3a", "corridor-3c"]
+    places = sign_places(fake)
+    assert len(places) == 2 and places[0] in ("elevator-3", "corridor-3a") and places[-1] == "corridor-3c"
     assert len([e for e in calls(fake, "pick") if e["args"] == {"item": "wet-floor-sign"}]) == 2
     assert fake.reports == {"R-001": "done"} and not fake.false_done
+
+
+def test_spill_walk_does_not_look_twice_at_the_same_place(tmp_path):
+    fake, _session, ex, task = solo(tmp_path, "Someone mentioned a spill on floor 3.",
+                                    spill_spots={3: "corridor-3c"})
+    out = ex.run(task)
+    assert out.status == "done", out
+    cmds = [e["cmd"] for e in fake.log]
+    assert not any(a == b == "look" for a, b in itertools.pairwise(cmds)), cmds
+
+
+def test_bags_do_not_look_twice_at_the_desk(tmp_path):
+    fake, _session, ex, task = solo(
+        tmp_path, "Take the bags at the desk up to 206. The room is empty, the guest checks in later.")
+    out = ex.run(task)
+    assert out.status == "done", out
+    plain = [i for i, e in enumerate(fake.log) if e["cmd"] == "look" and not e["args"]]
+    assert not any(j == i + 1 for i, j in itertools.pairwise(plain))
+
+
+# --- fix round 1 (safety): a DND sign that appears while the keycard is fetched --------------------
+
+
+def test_room_check_looks_at_the_door_again_before_the_keycard(tmp_path, monkeypatch):
+    fake, session, ex, task = solo(tmp_path, "Check if 103 is empty and tidy, report back.",
+                                   absent_rooms={"room-103"})
+    real_gather = ex.gather
+
+    def gather_then_dnd(item, n=1):  # the sign goes up while the robot is away at the front desk
+        real_gather(item, n)
+        fake._dnd.add("room-103")
+
+    monkeypatch.setattr(ex, "gather", gather_then_dnd)
+    out = ex.run(task)
+    assert out.status == "failed" and "Do Not Disturb" in out.note, out
+    assert not [e for e in calls(fake, "use") if e["args"].get("item") == "keycard"]
+    assert not fake.unsafe and fake.reports == {"R-001": "failed"}
+    assert len([e for e in calls(fake, "look") if e["args"] == {"at": "room-103"}]) == 2  # knock, keycard
+    assert any(d.get("status") == "ikke_forstyrr" for d in decisions(session, "room_status"))

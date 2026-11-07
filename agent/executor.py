@@ -95,10 +95,13 @@ class Executor:
         self._moves = 0
         self._in_go = 0
         self.cart_needed = False  # a tray or bags flow: never drop the cart to reach the stairs
+        self.calls = 0  # commands sent; a look is "fresh" while nothing was sent after it
+        self._look_call: dict[str, int] = {}
 
     # --- server calls --------------------------------------------------------------------------
 
     def cmd(self, name: str, **args) -> Reply:
+        self.calls += 1
         reply = self.session.cmd(name, **args)
         if reply.clock:
             self.state.clock = reply.clock
@@ -209,9 +212,18 @@ class Executor:
         self._tentative -= {frozenset((loc, ex["to"])) for ex in exits}  # a seen exit is real
         self._looked.add(loc)
         self.looks[loc] = look
+        self._look_call[loc] = self.calls
         if lost or any(to not in known_nodes for to in seen):
             self.log("map_learnt", at=loc, lost=lost, new=sorted(set(seen) - known_nodes))
         return look
+
+    def fresh_look(self) -> dict:
+        """The look at this place if it was the last command sent (the first-visit look on
+        arrival), else a new one. Not for door looks before a knock or keycard: those stay fresh."""
+        loc = self.state.location
+        if self._look_call.get(loc) == self.calls and loc in self.looks:
+            return self.looks[loc]
+        return self.look()
 
     # --- moving --------------------------------------------------------------------------------
 

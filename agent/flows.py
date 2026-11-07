@@ -210,6 +210,8 @@ def room_check(ex: Executor, task: Task) -> Result:
     if not ex.state.carrying("keycard"):
         ex.gather("keycard")
         ex.go(corridor)
+        if _door_sign(ex, room):  # the trip took time: a sign may have gone up meanwhile
+            raise ActionFailed(f"Do Not Disturb sign on {room} when back with the keycard; did not enter")
     reply = ex.cmd("use", item="keycard", on=room)
     if not reply.ok:
         raise ActionFailed(f"keycard did not open {room}: {reply.result}")

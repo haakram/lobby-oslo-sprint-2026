@@ -141,7 +141,7 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
     if not ex.get_cart():  # bags are heavy, like trays
         raise ActionFailed("could not get the cart for the bags")
     ex.go(ex.hotel.special.get("clerk", "front-desk"))
-    name = find_object(objects_here(ex.look()), BAG_WORDS, room) or "bags"
+    name = find_object(objects_here(ex.fresh_look()), BAG_WORDS, room) or "bags"
     ok, text = ex.pick(name)
     if not ok:
         raise ActionFailed(f"could not pick {name}: {text}")
@@ -195,7 +195,7 @@ def noise(ex: Executor, task: Task, h: Hyp) -> Result:
     corridor = _corridor(ex, task.room)
     num = task.room.removeprefix("room-")
     ex.go(corridor)
-    look = ex.look()
+    look = ex.fresh_look()  # the first-visit look on arrival, when it was the last command
     desc, people = str(look.get("description") or "").strip(), _people(look)
     seen = f"{corridor}: {desc or 'no description'}" + (f"; people: {', '.join(people)}" if people else "")
     ex.log("noise_look", request=task.request, at=corridor, description=desc, people=people)
@@ -231,11 +231,11 @@ def noise(ex: Executor, task: Task, h: Hyp) -> Result:
 
 
 def _find_wet(ex: Executor, floor: int, corridors: list[str], seen: list[str],
-              known: set[str] = frozenset()) -> list[str]:
-    """Walk the floor's corridors, looking before each step on, and list the wet spots seen: the
-    ones not known when the task started first (the reported spill is new; an old patch is usually
-    one the robot slipped on hours ago: live R-067 signed corridor-1b for a spill in 1a, for 0),
-    then the known ones, newest first. The walk stops once a new one is found."""
+              known: set[str] = frozenset()) -> tuple[list[str], list[str]]:
+    """Walk the floor's corridors, looking before each step on, until a wet spot NOT in `known`
+    shows (the reported spill is new; an old patch is usually one the robot slipped on hours ago:
+    live R-067 signed corridor-1b for a spill in 1a, for 0). Returns (wet spots seen, in walk
+    order; corridors not walked yet), so the walk can be resumed with a larger `known`."""
     if ex.hotel.nodes.get(ex.state.location, {}).get("floor") != floor:
         landing = next((e for e in ex.hotel.elevators() if ex.hotel.floor(e) == floor), None)
         if landing:
@@ -243,25 +243,27 @@ def _find_wet(ex: Executor, floor: int, corridors: list[str], seen: list[str],
     try:
         order, _ = best_tour(ex.hotel, ex.state.location, corridors, with_cart=ex.state.has_cart)
     except NoRoute:
-        order = corridors
+        order = list(corridors)
+    remaining = [c for c in order if c != ex.state.location]
     found: list[str] = []
-    for stop in [None, *order]:
-        if stop is not None:
-            if stop == ex.state.location:
-                continue
-            if any(s not in known for s in found):
-                break
-            ex.go(stop)
-        look = ex.look()
+    while True:
+        look = ex.fresh_look()  # the first-visit look on arrival, when it was the last command
         here, desc = ex.state.location, str(look.get("description") or "").strip()
         seen.append(f"{here}: {desc or 'no description'}")
         if "wet" in desc.lower() and here not in found:
             found.append(here)
         for to in [e["to"] for e in look["exits"] if "wet" in str(e.get("warning", "")).lower()]:
             seen.append(f"{here}: the floor towards {to} looks wet")  # marked wet by the look: a creep
-            if to not in found:
+            if to not in found and ex.hotel.nodes.get(to, {}).get("kind") != "room":
                 found.append(to)
-    age = {spot: i for i, spot in enumerate(ex.hotel.wet_spots())}
+        if any(s not in known for s in found) or not remaining:
+            return found, remaining
+        ex.go(remaining.pop(0))
+
+
+def _rank(found: list[str], known: set[str], hotel) -> list[str]:
+    """Spots not known at task start first (walk order), then the known ones, newest first."""
+    age = {spot: i for i, spot in enumerate(hotel.wet_spots())}
     old = sorted((s for s in found if s in known), key=lambda s: -age.get(s, -1))
     return [s for s in found if s not in known] + old
 
@@ -269,8 +271,10 @@ def _find_wet(ex: Executor, floor: int, corridors: list[str], seen: list[str],
 @_hypothesis("H-spill")
 def spill(ex: Executor, task: Task, h: Hyp) -> Result:
     """H-spill: a wet-floor sign from storage, placed (no `where`) on the wet patch of floor N.
-    The patch not yet known when the task started is signed first; if the score does not rise
-    and another candidate was seen, the sign is moved there once."""
+    The first patch not known when the task started is signed; if the score does not rise, the
+    walk resumes past the patches seen so far, the sign is picked up and moved once to the next
+    not-known patch (else to the best other spot seen). At most two placements; done only on a
+    score rise."""
     floor = task.floor
     known = set(ex.hotel.wet_spots())
     corridors = sorted(n for n, v in ex.hotel.nodes.items() if v["kind"] == "corridor" and v["floor"] == floor)
@@ -278,13 +282,14 @@ def spill(ex: Executor, task: Task, h: Hyp) -> Result:
         raise ActionFailed(f"no corridors known on floor {floor}")
     ex.gather("wet-floor-sign")
     seen: list[str] = []
-    spots = _find_wet(ex, floor, corridors, seen, known)
-    if not spots:
+    found, rest = _find_wet(ex, floor, corridors, seen, known)
+    if not found:
         ex.work_order("sol", f"Søl meldt i etasje {floor}: fant ikke vått gulv", request=task.request)
         h.log("no wet patch seen; sign kept", h.before, ex.score_now(), seen=seen)
         raise ActionFailed(f"no wet patch seen on floor {floor}: " + "; ".join(seen))
     tried: list[str] = []
-    for attempt, spot in enumerate(spots[:2]):  # the best candidate, then one retry
+    spot = _rank(found, known, ex.hotel)[0]
+    for attempt in range(2):  # the best candidate, then one retry
         ex.go(spot)  # a warned exit: seen, so the robot creeps onto it
         mid = ex.score_now()
         placed = ex.cmd("place", item="wet-floor-sign")
@@ -297,12 +302,20 @@ def spill(ex: Executor, task: Task, h: Hyp) -> Result:
             h.log(f"placed a wet-floor sign at {spot}: {placed.result}", mid, after,
                   score_at_start=h.before, seen=seen, tried=tried, known=sorted(known))
             return f"wet-floor sign placed over the spill at {spot}", None
-        if attempt == 0 and len(spots) > 1 and placed.ok:
-            ok, _text = ex.pick("wet-floor-sign")  # move it to the other candidate
-            ex.log("sign_moved", request=task.request, from_spot=spot, to_spot=spots[1], picked=ok)
-            if not ok:
-                break
-    ex.work_order("sol", f"Søl ved {spots[0]}: varselskilt satt ut", place=spots[0], request=task.request)
+        if attempt or not placed.ok:
+            break
+        ok, _text = ex.pick("wet-floor-sign")  # not the spill: take the sign along
+        if not ok:
+            break
+        passed = known | set(found)  # the patches seen so far are not it: walk on
+        more, rest = _find_wet(ex, floor, rest, seen, passed)
+        others = [s for s in more if s not in passed] or [s for s in _rank(found, known, ex.hotel) if s != spot]
+        others = others or [s for s in more if s != spot]
+        if not others:
+            break
+        ex.log("sign_moved", request=task.request, from_spot=spot, to_spot=others[0], walked_on=rest == [])
+        spot = others[0]
+    ex.work_order("sol", f"Søl ved {spot}: varselskilt satt ut", place=spot, request=task.request)
     h.log(f"sign placed without a score rise: {'; '.join(tried)}", h.before, ex.score_now(),
           seen=seen, tried=tried, known=sorted(known))
     raise ActionFailed(f"placed a wet-floor sign ({'; '.join(tried)}) but the score did not rise")

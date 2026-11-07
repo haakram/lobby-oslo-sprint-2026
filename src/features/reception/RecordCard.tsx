@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { Badge, type BadgeTone, Button, Card } from "@/ui";
 import { formatClock, formatDate } from "./format";
-import { ROOM_TYPES } from "./hotel";
+import { PERKS, ROOM_TYPES } from "./hotel";
 import type { BookingRecord, MessageRecord, MessageTopic, ReceptionRecord } from "./records";
 import type { StaffMark } from "./useStaffMarks";
 
@@ -134,8 +134,12 @@ function BookingCard({
           {record.guests}
         </Field>
         <Field label="Pris direkte" mono>
-          {`${record.directTotal} kr`}
+          {`${record.directTotal} kr (${record.pricePerNight} kr/natt)`}
         </Field>
+        {record.discountStep > 0 && (
+          <Field label="Prutet">{`Trinn ${record.discountStep} av prutestigen`}</Field>
+        )}
+        {record.perk && <Field label="Lovet ekstra">{PERKS[record.perk]}</Field>}
         {record.note && <Field label="Merknad">{record.note}</Field>}
       </dl>
     </Shell>

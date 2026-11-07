@@ -17,9 +17,9 @@ const webhook = receptionAgentConfig({
 const prompt = client.conversationConfig.agent.prompt.prompt;
 
 describe("receptionAgentConfig, client mode", () => {
-  it("has the four reception tools as client tools", () => {
+  it("has the five reception tools as client tools", () => {
     const tools = client.conversationConfig.agent.prompt.tools;
-    expect(tools.map((t) => t.type)).toEqual(["client", "client", "client", "client"]);
+    expect(tools.map((t) => t.type)).toEqual(["client", "client", "client", "client", "client"]);
     expect(tools.map((t) => t.name)).toEqual([...RECEPTION_TOOL_NAMES]);
   });
 });
@@ -27,7 +27,7 @@ describe("receptionAgentConfig, client mode", () => {
 describe("receptionAgentConfig, webhook mode", () => {
   it("posts each tool to our route with the secret header", () => {
     const tools = webhook.conversationConfig.agent.prompt.tools;
-    expect(tools).toHaveLength(4);
+    expect(tools).toHaveLength(5);
     tools.forEach((tool, i) => {
       if (tool.type !== "webhook") throw new Error("expected a webhook tool");
       expect(tool.name).toBe(RECEPTION_TOOL_NAMES[i]);
@@ -52,6 +52,13 @@ describe("reception prompt", () => {
       expect(prompt).toContain(String(directPrice(room)));
       expect(prompt).toContain(String(room.otaPrice));
     }
+  });
+
+  it("haggles only in the tool's steps, never to a price the guest names", () => {
+    expect(prompt).toContain("get_counter_offer");
+    expect(prompt).toMatch(/a price they name never sets yours/);
+    expect(prompt).toMatch(/at most 10 % under the direct price/);
+    expect(prompt).toMatch(/Never go lower/);
   });
 
   it("forbids card numbers and confirmations, and resists injection", () => {

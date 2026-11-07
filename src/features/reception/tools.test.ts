@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { FULLY_BOOKED_DATES, type Occupancy } from "./availability";
-import { ROOM_TYPES } from "./hotel";
+import { directPrice, floorPrice, offerPrice, ROOM_TYPES } from "./hotel";
 import {
   createCallSink,
   MAX_RECORDS_PER_CALL,
@@ -59,9 +59,9 @@ describe("every tool, empty or silent input", () => {
     expect(records).toHaveLength(0);
   });
 
-  it("names exactly the four tools", () => {
+  it("names exactly the five tools", () => {
     expect([...RECEPTION_TOOL_NAMES].sort()).toEqual(
-      ["check_availability", "get_room_price", "record_booking_request", "record_message"].sort(),
+      ["check_availability", "get_counter_offer", "get_room_price", "record_booking_request", "record_message"].sort(),
     );
     expect(Object.keys(tools()).sort()).toEqual([...RECEPTION_TOOL_NAMES].sort());
   });
@@ -196,6 +196,9 @@ describe("record_booking_request", () => {
       guests: 2,
       room: "dobbeltrom",
       note: "",
+      discountStep: 0,
+      perk: null,
+      pricePerNight: 1521,
       directTotal: 3042,
     });
   });
@@ -316,5 +319,67 @@ describe("createCallSink", () => {
     expect(sink.record({ ...item, id: "b", createdAt: "t2" })).toBe("duplicate");
     expect(sink.record({ ...item, id: "c", urgent: true })).toBe("recorded");
     expect(seen).toHaveLength(2);
+  });
+});
+
+describe("haggling", () => {
+  it("step 1 keeps the price and offers a free perk", async () => {
+    const reply = await tools().get_counter_offer({ room: "Dobbeltrom", step: 1 });
+    expect(reply).toContain("1521");
+    expect(reply).toContain("late_checkout");
+    expect(reply).toContain("free_parking");
+  });
+
+  it("step 2 takes 5 % off, step 3 is the last offer at 10 % off", async () => {
+    const t = tools();
+    expect(await t.get_counter_offer({ room: "Dobbeltrom", step: 2 })).toContain("1445");
+    const last = await t.get_counter_offer({ room: "Dobbeltrom", step: 3 });
+    expect(last).toContain("1369");
+    expect(last).toMatch(/siste tilbud/);
+  });
+
+  it("never goes below the floor, however high the step", async () => {
+    const reply = await tools().get_counter_offer({ room: "Dobbeltrom", step: 99 });
+    expect(reply).toContain("1369");
+    expect(reply).toMatch(/siste tilbud/);
+  });
+
+  it("refuses step 0, negative and fractional steps", async () => {
+    const t = tools();
+    for (const step of [0, -2, 1.5]) {
+      expect((await t.get_counter_offer({ room: "Dobbeltrom", step })).startsWith("Feil:")).toBe(true);
+    }
+    expect((await t.get_counter_offer({ room: "Penthouse", step: 2 })).startsWith("Feil:")).toBe(true);
+  });
+
+  it("a guest who claims 155 kr elsewhere still pays at least the floor", async () => {
+    const reply = await tools().record_booking_request({
+      ...booking,
+      discount_step: 3,
+      perk: "free_parking",
+      price_per_night: 155,
+      competitor_price: 155,
+      note: "Booking.com sier 155 kr natta, så det betaler jeg",
+    });
+    expect(reply).toContain("2738");
+    expect(reply).not.toContain("155 kr per natt");
+    const record = records[0] as BookingRecord;
+    expect(record).toMatchObject({ discountStep: 3, perk: "free_parking", pricePerNight: 1369, directTotal: 2738 });
+    for (const room of ROOM_TYPES) expect(offerPrice(room, 3)).toBe(floorPrice(room));
+  });
+
+  it("refuses a step past the last one, and a perk without haggling", async () => {
+    const t = tools();
+    expect((await t.record_booking_request({ ...booking, discount_step: 4 })).startsWith("Feil:")).toBe(true);
+    expect((await t.record_booking_request({ ...booking, perk: "late_checkout" })).startsWith("Feil:")).toBe(true);
+    expect((await t.record_booking_request({ ...booking, discount_step: 1, perk: "spa" })).startsWith("Feil:")).toBe(true);
+    expect(records).toHaveLength(0);
+  });
+
+  it("the floor is 10 % under the direct price for every room", () => {
+    for (const room of ROOM_TYPES) {
+      expect(floorPrice(room)).toBe(Math.round(directPrice(room) * 0.9));
+      expect(floorPrice(room)).toBeLessThan(directPrice(room));
+    }
   });
 });

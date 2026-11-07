@@ -217,6 +217,18 @@ class Ledger:
 
     def __init__(self) -> None:
         self.entries: dict[str, Entry] = {}
+        self.dnd: dict[str, str] = {}  # room -> sim clock when a Do Not Disturb sign was last seen
+
+    def note_dnd(self, room: str, clock: str) -> None:
+        self.dnd[room] = clock
+
+    def dnd_seen(self, room: str, now: str, memory_s: int) -> str | None:
+        """The clock a DND sign on `room` was seen, if that is within memory_s before `now`."""
+        seen = self.dnd.get(room)
+        if seen is None:
+            return None
+        a, b = _secs(seen), _secs(now)
+        return seen if a is None or b is None or 0 <= b - a <= memory_s else None
 
     def add(self, task: Task) -> None:
         if task.request not in self.entries:

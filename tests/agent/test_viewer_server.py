@@ -159,3 +159,47 @@ def test_cors_env_override(base, monkeypatch):
     for origin in ["https://app.example", "http://localhost:4000"]:
         assert req(base + "/api/runs", origin=origin)[1][ACAO] == origin
     assert ACAO not in req(base + "/api/runs", origin="http://localhost:3000")[1]
+
+
+def _raw(base, path, host, method="GET"):
+    req = urllib.request.Request(base + path, method=method, headers={"Host": host})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def test_host_check_allows_loopback_names(base):
+    port = base.rsplit(":", 1)[1]
+    assert _raw(base, "/api/runs", f"127.0.0.1:{port}") == 200
+    assert _raw(base, "/api/runs", f"localhost:{port}") == 200
+    assert _raw(base, "/", f"localhost:{port}") == 200
+
+
+@pytest.mark.parametrize(
+    "host", ["evil.example", "evil.example:8765", "localhost", "127.0.0.1", "localhost:1",
+             "localhost.evil.example:{port}", "127.0.0.1:{port}.evil.example"],
+)
+def test_host_check_rejects_rebinding(base, host):
+    port = base.rsplit(":", 1)[1]
+    host = host.format(port=port)
+    for path in ("/api/runs", "/api/hotel", "/", "/static/app.js"):
+        assert _raw(base, path, host) == 403
+
+
+def test_host_check_applies_to_options(base):
+    port = base.rsplit(":", 1)[1]
+    req = urllib.request.Request(
+        base + "/api/runs", method="OPTIONS",
+        headers={"Host": "evil.example", "Origin": "http://localhost:3000"},
+    )
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(req)
+    assert e.value.code == 403
+    ok = urllib.request.Request(
+        base + "/api/runs", method="OPTIONS",
+        headers={"Host": f"localhost:{port}", "Origin": "http://localhost:3000"},
+    )
+    with urllib.request.urlopen(ok) as r:
+        assert r.status == 204

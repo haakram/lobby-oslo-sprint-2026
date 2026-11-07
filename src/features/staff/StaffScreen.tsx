@@ -28,7 +28,8 @@ export function StaffScreen() {
           const people = onShift(shift.id);
           const active = shift.id === now;
           return (
-            <section key={shift.id} aria-labelledby={`shift-${shift.id}`} data-enter>
+            // On a phone the shift that is on now comes first.
+            <section key={shift.id} aria-labelledby={`shift-${shift.id}`} data-enter className={cx(active && "order-first lg:order-none")}>
               <Card className={cx("sm:p-6", active && "border-line-strong")}>
                 <PanelHead
                   id={`shift-${shift.id}`}
@@ -39,7 +40,7 @@ export function StaffScreen() {
                     active ? (
                       <span className="flex items-center gap-3 text-sm text-muted">
                         {shift.from}–{shift.to}
-                        <Badge tone="accent">Nå</Badge>
+                        <Badge tone="success">Nå</Badge>
                       </span>
                     ) : undefined
                   }
@@ -82,15 +83,26 @@ function Person({ member }: { member: StaffMember }) {
   const robot = member.name === "Roboten";
   return (
     <li className="flex items-center gap-3 py-2.5">
-      <Monogram name={robot ? "Ro" : member.name} size={32} className={robot ? "bg-accent text-on-accent" : undefined} />
+      {robot ? (
+        // The robot's monogram is the accent (DESIGN.md "Monogram"); Monogram's own soft fill would win the class order.
+        <span
+          aria-hidden="true"
+          style={{ width: 32, height: 32, fontSize: 14 }}
+          className="inline-flex shrink-0 items-center justify-center rounded-full bg-accent font-semibold leading-none text-on-accent"
+        >
+          R
+        </span>
+      ) : (
+        <Monogram name={member.name} size={32} />
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-semibold">{member.name}</span>
-        <span className="truncate text-sm text-muted">
+        <span className="text-sm break-words text-muted">
           {member.role}
           {member.area ? ` · ${member.area}` : ""}
         </span>
       </div>
-      <span className="text-xs whitespace-nowrap text-muted">{member.phone}</span>
+      <span className="text-sm whitespace-nowrap text-muted sm:text-xs">{member.phone}</span>
     </li>
   );
 }

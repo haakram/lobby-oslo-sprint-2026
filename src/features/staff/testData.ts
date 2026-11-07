@@ -7,10 +7,11 @@ export type StaffRole = "Resepsjon" | "Renhold" | "Vedlikehold" | "Frokost" | "N
 
 export type ShiftId = "natt" | "dag" | "kveld";
 
+/** Three shifts that meet: the 06:00 handover is the night's end and the day's start. */
 export const SHIFTS: readonly { id: ShiftId; label: string; from: string; to: string }[] = [
   { id: "natt", label: "Natt", from: "22:00", to: "06:00" },
-  { id: "dag", label: "Dag", from: "07:00", to: "15:00" },
-  { id: "kveld", label: "Kveld", from: "15:00", to: "23:00" },
+  { id: "dag", label: "Dag", from: "06:00", to: "14:00" },
+  { id: "kveld", label: "Kveld", from: "14:00", to: "22:00" },
 ];
 
 export type StaffMember = {
@@ -41,11 +42,16 @@ const PEOPLE: Array<Omit<StaffMember, "id">> = [
 
 export const STAFF: readonly StaffMember[] = PEOPLE.map((person, index) => ({ id: `staff-${index + 1}`, ...person }));
 
-/** The shift running at a wall-clock hour (Oslo): night until 06, day until 15, evening until 23. */
+const hourOf = (clock: string) => Number(clock.slice(0, 2));
+
+/** The shift running at a wall-clock hour (Oslo), read off SHIFTS so the plan and "Nå" never disagree. */
 export function shiftAt(hour: number): ShiftId {
-  if (hour < 6 || hour >= 23) return "natt";
-  if (hour < 15) return "dag";
-  return "kveld";
+  for (const shift of SHIFTS) {
+    const from = hourOf(shift.from);
+    const to = hourOf(shift.to);
+    if (from < to ? hour >= from && hour < to : hour >= from || hour < to) return shift.id;
+  }
+  return "natt";
 }
 
 export function onShift(shift: ShiftId, staff: readonly StaffMember[] = STAFF): StaffMember[] {

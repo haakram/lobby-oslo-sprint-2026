@@ -7,6 +7,7 @@ import { CleaningStops } from "./CleaningStops";
 import { planCleaning } from "./cleaningPlan";
 import { placeLabel, type HotelMap } from "./hotelMap";
 import { HotelPlan } from "./HotelPlan";
+import { OffMapRooms } from "./OffMapRooms";
 import { cleaningPresets, roomStatusAt, type RoomPreset, type RoomReport } from "./nightRooms";
 import type { CleaningStart } from "./query";
 import { SavingBand } from "./SavingBand";
@@ -16,6 +17,43 @@ import { replaceQuery } from "./urlState";
 export type CleaningInitial = { rooms: string[]; unknown: string[]; start: CleaningStart | null; cart: boolean | null };
 
 const NO_STATUSES: ReadonlyMap<string, RoomReport> = new Map();
+
+/** No way to a room on the map. The advice and the actions follow the real cause. */
+function NoRouteError({
+  room,
+  from,
+  to,
+  stairsOnly,
+  onCartOff,
+  onRemove,
+}: {
+  room: string;
+  from: string;
+  to: string;
+  stairsOnly: boolean;
+  onCartOff: () => void;
+  onRemove: (room: string) => void;
+}) {
+  const name = placeLabel(room);
+  return (
+    <ErrorState
+      title="Ingen rute funnet"
+      body={
+        stairsOnly
+          ? `${name} kan bare nås via trapp, og med vogn går ruten ikke i trapp. Slå av vogn, eller ta rommet ut av ruten.`
+          : `Kartet har ingen vei mellom ${placeLabel(from)} og ${placeLabel(to)}. Ta ${name.toLowerCase()} ut av ruten og besøk det manuelt.`
+      }
+      action={
+        <div className="flex flex-wrap gap-2">
+          {stairsOnly && <Button onClick={onCartOff}>Slå av vogn</Button>}
+          <Button variant={stairsOnly ? "secondary" : "primary"} onClick={() => onRemove(room)}>
+            Fjern {name.toLowerCase()}
+          </Button>
+        </div>
+      }
+    />
+  );
+}
 
 /** Renhold: pick rooms (from the night or on the map), get the best round across floors. */
 export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightLog; initial: CleaningInitial }) {
@@ -29,7 +67,16 @@ export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightL
   const [drawToken, setDrawToken] = useState(initial.rooms.length > 0 ? 1 : 0);
   const redraw = () => setDrawToken((t) => t + 1);
 
-  const plan = useMemo(() => planCleaning(map, { start, rooms, cart }), [map, start, rooms, cart]);
+  // Only rooms on tonight's map can be routed; the rest are listed apart, never dropped.
+  const routable = useMemo(() => rooms.filter((r) => map.nodes[r]?.kind === "room"), [map, rooms]);
+  const offMap = useMemo(() => rooms.filter((r) => map.nodes[r]?.kind !== "room"), [map, rooms]);
+  const plan = useMemo(() => planCleaning(map, { start, rooms: routable, cart }), [map, start, routable, cart]);
+  // With the cart on, would the same rooms work by the stairs? Then that is the advice, and the action.
+  const stairsOnly = useMemo(() => {
+    if (!cart || !plan || !("error" in plan)) return false;
+    const byStairs = planCleaning(map, { start, rooms: routable, cart: false });
+    return byStairs !== null && !("error" in byStairs);
+  }, [map, start, routable, cart, plan]);
   const selected = useMemo(() => new Set(rooms), [rooms]);
 
   const firstSync = useRef(true);
@@ -58,7 +105,7 @@ export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightL
     <div className="flex flex-col gap-4 lg:gap-6">
       {initial.unknown.length > 0 && (
         <p role="status" className="rounded-md border-l-4 border-warning bg-warning-soft px-4 py-3 text-base text-warning">
-          Fant ikke {initial.unknown.join(", ")} i hotellkartet. De andre rommene fra lenken er med.
+          Lenken hadde noe som ikke er et romnummer: {initial.unknown.join(", ")}. Rommene i lenken er med.
         </p>
       )}
 
@@ -88,12 +135,21 @@ export function CleaningMode({ map, log, initial }: { map: HotelMap; log: NightL
         <SavingBand plan={ok} />
       ) : plan && "error" in plan ? (
         <Card className="p-4 sm:p-5">
-          <ErrorState
-            title="Ingen rute funnet"
-            body={`Kartet har ingen vei fra ${placeLabel(plan.from)} til ${placeLabel(plan.to)}${cart ? " uten trapp" : ""}. Fjern rommet${cart ? " eller slå av vogn" : ""} og prøv igjen.`}
+          <NoRouteError
+            room={plan.to === start ? plan.from : plan.to}
+            from={plan.from}
+            to={plan.to}
+            stairsOnly={stairsOnly}
+            onCartOff={() => {
+              setCart(false);
+              redraw();
+            }}
+            onRemove={toggle}
           />
         </Card>
       ) : null}
+
+      {offMap.length > 0 && <OffMapRooms rooms={offMap} statuses={statuses} onRemove={toggle} />}
 
       <div className="lg:order-first">
         <CleaningControls

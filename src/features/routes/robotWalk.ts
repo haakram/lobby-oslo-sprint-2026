@@ -36,6 +36,8 @@ export type RobotNight = {
   metres: number;
   rides: number;
   between: { metres: number; rides: number };
+  /** Places the robot went that the map doesn't have: counted in the metres, not drawn. */
+  offMap: string[];
 };
 
 const TASK_KIND: Record<string, string> = {
@@ -79,6 +81,7 @@ export function robotWalk(lines: readonly RunLine[], map: HotelMap): RobotNight 
   let at: string | null = null;
   let clock: string | null = null;
   let current: RobotTask | null = null;
+  const offMap = new Set<string>();
 
   const close = (task: RobotTask, outcome: RobotTask["outcome"]) => {
     task.outcome = outcome;
@@ -99,11 +102,12 @@ export function robotWalk(lines: readonly RunLine[], map: HotelMap): RobotNight 
       if (line.cmd === "status") at = str(rec(line.result)?.location) ?? at;
       if (line.cmd !== "move" || !line.ok) continue;
       const to = arrivedAt(line.args, line.result);
-      if (!to || !map.nodes[to]) continue;
-      if (at && at !== to && map.nodes[at]) {
+      if (!to) continue;
+      if (!map.nodes[to]) offMap.add(to);
+      if (at && at !== to) {
         const a = map.nodes[at];
         const b = map.nodes[to];
-        const ride = a.kind === "elevator" && b.kind === "elevator" && a.floor !== b.floor;
+        const ride = a?.kind === "elevator" && b?.kind === "elevator" && a.floor !== b.floor;
         const reported = rec(line.result)?.metres;
         const metres = ride ? 0 : typeof reported === "number" && reported >= 0 ? reported : edgeMetres(map, at, to);
         const move: RobotMove = { from: at, to, metres, clock, ride, request: current?.request ?? null };
@@ -152,6 +156,7 @@ export function robotWalk(lines: readonly RunLine[], map: HotelMap): RobotNight 
     metres: Math.round(sum(moves, (m) => m.metres)),
     rides: moves.filter((m) => m.ride).length,
     between: { metres: Math.round(sum(between, (m) => m.metres)), rides: between.filter((m) => m.ride).length },
+    offMap: [...offMap].sort(),
   };
 }
 

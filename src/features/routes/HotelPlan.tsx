@@ -30,11 +30,13 @@ const PIN_S = 0.15;
 const MIN_PX_PER_M = 12;
 const CONNECTOR = 2;
 
+// TODO(phase-2): read from src/ui/roomStatus.ts once the design lead lands it (UX audit X2). Until
+// then these follow that spec's hues: Må vaskes accent, Ikke forstyrr warning, Klar success, Opptatt muted.
 export const STATUS_TONE: Record<RoomStatus, string> = {
   klar: "bg-success",
-  opptatt: "bg-line-strong",
-  ma_vaskes: "bg-warning",
-  ikke_forstyrr: "bg-danger",
+  opptatt: "bg-muted",
+  ma_vaskes: "bg-accent",
+  ikke_forstyrr: "bg-warning",
 };
 
 export type PlanPin = { node: string; label: string; /** The route step that ends here; no step = shown at once. */ step?: number };

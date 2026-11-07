@@ -4,7 +4,7 @@ import { useId, useMemo, useState, type KeyboardEvent } from "react";
 import { usePicklist } from "@/features/picklist/PicklistProvider";
 import { cx, RegenIcon, type RegenName } from "@/ui";
 import { CleaningMode, type CleaningInitial } from "./CleaningMode";
-import { guestRooms, hotelMap } from "./hotelMap";
+import { hotelMap } from "./hotelMap";
 import { PicklistMode } from "./PicklistMode";
 import { parseCart, parseMode, parseRoomQuery, parseStart, type RouteMode } from "./query";
 import { RobotMode } from "./RobotMode";
@@ -31,9 +31,9 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
   const sku = typeof params.sku === "string" ? params.sku : undefined;
 
   const initial = useMemo<CleaningInitial>(() => {
-    const { rooms, unknown } = parseRoomQuery(params.rom, new Set(guestRooms(map)));
+    const { rooms, unknown } = parseRoomQuery(params.rom);
     return { rooms, unknown, start: parseStart(params.start), cart: parseCart(params.vogn) };
-  }, [map, params.rom, params.start, params.vogn]);
+  }, [params.rom, params.start, params.vogn]);
 
   // An explicit ?modus= wins; ?sku= (Øyne's "Vis vei") or a pick list in progress opens the pick list.
   const [mode, setMode] = useState<RouteMode>(

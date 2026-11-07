@@ -36,18 +36,22 @@ from pathlib import Path
 from typing import Literal
 
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
-from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_route
+from agent.routing import MOVE_S_PER_M, NoRoute, Route, best_tour, route_seconds, shortest_route
 from agent.tasks import Entry, Kind, Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
 
 IDLE_SCANS_WHEN_FULL = 3  # scans between dock tries while the battery is full (each 60 s, ~1 %)
 NAV_MIN_HOPS = 2  # plain moves in a row that one navigate replaces, once the call pace needs it
-CALL_PROJECTION_LIMIT = 1250  # calls a whole night is heading for before navigate is used (final cap ~1,320)
+CALL_PROJECTION_LIMIT = 1250  # a final's night projected past this navigates (when no call cap is set)
 NIGHT_S = 8 * 3600
 # Offline seeds 1-3: navigate on 2+ hop legs saves 170-220 calls a night for 10-35 points of slower
 # walking; a night cut by the final's call cap loses 150-200 points of its last hour (live seeds 2, 4).
 WET_LOOK_S = 10 * 60  # a corridor approach looked at longer ago than this is looked at again
 # (live batch 5: 7 slips in 4 nights still, on patches younger than the 30 min window used before)
+WET_LOOK_BUSY_S = 45 * 60  # ... the window while busy (2+ tasks queued or battery under BUSY_BATTERY):
+# live seed 16 spent 143 re-looks (12 sim-min, 169 calls) to avoid at most 2 slips (-15 and 60 s each)
+BUSY_QUEUE = 2
+BUSY_BATTERY = 40.0
 DEFAULT_EXPERIMENTS = ("spill_done",)  # live seed 4: two spill reports verified (+43, +63) when
 # the sign stood on the patch; the report, not the place, carries the credit (like a room check)
 
@@ -79,10 +83,26 @@ SKIP_MIN_AGE_S = 8 * 60  # [obs] 16 live "Skip R-NNN": 8:23 to 29:24 after the r
 GO_ATTEMPTS = 24  # route tries per go(): each first-visit look may change the map and replan
 BATTERY_LOW = 25.0  # below this a trip waits for a charge ...
 BATTERY_OK = 60.0  # ... up to this (or until a request arrives)
-BATTERY_CRITICAL = 10.0  # below this the charge goes ahead even while work waits
+BATTERY_CRITICAL = 15.0  # below this the charge goes ahead even while work waits (a forced block)
 DRAIN_PER_MIN = 0.9  # [obs] active battery drain, % per sim minute (413 live intervals)
 DOCK_MARGIN = 5.0  # % kept on top of what the way to the dock drains
-CHARGE_ROUNDS = 10
+CHARGE_ROUNDS = 20  # docks per charge: a forced block chains short docks, each woken by a message
+# A forced charge is a block: dock, read the inbox when a message wakes it (0 s), dock again, up to
+# this target. Live seed 16 ran ~20 forced cycles after 03:21, each a walk to the dock that the next
+# message woke after ~3 min: +2.1 % per 4.6 min, the walk eating ~40 % of what the dock gave.
+CHARGE_TARGET_FORCED = 40.0
+CHARGE_TARGET_MIN = 20.0  # ... shrinking toward 06:00 (10 + 0.4 x minutes left), never under this
+NIGHT_END = "06:00:00"  # the server ends the shift here
+# ... and no new dock after this long once the battery is back to BATTERY_LOW: live manager skips come
+# 7-30 min after a request (median 18.7) and a skipped request scores 0 even when done.
+FORCED_BLOCK_MAX_S = 15 * 60
+# Floor-1 top-up: a task's way about to leave the dock's floor by elevator, with the battery under
+# TOP_UP_BELOW and the dock within TOP_UP_DOCK_M, docks first (the dock ends on the next message).
+# Offline bench (seeds 2-13), off -> on: scale 1.0 1648.7 -> 1628.8, 1.3 2021.2 -> 2018.1 (stress:
+# 1.6 2170.2 -> 2180.5, 2.0 2208.4 -> 2258.0); under 50 % instead of 70 %: 1643.3, 2024.2, 2201.2, 2266.8.
+TOP_UP_BEFORE_UP = False
+TOP_UP_BELOW = 70.0
+TOP_UP_DOCK_M = 25.0
 DOCK_RETRY_S = 600  # a dock found out of reach from a place is not tried from there for 10 sim-min
 MOVE_REFUSALS_MAX = 3  # the same move refused this many times in a row: given up, its edge dropped
 SHIFT_START = "22:00:00"  # the shift's start clock when the session does not report one
@@ -145,9 +165,11 @@ class Executor:
         self.inbox_waiting = False  # an inbox event was seen; the shift loop clears it
         self.ledger = Ledger()  # every request of the shift (follow-ups, duplicates)
         self.skipped: set[str] = set()  # requests the manager skipped (the shift loop's inbox read)
-        self.current: Task | None = None  # the running task, while run() carries it out
-        self.inbox_hook: Callable[[], None] | None = None  # the shift loop's inbox read, for mid-task skips
+        self.current: Task | None = None  # the running task, while run() carries it out: work waiting
         self.queue: list[Task] = []  # the shift loop's pending tasks (a follow-up may run one early)
+        # The shift loop's inbox read (it queues requests and drops skips): mid-task skip checkpoints
+        # and the charge block call it.
+        self.read_inbox: Callable[[], None] | None = None
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
         self._logged: dict | None = None
         self._tentative: set[frozenset[str]] = set()
@@ -186,6 +208,7 @@ class Executor:
         self._look_clock: dict[str, int] = {}  # place -> sim second of the last look there
         self._visited: set[str] = set()  # places the robot has stood in: navigate works only there
         self._exp_pending: str | None = None
+        self._topping_up = False
 
     def experiment(self, name: str) -> bool:
         """True while the named experiment is switched on and not yet refuted this shift."""
@@ -558,11 +581,16 @@ class Executor:
         return leg
 
     def _nav_min_hops(self) -> int | None:
-        """Navigate only when the night's call pace, projected from the first sim hour on, would
-        pass CALL_PROJECTION_LIMIT (NS_NAV_MIN_HOPS forces a leg length; 0 switches navigate off)."""
+        """Navigate only in the final, and only when the night's call pace, projected from the first
+        sim hour on, would pass the session's call cap (CALL_PROJECTION_LIMIT when none is set).
+        A practice night has no call cap: navigate's ~25 % slower metres (same battery a minute)
+        cost live rich nights ~6-11 sim-min and ~5-8 % battery from 23:00 on (NS_NAV_MIN_HOPS
+        forces a leg length in either mode; 0 switches navigate off)."""
         forced = os.environ.get("NS_NAV_MIN_HOPS")
         if forced is not None and forced.isdigit():
             return int(forced) or None
+        if self.session.mode != "final":
+            return None
         try:
             elapsed = clock_to_seconds(self.state.clock) - clock_to_seconds("22:00:00")
         except (ValueError, AttributeError):
@@ -572,7 +600,7 @@ class Executor:
         if elapsed < 3600:
             return None
         projected = self.session.calls * NIGHT_S / elapsed
-        return NAV_MIN_HOPS if projected > CALL_PROJECTION_LIMIT else None
+        return NAV_MIN_HOPS if projected > (self.session.call_cap or CALL_PROJECTION_LIMIT) else None
 
     def _navigate(self, leg: list[str]) -> bool:
         """One navigate to the leg's end; False (nothing moved) when the server declined."""
@@ -597,9 +625,10 @@ class Executor:
         return True
 
     def _stale_before_corridor(self, here: str, to: str) -> bool:
-        """Step into a corridor whose wetness is unknown and whose approach was last looked at
-        more than WET_LOOK_S ago (live seed 1: 6-7 slips a night, -15 and 60 s each, all on the
-        first step onto a patch that appeared after the first-visit look)."""
+        """Step into a corridor whose wetness is unknown and whose approach was never looked at,
+        or last looked at more than WET_LOOK_S ago (WET_LOOK_BUSY_S while busy) (live seed 1: 6-7
+        slips a night, -15 and 60 s each, all on the first step onto a patch that appeared after
+        the first-visit look)."""
         nodes = self.hotel.nodes
         if nodes.get(to, {}).get("kind") != "corridor" or nodes.get(here, {}).get("kind") == "room":
             return False
@@ -612,7 +641,13 @@ class Executor:
         # The floor of `to` was seen by any look that listed it as an exit (a spot is wet from
         # every side, world.mark_wet), not only by a look from here: the newest such look counts.
         seen = [t for t in (self._look_clock.get(here), self._exit_seen.get(to)) if t is not None]
-        return not seen or now - max(seen) > WET_LOOK_S
+        return not seen or now - max(seen) > (WET_LOOK_BUSY_S if self._busy() else WET_LOOK_S)
+
+    def _busy(self) -> bool:
+        """BUSY_QUEUE or more tasks queued, or the battery under BUSY_BATTERY: time is dearer than
+        a rare slip, so corridor approaches are looked at again less often."""
+        battery = self._battery()
+        return len(self.queue) >= BUSY_QUEUE or (battery is not None and battery < BUSY_BATTERY)
 
     def _look_on_arrival(self) -> bool:
         """The first time at a non-room place this shift: one look (5 s), so wet warnings, metres
@@ -635,6 +670,7 @@ class Executor:
         A move refused as closed off (cleaning) closes that edge for BLOCK_S and plans again from
         here (live seed 3: 125 retries of one closed move stranded the robot).
         Interruptible walks (the way back to the dock) may stop short once a message is waiting."""
+        self._top_up_before_up(dst)
         looked = False
         self._in_go += 1
         try:
@@ -682,6 +718,47 @@ class Executor:
             self._in_go -= 1
             if not self._in_go:
                 self._drop_tentative()
+
+    def _top_up_before_up(self, dst: str) -> None:
+        """TOP_UP_BEFORE_UP: a running task's walk (the outermost go) about to leave the dock's floor
+        by elevator, with the battery under TOP_UP_BELOW and the dock within TOP_UP_DOCK_M: one dock
+        first, never with a message unread (the inbox is read first). It ends on the next message.
+        One `top_up` decision line. Never raises but ShiftEnded and ActionFailed from the walk."""
+        if not TOP_UP_BEFORE_UP or self.current is None or self._in_go or self._topping_up:
+            return
+        battery = self._battery()
+        here = self.state.location
+        dock = self.hotel.special.get("dock", "charging-dock")
+        if battery is None or battery >= TOP_UP_BELOW or here in (dst, dock):
+            return
+        try:
+            if self.hotel.floor(here) != self.hotel.floor(dock):
+                return
+            route = self._route(dst)
+        except (KeyError, NoRoute):
+            return
+        if not any(step.cmd == "call_elevator" for step in route.steps):
+            return
+        if self._seconds_to(dock) > TOP_UP_DOCK_M * MOVE_S_PER_M:
+            return
+        self._topping_up = True
+        try:
+            start_s = self._now_s()
+            if not self._reach_dock(dock):
+                return
+            if self.inbox_waiting:
+                self._inbox_now()
+            reply = self.cmd("dock")
+            self._after_dock(reply)  # var-15: the dock reply renews the status cache
+            text = str(reply.result).lower()
+            self.refresh()
+            end_s = self._now_s()
+            self.log("top_up", **{"from": battery}, to=self._battery(), to_place=dst,
+                     minutes=round((end_s - start_s) / 60, 1) if end_s is not None and start_s is not None else None,
+                     woken=reply.ok and (self.inbox_waiting or "woke" in text), queued=len(self.queue),
+                     request=self.current.request if self.current is not None else None)
+        finally:
+            self._topping_up = False
 
     def _recover(self, failed_to: str | None) -> None:
         """One look: the look is the truth about this place's exits (look() drops stale edges, adds
@@ -1244,22 +1321,72 @@ class Executor:
         return seconds / 60 * DRAIN_PER_MIN + DOCK_MARGIN
 
     def _work_waiting(self) -> bool:
-        return self.inbox_waiting or bool(self.queue)
+        return self.inbox_waiting or bool(self.queue) or self.current is not None
+
+    def _inbox_now(self) -> None:
+        """Read the inbox now: the shift loop's hook (it queues the requests), else a bare read."""
+        if self.read_inbox is not None:
+            self.read_inbox()
+        else:
+            self.cmd("inbox")
+            self.inbox_waiting = False
+
+    def _needed_to_six(self) -> float:
+        """% a robot working without a break until 06:00 still drains, plus DOCK_MARGIN; infinite
+        when the clock is unknown. Conservative like the dock reserve: DRAIN_PER_MIN (0.9), not the
+        measured 0.70-0.76 (at 0.75 a robot at 50 % with 60 min left passed, and at a real 0.9 it
+        strands ~5 min before 06:00, -200). clock_to_seconds puts times before noon on the next
+        day, so the minutes left are right on both sides of midnight."""
+        now = self._now_s()
+        if now is None:
+            return float("inf")
+        left = max(0.0, (clock_to_seconds(NIGHT_END) - now) / 60)
+        return DRAIN_PER_MIN * left + DOCK_MARGIN
+
+    def _lasts_the_night(self, battery: float) -> bool:
+        """The battery carries the robot to 06:00: no charge forced by BATTERY_CRITICAL (a charge
+        then is lost work). A battery under the dock reserve is charged anyway (_charge)."""
+        return battery >= self._needed_to_six()
+
+    def _decline_if_skipped(self) -> None:
+        """A charge inside a running task's flow read the inbox: when the manager skipped that very
+        request meanwhile (the ledger says so), the flow ends declined instead of doing 0-point work."""
+        if self.current is None:
+            return
+        entry = self.ledger.get(self.current.request)
+        if entry is not None and entry.status == "skipped":
+            self.log("skipped_while_charging", request=self.current.request)
+            raise Declined("Skipped by the night manager while the robot charged; not done")
+
+    def _block_target(self) -> float:
+        """A forced block's target: CHARGE_TARGET_FORCED, shrinking toward 06:00 (10 + 0.4 x the
+        minutes left, never under CHARGE_TARGET_MIN): a 25 % charge 20 minutes before the end is
+        wasted."""
+        now = self._now_s()
+        if now is None:
+            return CHARGE_TARGET_FORCED
+        left = max(0.0, (clock_to_seconds(NIGHT_END) - now) / 60)
+        return max(CHARGE_TARGET_MIN, min(CHARGE_TARGET_FORCED, 10 + 0.4 * left))
 
     def ensure_battery(self, low: float = BATTERY_LOW, enough: float = BATTERY_OK) -> bool:
         """Charge at the dock below `low` %, or below what the way to the dock drains plus a margin
         (a far dock is headed for earlier), up to `enough` % (or until a request wakes the robot,
-        or the dock refuses). Not while work waits (a message, or a queued task: no 40-minute
-        charge in front of it) unless the battery is below BATTERY_CRITICAL or that reserve: a
-        flat battery loses the rest of the night. True when a charge was attempted. Never raises
-        except ShiftEnded and Ctrl-C: the loop calls it before every choice."""
+        or the dock refuses). Not while work waits (a message, a queued task or the running one: no
+        40-minute charge in front of it) unless the battery is below BATTERY_CRITICAL or that
+        reserve: a flat battery loses the rest of the night. That forced charge is a block of
+        chained docks up to _block_target(), the inbox read between them. True when a charge was
+        attempted. Never raises except ShiftEnded and Ctrl-C (the loop calls it before every choice),
+        and Declined inside a flow whose request the manager skipped during the charge."""
         try:
-            return self._charge(low, enough)
-        except (ShiftEnded, TaskSkipped):
+            charged = self._charge(low, enough)
+        except (ShiftEnded, TaskSkipped):  # TaskSkipped: a walk to the dock read a mid-task skip
             raise
         except Exception as exc:  # noqa: BLE001 - an odd reply must not block every loop pass
             self.log("charge_failed", error=type(exc).__name__, reason=str(exc)[:200])
             return False
+        if charged:
+            self._decline_if_skipped()
+        return charged
 
     def _charge(self, low: float, enough: float) -> bool:
         battery = self._battery()
@@ -1270,21 +1397,44 @@ class Executor:
         reserve = self._dock_reserve(dock)
         if battery >= max(low, reserve):
             return False
-        forced = battery < max(BATTERY_CRITICAL, reserve)
+        # The end-of-night guard skips only a charge forced by BATTERY_CRITICAL: never one under the
+        # dock reserve (that robot could not get back to the dock).
+        forced = battery < max(BATTERY_CRITICAL, reserve) and (battery < reserve or not self._lasts_the_night(battery))
         if not forced and self._work_waiting():
-            self.log("charge_deferred", battery=battery, queued=len(self.queue), inbox=self.inbox_waiting)
+            self.log("charge_deferred", battery=battery, queued=len(self.queue), inbox=self.inbox_waiting,
+                     running=self.current.request if self.current is not None else None)
             return False
+        # A far dock (forced by its reserve) is charged for at least that reserve.
+        target = max(self._block_target(), min(reserve, 100.0)) if forced else enough
         self.log("battery_low", battery=battery, at=self.state.location, dock=dock,
-                 reserve=round(reserve, 1), forced=forced)
+                 reserve=round(reserve, 1), forced=forced, target=round(target, 1))
+        self._charge_block(target, forced=forced)
+        return True
+
+    def _charge_block(self, target: float, *, forced: bool) -> None:
+        """Walk to the dock and dock until `target` %, the dock refuses (full) or CHARGE_ROUNDS.
+        Forced: never a dock with a message unread (it returns at once, "Docked for 0 min"): the
+        inbox is read first, and after every wake-up, then the robot docks again at once, with no
+        walk and no task in between; after FORCED_BLOCK_MAX_S no new dock starts once the battery
+        is back to BATTERY_LOW. Not forced: a wake-up (or a message on the way) ends the charge,
+        the request goes first. One `charge_block` decision line per block."""
+        start_battery, start_s = self._battery(), self._now_s()
+        woken = 0
         for _ in range(CHARGE_ROUNDS):
             battery = self._battery()
-            if battery is None or battery >= enough:
+            if battery is None or battery >= target:
+                break
+            now = self._now_s()
+            if (forced and battery >= BATTERY_LOW and now is not None and start_s is not None
+                    and now - start_s >= FORCED_BLOCK_MAX_S):
                 break
             dock = self.hotel.special.get("dock", "charging-dock")
             if not self._reach_dock(dock):
                 self.log("charge_failed", reason=f"could not reach {dock}")
                 break
-            if not forced and self._work_waiting():
+            if forced and self.inbox_waiting:
+                self._inbox_now()  # a message came on the way: queued, and the dock still charges
+            elif not forced and self._work_waiting():
                 break  # a request came in on the way: it goes first
             reply = self.cmd("dock")
             self._after_dock(reply)
@@ -1292,10 +1442,21 @@ class Executor:
                 continue  # dock again, at the map's dock
             text = str(reply.result).lower()
             self.refresh()
-            if not reply.ok or self.inbox_waiting or "woke" in text or "message" in text:
+            if not reply.ok:
                 break
-        self.log("charged", battery=self.state.battery, woken=self.inbox_waiting)
-        return True
+            if not (self.inbox_waiting or "woke" in text or "message" in text):
+                continue
+            woken += 1
+            if not forced:
+                break
+            self._inbox_now()
+            self.log("charge_woken", battery=self.state.battery, queued=len(self.queue))
+        self.log("charged", battery=self.state.battery, woken=self.inbox_waiting or woken > 0, wakes=woken)
+        end_s = self._now_s()
+        minutes = (end_s - start_s) / 60 if end_s is not None and start_s is not None else None
+        self.log("charge_block", **{"from": start_battery}, to=self._battery(),
+                 minutes=None if minutes is None else round(minutes, 1), queued=len(self.queue),
+                 woken=woken, forced=forced, target=round(target, 1))
 
     # --- waiting -------------------------------------------------------------------------------
 
@@ -1402,7 +1563,7 @@ class Executor:
         a skip read only after the task scored 0 for the rest of the task and lost the +5 cancel
         (seed 5 R-040, 9 min of scans after the skip). Never on a walk outside a task."""
         task = self.current
-        if task is None or self.inbox_hook is None or not self.inbox_waiting:
+        if task is None or self.read_inbox is None or not self.inbox_waiting:
             return
         try:
             age = clock_to_seconds(self.state.clock) - clock_to_seconds(task.arrived)
@@ -1410,7 +1571,7 @@ class Executor:
             return
         if age < SKIP_MIN_AGE_S:
             return
-        self.inbox_hook()
+        self.read_inbox()
         if task.request in self.skipped:
             raise TaskSkipped(f"{task.request} skipped by the manager mid-task")
 
@@ -1424,7 +1585,9 @@ class Executor:
         # before and after their last action (that is what verifies a "done"), so `points` comes
         # from the scores they observed. The report's own bonus lands on the next refresh.
         start = self.state.score
-        outer, self.current = self.current, task  # a follow-up may run its waiting original inside
+        # A follow-up may run its waiting original inside; while set, work is waiting (no charge
+        # but a forced one starts during the flow) and a mid-task skip can stop it.
+        outer, self.current = self.current, task
         try:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):

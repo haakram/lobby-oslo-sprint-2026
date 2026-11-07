@@ -71,6 +71,7 @@ def cmd_final(args, settings: Settings, factory: ClientFactory) -> int:
 
 
 def _final(settings: Settings, factory: ClientFactory) -> int:
+    from agent.bench import default_max_calls
     from agent.world import Hotel
 
     try:  # a bad params or map file must fail here, before any shift has started
@@ -111,7 +112,7 @@ def _final(settings: Settings, factory: ClientFactory) -> int:
         try:
             results[i] = shift.run_shift(
                 client, session=session, params=params, hotel=hotel, brain=brain,
-                real_time_limit_s=FINAL_REAL_TIME_S, stop=stop,
+                real_time_limit_s=FINAL_REAL_TIME_S, stop=stop, call_cap=default_max_calls(settings.max_rps),
             )
         except Exception as exc:  # noqa: BLE001
             results[i] = {"shift": session.shift_id, "score": None, "reason": f"crashed: {type(exc).__name__}"}
@@ -202,8 +203,8 @@ def _offline_factory():
 
     settings = load_settings()
 
-    def make(seed: int) -> WybeClient:
-        fake = FakeWybe(**offline_scenario(seed))
+    def make(seed: int, hourly_scale: float = 1.0) -> WybeClient:
+        fake = FakeWybe(**offline_scenario(seed, hourly_scale=hourly_scale))
         offline = replace(settings, key="offline", max_rps=1000.0, runs_dir=Path("temp/bench_runs"))
         return WybeClient(offline, transport=httpx.MockTransport(fake.handler), sleep=lambda s: None)
 
@@ -221,16 +222,23 @@ def cmd_bench(args, settings: Settings, factory: ClientFactory) -> int:
     from agent.bench import parse_seeds, run_bench
 
     seeds = parse_seeds(args.seeds)
+    if args.live and args.hourly_scale != 1.0:
+        print("--hourly-scale is offline only (generated nights); the live server plays its own", file=sys.stderr)
+        return 2
     if args.live:
         client = factory(settings, live=True)  # one client: its rate limiter is shared by all threads
         make = lambda: client
     else:
         make = _offline_factory()
     cap = _resolve_cap(args, settings)
-    res = run_bench(make, seeds, parallel=args.parallel, sim_end=args.sim_end, max_calls=cap)
+    res = run_bench(make, seeds, parallel=args.parallel, sim_end=args.sim_end, max_calls=cap,
+                    hourly_scale=args.hourly_scale)
     for seed, score in res.scores.items():
         at = f" at {res.cap_clocks[seed]}" if seed in res.cap_clocks else ""
-        print(f"seed {seed}  score {score}  calls {res.calls.get(seed, 0)}  capped {res.capped_scores[seed]}{at}")
+        low = res.min_battery.get(seed)
+        print(f"seed {seed}  score {score}  calls {res.calls.get(seed, 0)}  capped {res.capped_scores[seed]}{at}"
+              f"  requests {res.requests.get(seed, 0)}  served {res.served.get(seed, 0)}"
+              f"  min_battery {'-' if low is None else f'{low:.1f}'}  docks {res.dock_calls.get(seed, 0)}")
     print(f"mean {res.mean:.1f}  mean_drop_worst {res.mean_drop_worst:.1f}")
     print(f"cap {cap or 'none'}  capped mean {res.mean_capped:.1f}  "
           f"capped mean_drop_worst {res.mean_drop_worst_capped:.1f}")
@@ -244,7 +252,7 @@ def cmd_tune(args, settings: Settings, factory: ClientFactory) -> int:
     best, results = tune(
         _offline_factory(), parse_seeds(args.seeds), trials=args.trials, parallel=args.parallel,
         rng_seed=args.rng_seed, out_path=Path(args.out), max_calls=_resolve_cap(args, settings),
-        capped=args.optimise_capped,
+        capped=args.optimise_capped, hourly_scale=args.hourly_scale,
     )
     top = max(results, key=lambda r: r.mean_drop_worst_capped if args.optimise_capped else r.mean_drop_worst)
     print(f"baseline  mean {results[0].mean:.1f}  mean_drop_worst {results[0].mean_drop_worst:.1f}")
@@ -280,6 +288,7 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--live", action="store_true", help="use the real server (counted)")
     p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default: the final's, 44*60*rps/10; 0 = none). The capped score is the "
                    "last score the agent observed (status/end replies); retries are not counted")
+    p.add_argument("--hourly-scale", type=float, default=1.0, help="multiply every hour's generated requests (1.3: ~88 a night, like live seeds 10/16/23); seed 1 ignores it")
     p.set_defaults(fn=cmd_bench)
     p = sub.add_parser("tune", help="offline parameter search; writes the best params (never live)")
     p.add_argument("--seeds", default="1-20")
@@ -290,6 +299,7 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default: the final's, 44*60*rps/10; 0 = none). The capped score is the "
                    "last score the agent observed (status/end replies); retries are not counted")
     p.add_argument("--optimise-capped", action="store_true", help="pick the best score at the call cap")
+    p.add_argument("--hourly-scale", type=float, default=1.0, help="multiply every hour's generated requests (1.3: ~88 a night, like live seeds 10/16/23); seed 1 ignores it")
     p.set_defaults(fn=cmd_tune)
     args = ap.parse_args(argv)
     return args.fn(args, load_settings(), client_factory or shift.make_client)

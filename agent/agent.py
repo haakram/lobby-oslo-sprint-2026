@@ -212,8 +212,10 @@ _SKIP = re.compile(r"^\s*Skip (R-\d+)\b")
 def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]) -> None:
     """The manager's "Skip R-NNN, 327 checked out. Don't bother with it.": the request is dropped
     from the queue and marked skipped. Live: a skipped request scores 0 even when done and verified
-    (seed 4 R-019), so the trip is pure loss. A running task stops at its next walk step when the
-    inbox is read mid-task (Executor.skip_checkpoint); otherwise the inbox is read between tasks."""
+    (seed 4 R-019), so the trip is pure loss. The inbox is read between tasks and, through the
+    executor's hook (Executor.read_inbox), mid-task: a running task stops at its next walk step
+    (Executor.skip_checkpoint), and a running request skipped during a charge block inside its flow
+    ends declined after the block (Executor._decline_if_skipped)."""
     dropped = [t for t in pending if t.request == rid]
     for task in dropped:
         pending.remove(task)
@@ -226,41 +228,6 @@ def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]
                    note="Skipped as instructed: the guest checked out.")
     ex.log("request_skipped", request=rid, text=text[:120], was_queued=bool(dropped),
            reported=reply.ok, reply=str(reply.result)[:80])
-
-
-NIGHT_END_S = clock_to_seconds("06:00:00") + 24 * 3600  # the server ends the shift at 06:00
-
-
-def _too_late(task: Task, state: RobotState, hotel: Hotel, params: Params) -> bool:
-    """True when the task's estimated time runs past 06:00 (clocks after midnight wrap)."""
-    try:
-        now = clock_to_seconds(state.clock)
-    except (ValueError, AttributeError):
-        return False
-    if now < clock_to_seconds("12:00:00"):
-        now += 24 * 3600
-    from agent.planner import UNREACHABLE_S, estimate_seconds
-
-    secs = estimate_seconds(task, state, hotel, params)
-    if secs >= UNREACHABLE_S:
-        return False  # not priced (an unknown room is explored first): let the flow decide
-    return now + secs > NIGHT_END_S
-
-
-def _close_out(ex: Executor, pending: list[Task]) -> None:
-    """Nothing left can finish before the day shift: every pending request is reported declined
-    (never punished; other teams' notes suggest an unanswered request may cost ~15 at 06:00)."""
-    for task in list(pending):
-        pending.remove(task)
-        try:
-            reply = ex.cmd("report", request=task.request, outcome="declined",
-                           note="Not reached before the end of the night shift; handing over to the day shift")
-            ex.ledger.set_status(task.request, "declined")
-            ex.log("closed_out", request=task.request, reply=str(reply.result)[:80])
-        except (WybeError, ShiftEnded):
-            raise
-        except Exception as exc:  # noqa: BLE001 - one odd reply must not stop the close-out
-            ex.log("closed_out", request=task.request, error=str(exc)[:120])
 
 
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:
@@ -353,7 +320,8 @@ def run_shift(
     pending: list[Task] = []
     ex.queue = pending  # the same list: a follow-up that runs its original removes it here
     seen: set[str] = set()
-    ex.inbox_hook = lambda: _read_inbox(ex, brain, seen, pending)  # mid-task skips
+    # The executor's inbox hook: mid-task skip checkpoints and the forced charge block read through it.
+    ex.read_inbox = lambda: _read_inbox(ex, brain, seen, pending)
     retried: set[str] = set()  # tasks put back once after a mid-task server error
     errors = 0
     opened = False
@@ -387,10 +355,9 @@ def run_shift(
                             ex.log("opening_failed", step=step, reason=str(exc))
                     continue
                 ex.ensure_battery()  # below 25 %: charge at the dock before the next task or wait
+                # No close-out before 06:00: a declined real request pays 0 and a request still open
+                # at 06:00 costs nothing (live), so the best task is tried to the end.
                 task = choose_next(pending, state, hotel, params)
-                if task is not None and _too_late(task, state, hotel, params):
-                    _close_out(ex, pending)  # the shortest cannot finish by 06:00: none can
-                    task = None
                 if task is None:
                     ex.wait_for_request(should_stop=out_of_time)
                 else:
@@ -428,10 +395,14 @@ def run_shift(
             session.log_decision("wybe_error", {"error": str(exc)[:200], "during": "end_shift"})
         except Exception as exc:  # noqa: BLE001 - the end line below must still be written
             session.log_decision("end_failed", {"error": type(exc).__name__})
-        result["score"] = state.score
+        final = session.final_score  # the server's own score when it ended the shift (stranded: -200)
+        result["score"] = final if isinstance(final, int | float) and not isinstance(final, bool) else state.score
         result["calls"] = session.calls
         result["at_cap"] = session.at_cap  # (score, clock) when calls reached call_cap, else None
         result["requests_served"] = ex.ledger.served()  # also originals a follow-up ran or redelivered
+        result["requests"] = len(ex.ledger.entries)  # requests received this shift
+        result["min_battery"] = session.min_battery
+        result["dock_calls"] = session.cmd_counts.get("dock", 0)
         session.log_end(result)
     return result
 

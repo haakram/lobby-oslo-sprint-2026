@@ -298,13 +298,29 @@ def test_429_without_retry_after_uses_the_backoff_and_a_long_header_is_capped(tm
     client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
                         sleep=delays.append)
     session = client.start_shift("practice", seed=1)
-    assert session.cmd("status").ok and delays == [0.5, 1]
+    assert session.cmd("status").ok and delays == [1, 2]  # no header: 1 s, growing
     replies, _ = _rate_limited(1, retry_after=600)
     delays = []
     client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
                         sleep=delays.append)
     session = client.start_shift("practice", seed=1)
     assert session.cmd("status").ok and delays == [30]
+
+
+def test_a_429_retries_the_same_call_after_1_s_and_counts_it_once(tmp_path):
+    # Measured live 2026-11-07: 20 req/s clean, "Too many requests. Slow down." above ~22 req/s.
+    replies, state = _rate_limited(1)
+    reqs, delays = [], []
+    client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler(reqs, replies)),
+                        sleep=delays.append)
+    session = client.start_shift("practice", seed=1)
+    reply = session.cmd("move", to="corridor-1a")
+    assert reply.ok and reply.status == 200 and state["n"] == 2 and delays == [1]
+    sent = [json.loads(r.content) for r in reqs[1:]]
+    assert sent == [{"cmd": "move", "args": {"to": "corridor-1a"}}] * 2  # the same call, resent
+    assert session.calls == 1 and session.cmd_counts == {"move": 1}  # one game action, not two
+    logged = [json.loads(line) for line in session.log_path.read_text().splitlines()]
+    assert [e["cmd"] for e in logged if e["type"] == "call"] == ["move"]
 
 
 def test_persistent_429_raises_wybe_error_after_the_retries(tmp_path):

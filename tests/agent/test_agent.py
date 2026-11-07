@@ -42,6 +42,7 @@ def test_full_shift_scores_and_never_false_reports(tmp_path):
     assert not fake.unsafe
     assert set(result) == {
         "shift", "seed", "score", "requests_served", "reason", "calls", "at_cap",
+        "requests", "min_battery", "dock_calls",
     }
     lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
     assert lines[0]["type"] == "start" and lines[-1]["type"] == "end"
@@ -357,9 +358,14 @@ CALIBRATED_NIGHT_RATCHET = 1500  # +70: the stale-look rule before corridor step
 
 @pytest.fixture(scope="module")
 def calibrated_night(tmp_path_factory):
+    """Played as the final plays it (the call budget is the final's): navigate is final-only now, so
+    a practice night walks every leg (1,571 calls offline) where the final's executor navigates
+    (1,387). The session's mode is the only thing the executor reads of it."""
     fake = FakeWybe()
-    result = run_shift(client_for(tmp_path_factory.mktemp("calibrated"), fake.handler), seed=1,
-                       sim_end="06:00:00")
+    client = client_for(tmp_path_factory.mktemp("calibrated"), fake.handler)
+    session = client.start_shift("practice", seed=1)  # the fake's practice shift ...
+    session.mode = "final"  # ... with the final's executor behaviour
+    result = run_shift(client, session=session, sim_end="06:00:00")
     return fake, result
 
 
@@ -588,3 +594,32 @@ def test_task_younger_than_any_live_skip_reads_no_inbox_mid_task(tmp_path):
     assert not [c for c in reads if "22:03:41" <= c < "22:11:30"]
     assert fake.reports.get("R-002") == "done"
     assert all(d["status"] != "skipped" for d in _decisions(tmp_path, result, "task_failed"))
+
+
+# --- no close-out near 06:00: a declined real request pays 0, an open one at 06:00 costs nothing ------
+
+
+def test_a_request_near_six_is_tried_not_declined(tmp_path):
+    # Live: declining a real request pays 0 and a request open at 06:00 costs nothing, so the loop
+    # never declines what its estimate says cannot finish (offline seed 3 at 1.3: a spill priced at
+    # over 6 min at 05:53 was done in time, -44 when declined).
+    import agent.agent as mod
+    from agent.planner import Params, estimate_seconds
+    from agent.tasks import parse_request
+    from agent.world import Hotel, RobotState, clock_to_seconds
+
+    assert not any(hasattr(mod, name) for name in ("_close_out", "_too_late", "NIGHT_END_S"))
+    state = RobotState()
+    state.location = "charging-dock"
+    task = parse_request("R-001", "319 wants a towel.", "05:58:00")
+    assert estimate_seconds(task, state, Hotel.load(), Params()) > 120  # past 06:00 by the estimate
+    fake = FakeWybe(requests=[("05:58:00", "R-001", "319 wants a towel.")])
+    client = client_for(tmp_path, fake.handler)
+    session = client.start_shift("practice", seed=1)
+    fake._now = clock_to_seconds("05:58:00")  # R-001 comes with the loop's first status
+    run_shift(client, session=session, params=Params(use_cart=False))
+    assert fake.reports.get("R-001") != "declined"
+    started = _decisions(tmp_path, {"shift": session.shift_id}, "task_start")
+    assert [d["request"] for d in started] == ["R-001"]  # the robot keeps working until 06:00
+    assert not _decisions(tmp_path, {"shift": session.shift_id}, "closed_out")
+    assert any(e["cmd"] == "pick" for e in fake.log)

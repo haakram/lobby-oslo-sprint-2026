@@ -274,3 +274,43 @@ def test_live_count_counts_only_practice(tmp_path, monkeypatch):
         '{"mode": "practice"}\n{"mode": "final"}\n{"mode": "practice"}\n'
     )
     assert mod._live_count() == 2
+
+
+# --- Task 13 ----------------------------------------------------------------------------------------
+
+FOLLOW = "Front desk passed on a call from {}: the guest says the {} they ordered an hour ago never came."
+
+
+def _decisions(tmp_path, result, kind):
+    path = tmp_path / "runs" / f"{result['shift']}.jsonl"
+    lines = [json.loads(x) for x in path.read_text().splitlines()]
+    return [x["data"] for x in lines if x["type"] == "decision" and x["kind"] == kind]
+
+
+def test_follow_up_and_its_order_are_delivered_once_through_the_loop(tmp_path):
+    from agent.planner import Params
+
+    fake = FakeWybe(requests=[("22:03:30", "R-001", "104 wants a towel."),
+                              ("22:03:31", "R-002", FOLLOW.format(104, "towel"))])
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00",
+                       params=Params(use_cart=False))
+    placed = [e for e in fake.log if e["cmd"] == "place" and e["ok"]]
+    assert [e["args"] for e in placed] == [{"item": "towel", "where": "room-104"}]
+    assert fake.reports == {"R-001": "done", "R-002": "failed"}
+    assert not fake.false_done and not fake.wrong_deliveries
+    assert _decisions(tmp_path, result, "hypothesis")
+
+
+def test_full_night_with_the_live_request_types(tmp_path):
+    fake = FakeWybe()
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="00:30:00")
+    assert fake.false_done == [] and not fake.unsafe and not fake.wrong_deliveries
+    kinds = {r.rid: r.kind for r in fake._requests.values()}
+    for rid, kind in kinds.items():
+        if kind in ("bags", "noise", "spill") or (kind == "amenity" and rid == "R-008"):
+            assert fake.reports.get(rid) == "done", (rid, kind, fake.reports.get(rid))
+        if kind == "followup":
+            assert fake.reports.get(rid) == "failed", rid
+    ids = {d["id"] for d in _decisions(tmp_path, result, "hypothesis")}
+    assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill", "H-duplicate"} <= ids
+    assert result["score"] >= 250

@@ -1,4 +1,9 @@
-"""Shift loop: read the inbox, pick the best task, run it, wait when idle, always log the end."""
+"""Shift loop: read the inbox, pick the best task, run it, wait when idle, always log the end.
+
+Every request goes into the executor's ledger as it arrives (follow-ups and duplicates are judged
+against it), and the executor sees the pending queue (a follow-up may run its waiting original).
+World events such as a stranger asking to be let in are handled by the executor as they arrive.
+"""
 
 from __future__ import annotations
 
@@ -95,6 +100,7 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
                 ex.log("brain_classified", request=rid, kind=task.kind.value, room=task.room,
                        item=task.item)
         ex.log("request", request=rid, kind=task.kind.value, text=task.text)
+        ex.ledger.add(task)
         pending.append(task)
 
 
@@ -119,6 +125,7 @@ def run_shift(
     result: dict = {"shift": session.shift_id, "seed": seed, "score": None,
                     "requests_served": None, "reason": ""}
     pending: list[Task] = []
+    ex.queue = pending  # the same list: a follow-up that runs its original removes it here
     seen: set[str] = set()
     served = 0
     errors = 0

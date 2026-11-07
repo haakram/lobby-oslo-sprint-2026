@@ -3,6 +3,9 @@
 Each routine returns (note, after) once the server has rewarded the work (or, for a room check,
 once the robot has looked inside), or raises ActionFailed with the reason for the night manager.
 `after` runs once the report is sent (e.g. leaving the checked room).
+
+Every knock is preceded by a `look at` the door: a Do Not Disturb sign means no knock, no keycard.
+The Task 13 kinds (bags, noise, spill, follow-up, named guests, duplicates) are in flows_extra.py.
 """
 
 from __future__ import annotations
@@ -23,12 +26,26 @@ OCCUPIED_NOTE = "occupied: guest answered; did not enter"
 SECONDARY_SCANS = ("lobby-bar", "front-desk", "lobby")  # sofas and counters, then the lobby
 FLOOR_WORDS = {"ground": 1, "first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3}
 GENERIC_PARTS = {"corridor", "room", "floor"}
+HINT_WORDS = {"counter": "front-desk", "counters": "front-desk", "reception": "front-desk",
+              "sofa": "lobby-bar", "sofas": "lobby-bar"}
+NAMED_KINDS = (Kind.AMENITY, Kind.TRAY, Kind.MESSAGE)
 
 
 def handle(ex: Executor, task: Task) -> Result:
+    from agent import flows_extra  # the Task 13 kinds; that module imports the shared steps here
+
+    if dup := ex.ledger.duplicate_of(task):
+        score = ex.score_now()
+        flows_extra.hyp(ex, "H-duplicate", task, f"not redone: same text and room as {dup}", score, score)
+        raise ActionFailed(f"duplicate of {dup}")
     if task.kind is Kind.UNKNOWN:
         task = _classify(ex, task)
-    return HANDLERS[task.kind](ex, task)
+    if task.room is None and task.guest and task.kind in NAMED_KINDS:
+        task = flows_extra.resolve_named(ex, task)
+    handler = HANDLERS.get(task.kind) or flows_extra.HANDLERS.get(task.kind)
+    if handler is None:
+        raise ActionFailed(f"no routine for {task.kind.value} requests")
+    return handler(ex, task)
 
 
 def normalize(task: Task) -> Task:
@@ -69,14 +86,25 @@ def _corridor(ex: Executor, room: str | None) -> str:
 
 
 def _knock(ex: Executor, room: str) -> str:
-    """'dnd' | 'no_answer' | 'open'."""
+    """'dnd' | 'no_answer' | 'open'. Looks at the door first: a DND door is never knocked on."""
+    door = ex.cmd("look", at=room)
+    text = str(door.result)
+    if DND in text.lower():
+        ex.room_status(room, "ikke_forstyrr", "door_sign", "Do Not Disturb sign")
+        return "dnd"
+    if not door.ok:  # unseen sign: knocking would be a gamble
+        raise ActionFailed(f"could not see the door of {room}: {text}")
     reply = ex.cmd("knock", door=room)
     text = str(reply.result)
     if DND in text.lower():
+        ex.room_status(room, "ikke_forstyrr", "knock", text)
         return "dnd"
     if not reply.ok:
         raise ActionFailed(f"could not knock at {room}: {text}")
-    return "no_answer" if "no answer" in text.lower() else "open"
+    if "no answer" in text.lower():
+        return "no_answer"
+    ex.room_status(room, "opptatt", "knock", text)
+    return "open"
 
 
 def _at_open_door(ex: Executor, room: str) -> None:
@@ -126,6 +154,13 @@ def tray(ex: Executor, task: Task) -> Result:
             raise ActionFailed("could not get the cart for the tray")
         ex.go(ex.hotel.special.get("kitchen", "kitchen-pass"))
         ok, text = ex.pick(item)
+        if not ok and task.guest:  # H-named: the tray may carry the guest's name, not the room's
+            from agent.flows_extra import find_object, objects_here
+
+            alt = find_object(objects_here(ex.look()), ("tray",), task.room, task.guest, exact=True)
+            if alt and alt != item:
+                item = alt
+                ok, text = ex.pick(item)
         if not ok:
             raise ActionFailed(f"could not pick {item}: {text}")
     return _deliver(ex, task.room, item)
@@ -147,12 +182,9 @@ def room_check(ex: Executor, task: Task) -> Result:
     room = task.room
     corridor = _corridor(ex, room)
     ex.go(corridor)
-    door = ex.cmd("look", at=room)
-    if DND in str(door.result).lower():
-        raise ActionFailed(f"Do Not Disturb sign on {room}; did not knock or enter")
-    answer = _knock(ex, room)
+    answer = _knock(ex, room)  # looks at the door first
     if answer == "dnd":
-        raise ActionFailed(f"Do Not Disturb sign on {room}; did not enter")
+        raise ActionFailed(f"Do Not Disturb sign on {room}; did not knock or enter")
     if answer == "open":
         ex.log("note", request=task.request, room=room,
                text="a guest answered: an occupied room does not verify the check; reporting failed")
@@ -170,6 +202,11 @@ def room_check(ex: Executor, task: Task) -> Result:
     where = ex.refresh().get("location")
     if where != room:  # the look must have been inside the room, or the check is not done
         raise ActionFailed(f"not inside {room} after entering (status says {where})")
+    if "tidy" in seen.lower() and "untidy" not in seen.lower():
+        ex.room_status(room, "klar", "room_check", seen)
+    else:
+        ex.room_status(room, "ma_vaskes", "room_check", seen)
+        ex.work_order("annet", f"Romsjekk {room}: {seen}", room=room, request=task.request)
 
     def leave() -> None:
         if not ex.move(corridor).ok:
@@ -192,27 +229,37 @@ def lost_item(ex: Executor, task: Task) -> Result:
 
 
 def _ask_room(ex: Executor, guest: str | None) -> str:
+    """The clerk knows guests' rooms; asked once per name per shift (the answer is cached)."""
     if not guest:
         raise ActionFailed("no room and no guest name in the request")
-    ex.go(ex.hotel.special.get("clerk", "front-desk"))
-    reply = ex.cmd("ask", person="clerk", question=f"Which room is {guest} in?")
-    answer = reply.result.get("answer") if isinstance(reply.result, dict) else reply.result
-    m = re.search(r"room[\s-]?(\d{3})", str(answer), re.IGNORECASE)
-    if not reply.ok or not m:
+    if guest not in ex.guest_rooms:
+        ex.go(ex.hotel.special.get("clerk", "front-desk"))
+        reply = ex.cmd("ask", person="clerk", question=f"Which room is {guest} in?")
+        answer = reply.result.get("answer") if isinstance(reply.result, dict) else reply.result
+        m = re.search(r"room[\s-]?(\d{3})", str(answer), re.IGNORECASE)
+        ex.guest_rooms[guest] = f"room-{m[1]}" if reply.ok and m else None
+        ex.log("asked_room", guest=guest, room=ex.guest_rooms[guest], answer=str(answer)[:200])
+    if ex.guest_rooms[guest] is None:
         raise ActionFailed(f"the clerk did not know {guest}'s room")
-    ex.log("asked_room", guest=guest, room=f"room-{m[1]}")
-    return f"room-{m[1]}"
+    return ex.guest_rooms[guest]
+
+
+def _words(name: str) -> set[str]:
+    return {w for w in name.lower().split("-") if w and not w.isdigit() and not w.endswith("'s")}
 
 
 def same_item(a: str, b: str) -> bool:
-    """Whole hyphen-separated words: glasses ~ reading-glasses, but not sunglasses."""
-    wa, wb = set(a.lower().split("-")), set(b.lower().split("-"))
-    return wa <= wb or wb <= wa
+    """Whole hyphen-separated words: glasses ~ reading-glasses, toy ~ toy-2, but not sunglasses."""
+    wa, wb = _words(a), _words(b)
+    return bool(wa and wb) and (wa <= wb or wb <= wa)
 
 
-def _pick_found(ex: Executor, item: str) -> str | None:
-    """Pick item where a scan revealed it (now or earlier); the name it was picked as, or None."""
-    name = next((f for f in ex.found if same_item(item, f)), None)
+def _pick_found(ex: Executor, item: str, near: list[str] = ()) -> str | None:
+    """Pick item where a scan revealed it (now or earlier); the name it was picked as, or None.
+    Of several matches (toy-2, toy-3), the one lying where the hint points goes first."""
+    names = [f for f in ex.found if same_item(item, f)]
+    names.sort(key=lambda f: ex.found[f] not in near)
+    name = names[0] if names else None
     if name is None:
         return None
     place = ex.found.pop(name)
@@ -225,9 +272,9 @@ def _pick_found(ex: Executor, item: str) -> str | None:
 
 
 def _find(ex: Executor, item: str, hint: str | None) -> str:
-    if name := _pick_found(ex, item):
-        return name
     primary, secondary = scan_candidates(ex.hotel, hint)
+    if name := _pick_found(ex, item, primary):
+        return name
     scans = 0
     for group in (primary, secondary):
         try:
@@ -244,14 +291,15 @@ def _find(ex: Executor, item: str, hint: str | None) -> str:
                 continue
             ex.scan()
             scans += 1
-            if name := _pick_found(ex, item):
+            if name := _pick_found(ex, item, primary):
                 return name
     raise ActionFailed(f"{item} not found after {scans} scans")
 
 
 def scan_candidates(hotel: Hotel, hint: str | None) -> tuple[list[str], list[str]]:
-    """Places named by the hint (e.g. "ground floor corridor" -> corridor-1a/1b/1c), then the
-    places lost things end up (lobby-bar, front-desk, lobby)."""
+    """Places named by the hint (e.g. "ground floor corridor" -> corridor-1a/1b/1c, "counter" ->
+    front-desk), then the places lost things end up (lobby-bar, front-desk, lobby), then the rest
+    of the ground floor."""
     h = (hint or "").lower()
     words = set(re.findall(r"[a-z0-9]+", h))
     spaced = " ".join(re.findall(r"[a-z0-9]+", h))
@@ -265,6 +313,7 @@ def scan_candidates(hotel: Hotel, hint: str | None) -> tuple[list[str], list[str
     by_word = [n for n in places if n not in exact and not any(n in e for e in exact)
                and {p for p in n.split("-") if len(p) >= 3 and p not in GENERIC_PARTS} & words]
     primary = exact + by_word
+    primary += [p for w, p in HINT_WORDS.items() if w in words and p in hotel.nodes and p not in primary]
     if "corridor" in words and not any(hotel.nodes[n]["kind"] == "corridor" for n in exact):
         floor = next((f for w, f in FLOOR_WORDS.items() if w in words), None)
         if m := re.search(r"floor\s*(\d)", h):
@@ -274,6 +323,8 @@ def scan_candidates(hotel: Hotel, hint: str | None) -> tuple[list[str], list[str
         primary += [n for n in sorted(hotel.nodes) if hotel.nodes[n]["kind"] == "corridor"
                     and (floor is None or hotel.floor(n) == floor) and n not in primary]
     secondary = [n for n in SECONDARY_SCANS if n in hotel.nodes and n not in primary]
+    ground = hotel.nodes.get("lobby", {}).get("floor", 1)
+    secondary += [n for n in places if hotel.floor(n) == ground and n not in primary and n not in secondary]
     return primary, secondary
 
 

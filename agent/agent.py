@@ -36,10 +36,18 @@ def _live_transport() -> httpx.BaseTransport | None:
 
 
 def _live_count() -> int:
+    """Live practice starts so far (final starts are not practice shifts)."""
     try:
-        return sum(1 for line in LIVE_RUNS.read_text().splitlines() if line.strip())
+        lines = LIVE_RUNS.read_text().splitlines()
     except OSError:
         return 0
+    count = 0
+    for line in lines:
+        try:
+            count += json.loads(line).get("mode") == "practice"
+        except (ValueError, AttributeError):
+            continue
+    return count
 
 
 def make_client(settings: Settings, *, live: bool) -> WybeClient:
@@ -148,9 +156,20 @@ def run_shift(
                     outcome = ex.run(task)
                     served += outcome.status == "done"
                 errors = 0
+            except ShiftEnded:
+                raise
             except WybeError as exc:
                 errors += 1
                 session.log_decision("wybe_error", {"error": str(exc)[:200], "streak": errors})
+                if errors >= MAX_CONSECUTIVE_ERRORS:
+                    result["reason"] = "too many errors"
+                    break
+            except Exception as exc:  # noqa: BLE001 - one odd bug must not kill the shift
+                errors += 1
+                session.log_decision(
+                    "note",
+                    {"error": type(exc).__name__, "message": str(exc)[:200], "streak": errors},
+                )
                 if errors >= MAX_CONSECUTIVE_ERRORS:
                     result["reason"] = "too many errors"
                     break

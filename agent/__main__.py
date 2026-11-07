@@ -25,8 +25,10 @@ def _brain(settings: Settings) -> Brain:
 
 def cmd_run(args, settings: Settings, factory: ClientFactory) -> int:
     client = factory(settings, live=args.live)
+    # Offline runs must not spend real Claude budget unless --brain is given.
+    brain = _brain(settings) if (args.live or args.brain) else None
     result = shift.run_shift(
-        client, mode="practice", seed=args.seed, brain=_brain(settings), sim_end=args.sim_end
+        client, mode="practice", seed=args.seed, brain=brain, sim_end=args.sim_end
     )
     print(f"shift {result['shift']}  score {result['score']}  "
           f"served {result['requests_served']}  ({result['reason']})")
@@ -65,7 +67,7 @@ def cmd_final(args, settings: Settings, factory: ClientFactory) -> int:
             t.join()
     for r in results:
         print(f"shift {r.get('shift')}  score {r.get('score')}  ({r.get('reason')})")
-    return 0
+    return 1 if all(str(r.get("reason", "")).startswith("crashed") for r in results) else 0
 
 
 def cmd_route(args, settings: Settings, factory: ClientFactory) -> int:
@@ -95,6 +97,7 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--sim-end", default=None, help="stop at this sim clock, HH:MM:SS")
     p.add_argument("--live", action="store_true", help="use the real server (counted)")
+    p.add_argument("--brain", action="store_true", help="allow Claude offline too (spends budget)")
     p.set_defaults(fn=cmd_run)
     p = sub.add_parser("final", help="the 10 scored shifts (live; locked outside the window)")
     p.set_defaults(fn=cmd_final)

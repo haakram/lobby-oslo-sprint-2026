@@ -3,7 +3,6 @@
 import json
 
 import httpx
-import pytest
 
 from agent.__main__ import main
 from agent.agent import make_client, run_shift
@@ -63,27 +62,40 @@ def test_loop_survives_one_transport_error(tmp_path):
     assert lines[-1]["type"] == "end"
 
 
-def test_end_line_written_when_the_loop_dies(tmp_path):
-    class Boom(Exception):
-        pass
+def test_unexpected_error_does_not_kill_the_shift(tmp_path, monkeypatch):
+    import agent.agent as mod
 
-    class ExplodingBrain:
-        enabled = True
+    fake = FakeWybe()
+    real = mod.choose_next
+    calls = {"n": 0}
 
-        def classify(self, *a):
-            raise Boom
+    def flaky_choose(*a, **kw):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("planner bug")
+        return real(*a, **kw)
 
-    fake2 = FakeWybe(requests=[("22:03:30", "R-001", "do the strange thing please")])
-    client = client_for(tmp_path, fake2.handler)
-    with pytest.raises(Boom):
-        run_shift(client, seed=1, sim_end="23:30:00", brain=ExplodingBrain())
-    ends = [
-        json.loads(line)
-        for p in (tmp_path / "runs").glob("*.jsonl")
-        for line in p.read_text().splitlines()
-        if json.loads(line)["type"] == "end"
-    ]
-    assert len(ends) == 1
+    monkeypatch.setattr(mod, "choose_next", flaky_choose)
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="23:30:00")
+    assert result["score"] >= 100
+    lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
+    notes = [x for x in lines if x["type"] == "decision" and x["kind"] == "note"]
+    assert notes and notes[0]["data"]["error"] == "RuntimeError"
+    assert lines[-1]["type"] == "end"
+
+
+def test_persistent_unexpected_error_stops_after_cap_and_writes_end(tmp_path, monkeypatch):
+    import agent.agent as mod
+
+    def always(*a, **kw):
+        raise RuntimeError("stuck")
+
+    monkeypatch.setattr(mod, "choose_next", always)
+    fake = FakeWybe()
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="23:30:00")
+    assert result["reason"] == "too many errors"
+    lines = (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()
+    assert json.loads(lines[-1])["type"] == "end"
 
 
 def test_unknown_request_classified_once_by_brain(tmp_path):
@@ -157,3 +169,102 @@ def test_make_client_live_counts_starts(tmp_path, monkeypatch, capsys):
 def test_route_command(capsys):
     assert main(["route", "front-desk", "room-319"]) == 0
     assert "front-desk" in capsys.readouterr().out
+
+
+def _open_final(monkeypatch, tmp_path, n=3):
+    import agent.__main__ as cli
+
+    monkeypatch.setenv("FINAL_ARMED", "1")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "check_mode", lambda *a, **kw: None)
+    monkeypatch.setattr(cli, "FINAL_SHIFTS", n)
+    monkeypatch.setattr(cli, "FINAL_REAL_TIME_S", 7.0)
+    return cli
+
+
+def test_final_threads_share_client_and_survive_one_crash(tmp_path, monkeypatch, capsys):
+    import agent.agent as mod
+
+    cli = _open_final(monkeypatch, tmp_path, 3)
+    made = []
+
+    def factory(settings, *, live):
+        assert live is True
+        c = object()
+        made.append(c)
+        return c
+
+    seen, lock = [], __import__("threading").Lock()
+
+    def fake_run_shift(client, **kw):
+        with lock:
+            idx = len(seen)
+            seen.append((client, kw))
+        if idx == 1:
+            raise RuntimeError("shift blew up")
+        return {"shift": f"s{idx}", "seed": None, "score": 10 * idx, "requests_served": 0,
+                "reason": "done"}
+
+    monkeypatch.setattr(mod, "run_shift", fake_run_shift)
+    assert main(["final"], client_factory=factory) == 0
+    assert len(made) == 1 and len(seen) == 3
+    assert all(c is made[0] for c, _ in seen)
+    for _, kw in seen:
+        assert kw["mode"] == "final" and kw["seed"] is None and kw["real_time_limit_s"] == 7.0
+        assert kw["stop"] is not None
+    out = capsys.readouterr().out
+    assert out.count("shift ") == 3 and "crashed: RuntimeError" in out
+    assert cli.FINAL_SHIFTS == 3
+
+
+def test_final_returns_nonzero_when_every_shift_crashes(tmp_path, monkeypatch, capsys):
+    import agent.agent as mod
+
+    _open_final(monkeypatch, tmp_path, 2)
+
+    def boom(client, **kw):
+        raise RuntimeError("x")
+
+    monkeypatch.setattr(mod, "run_shift", boom)
+    assert main(["final"], client_factory=lambda s, *, live: object()) != 0
+
+
+def test_final_armed_but_outside_window_is_refused(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FINAL_ARMED", "1")
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def factory(settings, *, live):
+        def forbidden(request):
+            calls.append(request)
+            raise AssertionError("no request allowed")
+
+        return client_for(tmp_path, forbidden)
+
+    code = main(["final"], client_factory=factory)
+    out = capsys.readouterr()
+    assert code != 0 and "locked" in (out.out + out.err).lower()
+    assert calls == []
+
+
+def test_offline_run_builds_no_brain_unless_asked(tmp_path, monkeypatch):
+    import agent.__main__ as cli
+
+    monkeypatch.chdir(tmp_path)
+    built = []
+    monkeypatch.setattr(cli, "_brain", lambda s: built.append(1) or None)
+    assert main(["run", "--seed", "1", "--sim-end", "22:10:00"]) == 0
+    assert built == []
+    assert main(["run", "--seed", "1", "--sim-end", "22:10:00", "--brain"]) == 0
+    assert built == [1]
+
+
+def test_live_count_counts_only_practice(tmp_path, monkeypatch):
+    import agent.agent as mod
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "temp").mkdir()
+    (tmp_path / "temp" / "live_runs.jsonl").write_text(
+        '{"mode": "practice"}\n{"mode": "final"}\n{"mode": "practice"}\n'
+    )
+    assert mod._live_count() == 2

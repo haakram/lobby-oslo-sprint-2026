@@ -11,6 +11,7 @@ vi.mock("@elevenlabs/elevenlabs-js", () => ({
 }));
 
 import { GET } from "./route";
+import { RECEPTION_AGENT_ID_DEFAULT } from "@/lib/env";
 
 const KEY = "test-eleven-key-value-0000";
 const AGENT = "agent_test_reception_1";
@@ -33,10 +34,11 @@ describe("GET /api/reception/token", () => {
     expect(sdk.getWebrtcToken).not.toHaveBeenCalled();
   });
 
-  it("503 when the reception agent is missing", async () => {
+  it("uses the team's agent when none is set", async () => {
     vi.stubEnv("ELEVENLABS_RECEPTION_AGENT_ID", undefined);
-    expect((await GET()).status).toBe(503);
-    expect(sdk.getWebrtcToken).not.toHaveBeenCalled();
+    sdk.getWebrtcToken.mockResolvedValue({ token: "short-lived" });
+    expect((await GET()).status).toBe(200);
+    expect(sdk.getWebrtcToken).toHaveBeenCalledWith({ agentId: RECEPTION_AGENT_ID_DEFAULT });
   });
 
   it("returns a token for the reception agent, uncached", async () => {

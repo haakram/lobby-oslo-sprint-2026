@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { directPrice, ROOM_TYPES } from "./hotel";
+import { directPrice, HOTEL, ROOM_TYPES } from "./hotel";
 import {
   RECEPTION_DATA_FIELDS,
   RECEPTION_LANGUAGES,
@@ -74,6 +74,44 @@ describe("reception agent settings", () => {
   it("speaks Norwegian first, with the other languages as presets", () => {
     expect(client.conversationConfig.agent.language).toBe("no");
     expect(Object.keys(client.conversationConfig.languagePresets)).toEqual([...RECEPTION_LANGUAGES]);
+  });
+
+  it("covers the guests' languages, from Arabic and Urdu to Somali and Spanish", () => {
+    for (const code of ["en", "ar", "ur", "hi", "so", "tr", "es", "it", "de", "pl", "uk", "fa"]) {
+      expect(RECEPTION_LANGUAGES).toContain(code);
+    }
+    expect(RECEPTION_LANGUAGES.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(RECEPTION_LANGUAGES).size).toBe(RECEPTION_LANGUAGES.length);
+    expect(prompt).toContain("Somali");
+    expect(prompt).toMatch(/call language_detection and switch/);
+  });
+
+  it("says up front that it is an AI and that the call is written down", () => {
+    const greeting = client.conversationConfig.agent.firstMessage;
+    expect(greeting).toContain("KI-assistent");
+    expect(greeting).toContain("skrevet ned");
+    expect(prompt).toMatch(/opening notice once in the new language/);
+  });
+
+  it("reads requests back and tells the guest what was noted", () => {
+    expect(prompt).toMatch(/Read it all back/);
+    expect(prompt).toMatch(/tell the guest exactly what was noted down/);
+    expect(prompt).toMatch(/ask for a human/);
+  });
+
+  it("collects only what it needs and answers privacy questions", () => {
+    expect(prompt).toContain("fødselsnummer");
+    expect(prompt).toContain("Datatilsynet");
+    expect(prompt).toContain(HOTEL.privacy.email);
+    expect(prompt).toContain(`${HOTEL.privacy.retentionDays} days`);
+    expect(prompt).toMatch(/note it only if they say yes/);
+  });
+
+  it("keeps no audio and deletes transcripts after the retention period", () => {
+    expect(client.platformSettings.privacy).toEqual({
+      recordVoice: false,
+      retentionDays: HOTEL.privacy.retentionDays,
+    });
   });
 
   it("knows Oslo time and ends a silent call", () => {

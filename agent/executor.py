@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import time
 import traceback
 from collections.abc import Callable
@@ -68,6 +69,12 @@ DOCK_RETRY_S = 600  # a dock found out of reach from a place is not tried from t
 MOVE_REFUSALS_MAX = 3  # the same move refused this many times in a row: given up, its edge dropped
 SHIFT_START = "22:00:00"  # the shift's start clock when the session does not report one
 DOCK_LEARN_S = 120  # the dock is learnt only from a first status this close to the shift's start
+# Task 7 (live seed 41): lost items lie in the open, listed by `look` (glasses at corridor-1b, a wallet at
+# the kitchen pass), and `scan` reports only hidden things. What a look lists is a lost item unless its
+# base name (no trailing -N) is stock, a fixture, a tray, bags or a note, or it carries an " xN" count.
+STOCK_ITEMS = frozenset({"towel", "water-bottle", "phone-charger", "toiletry-kit", "pillow"})
+FIXTURES = frozenset({"wet-floor-sign", "keycard", "cart", "manual", "tray", "luggage", "bags"})
+NOT_LOST_PREFIXES = ("tray-", "luggage-", "bags-")  # bags-NNN: the offline fake's name for luggage
 
 
 @dataclass
@@ -76,6 +83,18 @@ class Outcome:
     status: Literal["done", "failed", "declined", "skipped"]
     points: int
     note: str
+
+
+def lost_object(name: object) -> bool:
+    """Could this look object be a lost item? glasses, wallet-2, toy: yes; towel, "towel x8",
+    tray-117-4, luggage-301, wet-floor-sign, keycard, cart, staff-note, manual: no."""
+    if not isinstance(name, str) or re.search(r"\sx\d+$", name):
+        return False
+    low = name.strip().lower()
+    base = re.sub(r"-\d+$", "", low)
+    if not base or low.startswith(NOT_LOST_PREFIXES) or "note" in base:
+        return False
+    return base not in STOCK_ITEMS and base not in FIXTURES
 
 
 class ActionFailed(Exception):
@@ -113,7 +132,8 @@ class Executor:
         self.state = state
         self.brain = brain
         self.max_scans = max_scans
-        self.found: dict[str, str] = {}  # item revealed by a scan -> where it lies
+        self.found: dict[str, str] = {}  # lost item revealed by a scan or listed by a look -> where it lies
+        self._seen_lost: set[str] = set()  # those in `found` a look listed: a later look there may drop them
         self.inbox_waiting = False  # an inbox event was seen; the shift loop clears it
         self.ledger = Ledger()  # every request of the shift (follow-ups, duplicates)
         self.queue: list[Task] = []  # the shift loop's pending tasks (a follow-up may run one early)
@@ -306,9 +326,27 @@ class Executor:
         self._looked.add(loc)
         self.looks[loc] = look
         self._look_call[loc] = self.calls
+        if isinstance(look.get("objects"), list) and self.hotel.nodes.get(loc, {}).get("kind") != "room":
+            self._record_lost(loc, look["objects"])
         if lost or any(to not in known_nodes for to in seen):
             self.log("map_learnt", at=loc, lost=lost, new=sorted(set(seen) - known_nodes))
         return look
+
+    def _record_lost(self, loc: str, objects: list) -> None:
+        """Task 7: every lost item a look lists goes into `found` (as a scan's would); one a look
+        listed here before and this one does not is gone (someone took it): no wasted trip. A scanned
+        item stays (hidden things may stay out of a look's sight). Guest rooms are not recorded."""
+        listed = {o.strip() for o in objects if lost_object(o)}
+        for name in [n for n, at in self.found.items() if at == loc and n in self._seen_lost]:
+            if name not in listed:
+                del self.found[name]
+                self._seen_lost.discard(name)
+                self.log("lost_item_vanished", item=name, at=loc)
+        for name in sorted(listed):
+            if self.found.get(name) != loc:
+                self.log("lost_item_seen", item=name, at=loc)
+            self.found[name] = loc
+            self._seen_lost.add(name)
 
     def fresh_look(self) -> dict:
         """The look at this place if it was the last command sent (the first-visit look on
@@ -1095,6 +1133,7 @@ class Executor:
         found = [f for f in result.get("found") or [] if isinstance(f, str)]
         for item in found:
             self.found[item] = self.state.location
+            self._seen_lost.discard(item)  # hidden: a look may not list it
         self.log("scan", at=self.state.location, found=found)
         return found
 

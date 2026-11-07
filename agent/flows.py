@@ -14,7 +14,7 @@ import re
 from collections.abc import Callable
 from dataclasses import replace
 
-from agent.executor import ActionFailed, Declined, Executor
+from agent.executor import ActionFailed, Declined, Executor, lost_object
 from agent.routing import NoRoute, best_tour
 from agent.tasks import ITEM_ALIASES, Kind, Task, is_override
 from agent.world import Hotel
@@ -25,6 +25,7 @@ DND = "do not disturb"
 OCCUPIED_NOTE = "occupied: guest answered; did not enter"
 MAX_SCANS_BOUND = 9  # with other requests waiting; alone, the whole ground floor (MAX_SCANS_IDLE)
 MAX_SCANS_IDLE = 12
+SCAN_CAP_BUSY = 3  # Task 7: with two or more other tasks queued, a hunt stops after 3 scans (60 s each)
 # Where lost things turned up in 5 live nights: lobby-bar 5, corridor-1b 4, corridor-1a 3,
 # kitchen-pass 3, front-desk 2, lobby 2; never the dock, the elevator, laundry, storage, stairs.
 # Batch 4 added laundry (toy-2, toy-3, wallet-4): the whole ground floor is swept when nothing
@@ -477,7 +478,8 @@ def lost_item(ex: Executor, task: Task) -> Result:
     _refuse_checked_out(ex, room, task.request)
     _corridor(ex, room)
     _refuse_known_dnd(ex, room, task.request)
-    stock = {name for items in ex.hotel.stock.values() for name in items}
+    # a look lists lost items too, and its objects become the map's stock: those are no stock (Task 7)
+    stock = {name for items in ex.hotel.stock.values() for name in items if not lost_object(name)}
     carried = [c for c in ex.state.hands + (ex.state.cart or [])  # a stock charger is no lost phone
                if c == item or (c not in stock and same_item(item, c))]
     verdicts = {c: _verdict(ex, task.request, c) for c in carried}
@@ -649,7 +651,8 @@ def _verdict(ex: Executor, request: str | None, name: str) -> str:
 
 
 def _pick_found(ex: Executor, item: str, near: list[str] = (), request: str | None = None) -> str | None:
-    """Pick item where a scan revealed it (now or earlier); the name it was picked as, or None.
+    """Pick item where a scan revealed it or a look listed it (now or earlier); the name it was
+    picked as, or None.
     Only this request's item (see _verdict), else the one nobody owns; of several, the one lying
     where the hint points; if that leaves two, none (a wrong one costs 20)."""
     names = [f for f in ex.found if same_item(item, f)]
@@ -692,6 +695,10 @@ def _find(ex: Executor, item: str, hint: str | None, request: str | None = None)
     likely = [n for n in dict.fromkeys(nearby + list(SECONDARY_SCANS)) if n in secondary]
     bound = MAX_SCANS_BOUND if ex.queue else MAX_SCANS_IDLE  # a long search must not hold up others
     cap = min(bound, max(ex.max_scans, len(primary) + len(likely)))
+    busy = len(ex.queue) >= 2  # Task 7 (live seed 41: an hour of scans while work waited): 3 scans at most
+    if busy:
+        cap = min(cap, SCAN_CAP_BUSY)
+        ex.log("scan_cap", request=request, cap=cap, queued=len(ex.queue))
     rest = [n for n in secondary if n not in likely]
     for group in (primary, likely, rest):
         try:
@@ -706,10 +713,20 @@ def _find(ex: Executor, item: str, hint: str | None, request: str | None = None)
             except ActionFailed as exc:
                 ex.log("scan_skip", place=place, reason=str(exc))
                 continue
+            # Task 7: a look (5 s) first, unless this visit's arrival look was the last command; an
+            # item lying in the open is picked from it, and the scan (60 s) is only for hidden ones.
+            try:
+                ex.fresh_look()
+            except ActionFailed as exc:
+                ex.log("look_failed", at=place, reason=str(exc))
+            if name := _pick_found(ex, item, primary, request):
+                return name
             ex.scan()
             scans += 1
             if name := _pick_found(ex, item, primary, request):
                 return name
+    if busy and scans >= cap:
+        raise ActionFailed(f"{item} not found after {scans} scans (others waiting)")
     raise ActionFailed(f"{item} not found after {scans} scans")
 
 

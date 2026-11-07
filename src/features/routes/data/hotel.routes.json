@@ -1,0 +1,260 @@
+{
+  "_note": "TODO(phase-2): replace with npm run routes when agent/ is on main. Hand-made stub map.",
+  "map": "stub-lager",
+  "start": "pack",
+  "nodes": {
+    "pack": {
+      "floor": 1,
+      "kind": "service",
+      "x": 4,
+      "z": 18,
+      "label": "Pakkesone"
+    },
+    "shelf-1a": {
+      "floor": 1,
+      "kind": "shelf",
+      "x": 14,
+      "z": 6,
+      "label": "Hylle 1A"
+    },
+    "shelf-1b": {
+      "floor": 1,
+      "kind": "shelf",
+      "x": 30,
+      "z": 6,
+      "label": "Hylle 1B"
+    },
+    "stairs-1": {
+      "floor": 1,
+      "kind": "stairwell",
+      "x": 20,
+      "z": 20,
+      "label": "Trapp"
+    },
+    "lift-1": {
+      "floor": 1,
+      "kind": "elevator",
+      "x": 36,
+      "z": 18,
+      "label": "Heis"
+    },
+    "shelf-2a": {
+      "floor": 2,
+      "kind": "shelf",
+      "x": 10,
+      "z": 6,
+      "label": "Hylle 2A"
+    },
+    "shelf-2b": {
+      "floor": 2,
+      "kind": "shelf",
+      "x": 28,
+      "z": 8,
+      "label": "Hylle 2B"
+    },
+    "stairs-2": {
+      "floor": 2,
+      "kind": "stairwell",
+      "x": 20,
+      "z": 20,
+      "label": "Trapp"
+    },
+    "lift-2": {
+      "floor": 2,
+      "kind": "elevator",
+      "x": 36,
+      "z": 18,
+      "label": "Heis"
+    }
+  },
+  "legs": {
+    "pack|shelf-1a": {
+      "metres": 22,
+      "seconds": 22,
+      "path": [
+        "pack",
+        "shelf-1a"
+      ]
+    },
+    "pack|shelf-1b": {
+      "metres": 38,
+      "seconds": 38,
+      "path": [
+        "pack",
+        "shelf-1a",
+        "shelf-1b"
+      ]
+    },
+    "pack|shelf-2a": {
+      "metres": 52,
+      "seconds": 72,
+      "path": [
+        "pack",
+        "stairs-1",
+        "stairs-2",
+        "shelf-2a"
+      ]
+    },
+    "pack|shelf-2b": {
+      "metres": 48,
+      "seconds": 68,
+      "path": [
+        "pack",
+        "stairs-1",
+        "stairs-2",
+        "shelf-2b"
+      ]
+    },
+    "shelf-1a|pack": {
+      "metres": 22,
+      "seconds": 22,
+      "path": [
+        "shelf-1a",
+        "pack"
+      ]
+    },
+    "shelf-1a|shelf-1b": {
+      "metres": 16,
+      "seconds": 16,
+      "path": [
+        "shelf-1a",
+        "shelf-1b"
+      ]
+    },
+    "shelf-1a|shelf-2a": {
+      "metres": 54,
+      "seconds": 74,
+      "path": [
+        "shelf-1a",
+        "stairs-1",
+        "stairs-2",
+        "shelf-2a"
+      ]
+    },
+    "shelf-1a|shelf-2b": {
+      "metres": 50,
+      "seconds": 70,
+      "path": [
+        "shelf-1a",
+        "stairs-1",
+        "stairs-2",
+        "shelf-2b"
+      ]
+    },
+    "shelf-1b|pack": {
+      "metres": 38,
+      "seconds": 38,
+      "path": [
+        "shelf-1b",
+        "shelf-1a",
+        "pack"
+      ]
+    },
+    "shelf-1b|shelf-1a": {
+      "metres": 16,
+      "seconds": 16,
+      "path": [
+        "shelf-1b",
+        "shelf-1a"
+      ]
+    },
+    "shelf-1b|shelf-2a": {
+      "metres": 56,
+      "seconds": 116,
+      "path": [
+        "shelf-1b",
+        "lift-1",
+        "lift-2",
+        "shelf-2b",
+        "shelf-2a"
+      ]
+    },
+    "shelf-1b|shelf-2b": {
+      "metres": 36,
+      "seconds": 96,
+      "path": [
+        "shelf-1b",
+        "lift-1",
+        "lift-2",
+        "shelf-2b"
+      ]
+    },
+    "shelf-2a|pack": {
+      "metres": 52,
+      "seconds": 72,
+      "path": [
+        "shelf-2a",
+        "stairs-2",
+        "stairs-1",
+        "pack"
+      ]
+    },
+    "shelf-2a|shelf-1a": {
+      "metres": 54,
+      "seconds": 74,
+      "path": [
+        "shelf-2a",
+        "stairs-2",
+        "stairs-1",
+        "shelf-1a"
+      ]
+    },
+    "shelf-2a|shelf-1b": {
+      "metres": 56,
+      "seconds": 116,
+      "path": [
+        "shelf-2a",
+        "shelf-2b",
+        "lift-2",
+        "lift-1",
+        "shelf-1b"
+      ]
+    },
+    "shelf-2a|shelf-2b": {
+      "metres": 20,
+      "seconds": 20,
+      "path": [
+        "shelf-2a",
+        "shelf-2b"
+      ]
+    },
+    "shelf-2b|pack": {
+      "metres": 48,
+      "seconds": 68,
+      "path": [
+        "shelf-2b",
+        "stairs-2",
+        "stairs-1",
+        "pack"
+      ]
+    },
+    "shelf-2b|shelf-1a": {
+      "metres": 50,
+      "seconds": 70,
+      "path": [
+        "shelf-2b",
+        "stairs-2",
+        "stairs-1",
+        "shelf-1a"
+      ]
+    },
+    "shelf-2b|shelf-1b": {
+      "metres": 36,
+      "seconds": 96,
+      "path": [
+        "shelf-2b",
+        "lift-2",
+        "lift-1",
+        "shelf-1b"
+      ]
+    },
+    "shelf-2b|shelf-2a": {
+      "metres": 20,
+      "seconds": 20,
+      "path": [
+        "shelf-2b",
+        "shelf-2a"
+      ]
+    }
+  }
+}

@@ -1,0 +1,167 @@
+@import "tailwindcss";
+
+/*
+ * Fettero design tokens (DESIGN.md is the source of truth).
+ * Two surfaces: light for working screens, dark for camera, night shift and the nav.
+ * A subtree switches surface with data-surface="dark"; every utility below
+ * reads these variables, so components never pick a colour themselves.
+ */
+:root,
+[data-surface="light"] {
+  color-scheme: light;
+  --bg: #e9ecee;
+  --surface: #ffffff;
+  --sunken: #f3f5f6;
+  --line: #d3d9dd;
+  --line-strong: #7a858d;
+  --text: #161c21;
+  --muted: #4f5a63;
+  --accent: #ff6a13;
+  --on-accent: #161c21;
+  --accent-text: #b03e00;
+  --accent-soft: #ffe6d6;
+  --success: #1b7340;
+  --success-soft: #e2f1e7;
+  --warning: #8a5800;
+  --warning-soft: #fbefd6;
+  --danger: #be2418;
+  --danger-soft: #fbe4e1;
+  --focus: #161c21;
+  --scrim: rgb(22 28 33 / 0.48);
+}
+
+[data-surface="dark"] {
+  color-scheme: dark;
+  --bg: #121c24;
+  --surface: #1a2630;
+  --sunken: #22313d;
+  --line: #2e3e4a;
+  --line-strong: #6a7c89;
+  --text: #e8edf0;
+  --muted: #9aaab5;
+  --accent: #ff7a2b;
+  --on-accent: #121c24;
+  --accent-text: #ff9a5c;
+  --accent-soft: #3f2616;
+  --success: #4cc27a;
+  --success-soft: #1c3a2a;
+  --warning: #f0b43c;
+  --warning-soft: #3d3118;
+  --danger: #ff7666;
+  --danger-soft: #40221f;
+  --focus: #e8edf0;
+  --scrim: rgb(6 10 14 / 0.64);
+}
+
+@theme {
+  --color-*: initial;
+  --radius-*: initial;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 20px;
+  --text-lg--line-height: 28px;
+  --text-xl: 24px;
+  --text-xl--line-height: 30px;
+  --text-2xl: 32px;
+  --text-2xl--line-height: 38px;
+  --text-3xl: 48px;
+  --text-3xl--line-height: 52px;
+  --text-display: 72px;
+  --text-display--line-height: 72px;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --animate-rise: rise 300ms var(--ease-standard) both;
+  --animate-progress: progress 1.2s linear infinite;
+  --animate-shimmer: shimmer 1.6s var(--ease-standard) infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes progress {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(250%);
+    }
+  }
+  @keyframes shimmer {
+    50% {
+      opacity: 0.55;
+    }
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-focus: var(--focus);
+  --color-scrim: var(--scrim);
+
+  --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-martian), ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  [data-surface] {
+    color: var(--text);
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

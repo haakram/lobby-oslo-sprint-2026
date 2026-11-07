@@ -91,6 +91,7 @@ class Executor:
         self._logged: dict | None = None
         self._tentative: set[frozenset[str]] = set()
         self._refusing = False
+        self._pleas: list[tuple[int | None, str]] = []  # Task 27: (sim second, place) of let-me-in pleas
         self._heard: dict[str, int | None] = {}  # person event text (normalised) -> sim second heard
         self._wet_reported: set[str] = set()
         self._calls = 0  # every server call; a cached status is valid only while this stands still
@@ -120,7 +121,8 @@ class Executor:
             elif ev.get("type") == "dock":
                 self.state.docked = False
             elif ev.get("type") == "person":
-                self._person(str(ev.get("text", "")))
+                at = reply.result.get("at") if isinstance(reply.result, dict) else None
+                self._person(str(ev.get("text", "")), at if isinstance(at, str) else None)
         return reply
 
     def log(self, decision: str, /, **data) -> None:
@@ -155,11 +157,26 @@ class Executor:
         self._heard[key] = now
         return False
 
-    def _person(self, text: str) -> None:
+    def pleaded_here(self) -> bool:
+        """Task 27: a "locked out"/"let me in" person event at this place within PERSON_MEMORY_S."""
+        try:
+            now = clock_to_seconds(self.state.clock)
+        except (ValueError, AttributeError):
+            now = None
+        return any(place == self.state.location and (now is None or then is None or 0 <= now - then < PERSON_MEMORY_S)
+                   for then, place in self._pleas)
+
+    def _person(self, text: str, place: str | None = None) -> None:
         """H-bathrobe: someone asks to be let in. Never a keycard; say no once, politely; don't follow.
         The same words again within 10 sim-minutes get no second answer; new words, or the same
         words much later, do."""
         repeat = self._repeat(text)
+        if any(w in text.lower() for w in LET_ME_IN):
+            try:
+                then = clock_to_seconds(self.state.clock)
+            except (ValueError, AttributeError):
+                then = None
+            self._pleas.append((then, place or self.state.location))
         self.log("person", text=text[:200], repeat=repeat)
         if repeat or self._refusing or not any(w in text.lower() for w in LET_ME_IN):
             return

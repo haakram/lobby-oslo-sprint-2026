@@ -154,9 +154,17 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
     if name is None:
         ex.go(ex.hotel.special.get("clerk", "front-desk"))
         objects = objects_here(ex.fresh_look())
+        from agent.flows import _fewer_objects_than_orders
+
+        if dup := _fewer_objects_than_orders(ex, task, objects, f"luggage-{room.removeprefix('room-')}"):
+            score = ex.score_now()
+            hyp(ex, "H-duplicate", task, f"not redone: one set of bags for {room}, {dup}'s", score, score)
+            raise Declined(f"Duplicate of {dup}: only one set of bags for {room} is at the desk, and it is {dup}'s")
         name = find_object(objects, BAG_WORDS, room) or "bags"
         ok, text = ex.pick(name)
         if not ok:
+            if name == "bags" or f"no {name}".lower() in text.lower():
+                raise Declined(f"No bags for {room} are waiting at the desk; they went up already or were never left")
             raise ActionFailed(f"could not pick {name}: {text}")
         if name in objects:
             objects.remove(name)

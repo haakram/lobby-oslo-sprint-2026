@@ -713,9 +713,9 @@ def test_duplicate_request_is_reported_failed_not_redone(tmp_path):
     got = collect(ex, session, {"R-001", "R-002"})
     ex.ledger.add(got["R-001"])
     ex.ledger.add(got["R-002"])
-    out = ex.run(got["R-002"])
+    out = ex.run(got["R-002"])  # judged at the kitchen pass: one tray, and it is R-001's
     assert out.status == "declined" and out.note.startswith("Duplicate of R-001")
-    assert not calls(fake, "pick") and not calls(fake, "move")
+    assert not calls(fake, "pick")
     assert ex.run(got["R-001"]).status == "done"
     assert hypotheses(session, "H-duplicate")
 
@@ -931,7 +931,7 @@ HYPOTHESIS_RUNS = {
                              "H-bags", "failed"),
     "bags dnd": (BAGS_TEXT.format(206), {"dnd_rooms": {"room-206"}}, None, "H-bags", "failed"),
     "bags not at the desk": (BAGS_TEXT.format(206), {}, lambda f, e, m: f._objects["front-desk"].pop("bags-206"),
-                             "H-bags", "failed"),
+                             "H-bags", "declined"),
     "noise done": (NOISE_201, NOISY_203_HOME, None, "H-noise", "done"),
     "noise door unseen": (NOISE_201, NOISY_203_HOME, lambda f, e, m: _door_unseen(f, m), "H-noise", "failed"),
     "noise dnd": (NOISE_201, {**NOISY_203_HOME, "dnd_rooms": {"room-203"}}, None, "H-noise", "failed"),
@@ -965,8 +965,8 @@ def test_every_hypothesis_run_logs_exactly_one_line(tmp_path, monkeypatch, case)
     assert isinstance(line["score_before"], int) and isinstance(line["score_after"], int)
     if status == "done":  # the delta covers the rewarded action (H-named: the delivery, not the ask)
         assert line["score_after"] > line["score_before"], line
-    elif status == "declined":  # the +5 lands on the declined report, after the hypothesis line
-        assert line["score_after"] == line["score_before"] == fake.score - 5, line
+    elif status == "declined":  # a +5 (false follow-up) lands on the report, after the hypothesis line
+        assert line["score_after"] == line["score_before"] and fake.score - line["score_after"] in (0, 5), line
     else:
         assert line["score_after"] == line["score_before"] == fake.score, line
 

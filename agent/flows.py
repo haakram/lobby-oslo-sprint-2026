@@ -43,7 +43,10 @@ UNTIDY = ("not tidy", "n't tidy", "untidy", "messy")  # checked before "tidy"
 def handle(ex: Executor, task: Task) -> Result:
     from agent import flows_extra  # the Task 13 kinds; that module imports the shared steps here
 
-    if dup := ex.ledger.duplicate_of(task):
+    # Trays and bags are not judged by text: a second order is a second object at the pickup
+    # (tray-104-7, luggage-313-34; live seed 7: a real second suitcase declined as a duplicate, and
+    # the third request then paid -18 for taking it). Nothing there -> declined (0).
+    if task.kind not in (Kind.TRAY, Kind.BAGS) and (dup := ex.ledger.duplicate_of(task)):
         score = ex.score_now()
         flows_extra.hyp(ex, "H-duplicate", task, f"not redone: same text and room as {dup}", score, score)
         # Live (scout, seed 1): a duplicate reported done is a false done (-30) even though the first
@@ -341,6 +344,19 @@ def pick_for_others(ex: Executor, task: Task, kind: Kind, names: Callable[[Task]
             ex.log("picked_for_later", request=other.request, item=here, during=task.request)
 
 
+def _fewer_objects_than_orders(ex: Executor, task: Task, objects: list[str], want: str) -> str | None:
+    """Trays and bags are judged at the pickup, not by text: the earliest open order for the room
+    owns the first object. The request of an earlier open order when there are fewer objects for
+    the room here than open orders up to and including this one, else None."""
+    mine = [o for o in objects if o == want or o.startswith(want + "-")]
+    earlier = [e.request for e in ex.ledger.entries.values()
+               if e.kind is task.kind and e.room == task.room and e.request < task.request
+               and e.status == "pending"]
+    if earlier and len(mine) < len(earlier) + 1:
+        return earlier[0]
+    return None
+
+
 def _tray(ex: Executor, task: Task) -> Result:
     _corridor(ex, task.room)
     _refuse_known_dnd(ex, task.room, task.request)
@@ -352,10 +368,14 @@ def _tray(ex: Executor, task: Task) -> Result:
         if not ex.get_cart():
             raise ActionFailed("could not get the cart for the tray")
         ex.go(ex.hotel.special.get("kitchen", "kitchen-pass"))
-        ok, text = ex.pick(item)
-        from agent.flows_extra import find_object, objects_here
+        from agent.flows_extra import find_object, hyp, objects_here
 
         objects = objects_here(ex.fresh_look())
+        if dup := _fewer_objects_than_orders(ex, task, objects, item):
+            score = ex.score_now()
+            hyp(ex, "H-duplicate", task, f"not redone: one tray for {task.room}, {dup}'s", score, score)
+            raise Declined(f"Duplicate of {dup}: only one tray for {task.room} is waiting, and that one is {dup}'s")
+        ok, text = ex.pick(item)
         if not ok:
             # A second tray for the same room carries a suffix (live: tray-104-7, like luggage).
             alt = next((o for o in objects if o == item or o.startswith(item + "-")), None)
@@ -365,6 +385,8 @@ def _tray(ex: Executor, task: Task) -> Result:
                 item = alt
                 ok, text = ex.pick(item)
         if not ok:
+            if f"no {item}".lower() in text.lower():
+                raise Declined(f"No {item} is waiting at the kitchen pass; it was taken up already or never put out")
             raise ActionFailed(f"could not pick {item}: {text}")
         if item in objects:
             objects.remove(item)
@@ -461,7 +483,9 @@ def _ask_room(ex: Executor, guest: str | None) -> str:
         question = f"Which room is {guest}?" if guest.startswith("next to") else f"Which room is {guest} in?"
         reply = ex.cmd("ask", person="clerk", question=question)
         answer = reply.result.get("answer") if isinstance(reply.result, dict) else reply.result
-        m = re.search(r"room[\s-]?(\d{3})", str(answer), re.IGNORECASE)
+        # "Ms Nygaard is in room-314." or "The room next to the elevator? For R-011 that's 332."
+        m = re.search(r"room[\s-]?(\d{3})\b", str(answer), re.IGNORECASE) or re.search(
+            r"(?<![\dR-])(\d{3})(?!\d)", str(answer).replace(guest, ""))
         # Live seed 6: asked for Mx Lien, the clerk answered "Ms Lie is in room-213" (another guest):
         # the toy went to the wrong room, -20. The answer must name the guest asked about.
         surname = guest.split()[-1].lower() if not guest.startswith("next to") else None

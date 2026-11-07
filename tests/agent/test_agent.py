@@ -332,7 +332,7 @@ def test_full_night_with_the_live_request_types(tmp_path):
         if kind == "followup":  # declined (+5 live, 6 of 6), the order itself retried under its own id
             assert fake.reports.get(rid) == "declined", rid
     ids = {d["id"] for d in _decisions(tmp_path, result, "hypothesis")}
-    assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill", "H-duplicate"} <= ids
+    assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill"} <= ids  # a tray duplicate is now judged at the pickup
     assert result["score"] >= 250
 
 

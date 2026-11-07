@@ -45,8 +45,8 @@ primitives, API client) gets one clearly owned home.
 
 | Area | Paths | Owner | Backup |
 |---|---|---|---|
-| Track A: Night Shift agent | TBD (set in the design spec) | ShirazIQ | Hamad |
-| Track B: Fettero app | TBD (set in the design spec) | Hamad | ShirazIQ |
+| Track A: Night Shift agent | TBD (set in the design spec) | Hamad | ShirazIQ |
+| Track B: Fettero app | TBD (set in the design spec) | ShirazIQ | Hamad |
 | Shared contracts (the agent's log format the app reads, env vars) | TBD | Hamad | ShirazIQ |
 | Repo tooling, CI, docs | `scripts/`, `.githooks/`, `.github/`, `.claude/`, `docs/` | Hamad | |
 

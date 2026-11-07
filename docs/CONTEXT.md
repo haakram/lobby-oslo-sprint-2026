@@ -255,8 +255,8 @@ Holio what they reward.
    ElevenLabs), built in parallel. Build with **subagent-driven development** as the standard for
    the whole repo, with as many subagents as help.
 2. The Wybe key lives in `.env` (`WYBE_NIGHTSHIFT_KEY`).
-3. Team name **Fettero**. Two members: Hamad (main coding) and ShirazIQ ("the hotel development";
-   Claude's reading: the Night Shift agent, to be confirmed in PLAN § Team review list).
+3. Team name **Fettero**. Two members. Hamad builds the Night Shift agent (route finding, task
+   planning); ShirazIQ builds the UI, the ElevenLabs connection and the demo (team lead, 12:25).
 4. Private GitHub repo `haakram/oslo-sprint-26`.
 5. Holio: pains 3, 6 and 9, all three equally, at demo level.
 6. Claude API budget for the product: **USD 30** in total.
@@ -265,8 +265,8 @@ Holio what they reward.
 
 | Name | GitHub | Role / focus | Owns (ARCHITECTURE § 3) |
 |---|---|---|---|
-| Hamad | haakram | Team lead, main coding | Track B: the app · tooling · pitch |
-| ShirazIQ | ShirazIQ | Hotel development | Track A: the Night Shift agent (to confirm) |
+| Hamad | haakram | Team lead, main coding | Track A: the Night Shift agent (routes, task planning) · tooling |
+| ShirazIQ | ShirazIQ | UI, voice, demo | Track B: the app (UI, camera, ElevenLabs) · Track C: the demo |
 
 - **Team name: Fettero.** Team photo due Sat 12:00.
 - Where we talk: TBD

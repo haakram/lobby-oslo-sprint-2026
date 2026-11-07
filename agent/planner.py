@@ -99,7 +99,7 @@ def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Para
     pick: Task | None = None
     for idx, t in enumerate(tasks):
         secs = estimate_seconds(t, state, hotel, params)
-        ratio = estimate_value(t, int(now + secs), params) / secs
+        ratio = estimate_value(t, int(now + secs), params) / max(secs, 1.0)
         key = (t.kind is Kind.UNKNOWN, -ratio, clock_to_seconds(t.arrived), idx)
         if best is None or key < best:
             best, pick = key, t

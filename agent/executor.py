@@ -56,6 +56,7 @@ NOTE_MAX = 300
 LET_ME_IN = ("locked out", "let me in")
 REFUSAL = "I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID."
 PERSON_MEMORY_S = 600  # the same person event within 10 sim-minutes of hearing it is a repeat
+SKIP_MIN_AGE_S = 8 * 60  # [obs] 16 live "Skip R-NNN": 8:23 to 29:24 after the request; younger ones wait
 GO_ATTEMPTS = 24  # route tries per go(): each first-visit look may change the map and replan
 BATTERY_LOW = 25.0  # below this a trip waits for a charge ...
 BATTERY_OK = 60.0  # ... up to this (or until a request arrives)
@@ -79,6 +80,12 @@ class Outcome:
 
 class ActionFailed(Exception):
     """A step could not be carried out; the message is the reason given to the night manager."""
+
+
+class TaskSkipped(Exception):
+    """The manager skipped the running request mid-task ("Skip R-NNN, ... checked out"): it was already
+    reported cancelled, so the task stops where it is, with no report of its own. Not an ActionFailed:
+    the flows' own handlers (a scan place out of reach, a top-up) must not swallow it."""
 
 
 class Declined(ActionFailed):
@@ -115,6 +122,9 @@ class Executor:
         self.found: dict[str, str] = {}  # item revealed by a scan -> where it lies
         self.inbox_waiting = False  # an inbox event was seen; the shift loop clears it
         self.ledger = Ledger()  # every request of the shift (follow-ups, duplicates)
+        self.skipped: set[str] = set()  # requests the manager skipped (the shift loop's inbox read)
+        self.current: Task | None = None  # the running task, while run() carries it out
+        self.inbox_hook: Callable[[], None] | None = None  # the shift loop's inbox read, for mid-task skips
         self.queue: list[Task] = []  # the shift loop's pending tasks (a follow-up may run one early)
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
         self._logged: dict | None = None
@@ -389,6 +399,8 @@ class Executor:
             if interruptible and self.inbox_waiting and not ride_pending:
                 self.log("walk_interrupted", at=here, towards=route.path[-1] if route.path else None)
                 return None
+            if not ride_pending:
+                self.skip_checkpoint()
             if step.cmd == "move" and not ride_pending:
                 leg = self._navigable_leg(here, steps, i - 1)
                 if leg and self._navigate(leg):
@@ -1032,7 +1044,7 @@ class Executor:
         except ShiftEnded and Ctrl-C: the loop calls it before every choice."""
         try:
             return self._charge(low, enough)
-        except ShiftEnded:
+        except (ShiftEnded, TaskSkipped):
             raise
         except Exception as exc:  # noqa: BLE001 - an odd reply must not block every loop pass
             self.log("charge_failed", error=type(exc).__name__, reason=str(exc)[:200])
@@ -1131,6 +1143,25 @@ class Executor:
 
     # --- tasks ---------------------------------------------------------------------------------
 
+    def skip_checkpoint(self) -> None:
+        """Mid-task, between two steps of a walk: when a message waits and the running request is old
+        enough to be skipped, read the inbox now (the shift loop's own read: skips are dropped and
+        reported cancelled, new requests queued) and stop the task if its request was skipped. Live:
+        a skip read only after the task scored 0 for the rest of the task and lost the +5 cancel
+        (seed 5 R-040, 9 min of scans after the skip). Never on a walk outside a task."""
+        task = self.current
+        if task is None or self.inbox_hook is None or not self.inbox_waiting:
+            return
+        try:
+            age = clock_to_seconds(self.state.clock) - clock_to_seconds(task.arrived)
+        except (ValueError, AttributeError):
+            return
+        if age < SKIP_MIN_AGE_S:
+            return
+        self.inbox_hook()
+        if task.request in self.skipped:
+            raise TaskSkipped(f"{task.request} skipped by the manager mid-task")
+
     def run(self, task: Task) -> Outcome:
         from agent import flows
 
@@ -1141,10 +1172,16 @@ class Executor:
         # before and after their last action (that is what verifies a "done"), so `points` comes
         # from the scores they observed. The report's own bonus lands on the next refresh.
         start = self.state.score
+        outer, self.current = self.current, task  # a follow-up may run its waiting original inside
         try:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):
             raise
+        except TaskSkipped as exc:  # reported cancelled by the inbox read: no second report
+            self.ledger.set_status(task.request, "skipped")  # logged like Task 22's unreported rise
+            self.log("task_failed", request=task.request, status="skipped", points=0,
+                     note=f"{exc} (stopped at {self.state.location})")
+            return Outcome(task.request, "skipped", 0, str(exc))
         except Declined as exc:
             return self._finish(task, "declined", str(exc), start)
         except ActionFailed as exc:
@@ -1155,6 +1192,8 @@ class Executor:
             self.log("executor_error", request=task.request, error=type(exc).__name__,
                      message=str(exc)[:300], where=where)
             return self._finish(task, "failed", f"internal error ({type(exc).__name__})", start)
+        finally:
+            self.current = outer  # the report and after() are past the point of a skip
         outcome = self._finish(task, "done", note, start)
         if after:  # the report is in: a hiccup here must not lose the outcome (or redo the task)
             try:

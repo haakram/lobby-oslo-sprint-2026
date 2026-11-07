@@ -212,11 +212,13 @@ _SKIP = re.compile(r"^\s*Skip (R-\d+)\b")
 def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]) -> None:
     """The manager's "Skip R-NNN, 327 checked out. Don't bother with it.": the request is dropped
     from the queue and marked skipped. Live: a skipped request scores 0 even when done and verified
-    (seed 4 R-019), so the trip is pure loss. A running task finishes; the inbox is read between tasks."""
+    (seed 4 R-019), so the trip is pure loss. A running task stops at its next walk step when the
+    inbox is read mid-task (Executor.skip_checkpoint); otherwise the inbox is read between tasks."""
     dropped = [t for t in pending if t.request == rid]
     for task in dropped:
         pending.remove(task)
     seen.add(rid)
+    ex.skipped.add(rid)  # a task running it stops at its next checkpoint (Executor.skip_checkpoint)
     ex.ledger.set_status(rid, "skipped")
     # Live (scout, seed 4 R-019): reporting the skipped request `cancelled` scores +5; a request
     # already reported is refused ("already reported"), which costs nothing.
@@ -315,6 +317,7 @@ def run_shift(
     pending: list[Task] = []
     ex.queue = pending  # the same list: a follow-up that runs its original removes it here
     seen: set[str] = set()
+    ex.inbox_hook = lambda: _read_inbox(ex, brain, seen, pending)  # mid-task skips
     retried: set[str] = set()  # tasks put back once after a mid-task server error
     errors = 0
     opened = False

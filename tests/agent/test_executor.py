@@ -1117,3 +1117,144 @@ def test_brain_room_check_looks_at_the_door_before_any_keycard(tmp_path, fake_kw
     assert looks, cmds
     assert (not keycards) if expected == "failed" else (keycards and looks[0] < keycards[0])
     assert not fake.unsafe and not fake.false_done
+
+
+def test_scan_cap_cannot_cut_off_hinted_and_secondary_places(tmp_path):
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, task = solo(tmp_path, text, hidden={"wallet": "lobby-bar"})
+    ex.max_scans = 2  # old behaviour: stop after the three corridors' first two, never reach the bar
+    out = ex.run(task)
+    assert out.status == "done", out
+    assert "lobby-bar" in scan_places(fake)
+
+
+def test_scan_count_stays_bounded_when_the_item_is_nowhere(tmp_path):
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, task = solo(tmp_path, text, hidden={})
+    ex.max_scans = 2
+    ex.run(task)
+    assert 3 + 3 <= len(scan_places(fake)) <= 9
+
+
+def test_lost_toy_hinted_at_the_bar_is_found_as_numbered_toy(tmp_path):
+    text = "Guest in 320 lost a child's toy, maybe the lobby bar."
+    fake, _session, ex, task = solo(tmp_path, text, hidden={"toy-2": "lobby-bar"})
+    fake._requests["R-001"].item = "toy-2"
+    out = ex.run(task)
+    assert out.status == "done", out
+
+
+# --- Task 28: the Nth lost-item request of an item gets the Nth item (live seeds 1, 2, 5) ---------
+
+
+def _lost_shift(tmp_path, texts, hidden):
+    """A shift with several lost-item requests, all in the ledger as the loop would add them."""
+    requests = [(f"22:0{i}:00", f"R-00{i}", t) for i, t in enumerate(texts, 1)]
+    fake, session, ex = setup(tmp_path, requests=requests, hidden=hidden)
+    tasks = [next_task(ex, session, f"R-00{i}") for i in range(1, len(texts) + 1)]
+    for t in tasks:
+        ex.ledger.add(t)
+    return fake, ex, tasks
+
+
+def _placed(fake):
+    return [e["args"]["item"] for e in calls(fake, "place") if e["ok"]]
+
+
+def test_second_glasses_request_gets_glasses_2_not_the_first_ones(tmp_path):
+    # seed 2: R-015's unsuffixed glasses lay in the corridor too; R-017 delivered it and lost 20
+    texts = ["Guest in 317 lost glasses, maybe the ground floor corridor.",
+             "Guest in 207 lost glasses, maybe the ground floor corridor."]
+    fake, ex, (_t1, t2) = _lost_shift(tmp_path, texts,
+                                      {"glasses": "corridor-1a", "glasses-2": "corridor-1b"})
+    out = ex.run(t2)
+    assert out.status == "done", out
+    assert _placed(fake) == ["glasses-2"]
+    assert "glasses" not in [e["args"]["item"] for e in calls(fake, "pick")]
+
+
+def test_first_glasses_request_still_gets_the_unsuffixed_item(tmp_path):
+    texts = ["Guest in 317 lost glasses, maybe the ground floor corridor.",
+             "Guest in 207 lost glasses, maybe the ground floor corridor."]
+    fake, ex, (t1, _t2) = _lost_shift(tmp_path, texts,
+                                      {"glasses": "corridor-1a", "glasses-2": "corridor-1a"})
+    out = ex.run(t1)
+    assert out.status == "done", out
+    assert _placed(fake) == ["glasses"]
+
+
+def test_a_failed_first_request_still_counts_for_the_numbering(tmp_path):
+    # seed 5: R-019's wallet was never found; R-069 (the 2nd wallet request) must not take it
+    texts = ["Guest in 105 lost a wallet, maybe the kitchen pass.",
+             "Mr Aune lost a wallet earlier tonight, probably somewhere around near the kitchen."]
+    fake, ex, (_t1, t2) = _lost_shift(tmp_path, texts, {"wallet": "kitchen-pass"})
+    ex.guest_rooms["Mr Aune"] = "room-213"
+    out = ex.run(t2)
+    assert out.status == "failed" or not _placed(fake), out
+    assert not calls(fake, "pick") and not fake.wrong_deliveries
+
+
+def test_the_carried_wrong_item_is_not_delivered(tmp_path):
+    texts = ["Guest in 105 lost a wallet, maybe the kitchen pass.",
+             "Guest in 213 lost a wallet, maybe the kitchen pass."]
+    fake, ex, (_t1, t2) = _lost_shift(tmp_path, texts,
+                                      {"wallet": "kitchen-pass", "wallet-2": "kitchen-pass"})
+    ex.go("kitchen-pass")
+    ex.scan()
+    ex.pick_or_cart("wallet")  # picked up by an earlier idle scan
+    out = ex.run(t2)
+    assert out.status == "done", out
+    assert _placed(fake) == ["wallet-2"] and not fake.wrong_deliveries
+
+
+def test_one_lost_item_is_never_delivered_twice(tmp_path):
+    texts = ["Guest in 105 lost a wallet, maybe the kitchen pass."]
+    fake, ex, (t1,) = _lost_shift(tmp_path, texts, {"wallet": "kitchen-pass"})
+    assert ex.run(t1).status == "done"
+    t2 = replace(t1, request="R-009", room="room-213")  # not in the ledger: no known owner
+    ex.found["wallet"] = "kitchen-pass"  # a stale memory of the same item
+    ex.max_scans = 1
+    out = ex.run(t2)
+    assert out.status != "done", out
+    assert _placed(fake) == ["wallet"]
+
+
+def test_two_unowned_candidates_away_from_the_hint_deliver_none(tmp_path):
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, task = solo(tmp_path, text,
+                                    hidden={"wallet-3": "lobby-bar", "wallet-4": "lobby-bar"})
+    out = ex.run(task)
+    assert out.status == "failed", out
+    assert not _placed(fake) and not fake.wrong_deliveries
+
+
+def test_a_failed_delivery_does_not_mark_the_item_delivered(tmp_path):
+    text = "Guest in 208 lost a wallet, maybe the kitchen pass."
+    fake, _session, ex, t1 = solo(tmp_path, text, hidden={"wallet": "kitchen-pass"})
+    out = ex.run(t1)  # room 208 has a DND sign: nothing is delivered
+    assert out.status != "done" and not _placed(fake), out
+    assert "wallet" not in getattr(ex, "lost_delivered", set())
+    from agent import flows
+
+    assert flows._verdict(ex, "R-001", "wallet") == "match"  # still free to reach its owner
+
+
+def test_item_numbered_past_the_known_requests_is_not_taken_when_others_exist(tmp_path):
+    # one lost-glasses request seen (R-001); glasses-3 lies there with glasses-2: a request was missed
+    text = "Guest in 317 lost glasses, maybe the ground floor corridor."
+    fake, ex, (t1,) = _lost_shift(tmp_path, [text], {"glasses-2": "corridor-1a", "glasses-3": "corridor-1a"})
+    out = ex.run(t1)
+    assert out.status != "done" and not _placed(fake), out
+
+
+def test_ambiguity_stops_the_search_at_once(tmp_path):
+    from agent import flows
+    from agent.executor import ActionFailed
+
+    text = "Guest in 320 lost a wallet, maybe the ground floor corridor."
+    fake, _session, ex, _task = solo(tmp_path, text,
+                                    hidden={"wallet-3": "corridor-1a", "wallet-4": "corridor-1a"})
+    ex.found.update({"wallet-3": "corridor-1a", "wallet-4": "corridor-1a"})
+    with pytest.raises(ActionFailed, match="did not guess"):  # request unknown to the ledger: both free
+        flows._find(ex, "wallet", "ground floor corridor", None)
+    assert not calls(fake, "scan") and not calls(fake, "pick")

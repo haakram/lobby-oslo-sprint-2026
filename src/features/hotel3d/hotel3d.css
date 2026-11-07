@@ -96,6 +96,29 @@
   opacity: 0.85;
 }
 
+/* Hover label on desktop: follows the pointer, positioned by the scene. */
+.h3d-hover {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.h3d-hover[hidden] {
+  display: none;
+}
+
 .h3d-labels[data-compact] .h3d-room {
   font-size: 10px;
   padding: 2px 4px;

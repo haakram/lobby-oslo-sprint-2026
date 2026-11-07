@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Hotel3D, StatusLegend } from "@/features/hotel3d/Hotel3D";
 import { PlaybackControls } from "@/features/hotel3d/PlaybackControls";
-import { EventFeed, TaskCard, WorkOrderList } from "@/features/hotel3d/ReplayPanels";
+import { EventFeed, RoomCard, TaskCard, WorkOrderList } from "@/features/hotel3d/ReplayPanels";
 import { type HotelReplay, placeName, type ReplaySource, useHotelReplay } from "@/features/replay";
 import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, MoonIcon, Skeleton, Stat } from "@/ui";
 import { viewerBase } from "./useRun";
@@ -22,6 +22,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   const replay = useHotelReplay(source, { viewerUrl: base });
   const ready = replay.status === "ready";
   const snapshot = replay.snapshot;
+  const [room, setRoom] = useState<string | null>(null);
 
   const decisions = useMemo(() => {
     if (!replay.timeline || !snapshot) return [];
@@ -88,7 +89,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
           <>
             <StatRow replay={replay} />
             <div className="mt-6 flex flex-col gap-4">
-              <Hotel3D replay={replay} variant="panel" />
+              <Hotel3D replay={replay} variant="panel" selectedRoom={room} onSelectRoom={setRoom} />
               <StatusLegend className="px-1 sm:hidden" />
               <Card>
                 <PlaybackControls replay={replay} compact />
@@ -102,6 +103,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
             )}
             <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
               <div className="flex min-w-0 flex-col gap-8">
+                {room && <RoomCard roomId={room} snapshot={snapshot} timeline={replay.timeline} onClose={() => setRoom(null)} />}
                 <TaskCard snapshot={snapshot} finished={snapshot.finished} />
                 <WorkOrderList orders={snapshot.workOrders} />
               </div>

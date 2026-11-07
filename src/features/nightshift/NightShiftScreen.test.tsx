@@ -84,6 +84,21 @@ describe("NightShiftScreen, replay", () => {
     expect(screen.getAllByText("R-001 · Lader til 319").length).toBeGreaterThan(0);
   });
 
+  it("opens a room's details when a room on the map is chosen, and closes them again", async () => {
+    serveDemo();
+    render(<NightShiftScreen />);
+    await screen.findByText("Ferdig");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Rom 319:/ }));
+    const card = screen.getByRole("heading", { name: "Rom 319" }).closest("[data-room]")!;
+    expect(card).toHaveAttribute("data-room", "room-319");
+    expect(within(card as HTMLElement).getByText(/^Oppgaver/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Rom 319:/ })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Lukk Rom 319" }));
+    expect(screen.queryByRole("heading", { name: "Rom 319" })).not.toBeInTheDocument();
+  });
+
   it("says what went wrong and retries when the recording can't be loaded", async () => {
     fetchMock.mockResolvedValueOnce(textResponse("", 500));
     render(<NightShiftScreen />);

@@ -1078,3 +1078,27 @@ def test_task_run_makes_no_log_only_status_calls(tmp_path):
     assert cmds[0] != "status", cmds[:3]  # the loop's refresh just ran: no second status
     assert cmds[-1] == "report", cmds[-3:]  # nothing after the report
     assert out.points > 0  # from the flow's own before/after scores
+
+
+@pytest.mark.parametrize("fake_kw,room,expected", [
+    ({"dnd_rooms": {"room-103"}}, "103", "failed"),  # a DND sign: no knock, no keycard
+    ({}, "104", "failed"),  # a guest answers: occupied, no keycard
+    ({"absent_rooms": {"room-103"}}, "103", "done"),  # nobody there: door look, knock, keycard, look inside
+])
+def test_brain_room_check_looks_at_the_door_before_any_keycard(tmp_path, fake_kw, room, expected):
+    class StubBrain:
+        def classify(self, request_id, text, arrived):
+            return Task(request_id, Kind.ROOM_CHECK, text, arrived, room=room)
+
+    fake, session, ex = setup(tmp_path, rids={"R-004"}, **fake_kw)
+    ex.brain = StubBrain()
+    task = replace(next_task(ex, session, "R-004"), kind=Kind.UNKNOWN, room=None)
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status == expected and fake.reports == {"R-004": expected}
+    cmds = [(e["cmd"], e["args"]) for e in fake.log[since:]]
+    keycards = [i for i, (c, a) in enumerate(cmds) if c == "use" and (a or {}).get("item") == "keycard"]
+    looks = [i for i, (c, a) in enumerate(cmds) if c == "look" and (a or {}).get("at") == f"room-{room}"]
+    assert looks, cmds
+    assert (not keycards) if expected == "failed" else (keycards and looks[0] < keycards[0])
+    assert not fake.unsafe and not fake.false_done

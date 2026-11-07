@@ -343,3 +343,31 @@ def test_loop_reads_the_inbox_only_when_a_message_is_waiting(tmp_path):
     assert inbox_calls <= delivered + 1, (inbox_calls, delivered)
     cmds = [e["cmd"] for e in fake.log]
     assert "inbox" not in {b for a, b in pairwise(cmds) if a == "scan"}  # not read after idle scans
+
+
+# --- Task 18 / I1: a Brain room check never reaches a keycard on a noise text or an unknown room ------
+
+
+def test_brain_room_check_rejected_for_noise_texts_and_unknown_rooms(tmp_path):
+    from agent.tasks import Kind, Task
+
+    texts = {"R-001": "Loud music from 103, can you see whether it is occupied?",
+             "R-002": "Have a quick peek at 999 please, the guest left."}
+    fake = FakeWybe(requests=[("22:03:30", "R-001", texts["R-001"]), ("22:03:31", "R-002", texts["R-002"])],
+                    absent_rooms={"room-103"})
+
+    class CheckingBrain:
+        enabled = True
+
+        def classify(self, rid, text, arrived):
+            room = "103" if rid == "R-001" else "999"
+            return Task(rid, Kind.ROOM_CHECK, text, arrived, room=room)
+
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00",
+                       brain=CheckingBrain())
+    assert fake.reports == {"R-001": "failed", "R-002": "failed"}
+    assert not any(e["cmd"] == "use" and (e["args"] or {}).get("item") == "keycard" for e in fake.log)
+    assert not fake.unsafe and not fake.false_done
+    rejected = _decisions(tmp_path, result, "brain_rejected")
+    assert {d["request"] for d in rejected} == {"R-001", "R-002"}
+    assert not _decisions(tmp_path, result, "brain_classified")

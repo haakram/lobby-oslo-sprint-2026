@@ -22,7 +22,7 @@ from agent.config import Settings
 from agent.executor import ActionFailed, Executor
 from agent.offline import FakeWybe
 from agent.planner import Params, choose_next, opening_plan
-from agent.tasks import Kind, Task, parse_request
+from agent.tasks import Kind, Task, parse_request, vet_brain_task
 from agent.world import Hotel, RobotState, clock_to_seconds
 
 PARAMS_FILE = Path(__file__).parent / "data" / "params_best.json"
@@ -91,6 +91,24 @@ def _inbox_waiting(ex: Executor, status: dict) -> bool:
     return not isinstance(unread, int) or unread > 0
 
 
+def _vet_brain(ex: Executor, original: Task, better: Task) -> Task:
+    """The Brain's answer is model output: a room check on a noise/complaint text, or on a room the
+    hotel map does not have, is rejected (the request stays UNKNOWN and is reported failed)."""
+    vetted = vet_brain_task(better)
+    reason = None
+    if better.kind is Kind.ROOM_CHECK and vetted.kind is not Kind.ROOM_CHECK:
+        reason = "room check on a noise or complaint text"
+    elif vetted.kind is Kind.ROOM_CHECK and vetted.room not in ex.hotel.nodes:
+        reason = f"room check on an unknown room {vetted.room}"
+    if reason is not None:
+        ex.log("brain_rejected", request=original.request, kind=better.kind.value, room=better.room,
+               reason=reason)
+        return original
+    ex.log("brain_classified", request=original.request, kind=vetted.kind.value, room=vetted.room,
+           item=vetted.item)
+    return vetted
+
+
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:
     reply = ex.cmd("inbox")
     ex.inbox_waiting = False
@@ -106,9 +124,7 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
         if task.kind is Kind.UNKNOWN and brain is not None and getattr(brain, "enabled", False):
             better = brain.classify(task.request, task.text, task.arrived)
             if better is not None and better.kind is not Kind.UNKNOWN:
-                task = flows.normalize(better)
-                ex.log("brain_classified", request=rid, kind=task.kind.value, room=task.room,
-                       item=task.item)
+                task = _vet_brain(ex, task, flows.normalize(better))
         ex.log("request", request=rid, kind=task.kind.value, text=task.text)
         ex.ledger.add(task)
         pending.append(task)

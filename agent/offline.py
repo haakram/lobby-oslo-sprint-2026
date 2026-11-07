@@ -432,6 +432,7 @@ class FakeWybe:
         absent_rooms: set[str] | None = None,
         wet: set[frozenset[str]] = frozenset(),
         hidden: dict[str, str | tuple[str, str]] | None = None,
+        visible: dict[str, str] | None = None,
         guests: dict[str, str] | None = None,
         end_clock: str = END_CLOCK,
         hotel_path: Path | None = None,
@@ -447,7 +448,9 @@ class FakeWybe:
         """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`.
         `described_rooms` names the room of a request whose room is described ("next to the elevator
         on floor 2"), by request id; otherwise such requests take the rooms on the corridor by that
-        floor's elevator landing in turn [hyp] (live seed 23: R-014's was 201, R-031's was not)."""
+        floor's elevator landing in turn [hyp] (live seed 23: R-014's was 201, R-031's was not).
+        `visible` lays lost items in the open from 22:00 (item -> place): a look lists them, a scan
+        does not (live seed 41: glasses in corridor-1b's look, "Nothing hidden here." from its scan)."""
         data = hotel if hotel is not None else json.loads(Path(hotel_path or DEFAULT_MAP).read_text())
         self._nodes: dict[str, dict] = data["nodes"]
         self._adj: dict[str, dict[str, dict]] = {}
@@ -466,6 +469,7 @@ class FakeWybe:
         self._absent = set(DEFAULT_ABSENT if absent_rooms is None else absent_rooms)
         self._wet = {frozenset(w) for w in wet}
         self._hidden = dict(DEFAULT_HIDDEN if hidden is None else hidden)
+        self._visible = dict(visible or {})
         self._guests = dict(DEFAULT_GUESTS if guests is None else guests)
         if guests is not None:  # explicit arguments win over the live defaults
             self._absent -= set(self._guests.values())
@@ -605,6 +609,8 @@ class FakeWybe:
         self._parked_carts: dict[str, list[str]] = {}
         self._docked = False
         self._objects = {place: dict(items) for place, items in self._stock0.items()}
+        for item, place in self._visible.items():
+            self._add_object(place, item)
         self._revealed: set[str] = set()
         self._visited = {self._dock}
         self._wet_known: set = set()  # legacy wet edges (frozensets) and spill spots (names) seen

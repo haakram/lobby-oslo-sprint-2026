@@ -197,20 +197,34 @@ verified ones (+43, +63) had the sign standing on the newly wet spot.
    only an old patch → declined, no −30; sign placement failure → declined; out of signs → the oldest credited sign
    is moved and the new spill verified.
 
-## Task 7 — Lost-item search under load (branch `hamad/hygiene`)
+## Task 7 — Lost items lying in plain sight, and the search under load (branch `hamad/lost`, merged into `hamad/hygiene`)
 
-Why: lost-item hunts run up to 6–10 scans (60 s and ~1 % battery each) while other requests wait; on seed 16 a wallet
-hunt failed after 10 scans during the rush.
+Why (live, seed 41, wave branch, 2026-11-07 ~23:00): six lost-item requests failed after 9–10 scans each (an hour of
+scanning, ~60 % battery, ~270 points) while the items were **visible**: a `look` at corridor-1b at 22:19 and 23:36
+listed `glasses` (R-002, "glasses, maybe the ground floor corridor", failed after 10 scans); `look` at kitchen-pass at
+00:20, 02:31, 03:43 and 05:02 listed `wallet` (R-012, "wallet, maybe the kitchen pass", failed after 10 scans);
+corridor-1c at 05:01 listed `toy` and `glasses-2`. `scan` reports only HIDDEN things ("Nothing hidden here" where an
+item lies in the open), and `Executor.found` (agent/executor.py ~144) is filled only by `scan` (~1314). Another team saw
+the same: 68 of 159 given-up items were visible in `look.objects`; all 288 finds were in 8 ground-floor places (lobby,
+lobby-bar, front-desk, kitchen-pass, corridor-1a/1b/1c, laundry).
 
-1. `agent/flows.py` `_find`: when at least two other tasks are queued (`len(ex.queue) >= 2`), cap the scans at 3
-   (`SCAN_CAP_BUSY = 3`), log `scan_cap` `{"request", "cap", "queued"}`; otherwise today's cap. A hunt that ends on
-   the busy cap raises `ActionFailed("... not found after N scans (others waiting)")` so the request is reported
-   `failed` (0, no penalty) and the robot moves on.
-2. Look before scanning: at each candidate place, if the robot has no fresh look there (this visit), `look` (5 s)
-   first and pick the item when it is already visible in `objects` (another team found 68 of 159 given-up items had
-   been visible somewhere they never looked; items revealed by an earlier scan stay visible). Only then `scan` (60 s).
-3. Tests: with 2 queued tasks the hunt stops after 3 scans; with none it runs to the usual cap; a visible item is
-   picked after a look with no scan.
+1. Every `look` result (no-arg looks; `Executor.look`/`fresh_look` and any flow that parses `objects`) records each
+   object that could be a lost item into `ex.found[name] = location` (the same dict scans fill). A lost-item object is
+   any object whose base name (strip a trailing `-N`) is not stock or a fixture: exclude names with an ` xN` count,
+   `tray-*`, `luggage-*`, `wet-floor-sign`, `keycard`, `cart`, notes (`*note*`, `manual`), and the stock items
+   (towel, water-bottle, phone-charger, toiletry-kit, pillow). When a later look at that place no longer lists an
+   object the robot recorded there, drop it from `found` (someone took it; avoids a wasted trip).
+2. `_find` (agent/flows.py): before the first scan, `_pick_found` already checks `found` — with step 1 that now
+   includes looked-at items. Then at each candidate place: if this visit has no look yet, `look` (5 s) first and pick
+   via `_pick_found` when the item is listed; scan (60 s) only when it is not. Keep `_verdict`'s ownership rule (the
+   Nth request of an item owns the Nth item: `wallet`, `wallet-2`, …; failed requests count).
+3. Search under load: when at least two other tasks are queued (`len(ex.queue) >= 2`), cap the scans at 3
+   (`SCAN_CAP_BUSY = 3`), log `scan_cap` `{"request", "cap", "queued"}`; otherwise today's cap. A hunt ending on the
+   busy cap raises `ActionFailed("... not found after N scans (others waiting)")` (reported `failed`, 0 points).
+4. Tests (the fake must be able to place a lost item visible, not hidden, if it cannot yet: add the minimum): an item
+   seen in an earlier look is fetched with 0 scans; an item lying visible at the hinted place is picked after one look
+   and no scan; an object that vanished from a later look is dropped from `found`; stock and trays are never recorded;
+   with 2 queued tasks the hunt stops after 3 scans.
 
 ## Task 8 — No door look before a plain knock (branch `hamad/hygiene`)
 

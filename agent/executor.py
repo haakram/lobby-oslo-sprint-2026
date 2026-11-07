@@ -74,6 +74,17 @@ CHARGE_ROUNDS = 20  # docks per charge: a forced block chains short docks, each 
 CHARGE_TARGET_FORCED = 40.0
 CHARGE_TARGET_MIN = 20.0  # ... shrinking toward 06:00 (10 + 0.4 x minutes left), never under this
 NIGHT_END = "06:00:00"  # the server ends the shift here
+# Pre-emptive block before the rush (energy-model.md): after PRE_BLOCK_AFTER, with at most one task
+# known and the battery under PRE_BLOCK_BELOW, the robot charges now, while it is cheap, instead of in
+# forced cycles later. Its first dock always runs (to the next message); it docks again while under
+# PRE_BLOCK_TARGET, until PRE_BLOCK_QUEUE tasks wait, and never starts a dock after PRE_BLOCK_MAX_S
+# (manager skips arrive 7-30 min after a request, median 18.7 min).
+PRE_BLOCK = False  # offline bench (seeds 2-13): scale 1.3 2021.2 -> 2014.2 with it, 1.0 equal, 1.6 -10
+PRE_BLOCK_AFTER = "02:00:00"
+PRE_BLOCK_BELOW = 45.0
+PRE_BLOCK_TARGET = 40.0
+PRE_BLOCK_QUEUE = 2
+PRE_BLOCK_MAX_S = 15 * 60
 DOCK_RETRY_S = 600  # a dock found out of reach from a place is not tried from there for 10 sim-min
 MOVE_REFUSALS_MAX = 3  # the same move refused this many times in a row: given up, its edge dropped
 SHIFT_START = "22:00:00"  # the shift's start clock when the session does not report one
@@ -1056,6 +1067,14 @@ class Executor:
             self.cmd("inbox")
             self.inbox_waiting = False
 
+    def _pre_block_due(self, battery: float) -> bool:
+        """The pre-emptive block's moment: switched on, after PRE_BLOCK_AFTER, battery under
+        PRE_BLOCK_BELOW, no task running, at most one queued (and the inbox read)."""
+        now = self._now_s()
+        return (PRE_BLOCK and now is not None and now >= clock_to_seconds(PRE_BLOCK_AFTER)
+                and battery < PRE_BLOCK_BELOW and self.current is None
+                and len(self.queue) < PRE_BLOCK_QUEUE)
+
     def _block_target(self) -> float:
         """A forced block's target: CHARGE_TARGET_FORCED, shrinking toward 06:00 (10 + 0.4 x the
         minutes left, never under CHARGE_TARGET_MIN): a 25 % charge 20 minutes before the end is
@@ -1089,9 +1108,14 @@ class Executor:
             return False
         dock = self.hotel.special.get("dock", "charging-dock")
         reserve = self._dock_reserve(dock)
+        forced = battery < max(BATTERY_CRITICAL, reserve)
+        if not forced and self._pre_block_due(battery):
+            self.log("battery_low", battery=battery, at=self.state.location, dock=dock,
+                     reserve=round(reserve, 1), forced=False, pre=True, target=PRE_BLOCK_TARGET)
+            self._charge_block(PRE_BLOCK_TARGET, forced=False, pre=True)
+            return True
         if battery >= max(low, reserve):
             return False
-        forced = battery < max(BATTERY_CRITICAL, reserve)
         if not forced and self._work_waiting():
             self.log("charge_deferred", battery=battery, queued=len(self.queue), inbox=self.inbox_waiting,
                      running=self.current.request if self.current is not None else None)
@@ -1103,26 +1127,34 @@ class Executor:
         self._charge_block(target, forced=forced)
         return True
 
-    def _charge_block(self, target: float, *, forced: bool) -> None:
+    def _charge_block(self, target: float, *, forced: bool, pre: bool = False) -> None:
         """Walk to the dock and dock until `target` %, the dock refuses (full) or CHARGE_ROUNDS.
         Forced: never a dock with a message unread (it returns at once, "Docked for 0 min"): the
         inbox is read first, and after every wake-up, then the robot docks again at once, with no
-        walk and no task in between. Not forced: a wake-up (or a message on the way) ends the charge,
-        the request goes first. One `charge_block` decision line per block."""
+        walk and no task in between. Pre-emptive (pre): the same chain, its first dock always, ended
+        by PRE_BLOCK_QUEUE tasks waiting or PRE_BLOCK_MAX_S. Otherwise a wake-up (or a message on
+        the way) ends the charge: the request goes first. One `charge_block` decision line per block."""
         start_battery, start_s = self._battery(), self._now_s()
-        woken = 0
+        woken = docks = 0
+        chain = forced or pre
         for _ in range(CHARGE_ROUNDS):
             battery = self._battery()
-            if battery is None or battery >= target:
+            if battery is None or (battery >= target and not (pre and not docks)):
+                break
+            now = self._now_s()
+            if pre and now is not None and start_s is not None and now - start_s >= PRE_BLOCK_MAX_S:
                 break
             dock = self.hotel.special.get("dock", "charging-dock")
             if not self._reach_dock(dock):
                 self.log("charge_failed", reason=f"could not reach {dock}")
                 break
-            if forced and self.inbox_waiting:
+            if chain and self.inbox_waiting:
                 self._inbox_now()  # a message came on the way: queued, and the dock still charges
-            elif not forced and self._work_waiting():
+            elif not chain and self._work_waiting():
                 break  # a request came in on the way: it goes first
+            if pre and len(self.queue) >= PRE_BLOCK_QUEUE:
+                break
+            docks += 1
             reply = self.cmd("dock")
             self.state.docked = reply.ok
             if not reply.ok and self._revert_dock(dock, str(reply.result)):
@@ -1134,16 +1166,18 @@ class Executor:
             if not (self.inbox_waiting or "woke" in text or "message" in text):
                 continue
             woken += 1
-            if not forced:
+            if not chain:
                 break
             self._inbox_now()
             self.log("charge_woken", battery=self.state.battery, queued=len(self.queue))
+            if pre and len(self.queue) >= PRE_BLOCK_QUEUE:
+                break
         self.log("charged", battery=self.state.battery, woken=self.inbox_waiting)
         end_s = self._now_s()
         minutes = (end_s - start_s) / 60 if end_s is not None and start_s is not None else None
         self.log("charge_block", **{"from": start_battery}, to=self._battery(),
                  minutes=None if minutes is None else round(minutes, 1), queued=len(self.queue),
-                 woken=woken, forced=forced, target=round(target, 1))
+                 woken=woken, forced=forced, pre=pre, target=round(target, 1))
 
     # --- waiting -------------------------------------------------------------------------------
 

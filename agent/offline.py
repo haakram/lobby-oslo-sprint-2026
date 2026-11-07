@@ -311,7 +311,7 @@ def points_for(kind: str, hours_into_night: float, wait_min: float) -> int:
 
 def _base_item(item: str) -> str:
     """'toy-2' -> 'toy': the server numbers repeated lost items; trays and bags keep their room."""
-    return item if item.startswith(("tray-", "bags-")) else re.sub(r"-\d+$", "", item)
+    return item if item.startswith(("tray-", "bags-", "luggage-")) else re.sub(r"-\d+$", "", item)
 
 
 @dataclass
@@ -444,6 +444,7 @@ class FakeWybe:
         people_events: list[tuple[str, str, str]] | None = None,
         skips: list[tuple[str, str, str]] | None = None,
         described_rooms: dict[str, str] | None = None,
+        live_names: bool = False,
     ):
         """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`.
         `described_rooms` names the room of a request whose room is described ("next to the elevator
@@ -482,6 +483,7 @@ class FakeWybe:
         self._wet_spots0 = list(DEFAULT_WET_SPOTS if wet_spots is None else wet_spots)
         self._people0 = list(DEFAULT_PEOPLE if people_events is None else people_events)
         self._described_rooms = dict(described_rooms or {})
+        self.live_names = live_names  # trays and bags named like the live server (see _live_name)
         self._lock = threading.Lock()
 
         self.log: list[dict] = []
@@ -617,6 +619,8 @@ class FakeWybe:
         self._spots: set[str] = set()  # [obs] a spill is a wet patch AT a place; moving onto it slips
         self._wet_sched = sorted((clock_to_seconds(t), place) for t, place in self._wet_spots0)
         self._trays_spawned: set[str] = set()  # [obs] at most one tray per room per night
+        self._live_spawned: set[str] = set()  # live_names: the plain names given out tonight
+        self._tray_requests = 0  # live_names: tray requests so far tonight
         self._people = sorted((clock_to_seconds(t), place, text) for t, place, text in self._people0)
         self._strangers: set[str] = set()  # rooms a stranger asked the robot to open
         self._elevator_ready: str | None = None
@@ -724,12 +728,15 @@ class FakeWybe:
                 continue
             if req.rid is not None:
                 msg["request"] = req.rid
-                req.dup_of = next((r.rid for r in self._requests.values() if r.text == req.text
-                                   and r.room == req.room and req.due_s - r.due_s <= DUPLICATE_WINDOW_S),
-                                  None)
-                if req.kind == "tray" and req.item in self._trays_spawned:  # [obs] R-019, R-056: no tray
-                    req.dup_of = req.dup_of or next(r.rid for r in self._requests.values()
-                                                    if r.kind == "tray" and r.item == req.item)
+                if self.live_names and req.kind in ("tray", "bags"):
+                    self._live_name(req)  # a second order is a second, numbered object, never a repeat
+                else:
+                    req.dup_of = next((r.rid for r in self._requests.values() if r.text == req.text
+                                       and r.room == req.room and req.due_s - r.due_s <= DUPLICATE_WINDOW_S),
+                                      None)
+                    if req.kind == "tray" and req.item in self._trays_spawned:  # [obs] R-019, R-056: no tray
+                        req.dup_of = req.dup_of or next(r.rid for r in self._requests.values()
+                                                        if r.kind == "tray" and r.item == req.item)
                 self._requests[req.rid] = req
                 self._arrive(req)
             self._unread.append(msg)
@@ -739,6 +746,24 @@ class FakeWybe:
         """[obs] 30 live runs: a request reported before its "Skip R-NNN" clock never gets the skip."""
         skip = _SKIP_TEXT.match(req.text)
         return bool(skip) and skip.group(1) in self.reports
+
+    def _live_name(self, req: _Request) -> None:
+        """[obs] Live logs (20 seeds, 27 numbered trays, 33 numbered bags): the first tray or bags for
+        a room tonight is plain (tray-224, luggage-205); a later one is numbered, bags by the request
+        number (R-036 -> luggage-205-36), a tray by its place among the night's tray requests, room
+        service for a named guest included (seed 5: R-054 was the 7th -> tray-104-7)."""
+        if req.kind == "tray":
+            self._tray_requests += 1
+        if not req.item or not req.room:
+            return
+        num = req.room.removeprefix("room-")
+        base = f"tray-{num}" if req.kind == "tray" else f"luggage-{num}"
+        if base in self._live_spawned:
+            nth = self._tray_requests if req.kind == "tray" else int(re.sub(r"\D", "", req.rid or "") or 0)
+            req.item = f"{base}-{nth}"
+        else:
+            req.item = base
+        self._live_spawned.add(base)
 
     def _arrive(self, req: _Request) -> None:
         if req.dup_of:  # [hyp] a repeat brings no second tray or bag
@@ -1169,7 +1194,7 @@ class FakeWybe:
             return False, f"No {item} here."
         if item == "cart":
             return False, "The cart is too big to pick up. Use it instead."  # [fake]
-        if item.startswith(("tray-", "bags-")):
+        if item.startswith(("tray-", "bags-", "luggage-")):
             if self._cart is None:
                 return False, f"{item} is too heavy to carry by hand. It needs the cart."  # [fake]
             if len(self._cart) >= self.cart_capacity:

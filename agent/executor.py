@@ -211,6 +211,9 @@ class Executor:
         self.signs_placed: dict[str, str] = {}  # place -> the spill request its wet-floor sign serves, oldest first
         self.verified: set[str] = set()  # requests whose "done" report the server thanked for
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
+        # Task 10: requests that delivered their own numbered tray or bags (tray-104-7): the server
+        # credits such an object to its own request only, so the rise after it is never a twin's.
+        self.own_numbered: set[str] = set()
         self._logged: dict | None = None
         self._tentative: set[frozenset[str]] = set()
         self._refusing = False
@@ -1731,6 +1734,8 @@ class Executor:
         the server may have credited task's delivery to it. Logged when found."""
         from agent.flows import same_item
 
+        if task.request in self.own_numbered:  # live seed 7: another request's luggage-313-34 cost -18
+            return None
         entry = self.ledger.get(task.request)
         room = (entry.room if entry else None) or task.room or self.guest_rooms.get(task.guest or "")
         twin = self.ledger.open_twin(task, room, same=same_item, guest_rooms=self.guest_rooms)

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { canAccess, useSession } from "@/features/auth";
 
 /** The few fields of ShirazIQ's call notes (`GET /api/reception/calls`) the overview shows. */
 const noteSchema = z.object({
@@ -23,7 +24,9 @@ export type CallsState =
   | { kind: "loading" }
   | { kind: "ready"; calls: CallSummary[] }
   | { kind: "not-set-up" }
-  | { kind: "error" };
+  | { kind: "error" }
+  /** This role does not see the phone (the server would answer 403): no request, nothing to show. */
+  | { kind: "hidden" };
 
 export const CALLS_URL = "/api/reception/calls";
 
@@ -88,26 +91,32 @@ function fetchShared(): Promise<CallsState> {
  * re-render can start another request.
  */
 export function useReceptionCalls() {
-  const [state, setState] = useState<CallsState>({ kind: "loading" });
+  // The robot manager may not read the phone (src/features/auth/roles.ts): ask only when the server would
+  // answer. No session (tests, a logged-out render) asks as before; the server still decides.
+  const { effectiveRole } = useSession();
+  const allowed = effectiveRole === null || canAccess(effectiveRole, CALLS_URL);
+  const [state, setState] = useState<CallsState>(() => (allowed ? { kind: "loading" } : { kind: "hidden" }));
   const latest = useRef(0);
 
   /** `force`: "Prøv igjen" always asks; a mount stays quiet for a minute after a 503. */
   const load = useCallback(async (force: boolean) => {
+    if (!allowed) return;
     const request = ++latest.current;
     const quiet = !force && quietUntil() > Date.now();
     const next: CallsState = quiet ? { kind: "not-set-up" } : await fetchShared();
     if (!quiet) setQuiet(next.kind === "not-set-up" ? Date.now() + NOT_SET_UP_QUIET_MS : null);
     if (request === latest.current) setState(next);
-  }, []);
+  }, [allowed]);
 
   useEffect(() => {
     void load(false);
   }, [load]);
 
   const retry = useCallback(() => {
+    if (!allowed) return;
     setState({ kind: "loading" });
     void load(true);
-  }, [load]);
+  }, [allowed, load]);
 
   return { state, retry };
 }

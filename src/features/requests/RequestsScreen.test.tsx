@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SessionProvider } from "@/features/auth/SessionProvider";
 import { RequestsScreen } from "./RequestsScreen";
 
 // A short night: the robot fails one request (towels, Rom 108) and leaves one open when the shift ends
@@ -49,6 +50,20 @@ afterEach(() => {
 });
 
 describe("RequestsScreen (Forespørsler)", () => {
+  it("does not ask for the phone as the robot manager (the server would answer 403) and shows no phone error", async () => {
+    route();
+    const session = { user: { u: "robot", name: "Robot", role: "robot" as const }, view: "robot" as const, effectiveRole: "robot" as const, exp: 0 };
+    render(
+      <SessionProvider session={session}>
+        <RequestsScreen />
+      </SessionProvider>,
+    );
+    await screen.findByRole("button", { name: "Ta over: Utstyr, Rom 108" });
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContain("/api/reception/calls");
+    expect(screen.queryByText(/Fikk ikke hentet telefonen/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/resepsjonisten er ikke koblet til/i)).not.toBeInTheDocument();
+  });
+
   it("lets staff take over what the robot failed and what it left open", async () => {
     route();
     render(<RequestsScreen />);

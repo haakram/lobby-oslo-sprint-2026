@@ -175,7 +175,7 @@ every request, then handle it fast. Few live runs: each one answers a specific q
 - [ ] 4. Speed = points (a fast delivery ~45, a slow one ~21): **batching** several requests per trip
       with the stocked cart in best-route order; use idle time (restock, wait near the elevator, not
       the far dock). Tune offline.
-- [ ] 5. Validate on other nights: 1–2 live runs on seed 2 (and 3) so we don't overfit seed 1 — the
+- [~] 5. Validate on other nights (batch 1: seeds 2–5 scored 128–1,237 → Tasks 24–28; batch 2 next): 1–2 live runs on seed 2 (and 3) so we don't overfit seed 1 — the
       final's 10 shifts are secret.
 - [ ] 6. Sun 11:00 freeze, 10-shift offline dry run; 12:00 `FINAL_ARMED=1 .venv/bin/python -m agent final`,
       watch in the viewer.
@@ -192,13 +192,21 @@ live-log calibration; plan Tasks 15–19):
 - [x] Task 15: offline fake calibrated to the live night: seed 1 replays the 68 live requests; scoring rises
       ~7.5 %/h; slips once per spot; seed 2 = observed layout; other seeds vary metres and stock. Offline seed-1
       replay 1,677 vs live 1,513. Reviewed. PR: this one.
-- [ ] Task 18: final readiness: fit a night in the 44-min cap at the shared rate, retry final starts, never end
-      a final shift on errors, stricter room checks, the 10-shift topology tested offline.
-- [ ] Task 19: adapt to the night's real map and stock (practice seed 2: same rooms, other metres, stock moved).
+- [x] Task 18: final readiness: ~30 % fewer calls per night, thrifty idle, resilient final starts (retry, adopt,
+      never more than 10, PID lock, Ctrl-C safe), a final shift never gives up, stricter room checks, the 10-shift
+      topology tested offline. Reviewed, 1 fix round. PR: this one.
+- [x] Task 19: adapt to the night's real map and stock (looks update stock/metres/doors, opening survey, look on
+      first visit, stock fallback, dock from status, battery, no-route recovery, spill sign on the new patch, fresh
+      door look before a room check's keycard). Reviewed, 1 fix round. PR: this one.
 - [x] Task 20: fail fast on rooms already seen with a Do-Not-Disturb sign (live: room 208 got 6 requests). Reviewed.
       PR: this one.
 - [x] Task 21: calls counted per shift; `bench --max-calls` reports the score at the final's per-shift call cap
       (44 min × rate ÷ 10 shifts = 1,320 at 5 req/s). Reviewed, 1 fix round. PR: this one.
+- [x] Tasks 22–28 (from live run 3 and batch 1 on seeds 2–5; reviewed, PR: this one): no "done" on an ambiguous
+      score rise (22); lost-item search order (23); dock/adoption fix + stuck safety net + call-budget ratchet (24);
+      respect "closed off for cleaning" corridors, never route through rooms, drop stale room links (25); explore a
+      floor when a room isn't on the map (26); look before using a keycard so nobody slips in (27); the right one
+      of look-alike lost items (28).
 - [-] Batching (step 4): dropped: 0 batchable trips on the live replay; the gain is in calls (Task 18).
 
 ### Drift — the 06:00 handover dashboard (team lead, 2026-11-07 ~13:40)

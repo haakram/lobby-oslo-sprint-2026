@@ -96,7 +96,8 @@ For a new teammate. ShirazIQ was invited on 2026-11-07.
 - [-] `./scripts/protect-main.sh`: dropped. GitHub's free plan has no branch protection on private
       repos; the local hooks and the team rules protect `main`.
 - [ ] Team name **Fettero** and photo handed in by Sat 12:00. [owner: Hamad]
-- [ ] Invite accepted, `setup.sh` run, first small PR (own lane in `MEMORY.md`). [owner: ShirazIQ]
+- [x] Invite accepted, `setup.sh` run, first small PR (own lane in `MEMORY.md`). [owner: ShirazIQ]
+      Verified: `setup.sh` showed all 4 plugins ✓, `secrets.sh status` shows all 3 keys set. PR: this one.
 - [ ] **Matches the brief** · [ ] **Seen working**
 
 ## Phase 1 — Recon and design (Sat, until ~13:00)
@@ -157,6 +158,27 @@ Also a **3D hotel viewer** to watch shifts live or replayed (plan Task 11), whic
 - [ ] **Final runbook** in `OPERATIONS.md` § 7: the exact command that starts all 10 at 12:00, who
       watches, what to do if one stops.
 - [ ] **Matches the brief** · [ ] **Seen working** (on the practice leaderboard; 10-shift dry run)
+
+### Drift — the 06:00 handover dashboard (team lead, 2026-11-07 ~13:40)
+
+Design and the 2-minute demo script: `docs/superpowers/specs/2026-11-07-ops-dashboard-design.md`.
+One story, five beats: the night on the room grid → send the cleaners → count the linen → the guest
+speaks up → close. Every beat solves a named hotel problem and maps to a prize.
+
+- [ ] **Track A:** the agent logs `room_status` and `work_order` decisions (additive run-log
+      `[contract]`, ARCHITECTURE § 4.3). [owner: Hamad]
+- [ ] **Track A:** viewer CORS for the app's local origin (`http://localhost:3000`) on `/api/*`, as
+      ShirazIQ asked in PR #7. [owner: Hamad]
+- [ ] **Track A:** hand over the demo run log from the next practice run (with the new decisions) as
+      `public/runs/demo.jsonl`. [owner: Hamad]
+- [ ] **Track B:** `/drift` screen: room grid, work-order feed, linen card, *Send renholderne* on the
+      existing tour engine, score strip. [owner: ShirazIQ]
+- [ ] **Track B:** voice tool `create_work_order` (proposes; *Bekreft* to add) + the guest check
+      ("Is everything else all right with the room?"). [owner: ShirazIQ]
+- [ ] **Track B:** linen count: `POST /api/count-linen` (Claude vision, metered) + expected stock
+      (test data) + a *lin* work order on deviation. [owner: ShirazIQ]
+- [ ] **Track C:** the 2-minute script into `docs/DEMO.md` § 2 and rehearsed twice against a timer;
+      sources for the hook's numbers found or the wording softened. [owner: ShirazIQ]
 
 ### Track B — Fettero app [owner: ShirazIQ]
 

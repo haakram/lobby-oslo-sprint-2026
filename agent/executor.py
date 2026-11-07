@@ -74,6 +74,9 @@ class _Replan:
 
 
 REPLAN = _Replan()
+# A move refused like this (live: "Closed off: a cleaning crew has blocked that corridor.") means
+# that edge is closed for a while: route around it, never retry the same move.
+CLOSED_OFF = ("closed off", "blocked", "cleaning")
 
 
 class Executor:
@@ -382,6 +385,8 @@ class Executor:
         """Walk to dst by the shortest known route. When the believed map has no route, or a move
         fails with "No way", one look learns the real exits and the route is planned again (once).
         A route changed by a first-visit look on the way is simply planned again from there.
+        A move refused as closed off (cleaning) closes that edge for BLOCK_S and plans again from
+        here (live seed 3: 125 retries of one closed move stranded the robot).
         Interruptible walks (the way back to the dock) may stop short once a message is waiting."""
         looked = False
         self._in_go += 1
@@ -389,6 +394,10 @@ class Executor:
             for _ in range(GO_ATTEMPTS):
                 if self.state.location == dst:
                     return
+                try:  # closures start their time now, and the ones whose time is up open again
+                    self.hotel.expire_blocks(clock_to_seconds(self.state.clock))
+                except (ValueError, AttributeError):
+                    pass
                 if self.state.location not in self.hotel.nodes and not looked:
                     looked = True  # lost: the one recovery look is spent on learning where
                     self._recover(None)
@@ -413,6 +422,10 @@ class Executor:
                     self._drop_tentative()
                     continue
                 low = text.lower()
+                if to is not None and any(w in low for w in CLOSED_OFF):
+                    self.hotel.block_edge(here, to)  # BLOCK_S from the clock of this refusal
+                    self.log("replan", at=here, reason="closed off", blocked=to, text=text[:120])
+                    continue
                 if looked or not ("no way" in low or "no elevator panel" in low):
                     raise ActionFailed(f"could not reach {dst}: {text}")
                 looked = True

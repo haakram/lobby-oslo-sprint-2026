@@ -78,6 +78,19 @@ function fromManual(order: ManualOrder, status: OrderStatus): WorkOrderView {
   };
 }
 
+const ENGLISH = /\b(?:the|is|are|was|nobody|here|there|and|with|not|please|floor|unmade)\b/i;
+
+/**
+ * A robot finding is "what: what it saw". The second half is the robot's own words, sometimes
+ * English: then it is quoted apart (DESIGN.md "Voice"), never read out as Norwegian.
+ */
+export function splitNote(text: string): { lead: string; quote: string | null } {
+  const at = text.indexOf(": ");
+  if (at < 0) return { lead: text, quote: null };
+  const rest = text.slice(at + 2);
+  return ENGLISH.test(rest) ? { lead: text.slice(0, at), quote: rest } : { lead: text, quote: null };
+}
+
 export function selectMaintenance({
   orders,
   statusOf,

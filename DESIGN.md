@@ -31,8 +31,11 @@ and emil-design-eng; the previous "floor tape and scanner" direction is retired.
   around panels and no shadows. A hairline `line` is used only *inside* a panel: row dividers, the
   rack's grid, an input's edge. Radii are small and consistent: 4 px controls and tiles, 8 px panels.
 - **One memorable element per screen,** taken from the hotel: the key rack on Oversikt; the hotel
-  itself, edge to edge, on 3D-kart; the day ledger on the receptionist's desk; the robot's task set
-  as one display line on the robot manager's desk; the lift indicator (floor numbers) in Ruter.
+  itself, filling the viewport, on 3D-kart; the day ledger on the receptionist's desk; the robot's
+  task set as one display line on the robot manager's desk; the failures first on the night report.
+- **No hero.** A screen starts with a 56–64 px bar (Oversikt: hotel, night, robot chip, shift clock)
+  or a `PageHeader` (name in the display face, one line, the actions), then the work. The ambient
+  fog (Vanta) lives behind the login page only.
 
 ## World
 
@@ -55,7 +58,7 @@ All three families are self-hosted through `next/font/google` in `src/app/layout
 
 | Role | Family | Weights | Sizes (px) | Why |
 |---|---|---|---|---|
-| Display | Bodoni Moda (opsz axis on) | 500, 600 | 28 · 40 · 56 · 72 | The face of brass plates and hotel monograms; its hairlines want size, so never under 28 px and never for running text. Clock, room numbers and big figures are set in it (`font-display tabular-nums`). |
+| Display | Bodoni Moda (opsz axis on) | 500, 600 | 22 (room plates) · 28 · 40 · 56 | The face of brass plates and hotel monograms; its hairlines want size, so never under 22 px (room numbers on tiles, weight 600, optical size on) and never for running text. Titles, the clock and big figures are set in it (`font-display tabular-nums`). |
 | Text | Schibsted Grotesk | 400, 500, 600, 700 | 13 · 14 · 16 · 18 | A grotesk drawn for a Norwegian publisher, with real æ ø å. Body 16/24; dense lists 14/20; small labels 13/16. Section headings 18/24 at 600, `tracking-[-0.01em]`. |
 | Identifiers | Martian Mono | 400, 500 | 12 · 13 | Only for codes people compare character by character: request ids, shift ids, seeds. |
 
@@ -91,9 +94,11 @@ text ≥ 4.5:1 against its background; large text and UI parts ≥ 3:1. The sign
 Hue check: the signature sits at ~218°, danger at ~6°, warning at ~40°, success at ~145°: the signature
 is more than 40° from every status colour, so the robot is never read as a warning or a fault.
 
-**Room states** (one word and one colour each, legend always shown): Klar `success` · Må vaskes
-`warning` · Opptatt `sunken` tile with `muted` word · Ikke forstyrr `text` outline (a door hanger) ·
-Avvik `danger` marker in the corner · Ikke sjekket dashed `line-strong`. The robot is `accent`.
+**Room states** live in one map, `src/ui/roomStatus.ts` (word, token, icon), that Oversikt, Ruter and
+the 3D hotel all read: Klar `success` · Må vaskes `warning` (loud: a `warning-soft` tile) · Opptatt
+`line-strong` tag on a quiet `sunken` tile · Ikke forstyrr `text` outline (a door hanger) · Ikke sjekket
+dashed `line-strong`. *Avvik is not a status:* it is a `danger` marker (a 3 px left edge and the word,
+with a count) drawn over whatever status the room has. The robot is `accent`.
 
 ## Spacing and radii
 
@@ -121,9 +126,9 @@ the global rule): content appears in place, the robot jumps.
 - **Where:** a screen's panels rise 8 px once, 50 ms apart; pressables scale to 0.97 on `:active`; the
   nav mark fades, it does not slide; the sheet rises; the robot walks its real route; the route
   draws itself. Motion answers an action or shows a change, never decorates.
-- **Ambient (Vanta FOG, `three-vanta`):** behind the dashboard header band only, umber tones at low
-  contrast, paused when the tab is hidden, off under reduced motion, never behind text without a
-  solid surface between.
+- **Ambient (Vanta FOG, `three-vanta`):** behind the login page only, umber tones at low contrast,
+  paused when the tab is hidden, off under reduced motion, never behind text without a solid surface
+  between. Working screens have no backdrop.
 
 ## States
 
@@ -149,13 +154,15 @@ All in `src/ui/`, exported from `src/ui/index.ts`.
 | `Card` | `tone` surface · sunken | A plane: `surface` (or `sunken` on a surface), radius `md`, 20–24 px padding, no border. |
 | `PageHeader` | `title`, `lede`, `meta`, `actions` | The screen's title in the display face with the lede beside it; actions on the right. |
 | `Badge` | `tone` neutral · accent · success · warning · danger | Soft background, strong text, radius `sm`, 13 px 600. |
-| `Stat` | `label`, `value`, `unit`, `tone`, `size` | Value in the display face (`xl`, or `2xl` when `size="lg"`), tabular; label below in `muted`. |
+| `Stat` | `label`, `value`, `unit`, `tone` (default · accent · success · warning · danger), `size` | Value in the display face (`xl`, or `2xl` when `size="lg"`), tabular; the unit small beside it; the label below in `muted`. The tone says whether the figure is good or bad. |
+| `TopBar` (dashboard) | `night`, `robot`, `source`, `loading` | The 64 px bar on Oversikt. |
+| `NowBand` (dashboard) | `rooms`, `orders`, `robot` | What needs a person now, each line with its one action; holds the screen's primary action. |
 | `Sheet` | `open`, `onClose`, `title` | Bottom sheet, `role="dialog"`, Escape and scrim close it. |
 | `Skeleton` | `className` | `sunken`, pulse, `aria-hidden`. |
 | `EmptyState` / `ErrorState` | `title`, `body`, `action` | As above. |
 | `AppNav` | — | Desktop: a 232 px rail on Natt with three labelled groups and the user plate bottom-left. Phone: a bottom bar with the role's first four screens and *Meny*, which opens a sheet with every group and the user plate. Filtered by `canAccess(effectiveRole, path)`. The active item carries a 2 px `accent` mark on its left (rail) or top (bar) that fades in. |
-| `UserPlate` | — | Generated monogram avatar (no photos), name, role; for admins a view switcher (Admin · Resepsjonist · Robotansvarlig) calling `switchView`. |
-| `ViewingAs` | — | A thin band under the top edge while an admin views as another role: "Viser som Resepsjonist · Tilbake til admin". |
+| `UserPlate` | — | Generated monogram avatar (no photos), name, role; opens a menu with the view switcher for admins (Admin · Resepsjonist · Robotansvarlig, calls `switchView`) and "Logg ut". |
+| `ViewAsBanner` (auth) | — | The band under the top edge while an admin views as another role: "Viser som Resepsjonist · Tilbake til admin". |
 | icons | `RegenIcon name=…` | Regen Icons (MIT), 24 px grid, 1.75 stroke, `currentColor`. No emoji, no other icon set. |
 
 ## 3D

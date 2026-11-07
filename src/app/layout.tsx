@@ -10,7 +10,7 @@ import "./globals.css";
 // The display face: titles, the clock, room numbers, big figures (DESIGN.md "Typography").
 const bodoni = Bodoni_Moda({
   subsets: ["latin"],
-  weight: ["500", "600"],
+  weight: "variable",
   axes: ["opsz"],
   variable: "--font-bodoni",
   display: "swap",

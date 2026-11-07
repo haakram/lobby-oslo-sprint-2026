@@ -44,8 +44,8 @@ CALL_PROJECTION_LIMIT = 1250  # calls a whole night is heading for before naviga
 NIGHT_S = 8 * 3600
 # Offline seeds 1-3: navigate on 2+ hop legs saves 170-220 calls a night for 10-35 points of slower
 # walking; a night cut by the final's call cap loses 150-200 points of its last hour (live seeds 2, 4).
-WET_LOOK_S = 30 * 60  # a corridor approach looked at longer ago than this is looked at again
-# (offline seed 1: +26 points for +70 calls; 15 min gave the same points for +90 calls)
+WET_LOOK_S = 10 * 60  # a corridor approach looked at longer ago than this is looked at again
+# (live batch 5: 7 slips in 4 nights still, on patches younger than the 30 min window used before)
 DEFAULT_EXPERIMENTS = ("spill_done",)  # live seed 4: two spill reports verified (+43, +63) when
 # the sign stood on the patch; the report, not the place, carries the credit (like a room check)
 
@@ -79,6 +79,11 @@ class Outcome:
 
 class ActionFailed(Exception):
     """A step could not be carried out; the message is the reason given to the night manager."""
+
+
+class Declined(ActionFailed):
+    """The request is turned down on purpose (no such order on record): reported "declined",
+    which the server pays 5 for a false follow-up (scout, live), where "failed" pays 0."""
 
 
 class _Replan:
@@ -1139,6 +1144,8 @@ class Executor:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):
             raise
+        except Declined as exc:
+            return self._finish(task, "declined", str(exc), start)
         except ActionFailed as exc:
             return self._finish(task, "failed", str(exc), start)
         except Exception as exc:  # noqa: BLE001 - an odd reply must not crash the shift

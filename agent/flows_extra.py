@@ -10,12 +10,13 @@ before any knock or keycard, and "done" needs an observed score rise.
 from __future__ import annotations
 
 import functools
+import os
 import re
 from collections.abc import Callable
 from dataclasses import replace
 
 from agent.client import ShiftEnded, WybeError
-from agent.executor import ActionFailed, Executor
+from agent.executor import ActionFailed, Declined, Executor
 from agent.flows import HANDLERS as BASE_HANDLERS
 from agent.flows import (
     Result,
@@ -381,6 +382,8 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
     if orig is None or orig.status == "done":
         why = "no order on record" if orig is None else f"{orig.request} was already done"
         h.log(f"delivered nothing: {why}", h.before, ex.score_now(), original=orig.request if orig else None)
+        if orig is None and os.environ.get("NS_DECLINE_FOLLOWUPS") == "1":
+            raise Declined(f"No {item.replace('-', ' ')} order from {num} on record tonight")
         raise ActionFailed(f"no order for {item} from {num} on record")
     queued = next((t for t in ex.queue if t.request == orig.request), None)
     if queued is not None:  # still waiting: do it now, under its own id

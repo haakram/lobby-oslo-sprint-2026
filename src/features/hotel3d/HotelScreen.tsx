@@ -5,6 +5,7 @@ import { probeViewer, type ReplaySource, resolveViewerUrl, useHotelReplay } from
 import { Badge, Button, cx, EmptyState, ErrorState, RegenIcon, Skeleton, Stat } from "@/ui";
 import { Hotel3D, StatusLegend } from "./Hotel3D";
 import { PlaybackControls } from "./PlaybackControls";
+import { forManagers } from "@/features/nightshift/eventFilter";
 import { EventFeed, RoomCard, TaskCard } from "./ReplayPanels";
 
 /** Where the robot's events a manager can read come from; the full log lives on Natteskift. */
@@ -156,7 +157,7 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
                   id="recent-heading"
                   title="Nylig"
                   emptyText="Roboten har ikke gjort noe ennå."
-                  events={snapshot.recent.slice(0, RECENT_SHOWN)}
+                  events={forManagers(snapshot.recent, false).slice(0, RECENT_SHOWN)}
                   className="min-w-0"
                 />
               </>

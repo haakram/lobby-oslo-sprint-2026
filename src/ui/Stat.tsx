@@ -21,10 +21,10 @@ export function Stat({
   className?: string;
 }) {
   return (
-    <div className={cx("flex flex-col gap-1", className)}>
+    <div className={cx("flex min-w-0 flex-col gap-1", className)}>
       <span
         className={cx(
-          "font-display font-medium whitespace-nowrap tabular-nums",
+          "font-display font-medium tabular-nums",
           size === "lg" ? "text-2xl" : "text-xl",
           tone === "accent" && "text-accent-text",
           tone === "success" && "text-success",
@@ -32,7 +32,7 @@ export function Stat({
           tone === "danger" && "text-danger",
         )}
       >
-        {value}
+        <span className="whitespace-nowrap">{value}</span>
         {unit && <span className="ml-1.5 font-sans text-sm font-medium text-muted">{unit}</span>}
       </span>
       <span className="text-xs text-muted">{label}</span>

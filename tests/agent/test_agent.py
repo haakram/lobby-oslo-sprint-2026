@@ -299,6 +299,10 @@ def test_follow_up_and_its_order_are_delivered_once_through_the_loop(tmp_path):
     assert fake.reports == {"R-001": "done", "R-002": "failed"}
     assert not fake.false_done and not fake.wrong_deliveries
     assert _decisions(tmp_path, result, "hypothesis")
+    assert result["requests_served"] == 1  # R-001, also when the follow-up ran it
+    path = tmp_path / "runs" / f"{result['shift']}.jsonl"
+    end = json.loads(path.read_text().splitlines()[-1])
+    assert end["type"] == "end" and end["requests_served"] == 1
 
 
 def test_full_night_with_the_live_request_types(tmp_path):

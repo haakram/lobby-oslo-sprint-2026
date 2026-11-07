@@ -23,13 +23,14 @@ from typing import Literal
 
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
 from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_route
-from agent.tasks import Ledger, Task
-from agent.world import Hotel, RobotState
+from agent.tasks import Ledger, Task, normalise
+from agent.world import Hotel, RobotState, clock_to_seconds
 
 IDLE_STEPS = 20  # scan+dock cycles per wait_for_request (~100 sim-s each); the loop calls again
 NOTE_MAX = 300
 LET_ME_IN = ("locked out", "let me in")
 REFUSAL = "I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID."
+PERSON_MEMORY_S = 600  # the same person event within 10 sim-minutes of hearing it is a repeat
 
 
 @dataclass
@@ -74,6 +75,7 @@ class Executor:
         self._logged: dict | None = None
         self._tentative: set[frozenset[str]] = set()
         self._refusing = False
+        self._heard: dict[str, int | None] = {}  # person event text (normalised) -> sim second heard
         self._wet_reported: set[str] = set()
 
     # --- server calls --------------------------------------------------------------------------
@@ -108,10 +110,28 @@ class Executor:
             self._wet_reported.add(place)
             self.work_order("sol", f"Vått gulv ved {place}", place=place)
 
+    def _repeat(self, text: str) -> bool:
+        """True when the same words were heard within PERSON_MEMORY_S (a server repeating an event
+        on later replies); otherwise remembers them as heard now."""
+        key = normalise(text)
+        try:
+            now = clock_to_seconds(self.state.clock)
+        except (ValueError, AttributeError):
+            now = None
+        if key in self._heard:
+            then = self._heard[key]
+            if now is None or then is None or 0 <= now - then < PERSON_MEMORY_S:
+                return True
+        self._heard[key] = now
+        return False
+
     def _person(self, text: str) -> None:
-        """H-bathrobe: someone asks to be let in. Never a keycard; say no once, politely; don't follow."""
-        self.log("person", text=text[:200])
-        if self._refusing or not any(w in text.lower() for w in LET_ME_IN):
+        """H-bathrobe: someone asks to be let in. Never a keycard; say no once, politely; don't follow.
+        The same words again within 10 sim-minutes get no second answer; new words, or the same
+        words much later, do."""
+        repeat = self._repeat(text)
+        self.log("person", text=text[:200], repeat=repeat)
+        if repeat or self._refusing or not any(w in text.lower() for w in LET_ME_IN):
             return
         self._refusing = True
         try:

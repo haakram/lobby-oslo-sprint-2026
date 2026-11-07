@@ -29,6 +29,7 @@ GENERIC_PARTS = {"corridor", "room", "floor"}
 HINT_WORDS = {"counter": "front-desk", "counters": "front-desk", "reception": "front-desk",
               "sofa": "lobby-bar", "sofas": "lobby-bar"}
 NAMED_KINDS = (Kind.AMENITY, Kind.TRAY, Kind.MESSAGE)
+UNTIDY = ("not tidy", "n't tidy", "untidy", "messy")  # checked before "tidy"
 
 
 def handle(ex: Executor, task: Task) -> Result:
@@ -41,7 +42,7 @@ def handle(ex: Executor, task: Task) -> Result:
     if task.kind is Kind.UNKNOWN:
         task = _classify(ex, task)
     if task.room is None and task.guest and task.kind in NAMED_KINDS:
-        task = flows_extra.resolve_named(ex, task)
+        return flows_extra.named(ex, task)
     handler = HANDLERS.get(task.kind) or flows_extra.HANDLERS.get(task.kind)
     if handler is None:
         raise ActionFailed(f"no routine for {task.kind.value} requests")
@@ -85,15 +86,23 @@ def _corridor(ex: Executor, room: str | None) -> str:
         raise ActionFailed(f"no corridor known for {room}") from None
 
 
-def _knock(ex: Executor, room: str) -> str:
-    """'dnd' | 'no_answer' | 'open'. Looks at the door first: a DND door is never knocked on."""
+def _door_sign(ex: Executor, room: str) -> bool:
+    """Look at the door before any knock or keycard: True on a Do Not Disturb sign (logged for the
+    dashboard). A door that can't be seen raises: acting on an unseen sign would be a gamble."""
     door = ex.cmd("look", at=room)
     text = str(door.result)
     if DND in text.lower():
         ex.room_status(room, "ikke_forstyrr", "door_sign", "Do Not Disturb sign")
-        return "dnd"
-    if not door.ok:  # unseen sign: knocking would be a gamble
+        return True
+    if not door.ok:
         raise ActionFailed(f"could not see the door of {room}: {text}")
+    return False
+
+
+def _knock(ex: Executor, room: str) -> str:
+    """'dnd' | 'no_answer' | 'open'. Looks at the door first: a DND door is never knocked on."""
+    if _door_sign(ex, room):
+        return "dnd"
     reply = ex.cmd("knock", door=room)
     text = str(reply.result)
     if DND in text.lower():
@@ -202,7 +211,7 @@ def room_check(ex: Executor, task: Task) -> Result:
     where = ex.refresh().get("location")
     if where != room:  # the look must have been inside the room, or the check is not done
         raise ActionFailed(f"not inside {room} after entering (status says {where})")
-    if "tidy" in seen.lower() and "untidy" not in seen.lower():
+    if _tidy(seen):
         ex.room_status(room, "klar", "room_check", seen)
     else:
         ex.room_status(room, "ma_vaskes", "room_check", seen)
@@ -213,6 +222,12 @@ def room_check(ex: Executor, task: Task) -> Result:
             raise ActionFailed(f"could not leave {room}")
 
     return f"looked inside {room}: {seen}", leave
+
+
+def _tidy(seen: str) -> bool:
+    """'The room is tidy.' -> True; 'not tidy', "isn't tidy", 'untidy', 'messy' -> False."""
+    low = seen.lower()
+    return "tidy" in low and not any(w in low for w in UNTIDY)
 
 
 def lost_item(ex: Executor, task: Task) -> Result:

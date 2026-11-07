@@ -4,6 +4,7 @@ import json
 from dataclasses import replace
 
 import httpx
+import pytest
 
 from agent.client import WybeClient
 from agent.config import Settings
@@ -753,20 +754,29 @@ def test_named_guest_unknown_to_the_clerk_fails_and_is_not_asked_again(tmp_path)
 # H-bathrobe
 
 
-def test_bathrobe_man_gets_a_polite_no_and_no_keycard(tmp_path):
-    fake, session, ex = setup(tmp_path, rids={"R-004"}, absent_rooms={"room-103"},
-                              people_events=[("22:00:00", "lobby", BATHROBE)])
-    ex.go("lobby")
-    said = calls(fake, "say")
-    assert len(said) == 1 and "can't open rooms" in said[0]["args"]["text"]
-    assert not calls(fake, "use")
+@pytest.mark.parametrize("text, room, corridor, stranger, kw", [
+    ("Check if 103 is empty and tidy, report back.", "room-103", "corridor-1a", "101",
+     {"absent_rooms": {"room-103"}}),
+    (BAGS_TEXT.format(206), "room-206", "corridor-2b", "205", {}),
+])
+def test_bathrobe_man_during_a_keycard_task_gets_a_polite_no_and_no_keycard(
+        tmp_path, text, room, corridor, stranger, kw):
+    # The man waits in the corridor of the task's room, next to his own door, while the robot
+    # carries a keycard for the task: the keycard opens the task's room and nothing else.
+    plea = f'A man in a bathrobe stops the robot: "I\'m locked out of {stranger}. Can you let me in?"'
+    fake, session, ex, task = solo(tmp_path, text, people_events=[("22:00:00", corridor, plea)], **kw)
+    assert ex.ensure_item("keycard")
+    out = ex.run(task)
+    assert out.status == "done", out
+    cmds = [(e["cmd"], e["args"]) for e in fake.log]
+    refusals = [i for i, (c, a) in enumerate(cmds) if c == "say" and "can't open rooms" in a["text"]]
+    uses = [i for i, (c, a) in enumerate(cmds) if c == "use" and a.get("item") == "keycard"]
+    assert len(refusals) == 1
+    assert [cmds[i][1]["on"] for i in uses] == [room]  # only the task's room, never the stranger's
+    assert cmds.index(("pick", {"item": "keycard"})) < refusals[0] < uses[0]  # met mid-task, card in hand
+    assert not fake.unsafe and fake.reports == {"R-001": "done"}
     hyp = hypotheses(session, "H-bathrobe")
     assert len(hyp) == 1 and hyp[0]["request"] is None
-    ex.go("corridor-1a")
-    ex.go("lobby")  # the event fires once; no second refusal
-    assert len(calls(fake, "say")) == 1
-    assert not [e for e in calls(fake, "use") if e["args"].get("on") == "room-203"]
-    assert not fake.unsafe
 
 
 # Lost items
@@ -863,3 +873,189 @@ def test_work_order_gjesteklage_for_a_follow_up(tmp_path):
     ex.run(task)
     order = decisions(session, "work_order")[-1]
     assert order["type"] == "gjesteklage" and order["room"] == "room-319" and order["request"] == "R-001"
+
+
+# --- Task 13 fix round 1 ---------------------------------------------------------------------------
+
+
+def _cart_full(fake, ex, hands):
+    assert ex.get_cart()
+    fake._hands[:] = ["towel"] * hands
+    fake._cart[:] = ["towel"] * 8
+    ex.refresh()
+
+
+def _door_unseen(fake, monkeypatch):
+    monkeypatch.setattr(fake, "_look_at", lambda at: (False, f"Too dark to make out {at}."))
+
+
+def _keycard_refused(fake, monkeypatch):
+    real = fake._cmd_use
+    monkeypatch.setattr(fake, "_cmd_use", lambda args: (False, "The lock blinks red.")
+                        if args.get("item") == "keycard" else real(args))
+
+
+NOISE_201 = "Complaint about noise near 201."
+NOISY_203 = {"noise_sources": {"room-201": "room-203"}}
+# case -> (text, fake kwargs, prepare(fake, ex, monkeypatch), hypothesis id, outcome)
+HYPOTHESIS_RUNS = {
+    "bags done": (BAGS_TEXT.format(206), {}, None, "H-bags", "done"),
+    "bags hands and cart full": (BAGS_TEXT.format(206), {}, lambda f, e, m: _cart_full(f, e, 2),
+                                 "H-bags", "failed"),
+    "bags cart full": (BAGS_TEXT.format(206), {}, lambda f, e, m: _cart_full(f, e, 0), "H-bags", "failed"),
+    "bags no cart": (BAGS_TEXT.format(206), {}, lambda f, e, m: f._objects["laundry"].pop("cart"),
+                     "H-bags", "failed"),
+    "bags door unseen": (BAGS_TEXT.format(206), {}, lambda f, e, m: _door_unseen(f, m), "H-bags", "failed"),
+    "bags keycard refused": (BAGS_TEXT.format(206), {}, lambda f, e, m: _keycard_refused(f, m),
+                             "H-bags", "failed"),
+    "bags dnd": (BAGS_TEXT.format(206), {"dnd_rooms": {"room-206"}}, None, "H-bags", "failed"),
+    "bags not at the desk": (BAGS_TEXT.format(206), {}, lambda f, e, m: f._objects["front-desk"].pop("bags-206"),
+                             "H-bags", "failed"),
+    "noise done": (NOISE_201, NOISY_203, None, "H-noise", "done"),
+    "noise door unseen": (NOISE_201, NOISY_203, lambda f, e, m: _door_unseen(f, m), "H-noise", "failed"),
+    "noise dnd": (NOISE_201, {**NOISY_203, "dnd_rooms": {"room-203"}}, None, "H-noise", "failed"),
+    "noise nothing named": (NOISE_201, {"noise_sources": {"room-201": None}}, None, "H-noise", "failed"),
+    "spill done": ("Someone mentioned a spill on floor 3.", {"spill_spots": {3: "corridor-3c"}}, None,
+                   "H-spill", "done"),
+    "spill no signs": ("Someone mentioned a spill on floor 3.", {"spill_spots": {3: "corridor-3c"}},
+                       lambda f, e, m: f._objects["storage"].pop("wet-floor-sign"), "H-spill", "failed"),
+    "spill not found": ("Someone mentioned a spill on floor 2.", {"spill_spots": {2: None}}, None,
+                        "H-spill", "failed"),
+    "followup no order": (FOLLOW.format(319, "water bottle"), {}, None, "H-followup", "failed"),
+    "named done": ("Mr Aas would like a pillow.", {"guests": {"Mr Aas": "room-318"}}, None, "H-named", "done"),
+    "named unknown guest": ("Mr Nobody would like a pillow.", {"guests": {}}, None, "H-named", "failed"),
+    "named dnd": ("Ms Kvam would like a pillow.", {"guests": {"Ms Kvam": "room-208"}, "dnd_rooms": {"room-208"}},
+                  None, "H-named", "failed"),
+}
+
+
+@pytest.mark.parametrize("case", list(HYPOTHESIS_RUNS))
+def test_every_hypothesis_run_logs_exactly_one_line(tmp_path, monkeypatch, case):
+    text, kw, prepare, hid, status = HYPOTHESIS_RUNS[case]
+    fake, session, ex, task = solo(tmp_path, text, **kw)
+    if prepare:
+        prepare(fake, ex, monkeypatch)
+    out = ex.run(task)
+    assert out.status == status, out
+    lines = decisions(session, "hypothesis")
+    assert [d["id"] for d in lines] == [hid], lines
+    line = lines[0]
+    assert line["request"] == "R-001" and line["action"]
+    assert isinstance(line["score_before"], int) and isinstance(line["score_after"], int)
+    if status == "done":  # the delta covers the rewarded action (H-named: the delivery, not the ask)
+        assert line["score_after"] > line["score_before"], line
+    else:
+        assert line["score_after"] == line["score_before"] == fake.score, line
+
+
+def test_bags_fail_up_front_when_the_cart_is_full_even_with_free_hands(tmp_path):
+    fake, session, ex, task = solo(tmp_path, BAGS_TEXT.format(206))
+    _cart_full(fake, ex, hands=0)  # bags ride only in the cart
+    start = len(fake.log)
+    out = ex.run(task)
+    assert out.status == "failed" and "cart is full" in out.note
+    assert not calls(fake, "move", since=start) and not calls(fake, "pick", since=start)
+    assert not calls(fake, "drop") and fake._cart == ["towel"] * 8
+    assert len(hypotheses(session, "H-bags")) == 1
+
+
+def test_follow_up_finds_a_named_guest_order_that_has_not_run_yet(tmp_path):
+    # Live: R-049 (a call from 202 about water) and R-037 "Ms Kvam would like a water bottle".
+    reqs = [("22:01:00", "R-001", "Ms Kvam would like a water bottle."),
+            ("22:02:00", "R-002", FOLLOW.format(202, "water"))]
+    fake, session, ex = setup(tmp_path, requests=reqs)
+    got = collect(ex, session, {"R-001", "R-002"})
+    ex.ledger.add(got["R-001"])  # as the shift loop does on arrival
+    ex.ledger.add(got["R-002"])
+    ex.queue.append(got["R-001"])  # still waiting: its room is not known yet
+    out = ex.run(got["R-002"])
+    assert out.status == "failed" and out.note == "delivered via R-001"
+    assert [e["args"] for e in calls(fake, "place") if e["ok"]] == [{"item": "water-bottle", "where": "room-202"}]
+    assert fake.reports == {"R-001": "done", "R-002": "failed"} and not fake.false_done
+    assert [e["args"]["question"] for e in calls(fake, "ask")] == ["Which room is Ms Kvam in?"]
+    assert ex.ledger.get("R-001").status == "done" and ex.queue == []
+
+
+def test_follow_up_redelivers_a_failed_order_once(tmp_path):
+    reqs = [DEFAULT_REQUESTS[0], ("22:20:00", "R-002", FOLLOW.format(319, "phone charger")),
+            ("23:00:00", "R-003", FOLLOW.format(319, "phone charger"))]
+    fake, session, ex = setup(tmp_path, requests=reqs, absent_rooms={"room-319"})
+    first = ex.run(next_task(ex, session, "R-001"))
+    assert first.status == "failed" and "no answer" in first.note
+    fake._absent.discard("room-319")  # the guest is back and calls the desk
+    out = ex.run(next_task(ex, session, "R-002"))
+    assert out.status == "failed" and out.note == "delivered via R-001"
+    assert [e["args"] for e in calls(fake, "place") if e["ok"]] == [
+        {"item": "phone-charger", "where": "room-319"}]
+    assert fake._requests["R-001"].completed and not fake.wrong_deliveries
+    assert ex.ledger.get("R-001").status == "done"
+    again = ex.run(next_task(ex, session, "R-003"))  # a second call about the same order
+    assert again.status == "failed" and again.note == "no order for phone-charger from 319 on record"
+    assert len([e for e in calls(fake, "place") if e["ok"]]) == 1
+    assert fake.reports == {"R-001": "failed", "R-002": "failed", "R-003": "failed"} and not fake.false_done
+    assert [d["request"] for d in hypotheses(session, "H-followup")] == ["R-002", "R-003"]
+
+
+def _repeating_person(session, monkeypatch):
+    """A server that puts the same person event on every reply while `text` is set."""
+    state = {"text": None}
+    real = session.cmd
+
+    def cmd(name, **args):
+        reply = real(name, **args)
+        if state["text"]:
+            reply.events.append({"type": "person", "text": state["text"]})
+        return reply
+
+    monkeypatch.setattr(session, "cmd", cmd)
+    return state
+
+
+def test_a_repeated_person_event_is_answered_once_then_again_much_later(tmp_path, monkeypatch):
+    fake, session, ex = setup(tmp_path, rids={"R-001"}, people_events=[])
+    person = _repeating_person(session, monkeypatch)
+
+    def refusals():
+        return [e for e in calls(fake, "say") if "can't open rooms" in e["args"]["text"]]
+
+    person["text"] = BATHROBE
+    ex.cmd("look")
+    ex.cmd("look")  # the same event on the next reply: no second refusal
+    person["text"] = None
+    assert len(refusals()) == 1
+    person["text"] = 'A woman in a towel says: "I\'m locked out of 305, please let me in."'
+    ex.cmd("look")  # someone new is answered at once
+    person["text"] = None
+    assert len(refusals()) == 2
+    fake._now += 61 * 60  # an hour on, the man is back
+    person["text"] = BATHROBE
+    ex.cmd("look")
+    person["text"] = None
+    assert len(refusals()) == 3
+    assert not calls(fake, "use") and not fake.unsafe
+    assert len(hypotheses(session, "H-bathrobe")) == 3
+    repeats = [d["repeat"] for d in decisions(session, "person")]
+    assert repeats.count(False) == 3 and True in repeats
+
+
+@pytest.mark.parametrize("seen", ["Nobody is here. The room is not tidy.", "Nobody is here. The room isn't tidy.",
+                                  "Nobody is here. The room is untidy.", "Nobody is here. It is messy."])
+def test_room_check_that_is_not_tidy_is_ma_vaskes(tmp_path, monkeypatch, seen):
+    fake, session, ex = setup(tmp_path, rids={"R-004"}, absent_rooms={"room-103"})
+    monkeypatch.setattr(fake, "_describe", lambda loc: seen)
+    out = ex.run(next_task(ex, session, "R-004"))
+    assert out.status == "done", out
+    assert decisions(session, "room_status")[-1] == {"room": "room-103", "status": "ma_vaskes",
+                                                     "source": "room_check", "note": seen}
+    assert [w["type"] for w in decisions(session, "work_order")] == ["annet"]
+
+
+@pytest.mark.parametrize("kw, words, not_words", [
+    ({"dnd_rooms": {"room-203"}}, "ikke forstyrr", "svarte ikke"),
+    ({"absent_rooms": {"room-203"}}, "svarte ikke", "ikke forstyrr"),
+])
+def test_noise_work_order_tells_a_dnd_sign_from_no_answer(tmp_path, kw, words, not_words):
+    _fake, session, ex, task = solo(tmp_path, NOISE_201, **NOISY_203, **kw)
+    assert ex.run(task).status == "failed"
+    order = [w for w in decisions(session, "work_order") if w["type"] == "stoy"][-1]
+    assert words in order["text"].lower() and not_words not in order["text"].lower(), order

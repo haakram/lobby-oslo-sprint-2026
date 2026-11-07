@@ -70,11 +70,23 @@ TBD — entities, fields, relations. A table per entity is enough.
 **Run log v1 (Track A → Track B).** The Night Shift agent writes one JSON object per line to
 `temp/runs/<shift>.jsonl`, `"v": 1` on every line. Types: `start` (shift, mode, seed), `call` (cmd,
 args, ok, clock, result, events, latency_ms, status), `decision` (kind: plan · task_start · task_done ·
-task_failed · brain · note, data), `state` (clock, location, score, battery, hands, cart), `end` (score,
-requests_served, reason). The 3D viewer (`viewer/`, served by `python -m agent viewer`) and anything
+task_failed · brain · note · room_status · work_order · hypothesis · noise_look · person, data), `state`
+(clock, location, score, battery, hands, cart), `end` (score, requests_served, reason). The 3D viewer
+(`viewer/`, served by `python -m agent viewer`) and anything
 Track B shows about the agent read only this. Hotel map: `agent/data/hotel_seed1.json` (nodes with
 floor, kind, x, z; edges in metres). Shortest routes for the app (Holio 6):
 `python -m agent route <from> <to>`. Details: `docs/superpowers/specs/2026-11-07-nightshift-agent-design.md`.
+
+Data of the newer decision kinds (Track A, additive):
+
+- `room_status`: `{"room": "room-206", "status": "klar" | "opptatt" | "ikke_forstyrr" | "ma_vaskes", "source": "room_check" | "knock" | "door_sign", "note": "<what the robot saw>"}`
+- `work_order`: `{"room": "room-201" | null, "place": "corridor-3a" | null, "type": "stoy" | "sol" | "teknisk" | "gjesteklage" | "annet", "text": "<short Norwegian description>", "request": "R-025" | null}`
+- `hypothesis`: `{"id": "<H-id>", "request", "action", "score_before", "score_after"}`, exactly one per run of
+  a hypothesis flow (H-named, H-bags, H-noise, H-spill, H-followup, H-duplicate, H-bathrobe; `request` is
+  null for H-bathrobe); optional extras `guest`, `room`, `seen`, `original`, `text`, `score_at_start`.
+- `noise_look`: `{"request": "R-010", "at": "corridor-2a", "description": "<look text>", "people": ["<name state>"]}`
+- `person`: `{"text": "<what the person said>", "repeat": true | false}`; `repeat` = the same words within
+  10 sim-minutes, not answered again.
 
 ### 4.4 Environment variables
 

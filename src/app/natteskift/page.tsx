@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { ComingSoon } from "@/ui";
+import { NightShiftScreen } from "@/features/nightshift/NightShiftScreen";
 
 export const metadata: Metadata = { title: "Natteskift" };
 
-// TODO(phase-2): the Natteskift screen replaces this placeholder.
 export default function Page() {
-  return <ComingSoon title="Natteskift" description="Robotens skift i natt, steg for steg." surface="dark" />;
+  // Not secret: the local viewer server's URL. Unset on the deployed app, which hides the Live tab.
+  return <NightShiftScreen viewerUrl={process.env.NEXT_PUBLIC_VIEWER_URL} />;
 }

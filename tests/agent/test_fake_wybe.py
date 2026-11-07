@@ -620,3 +620,28 @@ def test_end_shift_counts_served_requests(sim):
 def _secs(clock: str) -> int:
     h, m, s = (int(p) for p in clock.split(":"))
     return h * 3600 + m * 60 + s
+
+
+def test_cart_holds_eight_items_and_the_ninth_pick_is_refused():
+    sim = Sim(FakeWybe())
+    sim.start()
+    sim.walk("lobby", "corridor-1a", "corridor-1b", "laundry")
+    assert sim("use", item="cart")["ok"]
+    sim.fake._hands[:] = ["x", "y"]  # hands full, so every pick goes to the cart
+    sim.fake._cart[:] = ["towel"] * 7
+    assert sim("pick", item="pillow")["result"] == "Picked up pillow, in the cart."
+    refused = sim("pick", item="pillow")
+    assert refused["ok"] is False and refused["result"] == "The cart is full."
+    assert len(sim.fake._cart) == 8
+
+
+def test_cart_capacity_is_a_constructor_kwarg_and_blocks_trays():
+    fake = FakeWybe(cart_capacity=1, requests=[("22:00:30", "R-002", "Bring the tray from the kitchen pass to 104.")])
+    sim = Sim(fake)
+    sim.start()
+    sim.walk("lobby", "corridor-1a", "corridor-1b", "laundry")
+    assert sim("use", item="cart")["ok"]
+    fake._cart[:] = ["towel"]
+    sim.walk("corridor-1b", "corridor-1c", "kitchen-pass")
+    r = sim("pick", item="tray-104")
+    assert r["ok"] is False and r["result"] == "The cart is full."

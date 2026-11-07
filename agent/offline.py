@@ -41,6 +41,7 @@ DEFAULT_HIDDEN = {"glasses": "corridor-1b"}
 DEFAULT_GUESTS = {"Ms Nygaard": "room-314"}
 
 START_CLOCK = "22:00:00"
+CART_FULL = "The cart is full."  # live wording
 
 # --- sim costs in seconds (Global Constraints; wybe-api.md § 4 cheat sheet) -------------------------
 DOOR_S = 3
@@ -251,6 +252,7 @@ class FakeWybe:
         guests: dict[str, str] | None = None,
         end_clock: str = "02:00:00",
         hotel_path: Path | None = None,
+        cart_capacity: int = 8,
     ):
         data = json.loads(Path(hotel_path or DEFAULT_MAP).read_text())
         self._nodes: dict[str, dict] = data["nodes"]
@@ -270,6 +272,7 @@ class FakeWybe:
         self._hidden = dict(DEFAULT_HIDDEN if hidden is None else hidden)
         self._guests = dict(DEFAULT_GUESTS if guests is None else guests)
         self._end_s = clock_to_seconds(end_clock)
+        self.cart_capacity = cart_capacity  # live: 8 items; the 9th pick says "The cart is full."
         self._lock = threading.Lock()
 
         self.log: list[dict] = []
@@ -816,12 +819,16 @@ class FakeWybe:
         if item.startswith("tray-"):
             if self._cart is None:
                 return False, f"{item} is too heavy to carry by hand. It needs the cart."  # [fake]
+            if len(self._cart) >= self.cart_capacity:
+                return False, CART_FULL
             self._cart.append(item)
             where = "in the cart"
         elif len(self._hands) < 2:
             self._hands.append(item)
             where = "in hand"
         elif self._cart is not None:
+            if len(self._cart) >= self.cart_capacity:
+                return False, CART_FULL
             self._cart.append(item)
             where = "in the cart"
         else:

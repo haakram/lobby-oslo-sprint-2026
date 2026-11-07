@@ -41,19 +41,20 @@ def _ratio(task, st, hotel, p):
     return estimate_value(task, int(clock_to_seconds(st.clock) + secs), p) / secs
 
 
-def test_prefers_high_value_far_task_when_worth_it(hotel):
+def test_shortest_task_first_and_ratio_order_on_request(hotel):
     st = RobotState(location="corridor-3a", clock="22:10:00", cart=["towel"])
     tray = Task(request="R-1", kind=Kind.TRAY, text="", arrived="22:10:00", room="room-104", item="tray-104")
     am = amenity("room-210", req="R-2")
     p = Params()
-    # the tray is strictly farther, so only its higher value can make it win
+    # the tray is strictly farther; every request loses about a point a minute while it waits,
+    # so the nearer amenity goes first whatever the tray is worth (live seed 6: a tray waited 86 min
+    # under the value-per-second order once its value had decayed to the floor)
     assert estimate_seconds(tray, st, hotel, p) > estimate_seconds(am, st, hotel, p)
     assert _ratio(tray, st, hotel, p) > _ratio(am, st, hotel, p)
-    assert choose_next([am, tray], st, hotel, p) is tray
-    # control: same positions, tray worth little -> the amenity wins
-    low = Params(base_values={**p.base_values, "tray": 10})
-    assert _ratio(tray, st, hotel, low) < _ratio(am, st, hotel, low)
-    assert choose_next([am, tray], st, hotel, low) is am
+    assert choose_next([am, tray], st, hotel, p) is am
+    assert choose_next([tray, am], st, hotel, p) is am
+    # the old rule is still there on request
+    assert choose_next([am, tray], st, hotel, Params(order="ratio")) is tray
 
 
 def test_zero_action_seconds_does_not_divide_by_zero(hotel):

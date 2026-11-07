@@ -37,6 +37,7 @@ class Params:
     use_cart: bool = True
     max_scans: int = 6
     action_seconds: dict[str, float] = field(default_factory=_action_seconds)
+    order: str = "spt"  # "spt": shortest task first; "ratio": value per second (the old rule)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), sort_keys=True)
@@ -127,13 +128,21 @@ def estimate_value(task: Task, now_s: int, params: Params) -> float:
 
 
 def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Params) -> Task | None:
+    """Shortest task first. Every request loses about a point a minute while it waits, whatever
+    its kind, so the order that minimises the sum of waits (shortest processing time first) loses
+    the fewest points; the old value-per-second order ran a 10-minute lost-item search ahead of
+    three 2-minute deliveries and let decayed requests starve (live seed 6: a tray waited 86 min).
+    Params.order = "ratio" keeps the old rule."""
     now = clock_to_seconds(state.clock)
     best: tuple | None = None
     pick: Task | None = None
     for idx, t in enumerate(tasks):
         secs = estimate_seconds(t, state, hotel, params)
-        ratio = estimate_value(t, int(now + secs), params) / max(secs, 1.0)
-        key = (t.kind is Kind.UNKNOWN, -ratio, clock_to_seconds(t.arrived), idx)
+        if params.order == "ratio":
+            rank = -estimate_value(t, int(now + secs), params) / max(secs, 1.0)
+        else:
+            rank = secs
+        key = (t.kind is Kind.UNKNOWN, rank, clock_to_seconds(t.arrived), idx)
         if best is None or key < best:
             best, pick = key, t
     return pick

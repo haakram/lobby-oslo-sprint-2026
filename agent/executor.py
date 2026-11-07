@@ -47,8 +47,10 @@ NIGHT_S = 8 * 3600
 # walking; a night cut by the final's call cap loses 150-200 points of its last hour (live seeds 2, 4).
 WET_LOOK_S = 10 * 60  # a corridor approach looked at longer ago than this is looked at again
 # (live batch 5: 7 slips in 4 nights still, on patches younger than the 30 min window used before)
-DEFAULT_EXPERIMENTS = ("spill_done",)  # live seed 4: two spill reports verified (+43, +63) when
-# the sign stood on the patch; the report, not the place, carries the credit (like a room check)
+DEFAULT_EXPERIMENTS = ("spill_done", "sign_move")  # live seed 4: two spill reports verified (+43,
+# +63) when the sign stood on the patch; the report, not the place, carries the credit (like a room
+# check). sign_move: out of signs, the sign over the oldest verified spill is moved to the new patch
+# (another team, 61 shifts: no score change 25 game-minutes after such a move; spills never dry).
 
 IDLE_STEPS = 200  # dock+scan cycles per wait_for_request (~100 sim-s each); the loop calls again
 IDLE_STATUS_EVERY = 10  # idle checks between fallback `status` polls (replies carry the inbox event)
@@ -122,6 +124,9 @@ class Executor:
         # id, as the shift loop's read finds it: the manager answers a `reply` this way (Task 9).
         self.answers: dict[str, list[str]] = {}
         self.checked_out: set[str] = set()  # rooms the manager's skip says checked out: nothing is done there
+        self.wet_at_read: dict[str, frozenset[str]] = {}  # spill request -> wet spots known when it was read
+        self.signs_placed: dict[str, str] = {}  # place -> the spill request its wet-floor sign serves, oldest first
+        self.verified: set[str] = set()  # requests whose "done" report the server thanked for
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
         self._logged: dict | None = None
         self._tentative: set[frozenset[str]] = set()
@@ -815,6 +820,8 @@ class Executor:
         refused), the survey (if it has not run yet) and then the other stock places not yet seen
         this shift, nearest first."""
         tried: set[str] = set()
+        if item == "wet-floor-sign":  # a sign standing on a wet patch is not stock: it serves a spill
+            tried = set(self.signs_placed) | set(self.hotel.wet_spots())
         while self.count(item) < n:
             place = self._stock_place(item, tried)
             if place is None:
@@ -1191,6 +1198,8 @@ class Executor:
                 status, note = "skipped", f"{note} (report refused: {text})"[:NOTE_MAX]
             elif outcome == "done" and "thanks" not in text.lower():
                 self.log("report_unverified", request=task.request, reply=text)
+            elif outcome == "done":
+                self.verified.add(task.request)
             if self._exp_pending and outcome == "done":
                 verified = reply.ok and "thanks" in text.lower()
                 self.experiments[self._exp_pending] = verified

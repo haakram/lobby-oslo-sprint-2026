@@ -658,12 +658,12 @@ def test_spill_sign_placed_on_the_wet_patch(tmp_path):
     assert hypotheses(session, "H-spill")
 
 
-def test_spill_not_found_reports_failed_with_what_was_seen(tmp_path):
+def test_spill_not_found_reports_declined_with_what_was_seen(tmp_path):
     fake, _session, ex, task = solo(tmp_path, "Someone mentioned a spill on floor 2.", spill_spots={2: None})
     out = ex.run(task)
-    assert out.status == "failed" and "corridor-2" in out.note
+    assert out.status == "declined" and "corridor-2" in out.note
     assert not [e for e in calls(fake, "place") if e["args"].get("item") == "wet-floor-sign"]
-    assert fake.reports == {"R-001": "failed"}
+    assert fake.reports == {"R-001": "declined"}
 
 
 # H-followup
@@ -939,9 +939,9 @@ HYPOTHESIS_RUNS = {
     "spill done": ("Someone mentioned a spill on floor 3.", {"spill_spots": {3: "corridor-3c"}}, None,
                    "H-spill", "done"),
     "spill no signs": ("Someone mentioned a spill on floor 3.", {"spill_spots": {3: "corridor-3c"}},
-                       lambda f, e, m: f._objects["storage"].pop("wet-floor-sign"), "H-spill", "failed"),
+                       lambda f, e, m: f._objects["storage"].pop("wet-floor-sign"), "H-spill", "declined"),
     "spill not found": ("Someone mentioned a spill on floor 2.", {"spill_spots": {2: None}}, None,
-                        "H-spill", "failed"),
+                        "H-spill", "declined"),
     "followup no order": (FOLLOW.format(319, "water bottle"), {}, None, "H-followup", "declined"),
     "named done": ("Mr Aas would like a pillow.", {"guests": {"Mr Aas": "room-318"}}, None, "H-named", "done"),
     "named unknown guest": ("Mr Nobody would like a pillow.", {"guests": {}}, None, "H-named", "failed"),

@@ -287,54 +287,104 @@ def _find_wet(ex: Executor, floor: int, corridors: list[str], seen: list[str],
         ex.go(remaining.pop(0))
 
 
-def _rank(found: list[str], known: set[str], hotel) -> list[str]:
-    """Spots not known at task start first (walk order), then the known ones, newest first."""
-    age = {spot: i for i, spot in enumerate(hotel.wet_spots())}
-    old = sorted((s for s in found if s in known), key=lambda s: -age.get(s, -1))
-    return [s for s in found if s not in known] + old
+def _movable_signs(ex: Executor) -> list[str]:
+    """Where our signs stand over spills already reported done and verified, oldest first."""
+    return [place for place, rid in ex.signs_placed.items() if rid in ex.verified]
+
+
+def _take_old_sign(ex: Executor, task: Task) -> str | None:
+    """Out of signs (experiment sign_move): the sign over the oldest spill already reported done and
+    verified is picked up for the new patch. Returns where it stood, or None if none could be had."""
+    for place in _movable_signs(ex):
+        try:
+            ex.go(place)
+        except ActionFailed as exc:
+            ex.log("sign_move_failed", request=task.request, place=place, reason=str(exc)[:200])
+            continue
+        ok, text = ex.pick_or_cart("wet-floor-sign")
+        if ok:
+            old = ex.signs_placed.pop(place)
+            ex.log("sign_moved", request=task.request, place=place, old_request=old)
+            return place
+        ex.log("sign_move_failed", request=task.request, place=place, reason=text[:200])
+        ex.signs_placed.pop(place)  # gone or refused: never walked to again
+    return None
 
 
 @_hypothesis("H-spill")
 def spill(ex: Executor, task: Task, h: Hyp) -> Result:
-    """H-spill: a wet-floor sign from storage, placed (no `where`) on the wet patch of floor N and
-    LEFT THERE; the credit comes on the report, not the place (live seed 4, R-019/R-032: "Noted.
-    Thanks." +43/+63 with the sign on the patch; every report with the sign elsewhere: "Noted."
-    -30). Best patch: one not known when the task started, else the newest known one, a patch
-    with a sign already standing last. No second placement: moving the sign is what lost the
-    credit before. Done on a score rise, or (experiment spill_done, on by default, switched off
-    for the shift by one unverified report) on the report."""
+    """H-spill: a wet-floor sign placed (no `where`) on the NEW wet patch of floor N and LEFT THERE;
+    the credit comes on the report, not the place (live seed 4, R-019/R-032: "Noted. Thanks." +43/+63
+    with the sign on the newly wet spot; six reports with the sign elsewhere: "Noted." -30). New: not
+    in the robot's wet set when the request was read, nor under a sign of ours (another team, 61
+    shifts: a patch first seen wet after the message is the right one 95-98 % of the time, one wet
+    before it 12 of 30). Done only with the sign on a new patch and the robot standing on it, on a
+    score rise or (experiment spill_done) on the report; no new patch, only old ones, or a failed
+    place: declined, nothing placed or moved. Never a second placement in one request. Out of signs
+    (experiment sign_move): the sign over the oldest verified spill is moved, once a new patch shows."""
     floor = task.floor
-    known = set(ex.hotel.wet_spots())
+    known = set(ex.wet_at_read.get(task.request, ex.hotel.wet_spots())) | set(ex.signs_placed)
     corridors = sorted(n for n, v in ex.hotel.nodes.items() if v["kind"] == "corridor" and v["floor"] == floor)
     if not corridors:
         raise ActionFailed(f"no corridors known on floor {floor}")
-    ex.gather("wet-floor-sign")
+    out_of_signs = False
+    try:
+        ex.gather("wet-floor-sign")
+    except ActionFailed as exc:
+        if "out of stock" not in str(exc):
+            raise
+        if not (ex.experiment("sign_move") and _movable_signs(ex)):
+            h.log("no wet-floor sign left; nothing placed", h.before, ex.score_now())
+            raise Declined(f"No wet-floor sign left for the spill on floor {floor}: storage is empty "
+                           "and no placed sign may be moved.") from None
+        out_of_signs = True
     seen: list[str] = []
     found, _rest = _find_wet(ex, floor, corridors, seen, known)
-    if not found:
-        ex.work_order("sol", f"Søl meldt i etasje {floor}: fant ikke vått gulv", request=task.request)
-        h.log("no wet patch seen; sign kept", h.before, ex.score_now(), seen=seen)
-        raise ActionFailed(f"no wet patch seen on floor {floor}: " + "; ".join(seen))
+    new = [s for s in found if s not in known]
+    if not new:
+        old = [s for s in found if s in known]
+        ex.work_order("sol", f"Søl meldt i etasje {floor}: fant ikke nytt vått gulv", request=task.request)
+        h.log("no new wet patch seen; no sign placed", h.before, ex.score_now(), seen=seen,
+              known=sorted(known), old=old)
+        why = (f"only {', '.join(old)}, wet before this request (a sign there is not this spill's)"
+               if old else "no wet patch")
+        raise Declined(f"No new wet patch on floor {floor}: {why}. Seen: " + "; ".join(seen))
     signed = {s.split(":")[0] for s in seen if "sign stands" in s.lower()}
-    ranked = _rank(found, known, ex.hotel)
-    spot = ([s for s in ranked if s not in signed] or ranked)[0]
-    ex.go(spot)  # a warned exit: seen, so the robot creeps onto it
+    spot = ([s for s in new if s not in signed] or new)[0]
+    moved_from = _take_old_sign(ex, task) if out_of_signs else None
+    if out_of_signs and moved_from is None:
+        h.log(f"new wet patch at {spot}; no sign to put on it", h.before, ex.score_now(), seen=seen)
+        raise Declined(f"No wet-floor sign for the new wet patch at {spot}: storage is empty and no "
+                       "placed sign could be picked up.")
+    try:
+        ex.go(spot)  # a warned exit: seen, so the robot creeps onto it
+    except ActionFailed as exc:
+        h.log(f"could not reach the new wet patch at {spot}", h.before, ex.score_now(), seen=seen)
+        raise Declined(f"Could not reach the new wet patch at {spot}: {exc}") from None
     mid = ex.score_now()
     placed = ex.cmd("place", item="wet-floor-sign")
     if placed.ok:
         ex.take("wet-floor-sign")
+        ex.signs_placed[spot] = task.request
     after = ex.score_now()
-    ex.work_order("sol", f"Søl ved {spot}: varselskilt satt ut", place=spot, request=task.request)
+    ex.work_order("sol", f"Søl ved {spot}: varselskilt {'satt ut' if placed.ok else 'ikke satt ut'}",
+                  place=spot, request=task.request)
     h.log(f"placed a wet-floor sign at {spot}: {placed.result}", mid, after, score_at_start=h.before,
-          seen=seen, known=sorted(known), signed=sorted(signed), candidates=ranked)
+          seen=seen, known=sorted(known), signed=sorted(signed), candidates=new, moved_from=moved_from)
     if not placed.ok:
-        raise ActionFailed(f"could not place the wet-floor sign at {spot}: {placed.result}")
-    if _rose(mid, after):
+        raise Declined(f"Could not place the wet-floor sign at {spot}: {placed.result}")
+    if ex.state.location != spot:  # the report is verified with the sign under the robot
+        raise Declined(f"Placed the wet-floor sign at {spot}, but the robot is at {ex.state.location} now.")
+    rose = _rose(mid, after)
+    if not rose and not ex.experiment("spill_done"):
+        raise ActionFailed(f"placed a wet-floor sign at {spot} but the score did not rise")
+    if moved_from is not None:
+        ex.exp_claim("sign_move")  # one unverified report ends the moves for the night
+        return f"wet-floor sign moved from {moved_from} to the new wet patch at {spot}", None
+    if rose:
         return f"wet-floor sign placed over the spill at {spot}", None
-    if ex.experiment("spill_done") and ex.state.location == spot:
-        ex.exp_claim("spill_done")
-        return f"wet-floor sign placed over the wet patch at {spot}", None
-    raise ActionFailed(f"placed a wet-floor sign at {spot} but the score did not rise")
+    ex.exp_claim("spill_done")
+    return f"wet-floor sign placed over the wet patch at {spot}", None
 
 
 # --- H-followup ----------------------------------------------------------------------------------

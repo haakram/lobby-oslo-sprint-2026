@@ -304,6 +304,8 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
             better = brain.classify(task.request, task.text, task.arrived)
             if better is not None and better.kind is not Kind.UNKNOWN:
                 task = _vet_brain(ex, task, flows.normalize(better))
+        if task.kind is Kind.SPILL:  # a patch wet before this read is not this spill's (H-spill)
+            ex.wet_at_read[rid] = frozenset(ex.hotel.wet_spots())
         ex.log("request", request=rid, kind=task.kind.value, text=task.text)
         ex.ledger.add(task)
         pending.append(task)

@@ -1,5 +1,5 @@
 {
-  "_doc": "Which commit (and env) played each live night, for the same-code fidelity check (python -m agent replaybench --fidelity). Batches by start time on Sat 2026-11-07: 19:30 eb4a440, 19:59 404a7f6, 20:22 7180964, 20:44 ea5bc47, 20:54 fd65def, 21:13 e0590d7, 21:24 3fcd572, 21:45 0192db6, 21:58 and 22:09 3381426 (in the worktree before its commit at 22:12), 22:26 base = 3381426 with NS_NAV_MIN_HOPS=0, 22:42-23:06 wave = 8564396.",
+  "_doc": "Which commit (and env) played each live night, for the same-code fidelity check (python -m agent replaybench --fidelity). Batches by start time on Sat 2026-11-07: 19:30 eb4a440, 19:59 404a7f6, 20:22 7180964, 20:44 ea5bc47, 20:54 fd65def, 21:13 e0590d7, 21:24 3fcd572, 21:45 0192db6, 21:58 and 22:09 512a8a1 (their logs ask the clerk without the request id and reply first; the task brief said 3381426), 22:26 base = 3381426 with NS_NAV_MIN_HOPS=0, 22:42-23:06 wave = 8564396.",
   "w2-3eb205e43": {"commit": "eb4a440"}, "w2-60764c97c": {"commit": "eb4a440"},
   "w2-c51b37510": {"commit": "eb4a440"}, "w2-e67e6c9cc": {"commit": "eb4a440"},
   "w2-667af0a1e": {"commit": "404a7f6"}, "w2-001ceef19": {"commit": "404a7f6"},
@@ -13,8 +13,8 @@
   "w2-22befef5e": {"commit": "3fcd572"}, "w2-b5fc964b9": {"commit": "3fcd572"},
   "w2-7351b5e5a": {"commit": "3fcd572"}, "w2-a34dc2c69": {"commit": "3fcd572"},
   "w2-6e4f4a271": {"commit": "0192db6"}, "w2-d706b8050": {"commit": "0192db6"},
-  "w2-5d6cbaccc": {"commit": "3381426"}, "w2-28db193c7": {"commit": "3381426"},
-  "w2-f46dc30ca": {"commit": "3381426"}, "w2-5045a1227": {"commit": "3381426"},
+  "w2-5d6cbaccc": {"commit": "512a8a1"}, "w2-28db193c7": {"commit": "512a8a1"},
+  "w2-f46dc30ca": {"commit": "512a8a1"}, "w2-5045a1227": {"commit": "512a8a1"},
   "w2-67964f740": {"commit": "3381426", "env": {"NS_NAV_MIN_HOPS": "0"}},
   "w2-1655c5a81": {"commit": "3381426", "env": {"NS_NAV_MIN_HOPS": "0"}},
   "w2-7937623ec": {"commit": "8564396"}, "w2-772666089": {"commit": "8564396"},

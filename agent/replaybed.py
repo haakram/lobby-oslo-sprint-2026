@@ -286,6 +286,7 @@ class Scenario:
     flags: list[str] = field(default_factory=list)
     live: dict = field(default_factory=dict)
     visible: dict[str, list] = field(default_factory=dict)  # item -> [place, clock]; listed by look
+    dnd_windows: dict[str, list] = field(default_factory=dict)  # room -> [from | None, to | None]: a sign put up later
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=1, sort_keys=True)
@@ -306,6 +307,7 @@ class Scenario:
             "elevator_rooms": {(int(k) if str(k).isdigit() else k): v for k, v in self.elevator_rooms.items()},
             "end_clock": self.end_clock, "live_names": True, "scoring": scoring,
             "visible": {k: tuple(v) for k, v in self.visible.items()}, "live": True,
+            "dnd_windows": {k: tuple(v) for k, v in self.dnd_windows.items()},
         }
 
 
@@ -405,6 +407,7 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
     nav_slips: list[tuple[str, list[str]]] = []  # a slip somewhere on a navigate path
     visits: list[tuple[str, str]] = []  # (clock, place) every place the robot passed
     elev_by_rid: dict[str, str] = {}  # request -> room, the clerk's answer
+    signs: dict[str, list[tuple[str, bool]]] = collections.defaultdict(list)  # room -> (clock, DND sign seen)
 
     def wet(place: str, when: str) -> None:
         if place and place not in wet_first:
@@ -470,8 +473,7 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
             blocked_seen[tuple(sorted((loc, str(args["to"]))))].append(clk)
         if cmd == "look" and ok and isinstance(r, dict):
             if "sign" in r and "door" in r:
-                if str(r.get("sign", "none")).lower() != "none":
-                    dnd.add(str(r["door"]))
+                signs[str(r["door"])].append((clk, str(r.get("sign", "none")).lower() != "none"))
                 continue
             here = r.get("location")
             if not here:
@@ -515,11 +517,13 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
         if cmd == "knock" and ok and isinstance(r, str):
             door = str(args.get("door"))
             if "Do Not Disturb" in r:
-                dnd.add(door)
+                signs[door].append((clk, True))
             elif r.startswith("No answer"):
                 no_answer.add(door)
+                signs[door].append((clk, False))
             elif m := _OPENS.match(r):
                 guests[m[1]] = m[2]
+                signs[door].append((clk, False))
         if cmd == "ask" and ok and isinstance(r, dict):
             answer = str(r.get("answer") or "")
             if m := _IS_IN.match(answer):
@@ -548,6 +552,23 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
             flags.append(f"slip at {clock} on a navigate {'-'.join(path)}: spot unknown; {spot} assumed")
         if spot not in wet_first or clock_to_seconds(clock) < clock_to_seconds(wet_first[spot]):
             wet_first[spot] = clock
+
+    # Do Not Disturb: all night, or from between the last clear look and the first sign (it can go up late)
+    dnd_windows: dict[str, list] = {}
+    for room, seen in signs.items():
+        seen = sorted(seen, key=lambda x: clock_to_seconds(x[0]))
+        on = [clock_to_seconds(c) for c, d in seen if d]
+        if not on:
+            continue
+        before = [clock_to_seconds(c) for c, d in seen if not d and clock_to_seconds(c) < on[0]]
+        after = [clock_to_seconds(c) for c, d in seen if not d and clock_to_seconds(c) > on[-1]]
+        start = _hms((before[-1] + on[0]) // 2) if before else None
+        end = _hms((on[-1] + after[0]) // 2) if after else None
+        if start is None and end is None:
+            dnd.add(room)
+        else:
+            dnd_windows[room] = [start, end]
+            flags.append(f"{room}: Do Not Disturb from {start or 'the start'} to {end or 'the end'} (sign seen changing)")
 
     # requests, in arrival order
     requests: list[list] = []
@@ -757,7 +778,7 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
         wet_spots=wet_spots, spill_spots=spill_spots, blocked=blocked, people=people_list,
         noise_sources=noise_sources,
         elevator_rooms={**{str(k): v for k, v in sorted(elev_rooms.items())}, **dict(sorted(elevator.items()))},
-        end_clock=end_clock, flags=flags, visible=visible,
+        end_clock=end_clock, flags=flags, visible=visible, dnd_windows=dnd_windows,
         live={"score": night.live_score, "served": night.live_served, "calls": night.calls,
               "last_clock": night.last_clock, "ended": night.ended, "reason": night.reason,
               "requests": night.requests, "agent_played": night.agent_played,
@@ -893,6 +914,7 @@ kw["blocked_edges"] = [tuple(b) for b in kw["blocked_edges"]]
 kw["people_events"] = [tuple(p) for p in kw["people_events"]]
 kw["elevator_rooms"] = {(int(k) if str(k).isdigit() else k): v for k, v in kw["elevator_rooms"].items()}
 kw["visible"] = {k: tuple(v) for k, v in kw.get("visible", {}).items()}
+kw["dnd_windows"] = {k: tuple(v) for k, v in kw.get("dnd_windows", {}).items()}
 import inspect
 accepted = set(inspect.signature(offline.FakeWybe.__init__).parameters)
 kw = {k: v for k, v in kw.items() if k in accepted}
@@ -916,7 +938,7 @@ for rid, o in fake.reports.items():
 out.update({"fake_score": fake.score, "reports": outcomes, "false_done": list(fake.false_done),
             "wrong_deliveries": len(fake.wrong_deliveries), "slips": fake.slips, "unsafe": list(fake.unsafe),
             "stranded": fake.stranded, "verified": sum(r.completed for r in fake._requests.values()),
-            "end_clock": fake._clock()})
+            "end_clock": fake._clock(), "replay_shift": fake._shift_id})
 json.dump(out, open(sys.argv[2], "w"))
 '''
 
@@ -937,6 +959,7 @@ class ReplayResult:
     error: str | None = None
     flags: int = 0
     end_clock: str = ""
+    log: str = ""  # the replay's own run log
 
 
 def replay_night(scenario: Scenario, *, code_dir: Path | None = None, scoring: dict | None = None,
@@ -982,6 +1005,7 @@ def replay_night(scenario: Scenario, *, code_dir: Path | None = None, scoring: d
                    "stranded": data.get("stranded")},
         gap=gap, seconds=round(time.monotonic() - started, 1), error=data.get("error"), flags=len(scenario.flags),
         end_clock=str(data.get("end_clock") or ""),
+        log=str(runs_dir / f"{data['replay_shift']}.jsonl") if data.get("replay_shift") else "",
     )
 
 

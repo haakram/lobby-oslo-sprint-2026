@@ -363,15 +363,15 @@ def _lost_base(text: str) -> str:
     return "glasses"
 
 
-def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noqa: C901 - one pass over the log
+def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # one pass over the log, then the world
     flags: list[str] = []
     base = json.loads(Path(DEFAULT_MAP).read_text())
     seed1_rooms: dict[str, list[tuple[str, dict]]] = collections.defaultdict(list)  # corridor -> [(room, edge)]
     for e in base["edges"]:
         if e["b"].startswith("room-"):
             seed1_rooms[e["a"]].append((e["b"], e))
-    for corridor in seed1_rooms:
-        seed1_rooms[corridor].sort()
+    for rooms in seed1_rooms.values():
+        rooms.sort()
 
     # pass 1: walk the log
     messages: dict[tuple[str, str], list] = {}  # (rid, text) -> [clock, rid, text, sender]
@@ -398,7 +398,6 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
     clk = START_CLOCK
     last_score: int | None = None
     pending_report: tuple[str, str, str, int] | None = None
-    pending_sign: tuple[str, str] | None = None
     sign_results: dict[str, tuple[str, str]] = {}  # rid -> (sign place, report reply)
     last_place_sign: tuple[str, str] | None = None
     asked_floor: dict[str, int] = {}
@@ -655,7 +654,8 @@ def reconstruct(night: Night, *, end_clock: str = END_CLOCK) -> Scenario:  # noq
     stock: dict[str, dict[str, int]] = {}
     seen_items: set[str] = set()
     for place, objects in first_look_objects.items():
-        items = {k: v for k, v in objects.items() if k not in NOTE_OBJECTS and not k.startswith(("tray-", "luggage-", "bags-"))}
+        items = {k: v for k, v in objects.items() if k not in NOTE_OBJECTS and not _LOST_NAME.match(k)
+                 and not k.startswith(("tray-", "luggage-", "bags-"))}
         if place in stock_places or items:
             stock[place] = items
             seen_items.update(items)

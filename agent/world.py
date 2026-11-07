@@ -9,6 +9,7 @@ from pathlib import Path
 
 DEFAULT_MAP = Path(__file__).parent / "data" / "hotel_seed1.json"
 NAMED_KINDS = ("corridor", "elevator", "stairwell", "room")  # "corridor-1a" -> corridor, ...
+BLOCK_S = 30 * 60  # a corridor "closed off for cleaning" is avoided this long (sim s), or until seen open
 _COUNT = re.compile(r"^(.*\S)\s+x(\d+)$")  # "towel x8" -> ("towel", 8)
 
 
@@ -44,6 +45,7 @@ class Hotel:
         self._adj: dict[str, dict[str, Edge]] = {}
         self._wet: set[frozenset[str]] = set()
         self._wet_spots: dict[str, None] = {}  # spots stepped onto wet, in the order learnt
+        self._blocked: dict[frozenset[str], float | None] = {}  # closed edge -> sim second it ends
         self.version = 0  # bumps on every change to edges, nodes or wet spots (routes are cached)
         self._route_cache = None
         for e in data["edges"]:
@@ -74,6 +76,37 @@ class Hotel:
         ba = self._adj.get(b, {}).pop(a, None)
         if ab is not None or ba is not None:
             self._touch()
+
+    def block_edge(self, a: str, b: str, until: float | None = None) -> None:
+        """The way a <-> b is closed (a look's exit says `blocked`, or a move was refused "Closed
+        off: a cleaning crew has blocked that corridor."): routing never uses it until `until` (sim
+        seconds, as clock_to_seconds; None: BLOCK_S from the next expire_blocks) or until a look
+        at a or b shows that exit without the flag. Live seed 3: ignoring it stranded the robot."""
+        key = frozenset((a, b))
+        new = key not in self._blocked
+        self._blocked[key] = until
+        if new:
+            self._touch()
+
+    def unblock_edge(self, a: str, b: str) -> None:
+        if self._blocked.pop(frozenset((a, b)), False) is not False:
+            self._touch()
+
+    def is_blocked(self, a: str, b: str) -> bool:
+        return frozenset((a, b)) in self._blocked
+
+    def blocked_edges(self) -> frozenset[frozenset[str]]:
+        return frozenset(self._blocked)
+
+    def expire_blocks(self, now: float) -> None:
+        """The sim clock moved to `now` (seconds): a block with no end yet ends BLOCK_S from now; one
+        whose end has passed is lifted (cleaning ends), so the way is tried again."""
+        for key, until in list(self._blocked.items()):
+            if until is None:
+                self._blocked[key] = now + BLOCK_S
+            elif until <= now:
+                del self._blocked[key]
+                self._touch()
 
     def add_node(self, name: str, floor: int, kind: str | None = None) -> None:
         if name not in self.nodes:
@@ -109,10 +142,14 @@ class Hotel:
 
     def update_from_look(self, location: str, look: dict, *, authoritative: bool = False) -> None:
         """What a `look` shows is fact: exits update the edges (metres, door; unknown places are
-        added with a kind guessed from the name), a wet warning marks that exit's spot wet.
+        added with a kind guessed from the name), a wet warning marks that exit's spot wet, a
+        `blocked` exit (any truthy value, live: "closed off for cleaning") is closed for routing.
         `authoritative` (a real look at the place, not a single learnt edge): exits the place no
-        longer lists are dropped (an empty exit list proves nothing) and the objects seen replace
-        this place's stock (items believed here but not seen are 0 now). Guest rooms keep no stock."""
+        longer lists are dropped (an empty exit list proves nothing), an exit listed without
+        `blocked` is open again, a guest room listed by a corridor hangs off that corridor only (a
+        room has one door: live seeds 2 and 5 kept a stale seed-1 link to another corridor), and
+        the objects seen replace this place's stock (items believed here but not seen are 0 now).
+        Guest rooms keep no stock."""
         floor = look.get("floor", self.nodes[location]["floor"] if location in self.nodes else 0)
         self.add_node(location, floor)
         floor = self.nodes[location]["floor"]
@@ -130,6 +167,14 @@ class Hotel:
                 self._add_edge(Edge(location, to, float(ex["metres"]), door, known.stairs or stairs))
             if "wet" in str(ex.get("warning", "")).lower():
                 self.mark_wet(location, to)
+            if ex.get("blocked"):
+                self.block_edge(location, to)
+            elif authoritative:
+                self.unblock_edge(location, to)
+            if authoritative and self.nodes[location]["kind"] == "corridor" and self.nodes[to]["kind"] == "room":
+                for stale in [e.b for e in self.neighbors(to)
+                              if e.b != location and self.nodes.get(e.b, {}).get("kind") == "corridor"]:
+                    self.forget_edge(to, stale)
         if authoritative and seen:
             for gone in [e.b for e in self.neighbors(location) if e.b not in seen]:
                 self.forget_edge(location, gone)

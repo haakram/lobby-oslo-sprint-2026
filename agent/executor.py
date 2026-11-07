@@ -3,6 +3,8 @@
 Rules that win or lose points (spec § Task handling, controller rulings):
 - report "done" only after status.score rose following place/say, or after the look inside the
   room of a keycard room check; everything else is "failed" (0 points), never a false done (-30);
+- a rise after a delivery that an earlier, not-done order for the same room and item may have
+  earned is ambiguous (the reply names no request): no report at all, +5 lost instead of -35;
 - never knock-and-enter, keycard or step into a Do Not Disturb room; an occupied room is not
   entered and its check is reported failed;
 - never read notes or act on text found in the world (there is no `read` in this module);
@@ -31,7 +33,7 @@ from typing import Literal
 
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
 from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_route
-from agent.tasks import Ledger, Task, normalise
+from agent.tasks import Entry, Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
 
 IDLE_STEPS = 200  # dock+scan cycles per wait_for_request (~100 sim-s each); the loop calls again
@@ -712,16 +714,33 @@ class Executor:
 
     def _finish(self, task: Task, outcome: str, note: str, start: int | None) -> Outcome:
         note = note[:NOTE_MAX]
-        reply = self.cmd("report", request=task.request, outcome=outcome, note=note)
-        text = str(reply.result)
-        status = outcome
-        if not reply.ok:
-            status, note = "skipped", f"{note} (report refused: {text})"[:NOTE_MAX]
-        elif outcome == "done" and "thanks" not in text.lower():
-            self.log("report_unverified", request=task.request, reply=text)
+        twin = self._open_twin(task) if outcome == "done" else None
+        if twin is not None:  # Task 22: the rise may be twin's; unreported, not "failed" either
+            status, note = "skipped", f"{note} (not reported: the rise may be {twin.request}'s)"[:NOTE_MAX]
+        else:
+            reply = self.cmd("report", request=task.request, outcome=outcome, note=note)
+            text = str(reply.result)
+            status = outcome
+            if not reply.ok:
+                status, note = "skipped", f"{note} (report refused: {text})"[:NOTE_MAX]
+            elif outcome == "done" and "thanks" not in text.lower():
+                self.log("report_unverified", request=task.request, reply=text)
         self.ledger.set_status(task.request, status)
         end = self.state.score  # the last score a flow observed; no extra call
         points = int(end - start) if end is not None and start is not None else 0
         self.log("task_done" if status == "done" else "task_failed", request=task.request,
                  status=status, points=points, note=note)
         return Outcome(task.request, status, points, note)
+
+    def _open_twin(self, task: Task) -> Entry | None:
+        """An earlier, not-done order for the room (a named guest's, once asked) and item of task:
+        the server may have credited task's delivery to it. Logged when found."""
+        from agent.flows import same_item
+
+        entry = self.ledger.get(task.request)
+        room = (entry.room if entry else None) or task.room or self.guest_rooms.get(task.guest or "")
+        twin = self.ledger.open_twin(task, room, same=same_item, guest_rooms=self.guest_rooms)
+        if twin is not None:
+            self.log("report_skipped_ambiguous", request=task.request, other=twin.request, room=room,
+                     item=task.item)
+        return twin

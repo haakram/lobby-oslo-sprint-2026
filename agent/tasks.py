@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from enum import Enum
 
@@ -222,6 +223,11 @@ class Entry:
         return self.task.item
 
 
+def _tray(task: Task, room: str | None) -> str | None:
+    """A named guest's tray has no item until its room is known: tray-<number> of that room."""
+    return f"tray-{room.removeprefix('room-')}" if task.kind is Kind.TRAY and room else None
+
+
 def _secs(clock: str) -> int | None:
     try:
         return clock_to_seconds(clock)
@@ -297,6 +303,23 @@ class Ledger:
             room = entry.room or (guest_rooms or {}).get(entry.task.guest or "")
             if (entry.kind in ORDER_KINDS and room == task.room
                     and entry.item is not None and entry.item == task.item):
+                return entry
+        return None
+
+    def open_twin(self, task: Task, room: str | None, *, same: Callable[[str, str], bool],
+                  guest_rooms: dict[str, str | None] | None = None) -> Entry | None:
+        """Task 22: the first earlier order for the same room and item (`same` compares item names)
+        that is not done (waiting, declined as a duplicate, failed or unreported). A delivery reply
+        does not name the request it was credited to, so a score rise after delivering task may be
+        this one's. A named guest's order counts by the guest's room; a named tray by its room."""
+        item = task.item or _tray(task, room)
+        if room is None or not item:
+            return None
+        for entry in self._earlier(task):
+            there = entry.room or (guest_rooms or {}).get(entry.task.guest or "")
+            other = entry.item or _tray(entry.task, there)
+            if (entry.kind in ORDER_KINDS and entry.status != "done" and there == room
+                    and other and same(item, other)):
                 return entry
         return None
 

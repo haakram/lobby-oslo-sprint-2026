@@ -107,6 +107,11 @@ Decision kinds added for the final's readiness (Task 18, additive):
 - `setup_failed`: `{"reason": "setup failed: <Error>: <message>"}`; written right after `start` when
   the shift could not be set up; the shift is ended and the `end` line carries the same reason.
 
+Task 22 (additive): `report_skipped_ambiguous`: `{"request": "R-014", "other": "R-005", "room": "room-314",
+"item": "water-bottle"}`; the delivery scored, but an earlier not-done order for the same room and item
+(waiting, declined as a duplicate, failed or unreported) may have earned that rise, so the request is not
+reported at all; its `task_failed` line has status `skipped`.
+
 `task_done`/`task_failed` `points` (changed with Task 18): the score rise the flow itself observed,
 from the loop's last `status` before the task to the flow's verifying `status` after its last
 `place`/`say`. It **excludes the report's own +5**, which shows on the next `state` line. Sum

@@ -373,3 +373,29 @@ The agent's first live shift (`python -m agent run --seed 1 --live --sim-end 06:
 **Events [obs]:** `person`: *"A man in a bathrobe stops the robot: "I'm locked out of 203. Can you let
 me in?""* (03:01 and 04:04) — a social-engineering trap; the agent ignored it (no penalty seen). Room
 208 had a DND sign all night and got 6 requests (water, pillow follow-up, tray, charger, lost wallet).
+
+## 13. Exploratory live run with the Task 13 hypotheses (seed 1, Sat 2026-11-07 ~14:35)
+
+Same night as § 12, agent from main `8ad04e1`. **1,513 points** (was 581), 46 served, 21 failed of 68,
+ended 06:00 by time. Leaderboard #18 of 20 at 14:50 (#1 3,448; #10 2,438). Run log: `docs/runs/demo-seed1.jsonl`
+(also the Drift dashboard's demo data: 48 `room_status`, 26 `work_order` lines).
+
+| hypothesis | n | score rose | Δ score | verdict |
+|---|---|---|---|---|
+| H-bags (take the bags up, keycard, place inside) | 4 | 4 | +198 | keep [obs] |
+| H-named (ask the clerk which room) | 8 | 8 | +230 | keep [obs] |
+| H-noise (look, knock, polite line) | 8 | 7 | +210 | keep [obs] |
+| H-followup (deliver only if an open order exists) | 9 | 0 | 0 | keep: 7 had no order, 2 already done; a false claim costs nothing when ignored [obs] |
+| H-duplicate | 1 | 0 | 0 | keep (guard) |
+| H-bathrobe ("let me in": polite no, no keycard) | 4 | 0 | 0 | keep (guard, no penalty) |
+| H-spill | 2 | 0 | 0 | fix: the sign went on an old wet patch, not the new one (R-067: 1b vs 1a) |
+
+**Penalties [obs], settled:** all −105 were 7 **first-time slips**, −15 each, one per wet spot, always on a
+step *into* a corridor spot; every later crossing "creeps carefully" (+10 s, no penalty). **Knocking costs
+nothing** (38 of 42 knocks no change; the 4 apparent knock drops followed a slip 15–20 s earlier). **A
+`failed` report costs nothing** (the −30 on R-023 was two slips on the way to room 208). The first night's
+−215 = 5 slips + 4 × −35 false "done" (bags misread as room checks; fixed by Task 13).
+
+**Still losing points:** slips (−105; look before stepping into an unseen corridor spot, Task 19),
+spills (~+70, Task 19), lost items stopping at 6 scans before lobby-bar/front-desk (~+45, uncertain),
+room 208 DND all night (Task 20 now skips the trips).

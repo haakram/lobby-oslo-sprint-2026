@@ -104,6 +104,21 @@ pre-push hook stops accidental pushes either way.
 
 TBD at the rehearsal: platform, how `main` deploys, preview URLs per PR, how to roll back.
 
+### Night Shift final runbook (Sun 8 Nov, 12:00 Oslo)
+
+The final is `FINAL_ARMED=1 .venv/bin/python -m agent final`: 10 scored shifts in parallel threads
+sharing one rate limiter (5 req/s), each stopping itself after 44 real minutes. It refuses to start,
+printing why, unless `FINAL_ARMED=1` is in the shell environment (a `.env` file does not count) and
+the Oslo time is 11:59-13:00 on 8 Nov. It never falls back to practice.
+
+1. 11:45: last `git pull`, `./scripts/check.sh --fast` green, `.env` has `WYBE_NIGHTSHIFT_KEY`
+   (and `ANTHROPIC_API_KEY` if the Brain is used), no practice shift running.
+2. 11:59-12:00: Hamad runs the command above in a fresh terminal. ShirazIQ opens
+   `.venv/bin/python -m agent viewer` and watches (http://127.0.0.1:8765/).
+3. If one shift stops or crashes, do nothing: no hand-steering, no restart, no second `final`. The
+   other shifts continue; Ctrl-C stops all of them cleanly (each still writes its `end` line).
+4. Afterwards the run logs are in `temp/runs/`; the summary of all shifts is printed at the end.
+
 ## 8. Demo day
 
 - [ ] The deployed URL works in a private window, on a phone and on a laptop that isn't the builder's.

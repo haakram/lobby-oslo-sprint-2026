@@ -86,6 +86,17 @@ Several people, each with their own AI assistant, work here at the same time. Th
 ./scripts/check.sh --fast   # same without build; runs automatically before every push
 ```
 
+Night Shift agent (offline against the fake server by default; `--live` is the real server and
+every live start is counted in `temp/live_runs.jsonl`):
+
+```bash
+.venv/bin/python -m agent run --seed 1 [--sim-end 23:30:00] [--live]   # one practice shift
+.venv/bin/python -m agent viewer [--port 8765]                         # 3D viewer of temp/runs/
+.venv/bin/python -m agent route front-desk room-319 [--cart]           # shortest route
+.venv/bin/python -m agent bench | tune                                 # offline benchmark / tuning (own task)
+FINAL_ARMED=1 .venv/bin/python -m agent final                          # Sun 12:00 only, see OPERATIONS.md § 7
+```
+
 Stack-specific commands (dev server, tests, migrations, seed) are added here when the stack is chosen.
 
 ## Session ritual

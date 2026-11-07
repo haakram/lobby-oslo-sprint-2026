@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { STATUS_LOOK } from "@/features/dashboard/labels";
+import { RunBadge } from "@/features/dashboard/TopBar";
 import { useNight } from "@/features/dashboard/useNight";
 import { type CallSummary, useReceptionCalls } from "@/features/dashboard/useReceptionCalls";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
 import { SourceNote } from "@/features/modules/SourceNote";
-import { formatClock, formatDate } from "@/features/reception/format";
+import { formatDate, formatDayClock } from "@/features/reception/format";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, Skeleton, Stat } from "@/ui";
 import { nights, selectGuestDay, type Stay } from "./testData";
 
@@ -50,6 +51,8 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
   const special = list ? specialCases(list) : [];
   const roomStatus = useMemo(() => new Map((rooms ?? []).map((room) => [room.id, room.status])), [rooms]);
   const total = rooms?.length ?? ROOMS_IN_HOTEL;
+  const readyRooms = rooms ? rooms.filter((room) => room.status === "klar").length : null;
+  const nightMissing = run.status === "error" || run.status === "empty";
   const ready = calls.kind !== "loading" && run.status !== "loading";
 
   return (
@@ -57,6 +60,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
       module="gjester"
       ready={ready}
       lede={`${capitalise(DAY.format(new Date()))}. Ankomster, avreiser, hvem som bor her, og det resepsjonisten har tatt imot.`}
+      meta={run.source === "live" ? <RunBadge run={run} /> : undefined}
       actions={
         <Link href="/resepsjon" className={buttonClasses("secondary")}>
           Åpne Resepsjon
@@ -66,7 +70,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
       <FigureRow label="Dagen i tall">
         <Stat label="Ankomster i dag" value={day.arrivals.length} />
         <Stat label="Avreiser i dag" value={day.departures.length} />
-        <Stat label="Belegg i natt" value={day.roomsTonight} unit={`av ${total} rom`} tone="success" />
+        <Stat label="Belegg i natt" value={day.roomsTonight} unit={`av ${total} rom`} />
         {calls.kind === "loading" ? (
           <div className="flex flex-col gap-1">
             <Skeleton className="h-8 w-16" />
@@ -82,7 +86,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
           <section aria-labelledby="arrivals-heading" data-enter>
             <Card className="sm:p-6">
               <PanelHead id="arrivals-heading" title="Ankomster i dag" count={day.arrivals.length} note="Innsjekk fra 15:00." />
-              <StayList stays={day.arrivals} empty="Ingen ankomster i dag." roomStatus={roomStatus} />
+              <StayList stays={day.arrivals} empty="Ingen ankomster i dag." roomStatus={roomStatus} readyRooms={readyRooms} />
               <SourceNote className="mt-3" sources="test" />
             </Card>
           </section>
@@ -90,7 +94,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
           <section aria-labelledby="departures-heading" data-enter>
             <Card className="sm:p-6">
               <PanelHead id="departures-heading" title="Avreiser i dag" count={day.departures.length} note="Utsjekk til 11:00. Rommets status er slik roboten sist så det." />
-              <StayList stays={day.departures} empty="Ingen avreiser i dag." roomStatus={roomStatus} showStatus />
+              <StayList stays={day.departures} empty="Ingen avreiser i dag." roomStatus={roomStatus} readyRooms={readyRooms} showStatus statusUnknown={nightMissing} />
               <SourceNote className="mt-3" sources={["test", "run-log"]} />
             </Card>
           </section>
@@ -110,7 +114,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
                 <tbody className="divide-y divide-line">
                   {day.inHouse.map((stay) => (
                     <tr key={stay.id}>
-                      <td className="py-2 pr-3 font-mono text-xs tabular-nums">{stay.room ? stay.room.replace(/^room-/, "") : "–"}</td>
+                      <td className="py-2 pr-3 font-mono text-sm tabular-nums">{stay.room ? stay.room.replace(/^room-/, "") : "–"}</td>
                       <td className="py-2 pr-3 font-semibold">
                         {stay.name}
                         <span className="font-normal text-muted"> · {stay.guests}</span>
@@ -126,9 +130,27 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
               <SourceNote className="mt-3" sources="test" />
             </Card>
           </section>
+
+          <section aria-labelledby="booked-heading" data-enter>
+            <Card className="sm:p-6">
+              <PanelHead id="booked-heading" title="Kommende bookinger" count={day.booked.length} />
+              <ol className="mt-2 divide-y divide-line">
+                {day.booked.map((stay) => (
+                  <li key={stay.id} className="flex items-baseline justify-between gap-3 py-2.5 text-sm">
+                    <span className="font-semibold">{stay.name}</span>
+                    <span className="whitespace-nowrap text-muted tabular-nums">
+                      {formatDate(stay.arrival)} · {nights(stay)} {nights(stay) === 1 ? "natt" : "netter"}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <SourceNote className="mt-3" sources="test" />
+            </Card>
+          </section>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-6 lg:gap-8">
+        {/* On a phone the call-backs and special needs come before the long lists (order-first). */}
+        <div className="order-first flex min-w-0 flex-col gap-6 lg:order-none lg:gap-8">
           <section aria-labelledby="reception-heading" data-enter>
             <Card className="sm:p-6">
               <PanelHead id="reception-heading" title="Fra resepsjonisten" note="Bookinger og beskjeder tatt på telefonen." />
@@ -140,6 +162,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
               )}
               {calls.kind === "not-set-up" && (
                 <EmptyState
+                  as="h3"
                   className="mt-4"
                   title="Resepsjonisten er ikke koblet til ennå"
                   body="Når telefonagenten er satt opp, vises bookinger og hvem som må ringes tilbake her."
@@ -152,6 +175,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
               )}
               {calls.kind === "error" && (
                 <ErrorState
+                  as="h3"
                   className="mt-4"
                   title="Fikk ikke hentet samtalene"
                   body="Sjekk nettet og prøv igjen."
@@ -168,7 +192,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
                   {list.slice(0, 8).map((call) => (
                     <li key={call.id} className="flex flex-col gap-1 py-3">
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <span className="text-sm text-muted tabular-nums">{formatClock(call.startedAt)}</span>
+                        <span className="text-sm whitespace-nowrap text-muted tabular-nums">{formatDayClock(call.startedAt)}</span>
                         <span className="font-semibold">{call.callerName ?? call.title ?? "Samtale"}</span>
                         {call.arrival && (
                           <Badge tone="success">
@@ -176,7 +200,12 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
                             {call.departure ? `–${formatDate(call.departure)}` : ""}
                           </Badge>
                         )}
-                        {call.needsCallback && <Badge tone="warning">Ring tilbake</Badge>}
+                        {call.needsCallback && (
+                          // The number and the "Ringt tilbake" mark live on Resepsjon.
+                          <Link href="/resepsjon" className={buttonClasses("secondary", "sm")}>
+                            Ring tilbake
+                          </Link>
+                        )}
                       </div>
                       {call.summary && <p className="line-clamp-2 text-sm text-muted">{call.summary}</p>}
                     </li>
@@ -230,29 +259,29 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
             </Card>
           </section>
 
-          <section aria-labelledby="booked-heading" data-enter>
-            <Card className="sm:p-6">
-              <PanelHead id="booked-heading" title="Kommende bookinger" count={day.booked.length} />
-              <ol className="mt-2 divide-y divide-line">
-                {day.booked.map((stay) => (
-                  <li key={stay.id} className="flex items-baseline justify-between gap-3 py-2.5 text-sm">
-                    <span className="font-semibold">{stay.name}</span>
-                    <span className="text-muted tabular-nums">
-                      {formatDate(stay.arrival)} · {nights(stay)} {nights(stay) === 1 ? "natt" : "netter"}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              <SourceNote className="mt-3" sources="test" />
-            </Card>
-          </section>
         </div>
       </div>
     </ModulePage>
   );
 }
 
-function StayList({ stays, empty, roomStatus, showStatus = false }: { stays: Stay[]; empty: string; roomStatus: Map<string, keyof typeof STATUS_LOOK>; showStatus?: boolean }) {
+function StayList({
+  stays,
+  empty,
+  roomStatus,
+  readyRooms,
+  showStatus = false,
+  statusUnknown = false,
+}: {
+  stays: Stay[];
+  empty: string;
+  roomStatus: Map<string, keyof typeof STATUS_LOOK>;
+  /** Rooms ready to sell tonight, offered beside a guest with no room (null until the night is in). */
+  readyRooms: number | null;
+  showStatus?: boolean;
+  /** The night failed or is empty: say the status is unknown rather than leave a blank. */
+  statusUnknown?: boolean;
+}) {
   if (stays.length === 0) return <p className="mt-3 text-base text-muted">{empty}</p>;
   return (
     <ol className="mt-2 divide-y divide-line">
@@ -281,7 +310,13 @@ function StayList({ stays, empty, roomStatus, showStatus = false }: { stays: Sta
             </div>
             <div className="flex flex-col items-end gap-0.5 text-right">
               <span className={stay.room ? "font-mono text-sm tabular-nums" : "text-sm font-semibold text-warning"}>{roomWord(stay.room)}</span>
-              {showStatus && look && <span className={`text-xs ${look.word_class}`}>{look.word}</span>}
+              {!stay.room && (
+                <Link href="/rom" className="py-1 text-sm font-semibold text-accent-text hover:underline">
+                  {readyRooms === null ? "Se rommene" : `${readyRooms} klare rom`}
+                </Link>
+              )}
+              {showStatus && stay.room && look && <span className={`text-sm ${look.word_class}`}>{look.word}</span>}
+              {showStatus && stay.room && !look && statusUnknown && <span className="text-sm text-muted">Status ukjent</span>}
             </div>
           </li>
         );

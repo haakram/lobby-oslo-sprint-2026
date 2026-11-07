@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Hotel3D } from "@/features/hotel3d/Hotel3D";
+import { Hotel3D, StatusLegend } from "@/features/hotel3d/Hotel3D";
 import { PlaybackControls } from "@/features/hotel3d/PlaybackControls";
 import { EventFeed, TaskCard, WorkOrderList } from "@/features/hotel3d/ReplayPanels";
 import { type HotelReplay, placeName, type ReplaySource, useHotelReplay } from "@/features/replay";
@@ -89,6 +89,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
             <StatRow replay={replay} />
             <div className="mt-6 flex flex-col gap-4">
               <Hotel3D replay={replay} variant="panel" />
+              <StatusLegend className="px-1 sm:hidden" />
               <Card>
                 <PlaybackControls replay={replay} compact />
               </Card>

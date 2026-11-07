@@ -75,6 +75,12 @@
   white-space: nowrap;
 }
 
+.h3d-robot > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .h3d-robot:empty {
   display: none;
 }

@@ -76,7 +76,9 @@ describe("buildTimeline on the demo night", () => {
   it("describes the night in Norwegian, newest-last", () => {
     const done = timeline.events.find((event) => event.kind === "task_done");
     expect(done).toMatchObject({ label: "Fullført", tone: "success", request: "R-001" });
-    expect(done!.text).toContain("+23 p");
+    expect(done!.text).toBe("phone-charger x1 delivered to rom 319 (+23 p)");
+    const placed = timeline.events.find((event) => event.kind === "call:place" && event.text.startsWith("skilt"));
+    expect(placed!.text).toMatch(/^skilt for vått gulv ved korridor /);
     const refused = timeline.events.find((event) => event.kind === "task_failed" && /Do Not Disturb/.test(event.text));
     expect(refused).toMatchObject({ label: "Avstått", tone: "warning" });
     const knock = timeline.events.find((event) => event.kind === "call:knock");

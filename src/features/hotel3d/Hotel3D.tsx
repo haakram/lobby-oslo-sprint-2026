@@ -27,6 +27,20 @@ export type Hotel3DProps = {
 
 const LEGEND: RoomStatus[] = ["klar", "ma_vaskes", "opptatt", "ikke_forstyrr", "avvik", "ukjent"];
 
+/** The room colours with their words. Inside the 3D view from 640 px; under it on phones. */
+export function StatusLegend({ className }: { className?: string }) {
+  return (
+    <ul aria-label="Romstatus" className={cx("flex flex-wrap gap-x-3 gap-y-1", className)}>
+      {LEGEND.map((status) => (
+        <li key={status} className="flex items-center gap-1.5 text-xs font-medium text-muted">
+          <span aria-hidden="true" className="inline-block size-2.5 rounded-[2px] border border-line-strong" style={{ background: STATUS_CSS_VAR[status] }} />
+          {ROOM_STATUS_LABEL[status]}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 let webglSupport: boolean | null = null;
 
 /** Detected once per page; the server answers null so the first paint matches on both sides. */
@@ -199,18 +213,7 @@ export function Hotel3D({ replay, variant = "full", className }: Hotel3DProps) {
         </div>
 
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <ul aria-label="Romstatus" className={cx("flex flex-wrap gap-x-3 gap-y-1", compact && "max-sm:hidden")}>
-            {LEGEND.map((status) => (
-              <li key={status} className="flex items-center gap-1.5 text-xs font-medium text-muted">
-                <span
-                  aria-hidden="true"
-                  className="inline-block size-2.5 rounded-[2px] border border-line"
-                  style={{ background: STATUS_CSS_VAR[status] }}
-                />
-                {ROOM_STATUS_LABEL[status]}
-              </li>
-            ))}
-          </ul>
+          <StatusLegend className="max-sm:hidden" />
           {robot && (
             <p className="rounded-md bg-surface/90 px-2.5 py-1.5 text-xs text-muted backdrop-blur-sm">
               <span className="text-text">{placeName(robot.node)}</span> · {robot.floor}. etasje

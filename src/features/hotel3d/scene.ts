@@ -24,7 +24,7 @@ import { type SceneTokens, STATUS_TOKEN } from "./tokens";
  * once, nothing allocated per frame. `Hotel3D.tsx` owns it and calls `dispose()` on unmount.
  */
 
-export const FLOOR_HEIGHT = 7;
+export const FLOOR_HEIGHT = 8.5;
 const ROOM_SIZE = 2.4;
 const ROOM_HEIGHT = 0.5;
 const TILE_HEIGHT = 0.3;
@@ -32,9 +32,10 @@ const SHAFT_HEIGHT = 1.6;
 const CORRIDOR_WIDTH = 1.4;
 const DOOR_WIDTH = 0.45;
 const SLAB_MARGIN = 3.2;
-const DIM_OPACITY = 0.18;
+const DIM_OPACITY = 0.1;
 const FOLLOW_LERP = 0.08;
-const FOCUS_OFFSET = new THREE.Vector3(13, 15, 17);
+const FOCUS_OFFSET = new THREE.Vector3(12, 22, 15);
+const START_OFFSET = new THREE.Vector3(22, 40, 27);
 
 type FloorParts = {
   floor: number;
@@ -70,6 +71,7 @@ export class HotelScene {
   private readonly labelRenderer: CSS2DRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
+  private readonly baseFov: number;
   private readonly controls: OrbitControls;
   private readonly ctx: gsap.Context;
   private readonly tokens: SceneTokens;
@@ -120,8 +122,9 @@ export class HotelScene {
     this.scene.fog = new THREE.Fog(new THREE.Color(tokens.bg), 70, 160);
 
     const centre = new THREE.Vector3(8, floorY(2), 7);
-    this.camera = new THREE.PerspectiveCamera(options.compact ? 34 : 38, 1, 0.5, 400);
-    this.camera.position.copy(centre).add(new THREE.Vector3(30, 34, 36));
+    this.baseFov = options.compact ? 34 : 38;
+    this.camera = new THREE.PerspectiveCamera(this.baseFov, 1, 0.5, 400);
+    this.camera.position.copy(centre).add(START_OFFSET);
     this.camera.lookAt(centre);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -138,10 +141,13 @@ export class HotelScene {
       }
     });
 
-    const hemi = new THREE.HemisphereLight(new THREE.Color(tokens.text), new THREE.Color(tokens.bg), 1.1);
-    const key = new THREE.DirectionalLight(new THREE.Color(tokens.text), 1.2);
+    // Soft light only (DESIGN.md): a sky/ground pair and one key light, no shadow maps.
+    const hemi = new THREE.HemisphereLight(new THREE.Color(tokens.text), new THREE.Color(tokens.sunken), 2.4);
+    const key = new THREE.DirectionalLight(new THREE.Color(tokens.text), 2.2);
     key.position.set(24, 48, 16);
-    this.scene.add(hemi, key);
+    const fill = new THREE.DirectionalLight(new THREE.Color(tokens.text), 0.8);
+    fill.position.set(-30, 20, -10);
+    this.scene.add(hemi, key, fill);
 
     for (const node of Object.values(HOTEL_NODES)) {
       this.positions.set(node.id, new THREE.Vector3(node.x, floorY(node.floor), node.z));
@@ -195,7 +201,7 @@ export class HotelScene {
     this.robotLabel.append(this.robotTask, this.robotCarry);
     const robotTag = new CSS2DObject(this.robotLabel);
     robotTag.center.set(0.5, 1);
-    robotTag.position.y = 2.1;
+    robotTag.position.y = 1.9;
     this.robot.add(robotTag);
     this.scene.add(this.robot);
 
@@ -254,7 +260,7 @@ export class HotelScene {
       const maxZ = Math.max(...zs) + SLAB_MARGIN;
 
       const slabMaterial = this.track(
-        new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.surface), roughness: 0.95, transparent: true, opacity: 0.96 }),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.sunken), roughness: 0.95, transparent: true, opacity: 0.96 }),
       );
       const slab = new THREE.Mesh(this.track(new THREE.BoxGeometry(maxX - minX, 0.24, maxZ - minZ)), slabMaterial);
       slab.position.set((minX + maxX) / 2, y - 0.12, (minZ + maxZ) / 2);
@@ -262,7 +268,7 @@ export class HotelScene {
       materials.push(slabMaterial);
 
       const edgeMaterial = this.track(
-        new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.line), transparent: true, opacity: 0.9 }),
+        new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.lineStrong), transparent: true, opacity: 0.7 }),
       );
       const outline = new THREE.LineSegments(this.track(new THREE.EdgesGeometry(slab.geometry)), edgeMaterial);
       outline.position.copy(slab.position);
@@ -271,10 +277,10 @@ export class HotelScene {
 
       // Walkways: every edge between two non-room places on this floor, plus door stubs to rooms.
       const walkMaterial = this.track(
-        new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.sunken), roughness: 0.9, transparent: true, opacity: 1 }),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.lineStrong), roughness: 0.9, transparent: true, opacity: 0.6 }),
       );
       const doorMaterial = this.track(
-        new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.line), roughness: 0.9, transparent: true, opacity: 1 }),
+        new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.lineStrong), roughness: 0.9, transparent: true, opacity: 0.35 }),
       );
       const floorEdges = HOTEL_EDGES.filter((edge) => {
         const a = HOTEL_NODES[edge.a];
@@ -327,6 +333,27 @@ export class HotelScene {
       materials.push(roomMaterial);
       this.disposables.push(roomMesh);
 
+      // One outline per room, merged into a single line object per floor, so unknown rooms still read.
+      const roomEdges = this.track(new THREE.EdgesGeometry(roomGeometry));
+      const edgeCount = roomEdges.attributes.position.count;
+      const outlinePositions = new Float32Array(edgeCount * 3 * rooms.length);
+      rooms.forEach((room, index) => {
+        const source = roomEdges.attributes.position.array as Float32Array;
+        const offset = index * edgeCount * 3;
+        for (let i = 0; i < edgeCount; i += 1) {
+          outlinePositions[offset + i * 3] = source[i * 3] + room.x;
+          outlinePositions[offset + i * 3 + 1] = source[i * 3 + 1] + y + ROOM_HEIGHT / 2;
+          outlinePositions[offset + i * 3 + 2] = source[i * 3 + 2] + room.z;
+        }
+      });
+      const outlineGeometry = this.track(new THREE.BufferGeometry());
+      outlineGeometry.setAttribute("position", new THREE.BufferAttribute(outlinePositions, 3));
+      const outlineMaterial = this.track(
+        new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.lineStrong), transparent: true, opacity: 0.55 }),
+      );
+      group.add(new THREE.LineSegments(outlineGeometry, outlineMaterial));
+      materials.push(outlineMaterial);
+
       // Hubs, service rooms, elevators and stairs: tiles with a name.
       const tileMaterial = this.track(
         new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.sunken), roughness: 0.9, transparent: true, opacity: 1 }),
@@ -334,18 +361,28 @@ export class HotelScene {
       const shaftMaterial = this.track(
         new THREE.MeshStandardMaterial({ color: new THREE.Color(tokens.lineStrong), roughness: 0.7, transparent: true, opacity: 0.85 }),
       );
+      const shaftEdges = this.track(new THREE.EdgesGeometry(shaftGeometry));
+      const shaftLineMaterial = this.track(
+        new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.lineStrong), transparent: true, opacity: 0.8 }),
+      );
       for (const node of nodes) {
         if (node.kind === "room" || node.kind === "corridor") continue;
         const vertical = node.kind === "elevator" || node.kind === "stairwell";
-        const mesh = new THREE.Mesh(vertical ? shaftGeometry : tileGeometry, vertical ? shaftMaterial : tileMaterial);
-        mesh.position.set(node.x, y + (vertical ? SHAFT_HEIGHT / 2 : TILE_HEIGHT / 2), node.z);
+        // Every place is a low tile the robot can stand on; a lift or stairwell adds an open wire frame.
+        const mesh = new THREE.Mesh(tileGeometry, vertical ? shaftMaterial : tileMaterial);
+        mesh.position.set(node.x, y + TILE_HEIGHT / 2, node.z);
         group.add(mesh);
+        if (vertical) {
+          const frame = new THREE.LineSegments(shaftEdges, shaftLineMaterial);
+          frame.position.set(node.x, y + SHAFT_HEIGHT / 2, node.z);
+          group.add(frame);
+        }
         const tag = label(placeName(node.id), vertical ? "h3d-place h3d-place-shaft" : "h3d-place");
         tag.position.set(node.x, y + (vertical ? SHAFT_HEIGHT : TILE_HEIGHT) + 0.05, node.z);
         group.add(tag);
         labels.push(tag.element);
       }
-      materials.push(tileMaterial, shaftMaterial);
+      materials.push(tileMaterial, shaftMaterial, shaftLineMaterial);
 
       const floorTag = label(`${floor}. etasje`, "h3d-floor");
       floorTag.center.set(1, 0.5);
@@ -490,9 +527,12 @@ export class HotelScene {
   resize() {
     const width = Math.max(1, this.container.clientWidth);
     const height = Math.max(1, this.container.clientHeight);
-    this.renderer.setSize(width, height, false);
+    // setSize also sets the canvas's CSS size, so a 2× screen draws at 2× and still fits the box.
+    this.renderer.setSize(width, height);
     this.labelRenderer.setSize(width, height);
     this.camera.aspect = width / height;
+    // A portrait canvas (phone) sees less sideways, so it opens the lens a little.
+    this.camera.fov = this.camera.aspect < 1 ? this.baseFov + 10 : this.baseFov;
     this.camera.updateProjectionMatrix();
   }
 

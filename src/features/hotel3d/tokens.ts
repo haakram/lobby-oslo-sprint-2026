@@ -64,7 +64,7 @@ export const STATUS_TOKEN: Record<RoomStatus, keyof SceneTokens> = {
   opptatt: "lineStrong",
   ikke_forstyrr: "text",
   avvik: "danger",
-  ukjent: "sunken",
+  ukjent: "line",
 };
 
 /** The same mapping as CSS variables, for the 2D plan and the legend. */
@@ -74,5 +74,5 @@ export const STATUS_CSS_VAR: Record<RoomStatus, string> = {
   opptatt: "var(--line-strong)",
   ikke_forstyrr: "var(--text)",
   avvik: "var(--danger)",
-  ukjent: "var(--sunken)",
+  ukjent: "var(--line)",
 };

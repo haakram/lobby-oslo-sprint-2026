@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { probeViewer, type ReplaySource, resolveViewerUrl, useHotelReplay } from "@/features/replay";
 import { Badge, Button, Card, cx, EmptyState, ErrorState, Skeleton, Stat } from "@/ui";
-import { Hotel3D } from "./Hotel3D";
+import { Hotel3D, StatusLegend } from "./Hotel3D";
 import { PlaybackControls } from "./PlaybackControls";
 import { EventFeed, TaskCard } from "./ReplayPanels";
 
@@ -96,6 +96,7 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="flex min-w-0 flex-col gap-4">
             <Hotel3D replay={replay} variant="full" />
+            <StatusLegend className="px-1 sm:hidden" />
             <Card>
               <PlaybackControls replay={replay} />
             </Card>

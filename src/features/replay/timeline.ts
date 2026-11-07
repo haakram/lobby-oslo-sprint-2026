@@ -239,7 +239,7 @@ function describeDecision(kind: string, data: Record<string, unknown>, requests:
       const gain = before !== null && after !== null ? after - before : null;
       return {
         label: "Hypotese",
-        text: `${str(data.id) ?? ""} · ${str(data.action) ?? ""}${gain !== null ? ` (${gain >= 0 ? "+" : ""}${gain} p)` : ""}`,
+        text: `${str(data.id) ?? ""} · ${str(data.action) ?? ""}${gain !== null ? ` (${gain > 0 ? "+" : ""}${gain} p)` : ""}`,
         tone: gain ? "accent" : "neutral",
       };
     }
@@ -284,8 +284,22 @@ function describeDecision(kind: string, data: Record<string, unknown>, requests:
   }
 }
 
+/** Node ids inside free text ("room-319", "corridor-1b") in the hotel's own words. */
+export function humanise(text: string): string {
+  return text
+    .replace(/\broom-(\d+)\b/g, "rom $1")
+    .replace(/\bcorridor-(\w+)\b/g, "korridor $1")
+    .replace(/\belevator-(\d)\b/g, "heis $1")
+    .replace(/\bstairwell-(\d)\b/g, "trapp $1")
+    .replace(/\bkitchen-pass\b/g, "kjøkkenluka")
+    .replace(/\bcharging-dock\b/g, "ladestasjonen")
+    .replace(/\bfront-desk\b/g, "resepsjonen")
+    .replace(/\blobby-bar\b/g, "baren")
+    .replace(/\bstaff-room\b/g, "personalrommet");
+}
+
 /** What a robot action means. Only the actions worth a line in the feed. */
-function describeCall(cmd: string, args: Record<string, unknown>, ok: boolean, result: unknown): Described | null {
+function describeCall(cmd: string, args: Record<string, unknown>, ok: boolean, result: unknown, node: string | null): Described | null {
   const text = str(result) ?? "";
   if (!ok) {
     return { label: "Gikk ikke", text: `${cmd}: ${text}`, tone: "danger" };
@@ -293,8 +307,14 @@ function describeCall(cmd: string, args: Record<string, unknown>, ok: boolean, r
   switch (cmd) {
     case "knock":
       return { label: "Banket på", text: `${placeName(str(args.door))} · ${text}`, tone: "neutral" };
-    case "place":
-      return { label: "La igjen", text: `${itemName(str(args.item))} i ${placeName(str(args.where)).toLowerCase()}`, tone: "neutral" };
+    case "place": {
+      const where = str(args.where) ?? node;
+      return {
+        label: "La igjen",
+        text: `${itemName(str(args.item))}${where ? ` ${str(args.where) ? "i" : "ved"} ${placeName(where).toLowerCase()}` : ""}`,
+        tone: "neutral",
+      };
+    }
     case "pick":
       return { label: "Plukket", text: itemName(str(args.item)), tone: "neutral" };
     case "say": {
@@ -365,7 +385,7 @@ export function buildTimeline(lines: readonly RunLine[]): Timeline {
       clock: simToClock(t),
       kind,
       label: described.label,
-      text: described.text,
+      text: humanise(described.text),
       tone: described.tone,
       request,
       decision,
@@ -437,7 +457,7 @@ export function buildTimeline(lines: readonly RunLine[]): Timeline {
           cart = [];
           carryChanged(t);
         }
-        const described = describeCall(line.cmd, args ?? {}, line.ok, line.result);
+        const described = describeCall(line.cmd, args ?? {}, line.ok, line.result, node);
         if (described) pushEvent(t, `call:${line.cmd}`, described, str(args?.request), false);
         lastT = Math.max(lastT, t);
         break;
@@ -508,7 +528,7 @@ export function buildTimeline(lines: readonly RunLine[]): Timeline {
             room,
             place: str(data.place),
             type: str(data.type) ?? "annet",
-            text: str(data.text) ?? "",
+            text: humanise(str(data.text) ?? ""),
             request,
           });
           if (room && HOTEL_NODES[room]) timeline.roomChanges.push({ t, room, status: "avvik", note: str(data.text) });

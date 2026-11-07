@@ -34,6 +34,10 @@ jury) can watch the robot work a shift live or as a replay.
    part: tuning the planner's choices on replayable nights.
 6. A 3D viewer of the hotel with the robot, score, clock, task queue and decisions, live or replay.
 
+7. **Fewest live runs** (team lead: "as few runs as possible for the highest score"): tune and
+   develop offline against the fake server; live practice shifts only to validate, behind an explicit
+   `--live` flag, each one counted in `temp/live_runs.jsonl`.
+
 ## Non-goals
 
 - Training a model to do the routing (exact search is optimal and instant).

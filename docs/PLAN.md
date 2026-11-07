@@ -96,7 +96,8 @@ For a new teammate. ShirazIQ was invited on 2026-11-07.
 - [-] `./scripts/protect-main.sh`: dropped. GitHub's free plan has no branch protection on private
       repos; the local hooks and the team rules protect `main`.
 - [ ] Team name **Fettero** and photo handed in by Sat 12:00. [owner: Hamad]
-- [ ] Invite accepted, `setup.sh` run, first small PR (own lane in `MEMORY.md`). [owner: ShirazIQ]
+- [x] Invite accepted, `setup.sh` run, first small PR (own lane in `MEMORY.md`). [owner: ShirazIQ]
+      Verified: `setup.sh` showed all 4 plugins ✓, `secrets.sh status` shows all 3 keys set. PR: this one.
 - [ ] **Matches the brief** · [ ] **Seen working**
 
 ## Phase 1 — Recon and design (Sat, until ~13:00)
@@ -139,24 +140,66 @@ subagents): `docs/superpowers/plans/2026-11-07-nightshift-agent.md` · facts: `d
 Also a **3D hotel viewer** to watch shifts live or replayed (plan Task 11), which Track C can use in the demo.
 
 
-- [ ] **API client** for every discovered command: timeouts, retries, and every request and reply
+- [x] **API client** for every discovered command (plan Task 2, reviewed): timeouts, retries, and every request and reply
       logged to `temp/` (gitignored) so a shift can be replayed.
-- [ ] **World model:** floors, rooms, items, robot position and the task inbox, kept up to date from
+- [x] **World model** (Task 3; seed-1 map exact, corrected from `look`): floors, rooms, items, robot position and the task inbox, kept up to date from
       `status` / `inbox` (they don't reset the 20 s timer).
-- [ ] **Planner:** picks the next task by points against time, the shortest route across floors, and
+- [~] **Planner** (Task 8; value per second; batching several tasks per trip not yet): picks the next task by points against time, the shortest route across floors, and
       several tasks on one trip.
-- [ ] **Safe executor:** checks each step against the server's reply. **Never reports "done" unless
+- [x] **Safe executor** (Task 7; one report-done site, always behind a score rise): checks each step against the server's reply. **Never reports "done" unless
       the server confirms it**, refuses unsafe actions, and asks Claude for judgement on surprises.
-- [ ] **Speed:** every action well under 20 s, measured. Plain code for routine moves; Claude only
+- [x] **Speed** (live: ~1,650 calls for a full night in minutes): every action well under 20 s, measured. Plain code for routine moves; Claude only
       where judgement is needed.
-- [ ] **Cost guard:** counts Claude API spend per shift and in total, and stops before the USD 30
+- [x] **Cost guard** (Task 9; file-backed ledger, fails closed; Console limit USD 30 set): counts Claude API spend per shift and in total, and stops before the USD 30
       cap (`ANTHROPIC_BUDGET_USD`).
-- [ ] **Parallel runner:** starts N shifts at once (`mode: "final"` on Sunday), each isolated, under
+- [x] **Parallel runner** (Task 10; tested offline with the guard opened in-test): starts N shifts at once (`mode: "final"` on Sunday), each isolated, under
       the API rate limits.
-- [ ] **Score loop:** run practice shifts, read the score and the logs, fix the worst failure, repeat.
-- [ ] **Final runbook** in `OPERATIONS.md` § 7: the exact command that starts all 10 at 12:00, who
+- [~] **Score loop** (1 live night: 581 points; Task 13 for the new request types in progress; offline tune not yet calibrated): run practice shifts, read the score and the logs, fix the worst failure, repeat.
+- [x] **Final runbook** in `OPERATIONS.md` § 7 (Task 10): the exact command that starts all 10 at 12:00, who
       watches, what to do if one stops.
 - [ ] **Matches the brief** · [ ] **Seen working** (on the practice leaderboard; 10-shift dry run)
+
+#### Road to #1 on the Wybe leaderboard (team lead, 2026-11-07 ~14:00) [owner: Hamad]
+
+The #1 team's 3,448 over seed 1's 68 requests is ~50 points per request. We scored 581 because we
+failed 39 of 68 requests (unknown types), not because we were slow (the robot idled ~60 %). So: handle
+every request, then handle it fast. Few live runs: each one answers a specific question.
+
+- [ ] 1. Review + merge Task 13 (WIP `574f22d` on `hamad/na-t13`): every new request type.
+- [ ] 2. ONE live run on seed 1 (same night, same requests): the score deltas show which hypothesis
+      earns points; keep what scores, fix what doesn't. Per-hypothesis table → wybe-api.md § 13.
+- [ ] 3. Calibrate the offline fake to the real night (request mix and rate, cart 8, slips −15, end
+      06:00) so offline tuning means something.
+- [ ] 4. Speed = points (a fast delivery ~45, a slow one ~21): **batching** several requests per trip
+      with the stocked cart in best-route order; use idle time (restock, wait near the elevator, not
+      the far dock). Tune offline.
+- [ ] 5. Validate on other nights: 1–2 live runs on seed 2 (and 3) so we don't overfit seed 1 — the
+      final's 10 shifts are secret.
+- [ ] 6. Sun 11:00 freeze, 10-shift offline dry run; 12:00 `FINAL_ARMED=1 .venv/bin/python -m agent final`,
+      watch in the viewer.
+
+Target: past the median (~2,400) after steps 1–2; steps 3–5 decide the top. Live runs: ~4–5 total.
+
+### Drift — the 06:00 handover dashboard (team lead, 2026-11-07 ~13:40)
+
+Design and the 2-minute demo script: `docs/superpowers/specs/2026-11-07-ops-dashboard-design.md`.
+One story, five beats: the night on the room grid → send the cleaners → count the linen → the guest
+speaks up → close. Every beat solves a named hotel problem and maps to a prize.
+
+- [~] **Track A:** the agent logs `room_status` and `work_order` decisions (in Task 13: WIP 574f22d on hamad/na-t13, awaiting review) (additive run-log
+      `[contract]`, ARCHITECTURE § 4.3). [owner: Hamad]
+- [x] **Track A:** viewer CORS for the app's local origin (Task 14, merged) (`http://localhost:3000`) on `/api/*`, as
+      ShirazIQ asked in PR #7. [owner: Hamad]
+- [ ] **Track A:** hand over the demo run log from the next practice run (with the new decisions) as
+      `public/runs/demo.jsonl`. [owner: Hamad]
+- [ ] **Track B:** `/drift` screen: room grid, work-order feed, linen card, *Send renholderne* on the
+      existing tour engine, score strip. [owner: ShirazIQ]
+- [ ] **Track B:** voice tool `create_work_order` (proposes; *Bekreft* to add) + the guest check
+      ("Is everything else all right with the room?"). [owner: ShirazIQ]
+- [ ] **Track B:** linen count: `POST /api/count-linen` (Claude vision, metered) + expected stock
+      (test data) + a *lin* work order on deviation. [owner: ShirazIQ]
+- [ ] **Track C:** the 2-minute script into `docs/DEMO.md` § 2 and rehearsed twice against a timer;
+      sources for the hook's numbers found or the wording softened. [owner: ShirazIQ]
 
 ### Track B — Fettero app [owner: ShirazIQ]
 
@@ -206,3 +249,8 @@ Also a **3D hotel viewer** to watch shifts live or replayed (plan Task 11), whic
       allowed"? (Our reading: yes; we never paste code from other repos.)
 - [ ] **Wybe:** any rate limit on requests, or a limit on practice shifts? (They may answer "ask the
       robot".)
+- [ ] **Repo visibility for the jury:** the jury reads the commit history; the repo is private. Make
+      it public or give the jury access before Sun 14:00 (team lead's decision; CONTEXT § 11).
+- [ ] **Mock jury (12 jurors) — re-run next session**; 3 of 12 finished: `docs/checks/jury-2026-11-07.md`.
+- [ ] **Business slide** (Founders juror: 3/10): one buyer, one price, one next step, sourced numbers.
+- [ ] **Cut the demo to three beats?** (Product juror): night → work orders, send cleaners, Spanish complaint → work order; linen count and the Polish cleaner to Q&A.

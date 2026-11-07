@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,6 +16,14 @@ VIEWER_DIR = ROOT / "viewer"
 HOTEL_JSON = Path(__file__).resolve().parent / "data" / "hotel_seed1.json"
 SHIFT_RE = re.compile(r"^w2-[0-9a-f]{8,64}$")
 STATIC_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+DEFAULT_ALLOWED_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000")
+
+
+def allowed_origins() -> set[str]:
+    """CORS allowlist for /api/*: env VIEWER_ALLOWED_ORIGINS (comma-separated) or the dev default."""
+    raw = os.environ.get("VIEWER_ALLOWED_ORIGINS", "")
+    custom = {o.strip() for o in raw.split(",") if o.strip()}
+    return custom or set(DEFAULT_ALLOWED_ORIGINS)
 
 
 def read_lines(path: Path) -> list[dict]:
@@ -68,8 +77,40 @@ def make_handler(runs_dir: Path):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            self._cors_headers()
             self.end_headers()
             self.wfile.write(body)
+
+        def _is_api(self) -> bool:
+            return urlsplit(self.path).path.startswith("/api/")
+
+        def _allowed_origin(self) -> str | None:
+            origin = self.headers.get("Origin")
+            return origin if origin and origin in allowed_origins() else None
+
+        def _cors_headers(self) -> None:
+            """Echo an allowed Origin on /api/* only (never "*"); static files get nothing."""
+            if not self._is_api():
+                return
+            self.send_header("Vary", "Origin")
+            origin = self._allowed_origin()
+            if origin:
+                self.send_header("Access-Control-Allow-Origin", origin)
+
+        def do_OPTIONS(self):
+            origin = self._allowed_origin() if self._is_api() else None
+            if origin is None:
+                self.send_response(403)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
 
         def _json(self, obj, status: int = 200) -> None:
             self._send(status, json.dumps(obj).encode())

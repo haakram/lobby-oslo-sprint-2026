@@ -213,6 +213,34 @@ def test_sign_move_switches_off_after_its_first_unverified_report(tmp_path):
     assert ex.signs_placed == {spot: "R-002"}
 
 
+def test_a_verified_spill_done_stays_on_after_a_later_miss(tmp_path):
+    # Replay seed 7: R-009 and R-012 verified, then R-049's sign on another request's patch answered
+    # "Noted."; switching spill_done (and with it every sign move) off for the night lost R-060 and
+    # R-071 (+56, +62). A proven rule stays proven: the miss was that report's patch.
+    requests = [("22:01:00", "R-001", SPILL.format(3)), ("22:01:00", "R-002", SPILL.format(2)),
+                ("22:01:00", "R-003", SPILL.format(1))]
+    fake, _session, ex = setup(tmp_path, requests=requests, wet_spots=[],
+                              wet={frozenset({"elevator-2", "corridor-2a"})},
+                              spill_spots={3: "corridor-3c", 2: None, 1: "corridor-1b"})
+    first, second, third = read_tasks(ex, 3)
+    assert ex.run(first).status == "done" and "R-001" in ex.verified
+    ex.experiments["spill_done"] = True  # proven on the report, as live (this fake credits the place)
+    out = ex.run(second)
+    assert out.status == "done" and "R-002" not in ex.verified and fake.false_done == ["R-002"]
+    assert ex.experiments["spill_done"] is True and ex.experiment("spill_done")
+    assert ex.movable_signs() == ["corridor-3c"]  # R-001's credited sign may still be moved
+    out = ex.run(third)
+    assert out.status == "done" and "R-003" in ex.verified, out
+
+
+def test_an_experiment_never_verified_still_ends_on_its_first_miss(tmp_path):
+    fake, _session, ex, task = solo(tmp_path, SPILL.format(2), wet_spots=[],
+                                    wet={frozenset({"elevator-2", "corridor-2a"})}, spill_spots={2: None})
+    ex.experiments["spill_done"] = None
+    assert ex.run(task).status == "done" and fake.false_done == ["R-001"]
+    assert ex.experiments["spill_done"] is False
+
+
 def test_out_of_signs_and_the_old_sign_refused_is_declined_and_never_tried_again(tmp_path, monkeypatch):
     requests = [("22:01:00", "R-001", SPILL.format(3)), ("22:01:00", "R-002", SPILL.format(2))]
     fake, session, ex = setup(tmp_path, requests=requests, wet_spots=[],

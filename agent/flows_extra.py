@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from agent.client import ShiftEnded, WybeError
-from agent.executor import ActionFailed, Declined, Executor
+from agent.executor import ActionFailed, Declined, Executor, OutOfStock, night_seconds
 from agent.flows import HANDLERS as BASE_HANDLERS
 from agent.flows import (
     Result,
@@ -287,19 +287,28 @@ def _find_wet(ex: Executor, floor: int, corridors: list[str], seen: list[str],
         ex.go(remaining.pop(0))
 
 
-def _movable_signs(ex: Executor) -> list[str]:
-    """Where our signs stand over spills already reported done and verified, oldest first."""
-    return [place for place, rid in ex.signs_placed.items() if rid in ex.verified]
+def _old_patches(ex: Executor, task: Task) -> set[str]:
+    """Wet spots first seen before the request's message arrived (its `at` clock; another team, 61
+    shifts: a patch first seen after it is the right one 95-98 % of the time, one before 12 of 30).
+    A patch seen between the message and the inbox read is new. No readable clock: every spot."""
+    ex.stamp_wet()  # what the last reply showed
+    try:
+        arrived = night_seconds(task.arrived)
+    except (AttributeError, TypeError, ValueError):
+        return set(ex.hotel.wet_spots())
+    return {spot for spot, seen in ex.wet_first_seen.items() if seen < arrived}
 
 
 def _take_old_sign(ex: Executor, task: Task) -> str | None:
     """Out of signs (experiment sign_move): the sign over the oldest spill already reported done and
-    verified is picked up for the new patch. Returns where it stood, or None if none could be had."""
-    for place in _movable_signs(ex):
+    verified is picked up for the new patch. Returns where it stood, or None if none could be had.
+    One out of reach or refused is dropped for the night: never walked to again."""
+    for place in ex.movable_signs():
         try:
             ex.go(place)
         except ActionFailed as exc:
             ex.log("sign_move_failed", request=task.request, place=place, reason=str(exc)[:200])
+            ex.signs_placed.pop(place)
             continue
         ok, text = ex.pick_or_cart("wet-floor-sign")
         if ok:
@@ -316,24 +325,21 @@ def spill(ex: Executor, task: Task, h: Hyp) -> Result:
     """H-spill: a wet-floor sign placed (no `where`) on the NEW wet patch of floor N and LEFT THERE;
     the credit comes on the report, not the place (live seed 4, R-019/R-032: "Noted. Thanks." +43/+63
     with the sign on the newly wet spot; six reports with the sign elsewhere: "Noted." -30). New: not
-    in the robot's wet set when the request was read, nor under a sign of ours (another team, 61
-    shifts: a patch first seen wet after the message is the right one 95-98 % of the time, one wet
-    before it 12 of 30). Done only with the sign on a new patch and the robot standing on it, on a
-    score rise or (experiment spill_done) on the report; no new patch, only old ones, or a failed
-    place: declined, nothing placed or moved. Never a second placement in one request. Out of signs
-    (experiment sign_move): the sign over the oldest verified spill is moved, once a new patch shows."""
+    first seen wet before the request's message arrived (_old_patches), nor under a sign of ours.
+    Done only with the sign on a new patch and the robot standing on it, on a score rise or
+    (experiment spill_done) on the report; no new patch, only old ones, or a failed place: declined,
+    nothing placed or moved. Never a second placement in one request. Out of signs (experiments
+    sign_move and spill_done): the sign over the oldest verified spill is moved, once a new patch shows."""
     floor = task.floor
-    known = set(ex.wet_at_read.get(task.request, ex.hotel.wet_spots())) | set(ex.signs_placed)
+    known = _old_patches(ex, task) | set(ex.signs_placed)
     corridors = sorted(n for n, v in ex.hotel.nodes.items() if v["kind"] == "corridor" and v["floor"] == floor)
     if not corridors:
         raise ActionFailed(f"no corridors known on floor {floor}")
     out_of_signs = False
     try:
         ex.gather("wet-floor-sign")
-    except ActionFailed as exc:
-        if "out of stock" not in str(exc):
-            raise
-        if not (ex.experiment("sign_move") and _movable_signs(ex)):
+    except OutOfStock:
+        if not ex.movable_signs():
             h.log("no wet-floor sign left; nothing placed", h.before, ex.score_now())
             raise Declined(f"No wet-floor sign left for the spill on floor {floor}: storage is empty "
                            "and no placed sign may be moved.") from None
@@ -346,8 +352,8 @@ def spill(ex: Executor, task: Task, h: Hyp) -> Result:
         ex.work_order("sol", f"Søl meldt i etasje {floor}: fant ikke nytt vått gulv", request=task.request)
         h.log("no new wet patch seen; no sign placed", h.before, ex.score_now(), seen=seen,
               known=sorted(known), old=old)
-        why = (f"only {', '.join(old)}, wet before this request (a sign there is not this spill's)"
-               if old else "no wet patch")
+        why = (f"only {', '.join(old)}, first seen wet before this request came in at {task.arrived} "
+               "(a sign there is not this spill's)" if old else "no wet patch")
         raise Declined(f"No new wet patch on floor {floor}: {why}. Seen: " + "; ".join(seen))
     signed = {s.split(":")[0] for s in seen if "sign stands" in s.lower()}
     spot = ([s for s in new if s not in signed] or new)[0]

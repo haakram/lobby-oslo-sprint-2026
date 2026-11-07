@@ -7,8 +7,16 @@ it only 12 of 30 times; moving a sign off an older, already-credited spill cost 
 game-minutes (spills never dry). Storage holds 3 signs; rich nights have 5-7 spills.
 """
 
-from agent.agent import _read_inbox
+import pytest
+
+from agent.agent import _read_inbox, run_shift
+from agent.executor import ActionFailed, OutOfStock
+from agent.planner import Params, choose_next, estimate_seconds
+from agent.tasks import Kind, Task
+from agent.world import Hotel, RobotState
+from tests.agent.test_agent import client_for
 from tests.agent.test_executor import calls, decisions, map_file, next_task, setup, solo
+from tests.fakes.fake_wybe import FakeWybe
 
 SPILL = "Someone mentioned a spill on floor {}."
 OLD_PATCH = {frozenset({"elevator-3", "corridor-3a"})}  # wet all night; known before the spill
@@ -89,17 +97,37 @@ def test_a_failed_sign_placement_is_declined(tmp_path, monkeypatch):
     assert ex.signs_placed == {}
 
 
-def test_a_patch_first_seen_wet_after_the_request_was_read_counts_as_new(tmp_path):
-    # Known wet before this request = the robot's wet set when the request was READ: a patch the robot
-    # learnt between the read and the task's start (on another task) is still this spill's.
-    fake, _session, ex = setup(tmp_path, requests=[("22:01:00", "R-001", SPILL.format(3))],
-                               spill_spots={3: "corridor-3c"}, wet_spots=[])
+def test_a_patch_first_seen_wet_after_the_message_but_before_the_read_counts_as_new(tmp_path):
+    # Old = first seen wet before the request's message arrived (its `at` clock). Reads lag the
+    # message (up to ~17 sim-min live): a patch the robot sees in that gap is this spill's (another
+    # team: 95-98 % right), so it gets the sign.
+    fake, _session, ex = setup(tmp_path, requests=[("22:00:05", "R-001", SPILL.format(1))],
+                               spill_spots={1: "corridor-1b"}, wet_spots=[])
+    ex.go("storage")  # past corridor-1a, whose look shows 1b wet: after the message, before any read
+    assert "corridor-1b" in ex.hotel.wet_spots() and fake._unread
     (task,) = read_tasks(ex, 1)
-    assert ex.wet_at_read == {"R-001": frozenset()}
-    ex.hotel.mark_wet("corridor-3b", "corridor-3c")  # learnt after the read
     out = ex.run(task)
     assert out.status == "done", out
-    assert sign_moves(fake)[-1] == ("place", "corridor-3c") and not fake.false_done
+    assert sign_moves(fake)[-1] == ("place", "corridor-1b") and not fake.false_done
+    assert ex.wet_first_seen["corridor-1b"] >= ex_seconds(task.arrived)
+
+
+def test_wet_spots_are_stamped_with_the_clock_they_were_first_seen_at_across_midnight(tmp_path):
+    _fake, _session, ex = setup(tmp_path, requests=[])
+    ex.state.clock = "23:59:50"
+    ex.hotel.mark_wet("corridor-1a", "corridor-1b")
+    ex.stamp_wet()
+    ex.state.clock = "00:00:10"
+    ex.hotel.mark_wet("corridor-1a", "corridor-1b")  # already stamped: unchanged
+    ex.hotel.mark_wet("corridor-1b", "corridor-1c")
+    ex.stamp_wet()
+    assert ex.wet_first_seen["corridor-1b"] < ex.wet_first_seen["corridor-1c"]
+    assert ex.wet_first_seen["corridor-1c"] - ex.wet_first_seen["corridor-1b"] == 20
+
+
+def ex_seconds(clock):
+    from agent.executor import night_seconds
+    return night_seconds(clock)
 
 
 # --- rule 2: out of signs, the oldest credited sign is moved -------------------------------------
@@ -165,6 +193,87 @@ def test_out_of_signs_and_the_old_sign_refused_is_declined_and_never_tried_again
     assert fake.reports["R-002"] == "declined" and not fake.false_done
     assert ex.signs_placed == {} and fake._objects["corridor-3c"] == {"wet-floor-sign": 1}
     assert [d["place"] for d in decisions(session, "sign_move_failed")] == ["corridor-3c"]
+
+
+def _one_sign_two_spills(tmp_path):
+    requests = [("22:01:00", "R-001", SPILL.format(3)), ("22:01:00", "R-002", SPILL.format(2))]
+    fake, session, ex = setup(tmp_path, requests=requests, wet_spots=[],
+                              spill_spots={3: "corridor-3c", 2: "corridor-2b"},
+                              hotel_path=map_file(tmp_path, signs_in_storage(1)))
+    first, second = read_tasks(ex, 2)
+    assert ex.run(first).status == "done" and ex.signs_placed == {"corridor-3c": "R-001"}
+    return fake, session, ex, second
+
+
+def test_out_of_signs_and_the_old_sign_out_of_reach_is_declined_and_never_tried_again(tmp_path, monkeypatch):
+    fake, session, ex, second = _one_sign_two_spills(tmp_path)
+    real = ex.go
+
+    def go(dst, **kw):
+        if dst == "corridor-3c":
+            raise ActionFailed("could not reach corridor-3c: closed off")
+        return real(dst, **kw)
+
+    monkeypatch.setattr(ex, "go", go)
+    out = ex.run(second)
+    assert out.status == "declined" and "corridor-2b" in out.note, out
+    assert ex.signs_placed == {} and fake._objects["corridor-3c"] == {"wet-floor-sign": 1}
+    assert [d["place"] for d in decisions(session, "sign_move_failed")] == ["corridor-3c"]
+
+
+def test_no_sign_is_moved_while_spill_done_is_off(tmp_path):
+    # Live the place never raises the score: with spill_done refuted the done report cannot be made,
+    # so a credited sign must stay where it is.
+    fake, _session, ex, second = _one_sign_two_spills(tmp_path)
+    ex.experiments["spill_done"] = False
+    assert ex.movable_signs() == []
+    moves = len(sign_moves(fake))
+    out = ex.run(second)
+    assert out.status == "declined" and "sign" in out.note.lower(), out
+    assert len(sign_moves(fake)) == moves and ex.signs_placed == {"corridor-3c": "R-001"}
+
+
+def test_gather_raises_out_of_stock_as_its_own_exception(tmp_path):
+    _fake, _session, ex = setup(tmp_path, requests=[], hotel_path=map_file(tmp_path, signs_in_storage(0)))
+    with pytest.raises(OutOfStock, match="wet-floor-sign out of stock"):
+        ex.gather("wet-floor-sign")
+
+
+# --- the planner prices an out-of-stock spill with a movable sign --------------------------------
+
+
+def test_planner_runs_an_out_of_stock_spill_with_a_movable_sign_before_a_longer_task():
+    hotel = Hotel.load()
+    hotel.stock["storage"]["wet-floor-sign"] = 0
+    st = RobotState(location="corridor-3d", clock="22:30:00")
+    spill = Task(request="R-2", kind=Kind.SPILL, text="", arrived="22:20:00", floor=3)
+    far = Task(request="R-3", kind=Kind.LOST_ITEM, text="", arrived="22:20:00", room="room-101",
+               item="glasses", area_hint="lobby-bar")
+    assert estimate_seconds(spill, st, hotel, Params()) >= 1e6  # nothing movable: unpriced, last
+    assert choose_next([far, spill], st, hotel, Params()) is far
+    movable = ["corridor-3c"]
+    secs = estimate_seconds(spill, st, hotel, Params(), movable_signs=movable)
+    assert secs < estimate_seconds(far, st, hotel, Params(), movable_signs=movable)
+    assert choose_next([far, spill], st, hotel, Params(), movable_signs=movable) is spill
+
+
+def test_shift_loop_gives_the_planner_the_movable_signs(tmp_path, monkeypatch):
+    import agent.agent as mod
+
+    seen = []
+    real = mod.choose_next
+
+    def spy(tasks, state, hotel, params, **kw):
+        seen.append(kw.get("movable_signs"))
+        return real(tasks, state, hotel, params, **kw)
+
+    monkeypatch.setattr(mod, "choose_next", spy)
+    fake = FakeWybe(requests=[("22:01:00", "R-001", SPILL.format(3)), ("22:20:00", "R-002", SPILL.format(2))],
+                    spill_spots={3: "corridor-3c", 2: "corridor-2b"}, wet_spots=[],
+                    hotel_path=map_file(tmp_path, signs_in_storage(1)))
+    run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:50:00")
+    assert ["corridor-3c"] in seen
+    assert fake.reports == {"R-001": "done", "R-002": "done"} and not fake.false_done
 
 
 def test_gather_never_takes_a_sign_standing_on_a_wet_patch(tmp_path):

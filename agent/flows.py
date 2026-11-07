@@ -457,7 +457,7 @@ def lost_item(ex: Executor, task: Task) -> Result:
     item = task.item
     if not item:
         raise ActionFailed("no lost item named")
-    room = task.room or _ask_room(ex, task.guest)
+    room = task.room or _ask_room(ex, task.guest, task.request)
     _corridor(ex, room)
     _refuse_known_dnd(ex, room, task.request)
     stock = {name for items in ex.hotel.stock.values() for name in items}
@@ -474,10 +474,20 @@ def lost_item(ex: Executor, task: Task) -> Result:
     return result
 
 
-def _ask_room(ex: Executor, guest: str | None) -> str:
-    """The clerk knows guests' rooms; asked once per name per shift (the answer is cached)."""
+def _ask_room(ex: Executor, guest: str | None, request: str | None = None) -> str:
+    """The clerk knows guests' rooms; asked once per name per shift (the answer is cached). For a
+    room described by place ("next to the elevator on floor 3") the night manager is asked first
+    with `reply` (0 s against the clerk's 30 s); the clerk is the fallback."""
     if not guest:
         raise ActionFailed("no room and no guest name in the request")
+    if guest not in ex.guest_rooms and guest.startswith("next to") and request:
+        asked = ex.cmd("reply", request=request, text=f"Which room number is the one {guest}?")
+        text = str(asked.result)
+        m = re.search(r"(?<![\dR-])(\d{3})(?!\d)", text.replace(request, ""))
+        ex.log("asked_manager", request=request, question=guest, answer=text[:160],
+               room=f"room-{m[1]}" if asked.ok and m else None)
+        if asked.ok and m:
+            ex.guest_rooms[guest] = f"room-{m[1]}"
     if guest not in ex.guest_rooms:
         ex.go(ex.hotel.special.get("clerk", "front-desk"))
         question = f"Which room is {guest}?" if guest.startswith("next to") else f"Which room is {guest} in?"

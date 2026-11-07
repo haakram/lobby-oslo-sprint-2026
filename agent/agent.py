@@ -226,6 +226,41 @@ def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]
            reported=reply.ok, reply=str(reply.result)[:80])
 
 
+NIGHT_END_S = clock_to_seconds("06:00:00") + 24 * 3600  # the server ends the shift at 06:00
+
+
+def _too_late(task: Task, state: RobotState, hotel: Hotel, params: Params) -> bool:
+    """True when the task's estimated time runs past 06:00 (clocks after midnight wrap)."""
+    try:
+        now = clock_to_seconds(state.clock)
+    except (ValueError, AttributeError):
+        return False
+    if now < clock_to_seconds("12:00:00"):
+        now += 24 * 3600
+    from agent.planner import UNREACHABLE_S, estimate_seconds
+
+    secs = estimate_seconds(task, state, hotel, params)
+    if secs >= UNREACHABLE_S:
+        return False  # not priced (an unknown room is explored first): let the flow decide
+    return now + secs > NIGHT_END_S
+
+
+def _close_out(ex: Executor, pending: list[Task]) -> None:
+    """Nothing left can finish before the day shift: every pending request is reported declined
+    (never punished; other teams' notes suggest an unanswered request may cost ~15 at 06:00)."""
+    for task in list(pending):
+        pending.remove(task)
+        try:
+            reply = ex.cmd("report", request=task.request, outcome="declined",
+                           note="Not reached before the end of the night shift; handing over to the day shift")
+            ex.ledger.set_status(task.request, "declined")
+            ex.log("closed_out", request=task.request, reply=str(reply.result)[:80])
+        except (WybeError, ShiftEnded):
+            raise
+        except Exception as exc:  # noqa: BLE001 - one odd reply must not stop the close-out
+            ex.log("closed_out", request=task.request, error=str(exc)[:120])
+
+
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:
     reply = ex.cmd("inbox")
     ex.inbox_waiting = False
@@ -347,6 +382,9 @@ def run_shift(
                     continue
                 ex.ensure_battery()  # below 25 %: charge at the dock before the next task or wait
                 task = choose_next(pending, state, hotel, params)
+                if task is not None and _too_late(task, state, hotel, params):
+                    _close_out(ex, pending)  # the shortest cannot finish by 06:00: none can
+                    task = None
                 if task is None:
                     ex.wait_for_request(should_stop=out_of_time)
                 else:

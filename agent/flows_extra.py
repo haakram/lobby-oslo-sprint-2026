@@ -115,7 +115,7 @@ def named(ex: Executor, task: Task, h: Hyp) -> Result:
     covers the delivery (score_before is from before the ask)."""
     h.extra.update(guest=task.guest, room=None)
     cached = task.guest in ex.guest_rooms
-    room = _ask_room(ex, task.guest)
+    room = _ask_room(ex, task.guest, task.request)
     ex.ledger.set_room(task.request, room)
     h.extra["room"] = room
     found = f"{'cached' if cached else 'asked the clerk'}: {task.guest} is in {room}"

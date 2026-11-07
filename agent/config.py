@@ -3,6 +3,7 @@
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
 
@@ -19,6 +20,27 @@ class Settings:
     runs_dir: Path = Path("temp/runs")
 
 
+LOCAL_HOSTS = ("localhost", "127.0.0.1")
+
+
+def _checked_url(url: str) -> str:
+    """The bearer key goes to this URL: https only, plain http just for local test servers."""
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        parts, host = None, None
+    if parts is not None and (
+        (parts.scheme == "https" and host)
+        or (parts.scheme == "http" and host in LOCAL_HOSTS)
+    ):
+        return url
+    raise ValueError(
+        "WYBE_NIGHTSHIFT_URL must start with https:// (http:// is allowed only for "
+        "localhost or 127.0.0.1)"
+    )
+
+
 def load_settings(env_files: tuple[str, ...] = (".env", ".env.local")) -> Settings:
     values: dict[str, str | None] = {}
     for path in env_files:
@@ -29,7 +51,7 @@ def load_settings(env_files: tuple[str, ...] = (".env", ".env.local")) -> Settin
         return values.get(name) or default
 
     return Settings(
-        url=get("WYBE_NIGHTSHIFT_URL", "https://nightshift.wybe.me/"),
+        url=_checked_url(get("WYBE_NIGHTSHIFT_URL", "https://nightshift.wybe.me/")),
         key=get("WYBE_NIGHTSHIFT_KEY"),
         anthropic_key=get("ANTHROPIC_API_KEY") or None,
         budget_usd=float(get("ANTHROPIC_BUDGET_USD", "30")),

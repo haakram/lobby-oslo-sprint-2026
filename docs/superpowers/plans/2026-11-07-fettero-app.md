@@ -1,0 +1,172 @@
+# Fettero app (Track B) Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** A professional-looking Next.js app with four screens (Eyes, Routes, Voice, Night shift) that identifies products without a barcode, draws the shortest multi-floor route, talks in the speaker's language through ElevenLabs, and replays Track A's shift.
+
+**Architecture:** Next.js App Router at the repo root. Each screen is a feature folder under `src/features/`; shared tokens and components live in `src/ui/`; server-only code (env, Claude, ElevenLabs token) lives in route handlers and `src/lib/`. Track A's router is reused through a precomputed route matrix; the app only orders stops.
+
+**Tech Stack:** Next.js (App Router), React, TypeScript strict, npm, Tailwind CSS v4, `motion`, `zod`, `@anthropic-ai/sdk`, `@elevenlabs/react`, `@elevenlabs/elevenlabs-js`, `@mediapipe/tasks-vision`, `server-only`, Vitest + Testing Library + jsdom, Playwright.
+
+**Spec:** `docs/superpowers/specs/2026-11-07-fettero-app-design.md`
+
+**Branch:** `shiraziq/app` (from `main`). Never commit to `main`. End with `/handoff`.
+
+## Global Constraints
+
+- **Never run the app (`npm run dev`, `next start`, Playwright against a server) or generate speech without ShirazIQ's explicit yes in chat.** `npm run build`, lint, typecheck and unit tests are fine.
+- Never edit `agent/`, `viewer/`, `scripts/`, `.github/`, `.githooks/`, `.claude/`. Ask Hamad.
+- Keys only in route handlers / `src/lib/env.ts` (imports `server-only`). Never `NEXT_PUBLIC_` a secret. Never print, log or commit a key; never open `.env`.
+- Claude model `claude-opus-5-5`, `output_config.effort: "low"`, structured output via `client.messages.parse` with a zod schema, server-side fallbacks on (`betas: ["server-side-fallback-2026-07-01"]`, `fallbacks: "default"`); check `stop_reason === "refusal"` before reading content. Price $4 / $20 per MTok. Read `typescript/claude-api/README.md` from the `claude-api` skill before writing the call.
+- App Claude share: `APP_CLAUDE_BUDGET_USD`, default `5`. Refuse with HTTP 429 and copy *"Dagens kvote for gjenkjenning er brukt opp."* once spent.
+- ElevenLabs: before writing voice code run `npx -y @elevenlabs/cli@latest onboard check --answered --env-path .env` and follow what it prints. Look up `@elevenlabs/react` and `@elevenlabs/elevenlabs-js` APIs with Context7; do not guess them.
+- UI copy is Norwegian bokmål, no emoji, verbs on buttons. Every value comes from `DESIGN.md` tokens. `prefers-reduced-motion` turns all motion off.
+- Test data only. Stubs get `TODO(phase-2): …`.
+- `./scripts/check.sh` must pass before every push (it runs `npm run lint`, `typecheck`, `test`, `build`).
+- One PR per task group is fine; the PR that first reads `ELEVENLABS_AGENT_ID` / `APP_CLAUDE_BUDGET_USD` has `[contract]` in its title.
+
+## Review Focus
+
+1. **Camera or microphone permission denied, or no camera (desktop without webcam):** a clear full-screen state explaining what to allow, never a blank black box. Tests in Task 3 and Task 5.
+2. **Identify gets an image Claude can't place** (blurred, not a product, not in the catalogue): the card says *"Ikke i katalogen"* with the text it read; `sku: null` never crashes the card or the route button. Tests in Task 2 and Task 3.
+3. **A voice tool called with a bad or unknown argument** (an SKU not in the catalogue, an empty stop list, injected text): the tool returns an error string to the agent and the UI does nothing. Tests in Task 5.
+4. **Route with 0, 1 or duplicate stops, or a stop with no route in the matrix:** 0 → empty state; 1 → a single leg; duplicates collapse; missing pair → *"Ingen rute funnet"*, no throw. Tests in Task 4.
+5. **Run log with a malformed line, an unknown type, or a shift still running (no `end`):** bad lines are skipped and counted, unknown types ignored, live shift shows *"Pågår"*. Tests in Task 6.
+
+---
+
+### Task 1: Scaffold, design system and app shell (runs first; everything else depends on it)
+
+**Files:**
+- Create: `package.json`, `package-lock.json`, `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `postcss.config.mjs`, `vitest.config.ts`, `vitest.setup.ts`
+- Create: `src/app/layout.tsx`, `src/app/globals.css`, `src/app/page.tsx`, `src/app/oyne/page.tsx`, `src/app/ruter/page.tsx`, `src/app/stemme/page.tsx`, `src/app/natteskift/page.tsx` (feature pages are placeholders rendering `<ComingSoon title=… />`)
+- Create: `src/ui/` — `Button.tsx`, `Card.tsx`, `Sheet.tsx`, `Badge.tsx`, `Stat.tsx`, `Skeleton.tsx`, `EmptyState.tsx`, `ErrorState.tsx`, `AppNav.tsx`, `ComingSoon.tsx`, `motion.ts`, `index.ts`, `ui.test.tsx`
+- Create: `src/lib/env.ts`, `src/lib/env.test.ts`
+- Create: `src/features/catalog/products.ts`, `src/features/catalog/products.test.ts`
+- Create: `src/features/picklist/PicklistProvider.tsx`, `src/features/picklist/picklist.test.tsx`
+- Modify: `DESIGN.md` (fill every TBD), `.gitignore` (add `.next/`, `node_modules/`, `next-env.d.ts`, `/test-results/`, `/playwright-report/` if missing)
+
+**Interfaces:**
+- Produces:
+  - `serverEnv(): { ANTHROPIC_API_KEY: string; ELEVENLABS_API_KEY: string; ELEVENLABS_AGENT_ID: string | undefined; APP_CLAUDE_BUDGET_USD: number }` in `src/lib/env.ts` (imports `server-only`; zod; budget defaults to 5; throws a message naming the missing variable, never its value).
+  - `type Product = { sku: string; name: string; category: "hygiene" | "food" | "linen" | "other"; description: string; location: string /* map node id */; locationLabel: string }`, `PRODUCTS: readonly Product[]` (12 made-up items: shampoo, liquid soap, bar soap, toothpaste, shower gel, lotion, crispbread, oat bar, instant soup, bottled water, bath towel, hand towel; SKUs `FT-1001`…`FT-1012`; locations are node ids from `agent/data/hotel_seed1.json` when it exists, else from the stub in Task 4), `productBySku(sku: string): Product | undefined`.
+  - `usePicklist(): { skus: string[]; add(sku: string): void; remove(sku: string): void; clear(): void }` from `PicklistProvider` (wrapped in `layout.tsx`; dedupes; survives navigation, not reloads).
+  - UI components with typed props; motion presets `fadeRise`, `sheetIn`, `drawLine` in `src/ui/motion.ts` that return no-op variants when reduced motion is on.
+
+- [ ] **Step 1:** Create branch `shiraziq/app` from `main`. Scaffold Next.js (App Router, TypeScript, Tailwind v4, ESLint, `src/`, npm) at the repo root without overwriting existing docs. Install **all** dependencies in the Tech Stack line now so later tasks never touch `package.json`. Scripts: `lint` (`next lint` or `eslint .`), `typecheck` (`tsc --noEmit`), `test` (`vitest run`), `build` (`next build`), `routes` (`.venv/bin/python src/features/routes/export_routes.py`). ESLint ignores `agent/`, `viewer/`, `temp/`, `.venv/`.
+- [ ] **Step 2:** Invoke `frontend-design:frontend-design` with the spec's *Look and feel* section and fill `DESIGN.md`: character, world, two `next/font` families (one grotesque sans, one mono — not Inter, not the Geist default), full colour token table for light and dark surfaces with contrast ratios, spacing and radius scale, motion durations (150–300 ms, no bounce), states, components, voice. Map tokens to CSS variables in `globals.css` and Tailwind theme.
+- [ ] **Step 3: Write failing tests** — `env.test.ts`: missing `ANTHROPIC_API_KEY` throws an error whose message contains `ANTHROPIC_API_KEY` and not the other keys' values; `APP_CLAUDE_BUDGET_USD` unset → `5`; `"abc"` → throws. `products.test.ts`: 12 products, SKUs unique and match `/^FT-1\d{3}$/`, `productBySku("FT-1001")?.name` is defined, `productBySku("nope")` is `undefined`. `picklist.test.tsx`: add twice → one entry; remove; clear. `ui.test.tsx`: `Button` renders its label and is disabled with `loading`; `EmptyState` renders title and action.
+- [ ] **Step 4:** Run `npm test` → FAIL. Implement. Run `npm test` → PASS.
+- [ ] **Step 5:** Build the shell: `AppNav` (bottom tab bar on phones, side rail ≥ 1024 px; tabs *Øyne*, *Ruter*, *Stemme*, *Natteskift*; active state; keyboard focus ring), home page with the product name **Fettero**, one-line promise and four large entry cards. Metadata title `Fettero`.
+- [ ] **Step 6:** Run `./scripts/check.sh` → `GATE PASSED` with lint, typecheck, test, build all PASS.
+- [ ] **Step 7: Commit** `git commit -m "Track B: Next.js scaffold, design system, app shell, catalogue, picklist"`.
+
+### Task 2: Identify API (parallel with 4, 6 after Task 1)
+
+**Files:**
+- Create: `src/lib/spend.ts`, `src/lib/spend.test.ts`
+- Create: `src/features/eyes/identify.ts` (server-only), `src/features/eyes/identify.test.ts`, `src/features/eyes/schema.ts`
+- Create: `src/app/api/identify/route.ts`, `src/app/api/identify/route.test.ts`
+
+**Interfaces:**
+- Consumes: `serverEnv()`, `PRODUCTS`, `productBySku` (Task 1).
+- Produces:
+  - `costUsd(usage: { input_tokens: number; output_tokens: number }): number` ($4 in / $20 out per MTok); `createSpendMeter(limitUsd: number): { canSpend(): boolean; record(usd: number): void; spentUsd(): number }`; module singleton `appSpend`.
+  - `IdentifyRequest = z.object({ image: z.string() /* data:image/jpeg;base64,… */ })`, max decoded size 1.5 MB, JPEG or PNG only.
+  - `IdentifyResult = { sku: string | null; name: string; category: Product["category"] | "unknown"; textSeen: string[]; confidence: "high" | "medium" | "low"; product: Product | null }` in `schema.ts` (shared with the client; no server imports).
+  - `identifyProduct(imageBase64: string, mediaType: "image/jpeg" | "image/png", deps?: { client?: Anthropic; meter?: SpendMeter }): Promise<IdentifyResult>`.
+  - `POST /api/identify` → 200 `IdentifyResult` · 400 `{ error }` bad input · 429 budget spent · 502 Claude failed or refused. Never echoes the key or the raw model error.
+
+- [ ] **Step 1: Write failing tests** with a fake Anthropic client (no network): `spend.test.ts` — `costUsd({input_tokens: 1_000_000, output_tokens: 0}) === 4`; meter with limit 0.01 refuses after recording 0.01. `identify.test.ts` — model returns `sku: "FT-1001"` → `product.sku === "FT-1001"`; returns an SKU not in `PRODUCTS` → `sku: null, product: null`; `stop_reason: "refusal"` → throws `IdentifyRefused`; usage is recorded on the meter; meter exhausted → throws `BudgetExceeded` before calling the client. `route.test.ts` — non-image data URL → 400; 2 MB image → 400; `BudgetExceeded` → 429 with the Norwegian copy; success → 200 and a valid `IdentifyResult`.
+- [ ] **Step 2:** Run `npm test -- identify spend` → FAIL.
+- [ ] **Step 3: Implement.** System prompt (stable, first, cacheable): you identify retail and hotel products from a photo; read visible text; pick the SKU from the catalogue list (sku, name, category, description) or `null`; never invent an SKU. The image goes as a base64 `image` block before a short text block. Structured output with a zod schema of `{ sku: string | null, name, category, textSeen: string[], confidence }`; `max_tokens` 1024. Map `sku` through `productBySku`.
+- [ ] **Step 4:** Run `npm test` → PASS; `./scripts/check.sh` → PASS.
+- [ ] **Step 5: Commit** `"Track B: identify API with Claude vision and spend meter"`.
+
+### Task 3: Eyes screen (after Task 2's `schema.ts` exists; can start in parallel using that interface)
+
+**Files:**
+- Create: `public/models/efficientdet_lite0.tflite` (the official MediaPipe model; record its source URL and SHA-256 in `public/models/README.md`)
+- Create: `src/features/eyes/useCamera.ts`, `useDetector.ts`, `smoothBoxes.ts`, `smoothBoxes.test.ts`, `cropFrame.ts`, `BoxOverlay.tsx`, `ProductCard.tsx`, `ProductCard.test.tsx`, `PermissionState.tsx`, `EyesScreen.tsx`
+- Modify: `src/app/oyne/page.tsx`
+
+**Interfaces:**
+- Consumes: `IdentifyResult` (Task 2), `usePicklist`, UI components (Task 1).
+- Produces: `smoothBoxes(prev: Box[], next: Box[], alpha = 0.35): Box[]` with `Box = { id: string; x: number; y: number; w: number; h: number; label: string; score: number }` (match by IoU ≥ 0.3, keep ids stable, drop boxes unseen for 10 frames); `cropFrame(video: HTMLVideoElement, box: Box | null, maxSide = 768): string` (JPEG data URL, quality 0.85; `null` → whole frame).
+
+- [ ] **Step 1: Write failing tests** — `smoothBoxes`: a box moving 100 px moves 35 px in one step and keeps its id; a new box gets a new id; a box missing 10 frames is dropped. `ProductCard`: with `product` shows name, SKU, `locationLabel`, *Vis vei* and *Legg i plukkliste*; with `sku: null` shows *"Ikke i katalogen"* and the `textSeen` lines, and no *Vis vei*; clicking *Legg i plukkliste* calls `add(sku)`.
+- [ ] **Step 2:** `npm test` → FAIL. **Step 3: Implement.** Camera: rear camera (`facingMode: "environment"`), fallback to any; `PermissionState` for denied / not found / insecure context. Detector: MediaPipe `ObjectDetector` in `VIDEO` mode on `requestAnimationFrame`, score ≥ 0.4, max 5 results, WASM from the package's `wasm` dir copied to `public/mediapipe/` at build (or loaded from jsDelivr pinned to the installed version; record the choice). Boxes animate to their smoothed positions; label *"Ukjent produkt · trykk"* until identified, then the product name. Tap a box → `cropFrame` → `POST /api/identify` → the card rises in a `Sheet` with a skeleton while waiting. Shutter button identifies the whole frame. *Vis vei* → `router.push("/ruter?sku=" + sku)`.
+- [ ] **Step 4:** `npm test` → PASS; `./scripts/check.sh` → PASS.
+- [ ] **Step 5: Commit** `"Track B: Eyes screen with live boxes and identify card"`.
+
+### Task 4: Routes (parallel with 2, 6 after Task 1)
+
+**Files:**
+- Create: `src/features/routes/types.ts`, `tour.ts`, `tour.test.ts`, `data/hotel.routes.json` (stub), `loadRoutes.ts`, `export_routes.py`, `FloorMap.tsx`, `RouteStats.tsx`, `RoutesScreen.tsx`, `RoutesScreen.test.tsx`
+- Modify: `src/app/ruter/page.tsx`
+
+**Interfaces:**
+- Consumes: `PRODUCTS`, `productBySku`, `usePicklist` (Task 1).
+- Produces:
+  - `RouteMatrix = { map: string; nodes: Record<string, { floor: number; kind: string; x: number; z: number; label?: string }>; start: string; legs: Record<string /* "a|b" */, { metres: number; seconds: number; path: string[] }> }`.
+  - `bestTour(m: RouteMatrix, stops: string[]): { order: string[]; metres: number; seconds: number; path: string[] } | { error: "no-route"; from: string; to: string }` — starts and ends at `m.start`; exact permutations for ≤ 7 unique stops, nearest neighbour + 2-opt above.
+  - `listOrderMetres(m: RouteMatrix, stops: string[]): number` — walking the stops in the given order from `start` and back.
+  - `savings(best: number, naive: number): { metres: number; percent: number }` (percent rounded to whole number; 0 when naive is 0).
+- `export_routes.py`: imports `agent.world.Hotel` and `agent.routing.shortest_route`, writes `data/hotel.routes.json` for every pair among `start` (the packing/storage node) and all `Product.location` nodes (read from a JSON list the script takes as an argument, generated by `npm run routes`). Distances come only from Track A's router.
+
+- [ ] **Step 1: Write failing tests** with a 5-node fixture matrix: `bestTour` of 3 stops returns the order with the lowest metres (assert against a hand-computed value); `[]` → `metres: 0`, `order: []`; one stop → there and back; duplicates collapse; a pair missing from `legs` → `{ error: "no-route" }`; `savings(62, 100)` → `{ metres: 38, percent: 38 }`; `savings(0, 0)` → `{ metres: 0, percent: 0 }`. `RoutesScreen`: empty picklist shows the empty state with *"Legg til varer fra Øyne"*; three SKUs show the stat row with metres and percent.
+- [ ] **Step 2:** `npm test` → FAIL. **Step 3: Implement.** Stub matrix by hand for 4–6 nodes across two floors (lift and stairs), marked `TODO(phase-2): replace with npm run routes when agent/ is on main`. `FloorMap`: SVG per floor from node x/z, floor tabs, numbered stop pins, the route path drawn with `drawLine` stop by stop, lift/stairs icons, cross-floor legs shown as a labelled hop. `RouteStats`: total metres, saved metres, saved %, in the mono font. `?sku=` query adds that SKU to the picklist on load.
+- [ ] **Step 4:** `npm test` → PASS; `./scripts/check.sh` → PASS.
+- [ ] **Step 5: Commit** `"Track B: Routes screen with best tour and savings"`.
+- [ ] **Step 6 (when `agent/` is on `main`):** run `npm run routes`, replace the stub, update `Product.location` ids to real hotel nodes, re-run tests, commit `"Track B: route matrix from Track A's router"`.
+
+### Task 5: Voice (after Task 1; starts with the onboard check)
+
+**Files:**
+- Create: `src/app/api/voice/token/route.ts`, `route.test.ts`
+- Create: `src/features/voice/tools.ts`, `tools.test.ts`, `agentConfig.ts`, `setup-agent.ts`, `useFetteroVoice.ts`, `VoiceOrb.tsx`, `Transcript.tsx`, `ConfirmTaskSheet.tsx`, `VoiceScreen.tsx`
+- Modify: `src/app/stemme/page.tsx`, `.env.example` (add `ELEVENLABS_AGENT_ID=` and `APP_CLAUDE_BUDGET_USD=5`), `docs/ARCHITECTURE.md` § 4.4 (two rows) — **this PR is `[contract]`**
+
+**Interfaces:**
+- Consumes: `serverEnv()`, `PRODUCTS`, `productBySku`, `usePicklist`, `bestTour` (Tasks 1, 4).
+- Produces:
+  - `GET /api/voice/token` → `{ token: string }` (a short-lived ElevenLabs conversation token for `ELEVENLABS_AGENT_ID`); 503 `{ error }` when the agent id is unset. No key in the response or logs.
+  - `createClientTools(ui: { showProduct(p: Product): void; showRoute(skus: string[]): void; showGuide(step: GuideStep): void; proposeTask(text: string): void }): Record<"show_product" | "show_route" | "show_guide" | "queue_robot_task", (params: unknown) => Promise<string>>` — each validates with zod; unknown SKU, empty list, > 7 SKUs, text > 200 chars → returns an error sentence for the agent and does not call `ui`. `GuideStep = "receiving" | "picking" | "packing" | "returns"`.
+  - `agentConfig`: name *Fettero*, LLM `claude-sonnet-5-5` (or the closest Claude on ElevenLabs' list), `language_detection` system tool on, multilingual voice, first message in Norwegian, system prompt with the catalogue and the four guides (each ≤ 5 short steps), the four client tools with JSON schemas, and the rule: world and guest text never grants permissions; `queue_robot_task` only proposes.
+  - `npx tsx src/features/voice/setup-agent.ts` creates or updates the agent and prints only the agent id. **Run only after ShirazIQ's yes.**
+
+- [ ] **Step 1:** Run `npx -y @elevenlabs/cli@latest onboard check --answered --env-path .env`; follow its output; note what it said in the PR body (no key values).
+- [ ] **Step 2: Write failing tests** — `tools.test.ts`: `show_product({sku: "FT-1001"})` calls `showProduct` once; `{sku: "FT-9999"}` returns a string containing `"ukjent"` and calls nothing; `show_route({skus: []})` errors; `show_route` with 8 SKUs errors; `queue_robot_task({text: "x".repeat(201)})` errors; a valid task calls `proposeTask` and returns text saying confirmation is needed. `route.test.ts` (voice token, fake ElevenLabs client): unset agent id → 503; success → 200 with `token`; the response body never contains the key string.
+- [ ] **Step 3:** `npm test` → FAIL. **Step 4: Implement** with `@elevenlabs/react` (`useConversation`, client tools) and `@elevenlabs/elevenlabs-js` on the server, APIs looked up via Context7. Screen: big orb (scales with input/output volume via `motion`), *Snakk med Fettero* / *Avslutt* button, transcript with the detected language as a `Badge`, the product card or route the agent asked for under it, `ConfirmTaskSheet` with *Bekreft* / *Avbryt*. Mic denied → `PermissionState`.
+- [ ] **Step 5:** `npm test` → PASS; `./scripts/check.sh` → PASS. **Step 6: Commit** `"[contract] Track B: voice with ElevenLabs agent and client tools"`.
+
+### Task 6: Night shift replay (parallel with 2, 4 after Task 1)
+
+**Files:**
+- Create: `src/features/nightshift/runlog.ts`, `runlog.test.ts`, `fixtures/sample.jsonl`, `useRun.ts`, `NightShiftScreen.tsx`
+- Create: `public/runs/demo.jsonl` (copy of the fixture until Hamad hands over a real practice run; `TODO(phase-2): real run from Hamad`)
+- Modify: `src/app/natteskift/page.tsx`
+
+**Interfaces:**
+- Consumes: run log v1 (`docs/ARCHITECTURE.md` § 4.3), UI components (Task 1).
+- Produces: zod schemas for the five line types; `parseRunLog(text: string): { lines: RunLine[]; skipped: number }`; `summarise(lines: RunLine[]): { shift: string | null; mode: string | null; seed: number | null; score: number; clock: string | null; location: string | null; tasksDone: number; tasksFailed: number; live: boolean; decisions: Array<{ kind: string; text: string }> /* newest first, max 20 */ }`.
+
+- [ ] **Step 1: Write failing tests** — a fixture with `start`, two `call`, `decision` task_done and task_failed, `state`, `end`: `summarise` gives `tasksDone: 1, tasksFailed: 1, live: false`, score from `end`; a garbage line and a `"v": 2` line → `skipped: 2`; no `end` → `live: true`; unknown `type` ignored.
+- [ ] **Step 2:** `npm test` → FAIL. **Step 3: Implement.** Screen: dark surface; header stat row (score, sim clock, tasks done/failed, *Pågår* or *Ferdig* badge); the decision feed animating in; *Spill av* replays `/runs/demo.jsonl` at 10× speed; when `NEXT_PUBLIC_VIEWER_URL` (not secret, default unset) is set, a *Live* tab polls `${url}/api/runs` and `/api/run/<shift>?from=n` every 2 s and an *Åpne 3D* link opens the viewer.
+- [ ] **Step 4:** `npm test` → PASS; `./scripts/check.sh` → PASS. **Step 5: Commit** `"Track B: night shift replay from run log v1"`.
+
+### Task 7: Integration, docs, look-check and deploy (last)
+
+**Files:**
+- Modify: `docs/ARCHITECTURE.md` § 1 (stack rows for Track B), § 3 (Track B paths: `src/`, `public/`, root Node config files, `tests/app/`), § 7, § 8; `CLAUDE.md` § How to run (npm commands) only via a PR Hamad agrees to; `docs/PLAN.md` Track B ticks; `MEMORY.md` own lane.
+- Create: `tests/app/screens.spec.ts` (Playwright: each route renders its heading; screenshots at 1440×900 and 390×844 into `temp/`), `playwright.config.ts`
+
+- [ ] **Step 1:** Wire the flow identify → *Legg i plukkliste* → *Ruter* shows it → voice `show_route` uses the same picklist. Test: picklist shared across screens (Testing Library with the provider).
+- [ ] **Step 2: Ask ShirazIQ for the yes to run the app.** Then `npm run dev`, Playwright screenshots of all five routes in both sizes, check the console is clean, and review every screen against `DESIGN.md` with `frontend-design` (spacing, type scale, contrast, motion, copy). Fix what's off.
+- [ ] **Step 3: Ask ShirazIQ for the yes to make speech the first time.** Run `setup-agent.ts`, then talk to it in Norwegian, English and Polish; check each tool fires and the confirm sheet blocks `queue_robot_task`.
+- [ ] **Step 4: Deploy** to Vercel only after ShirazIQ says whose account; ShirazIQ adds `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `APP_CLAUDE_BUDGET_USD` in the Vercel dashboard. Open the URL on a phone; camera and mic work over HTTPS.
+- [ ] **Step 5:** `./scripts/check.sh` → PASS; PR; merge when CI is green; `/handoff`.
+
+## Order and parallelism
+
+Task 1 alone first. Then **Tasks 2, 4, 6 in parallel** (disjoint folders). Task 3 after Task 2's `schema.ts` lands (or in parallel against the interface). Task 5 in parallel with 3 once the onboard check is done. Task 7 last.

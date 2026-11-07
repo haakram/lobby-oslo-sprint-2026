@@ -270,11 +270,13 @@ def _rank(found: list[str], known: set[str], hotel) -> list[str]:
 
 @_hypothesis("H-spill")
 def spill(ex: Executor, task: Task, h: Hyp) -> Result:
-    """H-spill: a wet-floor sign from storage, placed (no `where`) on the wet patch of floor N.
-    The first patch not known when the task started is signed; if the score does not rise, the
-    walk resumes past the patches seen so far, the sign is picked up and moved once to the next
-    not-known patch (else to the best other spot seen). At most two placements; done only on a
-    score rise."""
+    """H-spill: a wet-floor sign from storage, placed (no `where`) on the wet patch of floor N and
+    LEFT THERE; the credit comes on the report, not the place (live seed 4, R-019/R-032: "Noted.
+    Thanks." +43/+63 with the sign on the patch; every report with the sign elsewhere: "Noted."
+    -30). Best patch: one not known when the task started, else the newest known one, a patch
+    with a sign already standing last. No second placement: moving the sign is what lost the
+    credit before. Done on a score rise, or (experiment spill_done, on by default, switched off
+    for the shift by one unverified report) on the report."""
     floor = task.floor
     known = set(ex.hotel.wet_spots())
     corridors = sorted(n for n, v in ex.hotel.nodes.items() if v["kind"] == "corridor" and v["floor"] == floor)
@@ -282,67 +284,31 @@ def spill(ex: Executor, task: Task, h: Hyp) -> Result:
         raise ActionFailed(f"no corridors known on floor {floor}")
     ex.gather("wet-floor-sign")
     seen: list[str] = []
-    found, rest = _find_wet(ex, floor, corridors, seen, known)
+    found, _rest = _find_wet(ex, floor, corridors, seen, known)
     if not found:
         ex.work_order("sol", f"Søl meldt i etasje {floor}: fant ikke vått gulv", request=task.request)
         h.log("no wet patch seen; sign kept", h.before, ex.score_now(), seen=seen)
         raise ActionFailed(f"no wet patch seen on floor {floor}: " + "; ".join(seen))
-    tried: list[str] = []
-    spot = _rank(found, known, ex.hotel)[0]
-    for attempt in range(2):  # the best candidate, then one retry
-        ex.go(spot)  # a warned exit: seen, so the robot creeps onto it
-        mid = ex.score_now()
-        placed = ex.cmd("place", item="wet-floor-sign")
-        if placed.ok:
-            ex.take("wet-floor-sign")
-        after = ex.score_now()
-        tried.append(f"{spot}: {placed.result}")
-        if placed.ok and _rose(mid, after):
-            ex.work_order("sol", f"Søl ved {spot}: varselskilt satt ut", place=spot, request=task.request)
-            h.log(f"placed a wet-floor sign at {spot}: {placed.result}", mid, after,
-                  score_at_start=h.before, seen=seen, tried=tried, known=sorted(known))
-            return f"wet-floor sign placed over the spill at {spot}", None
-        if attempt or not placed.ok:
-            break
-        ok, _text = ex.pick("wet-floor-sign")  # not the spill: take the sign along
-        if not ok:
-            break
-        passed = known | set(found)  # the patches seen so far are not it: walk on
-        more, rest = _find_wet(ex, floor, rest, seen, passed)
-        others = [s for s in more if s not in passed] or [s for s in _rank(found, known, ex.hotel) if s != spot]
-        others = others or [s for s in more if s != spot]
-        if not others:
-            break
-        ex.log("sign_moved", request=task.request, from_spot=spot, to_spot=others[0], walked_on=rest == [])
-        spot = others[0]
+    signed = {s.split(":")[0] for s in seen if "sign stands" in s.lower()}
+    ranked = _rank(found, known, ex.hotel)
+    spot = ([s for s in ranked if s not in signed] or ranked)[0]
+    ex.go(spot)  # a warned exit: seen, so the robot creeps onto it
+    mid = ex.score_now()
+    placed = ex.cmd("place", item="wet-floor-sign")
+    if placed.ok:
+        ex.take("wet-floor-sign")
+    after = ex.score_now()
     ex.work_order("sol", f"Søl ved {spot}: varselskilt satt ut", place=spot, request=task.request)
-    h.log(f"sign placed without a score rise: {'; '.join(tried)}", h.before, ex.score_now(),
-          seen=seen, tried=tried, known=sorted(known))
-    if ex.state.carrying("wet-floor-sign"):
-        placed = ex.cmd("place", item="wet-floor-sign")  # the sign was taken along: set it down here
-        if placed.ok:
-            ex.take("wet-floor-sign")
-    if ex.experiment("spill_use") and ex.state.location == spot:
-        # Probe: is `use` (not `place`) the verb that sets a sign up over a spill?
-        mid = ex.score_now()
-        ok, _ = ex.pick("wet-floor-sign")
-        used = ex.cmd("use", item="wet-floor-sign") if ok else None
-        if used is not None and used.ok:
-            ex.take("wet-floor-sign")
-        after = ex.score_now()
-        ex.log("probe", name="spill_use", request=task.request, spot=spot, picked=ok,
-               reply=str(used.result if used else "")[:200], before=mid, after=after)
-        if used is not None and used.ok and _rose(mid, after):
-            return f"wet-floor sign set up over the spill at {spot} (use)", None
-        if used is not None and not used.ok and ok:
-            put = ex.cmd("place", item="wet-floor-sign")
-            if put.ok:
-                ex.take("wet-floor-sign")
-    if placed.ok and ex.experiment("spill_done"):
-        # Experiment: like a room check, the credit may come on the report, not the place.
+    h.log(f"placed a wet-floor sign at {spot}: {placed.result}", mid, after, score_at_start=h.before,
+          seen=seen, known=sorted(known), signed=sorted(signed), candidates=ranked)
+    if not placed.ok:
+        raise ActionFailed(f"could not place the wet-floor sign at {spot}: {placed.result}")
+    if _rose(mid, after):
+        return f"wet-floor sign placed over the spill at {spot}", None
+    if ex.experiment("spill_done") and ex.state.location == spot:
         ex.exp_claim("spill_done")
         return f"wet-floor sign placed over the wet patch at {spot}", None
-    raise ActionFailed(f"placed a wet-floor sign ({'; '.join(tried)}) but the score did not rise")
+    raise ActionFailed(f"placed a wet-floor sign at {spot} but the score did not rise")
 
 
 # --- H-followup ----------------------------------------------------------------------------------

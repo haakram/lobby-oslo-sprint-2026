@@ -352,7 +352,7 @@ def test_offline_full_night_fits_the_final_call_budget_on_the_17_request_script(
 # Task 24 / 2: the calibrated seed-1 night (the 68 live requests, the default fake) is still over the
 # budget (integration review: 1409 calls). The ratchet stops it creeping up; the strict xfail keeps the
 # gap visible and turns into a failure (to be flipped) the day the night fits.
-CALIBRATED_NIGHT_RATCHET = 1450
+CALIBRATED_NIGHT_RATCHET = 1500  # +70: the stale-look rule before corridor steps
 
 
 @pytest.fixture(scope="module")

@@ -25,6 +25,7 @@ Besides the run log v1 lines, two decision kinds feed the dashboard: `room_statu
 
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 import traceback
@@ -37,6 +38,11 @@ from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeErro
 from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_route
 from agent.tasks import Entry, Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
+
+WET_LOOK_S = 30 * 60  # a corridor approach looked at longer ago than this is looked at again
+# (offline seed 1: +26 points for +70 calls; 15 min gave the same points for +90 calls)
+DEFAULT_EXPERIMENTS = ("spill_done",)  # live seed 4: two spill reports verified (+43, +63) when
+# the sign stood on the patch; the report, not the place, carries the credit (like a room check)
 
 IDLE_STEPS = 200  # dock+scan cycles per wait_for_request (~100 sim-s each); the loop calls again
 IDLE_STATUS_EVERY = 10  # idle checks between fallback `status` polls (replies carry the inbox event)
@@ -128,7 +134,8 @@ class Executor:
         # not rewarded yet; the report's reply settles it. One unverified report ends the experiment
         # for the shift (a false done costs 35), a verified one keeps it on.
         names = [n.strip() for n in os.environ.get("NS_EXPERIMENTS", "").split(",") if n.strip()]
-        self.experiments: dict[str, bool | None] = {n: None for n in names}
+        self.experiments: dict[str, bool | None] = {n: None for n in names or DEFAULT_EXPERIMENTS}
+        self._look_clock: dict[str, int] = {}  # place -> sim second of the last look there
         self._exp_pending: str | None = None
 
     def experiment(self, name: str) -> bool:
@@ -253,6 +260,8 @@ class Executor:
         look = reply.result
         loc = look.get("location") if isinstance(look.get("location"), str) else self.state.location
         self.state.location = loc
+        with contextlib.suppress(ValueError, AttributeError):
+            self._look_clock[loc] = clock_to_seconds(self.state.clock)
         exits = [
             ex for ex in look.get("exits") or []
             if isinstance(ex, dict) and isinstance(ex.get("to"), str)
@@ -368,6 +377,14 @@ class Executor:
                 ride_pending = True
                 continue
             to = step.args["to"]
+            if self._stale_before_corridor(here, to):
+                before = self.hotel.version
+                try:  # wet patches appear all night: a fresh look (5 s) turns a slip into a creep
+                    self.look()
+                except ActionFailed as exc:
+                    self.log("look_failed", at=here, reason=str(exc))
+                if self.hotel.version != before:
+                    return REPLAN
             reply = self.move(to)
             ride_pending = False
             if not reply.ok:
@@ -381,6 +398,22 @@ class Executor:
             if self._look_on_arrival():
                 return REPLAN
         return None
+
+    def _stale_before_corridor(self, here: str, to: str) -> bool:
+        """Step into a corridor whose wetness is unknown and whose approach was last looked at
+        more than WET_LOOK_S ago (live seed 1: 6-7 slips a night, -15 and 60 s each, all on the
+        first step onto a patch that appeared after the first-visit look)."""
+        nodes = self.hotel.nodes
+        if nodes.get(to, {}).get("kind") != "corridor" or nodes.get(here, {}).get("kind") == "room":
+            return False
+        if here not in nodes or self.hotel.is_wet(here, to):
+            return False
+        try:
+            now = clock_to_seconds(self.state.clock)
+        except (ValueError, AttributeError):
+            return False
+        last = self._look_clock.get(here)
+        return last is None or now - last > WET_LOOK_S
 
     def _look_on_arrival(self) -> bool:
         """The first time at a non-room place this shift: one look (5 s), so wet warnings, metres

@@ -699,17 +699,20 @@ def test_spill_sign_goes_on_the_patch_not_known_when_the_task_started(tmp_path):
     assert fake.reports["R-002"] == "done" and not fake.false_done
 
 
-def test_spill_sign_is_moved_once_when_the_first_patch_does_not_score(tmp_path):
-    # Fix round 1 (reviewer's scenario): nothing on floor 3 is known, an unrelated wet patch at the
-    # landing/3a is met first and does not score; the walk resumes and the sign ends on the spill.
+def test_spill_sign_is_left_on_the_first_new_patch_and_one_unverified_report_ends_the_experiment(tmp_path):
+    # Live seed 4: the credit for a spill comes on the report with the sign standing on the patch;
+    # moving the sign to a second patch lost it every time. So the sign is placed once and left.
+    # Here the first new patch (3a) is not the fake's spill (3c): the report is unverified, the
+    # spill_done experiment switches off for the shift and the next spill is reported failed.
     fake, _session, ex, task = solo(tmp_path, "Someone mentioned a spill on floor 3.",
                                     wet=OLD_PATCH, spill_spots={3: "corridor-3c"})
+    ex.experiments = {"spill_done": None}
     out = ex.run(task)
-    assert out.status == "done", out
     places = sign_places(fake)
-    assert len(places) == 2 and places[0] in ("elevator-3", "corridor-3a") and places[-1] == "corridor-3c"
-    assert len([e for e in calls(fake, "pick") if e["args"] == {"item": "wet-floor-sign"}]) == 2
-    assert fake.reports == {"R-001": "done"} and not fake.false_done
+    assert len(places) == 1 and places[0] in ("elevator-3", "corridor-3a")
+    assert len([e for e in calls(fake, "pick") if e["args"] == {"item": "wet-floor-sign"}]) == 1
+    assert out.status == "done" and ex.experiments["spill_done"] is False
+    assert not ex.experiment("spill_done")  # the next spill will not be reported done without a rise
 
 
 def test_spill_walk_does_not_look_twice_at_the_same_place(tmp_path):

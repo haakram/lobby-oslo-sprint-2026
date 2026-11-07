@@ -17,13 +17,19 @@ export type DashboardRun = {
   retry: () => void;
 };
 
-const POLL_MS = 3000;
+/** While a shift is live on the local viewer: follow it closely. */
+export const POLL_LIVE_MS = 3000;
+/** No live shift, or the viewer is down: look again now and then. */
+export const POLL_IDLE_MS = 30_000;
 const runEntry = z.object({ shift: z.string().regex(SHIFT_ID), live: z.boolean().optional() });
 const runResponse = z.object({ lines: z.array(z.unknown()), next: z.number().int().nonnegative() });
 
 async function getJson(url: string, signal: AbortSignal): Promise<unknown> {
   const response = await fetch(url, { cache: "no-store", signal });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) {
+    await response.text().catch(() => "");
+    throw new Error(`HTTP ${response.status}`);
+  }
   return response.json();
 }
 
@@ -42,8 +48,9 @@ export function useDashboardRun(viewerUrl?: string): DashboardRun {
     const controller = new AbortController();
     fetch(DEMO_RUN, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
+        const text = await response.text();
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const { lines } = parseRunLog(await response.text());
+        const { lines } = parseRunLog(text);
         setDemo({ status: lines.length ? "ready" : "empty", lines });
       })
       .catch(() => {
@@ -53,44 +60,67 @@ export function useDashboardRun(viewerUrl?: string): DashboardRun {
   }, [attempt]);
 
   useEffect(() => {
+    // Unset on the deployed app: no polling at all.
     if (!base) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let shift: string | null = null;
     let next = 0;
     let lines: RunLine[] = [];
+    let busy = false;
 
-    async function poll() {
+    /** One look at the viewer; returns how long to wait before the next one. */
+    async function look(): Promise<number> {
       try {
         const runs = z.array(z.unknown()).parse(await getJson(`${base}/api/runs`, controller.signal));
         const running = runs.map((run) => runEntry.safeParse(run)).find((run) => run.success && run.data.live);
         if (!running?.success) {
           shift = null;
           setLive(null);
-        } else {
-          if (running.data.shift !== shift) {
-            shift = running.data.shift;
-            next = 0;
-            lines = [];
-          }
-          const run = runResponse.parse(
-            await getJson(`${base}/api/run/${encodeURIComponent(shift)}?from=${next}`, controller.signal),
-          );
-          lines = [...lines, ...parseRunValues(run.lines).lines];
-          next = run.next;
-          setLive(lines.length ? lines : null);
+          return POLL_IDLE_MS;
         }
+        if (running.data.shift !== shift) {
+          shift = running.data.shift;
+          next = 0;
+          lines = [];
+        }
+        const run = runResponse.parse(
+          await getJson(`${base}/api/run/${encodeURIComponent(shift)}?from=${next}`, controller.signal),
+        );
+        const added = parseRunValues(run.lines).lines;
+        next = run.next;
+        if (added.length) {
+          lines = [...lines, ...added];
+          setLive(lines);
+        }
+        return POLL_LIVE_MS;
       } catch {
-        if (controller.signal.aborted) return;
-        setLive(null);
+        if (!controller.signal.aborted) setLive(null);
+        return POLL_IDLE_MS;
       }
-      if (!controller.signal.aborted) timer = setTimeout(poll, POLL_MS);
     }
 
-    void poll();
+    async function poll() {
+      if (busy) return;
+      busy = true;
+      clearTimeout(timer);
+      timer = undefined;
+      const wait = await look();
+      busy = false;
+      // Paused while the tab is hidden; `onVisible` picks it up again.
+      if (!controller.signal.aborted && !document.hidden) timer = setTimeout(poll, wait);
+    }
+
+    function onVisible() {
+      if (!document.hidden && timer === undefined) void poll();
+    }
+
+    document.addEventListener("visibilitychange", onVisible);
+    if (!document.hidden) void poll();
     return () => {
       controller.abort();
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [base]);
 

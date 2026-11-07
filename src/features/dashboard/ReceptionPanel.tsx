@@ -43,9 +43,14 @@ export function ReceptionPanel({ className }: { className?: string }) {
               title="Resepsjonisten er ikke koblet til ennå"
               body="Når telefonagenten er satt opp, vises samtaler, bookinger og beskjeder her."
               action={
-                <Link href="/resepsjon" className={buttonClasses("secondary")}>
-                  Åpne Resepsjon
-                </Link>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="secondary" onClick={retry} aria-label="Prøv igjen: Resepsjon">
+                    Prøv igjen
+                  </Button>
+                  <Link href="/resepsjon" className={buttonClasses("ghost")}>
+                    Åpne Resepsjon
+                  </Link>
+                </div>
               }
             />
           )}

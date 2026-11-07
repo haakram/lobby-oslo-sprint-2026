@@ -1,151 +1,121 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { productBySku } from "@/features/catalog/products";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, ErrorState, Sheet, Skeleton, cx } from "@/ui";
 import { BoxOverlay, type BoxLabel } from "./BoxOverlay";
 import { cropFrame } from "./cropFrame";
 import { PermissionState } from "./PermissionState";
 import { ProductCard } from "./ProductCard";
-import { ModelOutput, type IdentifyResult } from "./schema";
+import { IdentifyError, QUOTA_COPY } from "./requestIdentify";
+import type { IdentifyResult } from "./schema";
 import type { Box } from "./smoothBoxes";
 import { useCamera } from "./useCamera";
 import { useDetector } from "./useDetector";
+import { useLiveIdentify } from "./useLiveIdentify";
 
-type Identify =
-  | { phase: "idle" }
-  | { phase: "loading"; image: string; boxId: string | null }
-  | { phase: "done"; image: string; boxId: string | null; result: IdentifyResult }
-  | { phase: "error"; image: string; boxId: string | null; title: string; body: string; canRetry: boolean };
-
-class IdentifyError extends Error {
-  constructor(
-    readonly title: string,
-    readonly canRetry: boolean,
-  ) {
-    super(title);
-  }
-}
-
-const RETRY_BODY = "Hold varen stille med teksten mot kameraet, og prøv igjen.";
-
-async function requestIdentify(image: string, signal: AbortSignal): Promise<IdentifyResult> {
-  let response: Response;
-  try {
-    response = await fetch("/api/identify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image }),
-      signal,
-    });
-  } catch (error) {
-    if (signal.aborted) throw error;
-    throw new IdentifyError("Fikk ikke svar fra serveren", true);
-  }
-  const data: unknown = await response.json().catch(() => null);
-  if (response.status === 429) {
-    const message = (data as { error?: unknown } | null)?.error;
-    throw new IdentifyError(typeof message === "string" ? message : "Dagens kvote for gjenkjenning er brukt opp.", false);
-  }
-  const parsed = response.ok ? ModelOutput.safeParse(data) : null;
-  if (!parsed?.success) throw new IdentifyError("Fikk ikke kjent igjen varen", true);
-  // The product comes from our own catalogue, never from the response.
-  const product = parsed.data.sku ? (productBySku(parsed.data.sku) ?? null) : null;
-  return { ...parsed.data, sku: product ? product.sku : null, product };
-}
-
-const SHEET_TITLE: Record<Identify["phase"], string> = {
-  idle: "",
-  loading: "Ser på varen",
-  done: "Vare funnet",
-  error: "Ingen svar",
+/**
+ * What the sheet shows. For a box, the result lives in `useLiveIdentify` (shared with live
+ * recognition); for the whole frame (shutter), it is kept here.
+ */
+type SheetContent = {
+  boxId: string | null;
+  image: string | null;
+  result?: IdentifyResult;
+  error?: { title: string; quota: boolean };
 };
 
-/** Øyne: the live camera with boxes; tap a box or the shutter to identify the product. */
+const RETRY_BODY = "Hold varen stille med teksten mot kameraet, og prøv igjen.";
+const QUOTA_BODY = "Les SKU-en på etiketten, eller spør skiftlederen.";
+
+/** Øyne: the live camera with boxes. Stable boxes are recognised on their own; tap for the card. */
 export function EyesScreen() {
   const { video, status: cameraStatus, size: videoSize, retry: retryCamera } = useCamera();
-  const [identify, setIdentify] = useState<Identify>({ phase: "idle" });
-  // Separate from `identify`, so the sheet keeps its content while it slides away.
+  const [sheet, setSheet] = useState<SheetContent | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [labels, setLabels] = useState<Record<string, BoxLabel>>({});
+  const [autoOn, setAutoOn] = useState(true);
   const request = useRef<AbortController | null>(null);
 
   const detector = useDetector(video, cameraStatus === "ready" && !sheetOpen);
+  const { results, busy, quotaReached, send } = useLiveIdentify(video, detector.boxes, { auto: autoOn, paused: sheetOpen });
 
   useEffect(() => () => request.current?.abort(), []);
 
-  const setLabel = useCallback((boxId: string | null, label: BoxLabel | null) => {
-    if (!boxId) return;
-    setLabels((current) => {
-      const next = { ...current };
-      if (label) next[boxId] = label;
-      else delete next[boxId];
-      return next;
-    });
-  }, []);
+  const labels = useMemo(() => {
+    const next: Record<string, BoxLabel> = {};
+    for (const box of detector.boxes) {
+      const result = results[box.id];
+      if (busy[box.id]) next[box.id] = { text: "Gjenkjenner …", state: "busy" };
+      else if (result?.product) next[box.id] = { text: result.product.name, state: "known" };
+      else if (result) next[box.id] = { text: "Ikke i katalogen", state: "unknown" };
+    }
+    return next;
+  }, [detector.boxes, results, busy]);
 
+  /** Identifies a box (or the whole frame) on request and opens the sheet. */
   const run = useCallback(
     async (box: Box | null) => {
       const element = video.current;
       if (!element || cameraStatus !== "ready") return;
       const image = cropFrame(element, box);
-      const boxId = box?.id ?? null;
       request.current?.abort();
       const controller = new AbortController();
       request.current = controller;
-
-      setIdentify({ phase: "loading", image, boxId });
+      setSheet({ boxId: box?.id ?? null, image });
       setSheetOpen(true);
-      setLabel(boxId, { text: "Ser på varen", state: "busy" });
       try {
-        const result = await requestIdentify(image, controller.signal);
-        if (controller.signal.aborted) return;
-        setIdentify({ phase: "done", image, boxId, result });
-        setLabel(
-          boxId,
-          result.product
-            ? { text: result.product.name, state: "known" }
-            : { text: "Ikke i katalogen", state: "unknown" },
-        );
+        const result = await send(image, box, controller.signal);
+        if (!controller.signal.aborted && !box) setSheet((current) => current && { ...current, result });
       } catch (error) {
         if (controller.signal.aborted) return;
-        const known = error instanceof IdentifyError ? error : new IdentifyError("Fikk ikke kjent igjen varen", true);
-        setIdentify({
-          phase: "error",
-          image,
-          boxId,
-          title: known.title,
-          body: known.canRetry ? RETRY_BODY : "Les SKU-en på etiketten, eller spør skiftlederen.",
-          canRetry: known.canRetry,
-        });
-        setLabel(boxId, null);
+        const known = error instanceof IdentifyError ? error : new IdentifyError("Fikk ikke kjent igjen varen");
+        setSheet((current) => current && { ...current, error: { title: known.title, quota: known.quota } });
       }
     },
-    [video, cameraStatus, setLabel],
+    [video, cameraStatus, send],
+  );
+
+  const select = useCallback(
+    (box: Box) => {
+      // Already recognised (or being recognised live): open the card without a new request.
+      if (results[box.id] || busy[box.id]) {
+        setSheet({ boxId: box.id, image: null });
+        setSheetOpen(true);
+      } else {
+        void run(box);
+      }
+    },
+    [results, busy, run],
   );
 
   const close = useCallback(() => {
-    if (identify.phase === "loading") {
-      request.current?.abort();
-      setLabel(identify.boxId, null);
-    }
+    request.current?.abort();
     setSheetOpen(false);
-  }, [identify, setLabel]);
+  }, []);
 
   const retry = useCallback(() => {
-    if (identify.phase !== "error") return;
     // The same box if it is still tracked, otherwise the whole frame.
-    void run(detector.boxes.find((box) => box.id === identify.boxId) ?? null);
-  }, [identify, detector.boxes, run]);
+    void run(detector.boxes.find((box) => box.id === sheet?.boxId) ?? null);
+  }, [detector.boxes, sheet, run]);
 
   const problem = cameraStatus !== "starting" && cameraStatus !== "ready" ? cameraStatus : null;
   const ready = cameraStatus === "ready";
+  const autoActive = autoOn && !quotaReached;
 
   let hint = "Pek kameraet mot en vare, eller ta bilde av hele varen.";
   if (!ready) hint = "Starter kameraet";
   else if (detector.status === "loading") hint = "Laster gjenkjenning";
   else if (detector.status === "failed") hint = "Live-bokser er av. Ta bilde av varen med utløseren.";
+  else if (detector.boxes.length > 0 && autoActive) hint = "Hold varen stille, så kjenner Fettero den igjen.";
   else if (detector.boxes.length > 0) hint = "Trykk på en boks for å kjenne igjen varen.";
+
+  // What the sheet shows, derived so a live result fills an open sheet as soon as it lands.
+  const sheetResult = sheet?.boxId ? (results[sheet.boxId] ?? sheet.result) : sheet?.result;
+  const sheetBusy = sheet?.boxId ? busy[sheet.boxId] : !sheet?.error;
+  const sheetError =
+    sheet?.error ?? (!sheetResult && !sheetBusy ? { title: "Fikk ikke kjent igjen varen", quota: false } : undefined);
+  let sheetTitle = "Ser på varen";
+  if (sheetResult) sheetTitle = sheetResult.product ? "Vare funnet" : "Ukjent vare";
+  else if (sheetError) sheetTitle = "Ingen svar";
 
   return (
     <main data-surface="dark" className="relative flex flex-1 flex-col overflow-hidden bg-bg">
@@ -175,7 +145,7 @@ export function EyesScreen() {
           )}
 
           {ready && videoSize && (
-            <BoxOverlay boxes={detector.boxes} videoSize={videoSize} labels={labels} onSelect={(box) => void run(box)} />
+            <BoxOverlay boxes={detector.boxes} videoSize={videoSize} labels={labels} onSelect={select} />
           )}
 
           {!ready && (
@@ -185,10 +155,18 @@ export function EyesScreen() {
           )}
 
           <header className="pointer-events-none relative flex flex-col items-start gap-2 p-4 sm:px-8 lg:px-12 lg:pt-8">
-            <h1 className="rounded-md bg-bg/75 px-3 py-1 text-xl font-bold tracking-[-0.02em] backdrop-blur-sm">Øyne</h1>
+            <div className="flex w-full flex-wrap items-center justify-between gap-2">
+              <h1 className="rounded-md bg-bg/75 px-3 py-1 text-xl font-bold tracking-[-0.02em] backdrop-blur-sm">Øyne</h1>
+              <AutoSwitch on={autoActive} disabled={quotaReached} onToggle={() => setAutoOn((on) => !on)} />
+            </div>
             <p aria-live="polite" className="rounded-md bg-bg/75 px-3 py-1 text-sm text-text backdrop-blur-sm">
               {hint}
             </p>
+            {quotaReached && (
+              <p role="status" className="rounded-md bg-warning-soft px-3 py-1 text-sm font-semibold text-warning">
+                {QUOTA_COPY} Automatisk gjenkjenning er slått av.
+              </p>
+            )}
           </header>
 
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-6">
@@ -209,44 +187,76 @@ export function EyesScreen() {
         </>
       )}
 
-      <Sheet
-        open={sheetOpen}
-        onClose={close}
-        title={identify.phase === "done" && !identify.result.product ? "Ukjent vare" : SHEET_TITLE[identify.phase]}
-      >
-        {identify.phase === "loading" && <CardSkeleton image={identify.image} />}
-        {identify.phase === "done" && <ProductCard result={identify.result} />}
-        {identify.phase === "error" && (
+      <Sheet open={sheetOpen} onClose={close} title={sheetTitle}>
+        {sheetResult ? (
+          <ProductCard result={sheetResult} />
+        ) : sheetError ? (
           <ErrorState
-            title={identify.title}
-            body={identify.body}
+            title={sheetError.title}
+            body={sheetError.quota ? QUOTA_BODY : RETRY_BODY}
             action={
-              identify.canRetry ? (
-                <Button onClick={retry}>Prøv igjen</Button>
-              ) : (
+              sheetError.quota ? (
                 <Button variant="secondary" onClick={close}>
                   Lukk
                 </Button>
+              ) : (
+                <Button onClick={retry}>Prøv igjen</Button>
               )
             }
           />
+        ) : (
+          <CardSkeleton image={sheet?.image ?? null} />
         )}
       </Sheet>
     </main>
   );
 }
 
-/** The card's shape while Claude reads the pack, beside the picture that was sent. */
-function CardSkeleton({ image }: { image: string }) {
+/** Live recognition on or off, so a demo can stop it spending. */
+function AutoSwitch({ on, disabled, onToggle }: { on: boolean; disabled: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={onToggle}
+      className="pointer-events-auto flex min-h-12 items-center gap-3 rounded-md bg-bg/75 px-3 text-sm font-semibold backdrop-blur-sm disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      <span
+        aria-hidden="true"
+        className={cx(
+          "relative h-6 w-10 shrink-0 rounded-full border transition-colors duration-150 ease-standard",
+          on ? "border-accent bg-accent" : "border-line-strong bg-sunken",
+        )}
+      >
+        <span
+          className={cx(
+            "absolute top-0.5 left-0.5 size-[18px] rounded-full transition-transform duration-150 ease-standard",
+            on ? "translate-x-4 bg-on-accent" : "bg-text",
+          )}
+        />
+      </span>
+      Automatisk gjenkjenning
+    </button>
+  );
+}
+
+/** The card's shape while Claude reads the pack, beside the picture that was sent (when there is one). */
+function CardSkeleton({ image }: { image: string | null }) {
   return (
     <div className="flex flex-col gap-5" aria-busy="true">
       <div className="flex items-start gap-4">
-        <div
-          role="img"
-          aria-label="Bildet som blir sendt"
-          className="size-16 shrink-0 rounded-md border border-line bg-sunken bg-cover bg-center"
-          style={{ backgroundImage: `url(${image})` }}
-        />
+        {image ? (
+          <div
+            role="img"
+            aria-label="Bildet som blir sendt"
+            className="size-16 shrink-0 rounded-md border border-line bg-sunken bg-cover bg-center"
+            style={{ backgroundImage: `url(${image})` }}
+          />
+        ) : (
+          <Skeleton className="size-16 shrink-0" />
+        )}
         <div className="flex flex-1 flex-col gap-2">
           <Skeleton className="h-6 w-20 rounded-sm" />
           <Skeleton className="h-9 w-3/4" />

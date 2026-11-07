@@ -8,12 +8,12 @@
 | Layer | Choice | Why |
 |---|---|---|
 | Frontend | TBD | |
-| Backend / API | TBD | |
+| Backend / API | Track A agent: Python 3.12 + httpx | Plays the Wybe Night Shift over HTTP. |
 | Database | TBD | |
 | Auth | TBD (or "none: seeded demo user") | |
-| AI / LLM | TBD | |
+| AI / LLM | Claude via `anthropic` (Python SDK) | Track A brain, capped at USD 30 (R7.7). |
 | Hosting | TBD | |
-| Package manager | TBD | One per language; the lockfile is committed. |
+| Package manager | pip + requirements files (Track A, `.venv`) | Versions pinned with `==`. |
 
 ## 2. Folder layout
 

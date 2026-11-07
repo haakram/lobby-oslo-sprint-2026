@@ -37,7 +37,7 @@ from typing import Literal
 
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
 from agent.routing import NoRoute, Route, best_tour, route_seconds, shortest_route
-from agent.tasks import Entry, Ledger, Task, normalise
+from agent.tasks import Entry, Kind, Ledger, Task, normalise
 from agent.world import Hotel, RobotState, clock_to_seconds
 
 NAV_MIN_HOPS = 2  # plain moves in a row that one navigate replaces, once the call pace needs it
@@ -124,8 +124,11 @@ class Executor:
         *,
         brain=None,
         max_scans: int = 6,
+        params=None,
     ):
         self.session = session
+        self.params = params  # planner.Params; None (tests): no loadout, no restock (Variant 2)
+        self._restock_level = 0  # loadout items carried after the last fill
         self.hotel = hotel
         self.state = state
         self.brain = brain
@@ -897,6 +900,7 @@ class Executor:
         refused), the survey (if it has not run yet) and then the other stock places not yet seen
         this shift, nearest first."""
         tried: set[str] = set()
+        fetched = False
         while self.count(item) < n:
             place = self._stock_place(item, tried)
             if place is None:
@@ -916,6 +920,9 @@ class Executor:
                         raise ActionFailed(f"could not pick {item}: {text}")
                     tried.add(place)
                     break
+                fetched = True
+        if fetched:
+            self.top_up_here({item: n})  # Variant 2: at the shelf anyway, refill the loadout
 
     def ensure_item(self, item: str) -> bool:
         try:
@@ -950,8 +957,11 @@ class Executor:
             self.hotel.stock[place]["cart"] = 0
         return True
 
-    def stock_cart(self, items: dict[str, int]) -> None:
-        """Fill the cart (and hands) up to the given counts from the stock rooms, best order."""
+    def stock_cart(self, items: dict[str, int], *, interruptible: bool = False,
+                   keep_free: int | None = None) -> None:
+        """Fill the cart (and hands) up to the given counts from the stock rooms, best order.
+        Interruptible: stops between places and picks once a message is waiting. keep_free: stops
+        before a pick would leave fewer than that many free cart places (see room_left)."""
         if not self.get_cart():
             return
         by_place: dict[str, list[str]] = {}
@@ -964,18 +974,130 @@ class Executor:
             order = list(by_place)
         picked: dict[str, int] = {}
         for place in order:
+            if interruptible and self.inbox_waiting:
+                break
             try:
                 self.go(place)
             except ActionFailed as exc:
                 self.log("stock_cart_skip", place=place, reason=str(exc))
                 continue
             for item in by_place[place]:
-                while self.count(item) < items[item]:
+                while self.count(item) < items[item] and not (interruptible and self.inbox_waiting):
+                    if keep_free is not None and self.room_left(keep_free) <= 0:
+                        break
                     if not self.pick(item)[0]:
                         break
                     picked[item] = picked.get(item, 0) + 1
         self.log("stock_cart", picked=picked)
         self.refresh()
+
+    # --- Variant 2: the cart loadout -------------------------------------------------------------
+
+    def loadout_on(self) -> bool:
+        p = self.params
+        return p is not None and p.use_cart and p.loadout == "mix"
+
+    def room_left(self, keep_free: int) -> int:
+        """Picks that still fit while `keep_free` cart places stay free for a tray or bags (heavy:
+        cart only) or a keycard: picks fill the free hands first, then the cart."""
+        from agent.planner import CART_CAPACITY, HANDS
+
+        cart = len(self.state.cart) if self.state.cart is not None else CART_CAPACITY
+        return max(0, HANDS - len(self.state.hands)) + max(0, CART_CAPACITY - keep_free - cart)
+
+    def loadout_count(self) -> int:
+        from agent.planner import AMENITY_PRIOR
+
+        return sum(self.count(i) for i in AMENITY_PRIOR)
+
+    def amenities_seen(self) -> dict[str, int]:
+        """Amenity items asked tonight so far (every request the executor has started)."""
+        from agent.planner import AMENITY_PRIOR
+
+        seen: dict[str, int] = {}
+        for entry in self.ledger.entries.values():
+            t = entry.task
+            if t.kind is Kind.AMENITY and t.item in AMENITY_PRIOR:
+                seen[t.item] = seen.get(t.item, 0) + max(1, t.count)
+        return seen
+
+    def loadout_want(self, extra: dict[str, int] | None = None) -> dict[str, int]:
+        """Items to carry: the needs known for sure (`extra`, e.g. the task in hand, plus the
+        pending amenity requests' items) and then the likeliest spares (planner.loadout_target)
+        in the places left, never using the cart places kept for trays, bags and keycards."""
+        from agent.planner import AMENITY_PRIOR, CART_CAPACITY, HANDS, loadout_target
+
+        p = self.params
+        certain: dict[str, int] = dict(extra or {})
+        for t in self.queue:
+            if t.kind is Kind.AMENITY and t.item in AMENITY_PRIOR and t.room:
+                certain[t.item] = certain.get(t.item, 0) + max(1, t.count)
+        others = sum(1 for c in [*self.state.hands, *(self.state.cart or [])] if c not in AMENITY_PRIOR)
+        free = HANDS + CART_CAPACITY - p.reserve_slots - others
+        spares = max(0, min(p.loadout_slots, free) - sum(certain.values()))
+        try:
+            hours = max(0, clock_to_seconds(self.state.clock) - clock_to_seconds(SHIFT_START)) / 3600
+        except (AttributeError, TypeError, ValueError):
+            hours = 0.0
+        want = loadout_target(spares, self.amenities_seen(), hours, p.loadout_horizon_h)
+        for item, n in certain.items():
+            want[item] = want.get(item, 0) + n
+        return want
+
+    def stock_loadout(self) -> None:
+        """The opening: the cart, then the likeliest items of the night."""
+        self.stock_cart(self.loadout_want(), keep_free=self.params.reserve_slots)
+        self._restock_level = self.loadout_count()
+
+    def top_up_here(self, extra: dict[str, int]) -> None:
+        """At a stock place for a task anyway: pick the loadout items shelved here that are short
+        (10 s each, no detour). Only with the cart, so a tray or bags still find their places, and
+        only on an amenity's trip (a keycard or a wet-floor sign is wanted somewhere urgently)."""
+        from agent.planner import AMENITY_PRIOR
+
+        if not self.loadout_on() or not self.state.has_cart or not set(extra) <= set(AMENITY_PRIOR):
+            return
+        here = self.hotel.stock.get(self.state.location) or {}
+        picked: dict[str, int] = {}
+        for item, n in self.loadout_want(extra).items():
+            while (self.count(item) < n and here.get(item, 0) > 0
+                   and self.room_left(self.params.reserve_slots) > 0):
+                if not self.pick(item)[0]:
+                    break
+                picked[item] = picked.get(item, 0) + 1
+        if picked:
+            self.log("loadout_top_up", at=self.state.location, picked=picked)
+        self._restock_level = self.loadout_count()
+
+    def restock(self) -> bool:
+        """Idle (nothing pending): refill the loadout when at least params.restock_min items are
+        short and something was used since the last fill (so an empty shelf or a full cart is not
+        visited again and again). Stops between picks when a message comes in. True when a trip
+        was made."""
+        if not self.loadout_on() or not self.state.has_cart or self.inbox_waiting:
+            return False
+        if self.loadout_count() >= self._restock_level:
+            return False
+
+        def short_now() -> tuple[dict[str, int], int]:
+            want = self.loadout_want()
+            short = sum(n - self.count(i) for i, n in want.items()
+                        if n > self.count(i) and self._stock_place(i))
+            return want, min(short, self.room_left(self.params.reserve_slots))
+
+        want, short = short_now()
+        if short < self.params.restock_min:
+            return False
+        self.refresh()  # what the robot really carries (a re-taken cart is not empty), then decide
+        want, short = short_now()
+        if short < self.params.restock_min:
+            self._restock_level = self.loadout_count()
+            return False
+        self.log("restock", want=want, short=short)
+        self.stock_cart(want, interruptible=True, keep_free=self.params.reserve_slots)
+        if not self.inbox_waiting:
+            self._restock_level = self.loadout_count()
+        return True
 
     # --- learning the night's hotel --------------------------------------------------------------
 
@@ -1197,6 +1319,8 @@ class Executor:
             if not self._surveyed:
                 self.survey()  # the shift's first idle time: look at tonight's stock places once
                 continue  # the survey took time: check the inbox again first
+            if self.restock():
+                continue  # Variant 2: the refill took time: check the inbox again first
             if self.state.location != dock:
                 if not self._reach_dock(dock, interruptible=True):
                     self.log("wait_failed", reason=f"could not reach {dock}")

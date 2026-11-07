@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass, field
 
 from agent.routing import NoRoute, route_seconds
@@ -24,6 +25,47 @@ def _cart_stock() -> dict[str, int]:
     return {"towel": 2, "water-bottle": 2, "phone-charger": 1, "toiletry-kit": 1, "pillow": 1}
 
 
+# Variant 2 (cart loadout). Amenity items asked per night on 12 distinct live practice seeds
+# (1-12, named guests included, follow-ups excluded; 219 items): water 55, towel 49, pillow 42,
+# phone charger 38, toiletry kit 35. Per-night means [obs]; the fake (bench) asks no towels.
+AMENITY_PRIOR: dict[str, float] = {"water-bottle": 4.6, "towel": 4.1, "pillow": 3.5,
+                                   "phone-charger": 3.2, "toiletry-kit": 2.9}
+NIGHT_H = 8.0
+HANDS = 2
+CART_CAPACITY = 8  # live: the 9th item in the cart is refused
+
+
+def _poisson_tail(lam: float, k: int) -> float:
+    """P(N >= k) for N ~ Poisson(lam), k >= 1."""
+    term = total = math.exp(-lam)
+    for j in range(1, k):
+        term *= lam / j
+        total += term
+    return max(0.0, 1.0 - total)
+
+
+def loadout_target(slots: int, seen: dict[str, int], hours_in: float,
+                   horizon_h: float = 2.0) -> dict[str, int]:
+    """How many of each amenity item to carry with `slots` free places. Each item's hourly rate is
+    the live prior (one night's worth) updated with tonight's requests so far (Gamma-Poisson:
+    (prior + seen) / (8 h + hours in)); the k-th unit of an item is worth P(at least k asked in
+    the next `horizon_h` hours), and the slots go to the most valuable units (greedy, which is
+    optimal for this separable concave objective). Ties keep AMENITY_PRIOR's order."""
+    rates = {i: (p + seen.get(i, 0)) / (NIGHT_H + max(0.0, hours_in)) for i, p in AMENITY_PRIOR.items()}
+    order = list(AMENITY_PRIOR)
+    target = dict.fromkeys(order, 0)
+
+    def worth(i: str) -> float:
+        return _poisson_tail(rates[i] * horizon_h, target[i] + 1)
+
+    for _ in range(max(0, slots)):
+        item = max(order, key=lambda i: (worth(i), -order.index(i)))
+        if worth(item) <= 0.0:
+            break
+        target[item] += 1
+    return {i: n for i, n in target.items() if n}
+
+
 def _action_seconds() -> dict[str, float]:
     return {"amenity": 25, "message": 20, "tray": 25, "room_check": 50, "lost_item": 145,
             "bags": 50, "noise": 60, "spill": 150, "followup": 1}
@@ -38,6 +80,13 @@ class Params:
     max_scans: int = 6
     action_seconds: dict[str, float] = field(default_factory=_action_seconds)
     order: str = "spt"  # "spt": shortest task first; "ratio": value per second (the old rule)
+    # Variant 2: "mix" stocks loadout_target() at the start and at each restock; "fixed" keeps
+    # cart_stock at the start and never restocks (the old behaviour).
+    loadout: str = "mix"
+    loadout_slots: int = 6  # amenity items carried at most (hands + cart)
+    reserve_slots: int = 3  # cart places always left free for trays, bags, keycards, lost items
+    restock_min: int = 2  # an idle restock trip only when at least this many items are missing
+    loadout_horizon_h: float = 2.0
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), sort_keys=True)

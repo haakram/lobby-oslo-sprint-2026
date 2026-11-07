@@ -42,6 +42,11 @@ browser at 1440 px, Oversikt open. The data is a real live practice night of our
 | 1:20–1:50 | **3D-kart**: press **Spill av fra 22:00** at 600×, the orange robot walks the floors; drag the timeline to 06:00. Then **Natteskift**: *68 Oppgaver fullført · 10 feilet · 2212 Poeng*. | "And this is the robot's night. Not an animation: our agent played Wybe's live hotel simulation on its own, every move logged. Our best night: 2,695 points; 74 'done' reports, 74 credited by Wybe's server, one penalty all night, a slip on a wet floor." **If the Wybe final result is out (13:05), say it here instead.** | Innovation · Functionality · Team efficiency |
 | 1:50–2:00 | Back to **Oversikt**. | "Lobby: the whole hotel at 06:00, with a robot that works the night and tells the truth about it. Inside too: a camera that knows products without a barcode, and an AI receptionist that answers the phone in the guest's language." | All five; points to the Q&A |
 
+The counts quoted in beats 2–5 are read off the Sat 23:55 screenshots
+(`oslo-wt/lobby2/temp/ux-fix/A/admin-oversikt-1440.png`, `ux-fix/B/admin-ruter-route-1440.png`,
+`ux-fix/B/admin-foresporsler-after-taover-1440.png`, `shots-v2/admin-natteskift-1440.png`); re-read
+them off the merged, deployed build at the rehearsal and fix the lines if they moved.
+
 Rules for the presenter: don't explain the navigation; don't open Øyne, Stemme or Resepsjon in the 2
 minutes (they need a camera, a microphone and the network, and they are the Q&A answers); if a screen
 stalls for 3 seconds, say the line and move on.

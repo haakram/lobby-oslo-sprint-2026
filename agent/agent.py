@@ -81,6 +81,15 @@ def make_client(settings: Settings, *, live: bool) -> WybeClient:
     return client
 
 
+def _inbox_waiting(ex: Executor, status: dict) -> bool:
+    """Read the inbox only when something is there: an inbox event was seen, status counts unread
+    messages, or status was unusable (then the inbox is the only way to know)."""
+    if ex.inbox_waiting:
+        return True
+    unread = status.get("unread_messages") if status else None
+    return not isinstance(unread, int) or unread > 0
+
+
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:
     reply = ex.cmd("inbox")
     ex.inbox_waiting = False
@@ -138,11 +147,12 @@ def run_shift(
                 result["reason"] = "real time limit"
                 break
             try:
-                ex.refresh()
+                status = ex.refresh()
                 if sim_end_s is not None and clock_to_seconds(state.clock) >= sim_end_s:
                     result["reason"] = "sim end"
                     break
-                _read_inbox(ex, brain, seen, pending)
+                if _inbox_waiting(ex, status):
+                    _read_inbox(ex, brain, seen, pending)
                 if not opened:
                     opened = True
                     for step in opening_plan(params):

@@ -49,3 +49,17 @@ def test_final_armed_only_from_environment(tmp_path, monkeypatch):
 def test_missing_files_and_key_ok(tmp_path):
     s = load_settings((str(tmp_path / "nope"),))
     assert s.key == "" and s.anthropic_key is None
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "nan", "inf", "50.5", "abc"])
+def test_max_rps_must_be_finite_and_within_bounds(tmp_path, monkeypatch, value):
+    monkeypatch.setenv("NIGHTSHIFT_MAX_RPS", value)
+    with pytest.raises(ValueError, match="NIGHTSHIFT_MAX_RPS"):
+        load_settings((str(tmp_path / "nope"),))
+
+
+def test_max_rps_bounds_are_inclusive_at_fifty(tmp_path, monkeypatch):
+    monkeypatch.setenv("NIGHTSHIFT_MAX_RPS", "50")
+    assert load_settings((str(tmp_path / "nope"),)).max_rps == 50.0
+    monkeypatch.setenv("NIGHTSHIFT_MAX_RPS", "0.5")
+    assert load_settings((str(tmp_path / "nope"),)).max_rps == 0.5

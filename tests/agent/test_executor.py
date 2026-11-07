@@ -12,7 +12,7 @@ from agent.executor import Executor
 from agent.flows import scan_candidates
 from agent.tasks import Kind, Task, parse_request
 from agent.world import DEFAULT_MAP, Hotel, RobotState
-from tests.fakes.fake_wybe import DEFAULT_REQUESTS, FakeWybe
+from tests.fakes.fake_wybe import DEFAULT_REQUESTS, VERIFIED_BONUS, FakeWybe
 
 
 def settings(tmp_path) -> Settings:
@@ -89,7 +89,7 @@ def test_amenity_delivered_and_verified(tmp_path):
     fake, _, _, out = run_one(tmp_path, "R-001")
     assert out.status == "done", out
     assert fake.score >= 21
-    assert out.points == fake.score
+    assert out.points == fake.score - VERIFIED_BONUS  # the flow's rise; the report's bonus is not seen
     reports = calls(fake, "report")
     assert [r["result"] for r in reports] == ["Noted. Thanks."]
     assert fake.reports == {"R-001": "done"} and not fake.false_done
@@ -1059,3 +1059,28 @@ def test_noise_work_order_tells_a_dnd_sign_from_no_answer(tmp_path, kw, words, n
     assert ex.run(task).status == "failed"
     order = [w for w in decisions(session, "work_order") if w["type"] == "stoy"][-1]
     assert words in order["text"].lower() and not_words not in order["text"].lower(), order
+
+
+# --- Task 18 / C1: no free calls that only feed the log -------------------------------------------------
+
+
+def test_task_run_makes_no_log_only_status_calls(tmp_path):
+    fake, session, ex = setup(tmp_path, rids={"R-001"})
+    task = next_task(ex, session, "R-001")
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status == "done"
+    cmds = [e["cmd"] for e in fake.log[since:]]
+    assert cmds[0] != "status", cmds[:3]  # the loop's refresh just ran: no second status
+    assert cmds[-1] == "report", cmds[-3:]  # nothing after the report
+    assert out.points > 0  # from the flow's own before/after scores
+
+
+def test_wait_cycle_is_status_dock_scan(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=[])
+    session.cmd("inbox")
+    fake.battery = 50
+    since = len(fake.log)
+    ex.wait_for_request(max_idle=3)
+    cmds = [e["cmd"] for e in fake.log[since:]]
+    assert cmds == ["status", "dock", "scan"] * 3, cmds

@@ -463,7 +463,7 @@ class Executor:
                 self.log("wait_failed", reason=str(reply.result))
                 self.scan()  # as above: one bounded wait per call instead of an instant return
                 return
-            if self._request_waiting():
+            if self.inbox_waiting:  # a dock that woke on a message brings the inbox event
                 return
             self.scan()  # idle time spent usefully; the battery dips so the next dock works
 
@@ -475,7 +475,10 @@ class Executor:
         self.ledger.add(task)
         self.log("task_start", request=task.request, kind=task.kind.value, room=task.room,
                  item=task.item)
-        start = self.score_now()
+        # No status call of its own: the loop refreshed just before, and the flows read the score
+        # before and after their last action (that is what verifies a "done"), so `points` comes
+        # from the scores they observed. The report's own bonus lands on the next refresh.
+        start = self.state.score
         try:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):
@@ -506,7 +509,7 @@ class Executor:
         elif outcome == "done" and "thanks" not in text.lower():
             self.log("report_unverified", request=task.request, reply=text)
         self.ledger.set_status(task.request, status)
-        end = self.score_now()
+        end = self.state.score  # the last score a flow observed; no extra call
         points = int(end - start) if end is not None and start is not None else 0
         self.log("task_done" if status == "done" else "task_failed", request=task.request,
                  status=status, points=points, note=note)

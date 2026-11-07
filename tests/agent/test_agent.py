@@ -318,3 +318,27 @@ def test_full_night_with_the_live_request_types(tmp_path):
     ids = {d["id"] for d in _decisions(tmp_path, result, "hypothesis")}
     assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill", "H-duplicate"} <= ids
     assert result["score"] >= 250
+
+
+# --- Task 18 / C1: the night must fit the final's share of the rate -----------------------------------
+
+FINAL_CALL_BUDGET = 44 * 60 * 5 // 10  # 44 min at 5 req/s shared by 10 shifts
+
+
+def test_offline_full_night_fits_the_final_call_budget(tmp_path):
+    fake = FakeWybe()
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="06:00:00")
+    assert fake.false_done == [] and not fake.unsafe
+    assert result["score"] >= 250
+    assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
+
+
+def test_loop_reads_the_inbox_only_when_a_message_is_waiting(tmp_path):
+    fake = FakeWybe()
+    run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="23:00:00")
+    delivered = sum(len(e["result"]["messages"]) for e in fake.log if e["cmd"] == "inbox")
+    inbox_calls = sum(1 for e in fake.log if e["cmd"] == "inbox")
+    assert delivered >= 6  # the welcome and R-001..R-005
+    assert inbox_calls <= delivered + 1, (inbox_calls, delivered)
+    cmds = [e["cmd"] for e in fake.log]
+    assert "inbox" not in {b for a, b in zip(cmds, cmds[1:]) if a == "scan"}  # not read after idle scans

@@ -136,3 +136,73 @@ def test_cost_guard_thread_safe(tmp_path):
     for t in threads:
         t.join()
     assert guard.spent == pytest.approx(0.4, abs=1e-9)
+
+
+@pytest.mark.parametrize("content", ['{"spent_usd": 1.2', '{"other": 1}', '[]', '{"spent_usd": -1}'])
+def test_corrupt_ledger_fails_closed(tmp_path, content):
+    ledger = tmp_path / "spend.json"
+    ledger.write_text(content)
+    client = FakeClient('{"kind":"tray"}')
+    guard = CostGuard(30.0, ledger)
+    brain = Brain(settings(), guard, client=client)
+    assert guard.can_spend(0.0001) is False
+    assert brain.classify("r1", "x", "02:10") is None
+    assert client.calls == []
+    with pytest.raises(Exception):
+        guard.record(0.5)
+    assert ledger.read_text() == content
+
+
+def test_client_error_returns_none(tmp_path):
+    brain, client, _ = make(tmp_path, "{}")
+
+    def boom(**kw):
+        raise RuntimeError("sk-test-secret")
+
+    client.create = boom
+    assert brain.classify("r1", "x", "02:10") is None
+    assert brain.judge("s", ["a"]) is None
+
+
+def test_missing_usage_returns_none(tmp_path):
+    brain, client, _ = make(tmp_path, '{"kind":"tray"}')
+    client.create = lambda **kw: SimpleNamespace(
+        content=[SimpleNamespace(type="text", text='{"kind":"tray"}')]
+    )
+    assert brain.classify("r1", "x", "02:10") is None
+
+
+def test_record_failure_returns_none(tmp_path):
+    brain, _, guard = make(tmp_path, '{"kind":"tray"}')
+
+    def bad(usd):
+        raise OSError("disk full")
+
+    guard.record = bad
+    assert brain.classify("r1", "x", "02:10") is None
+
+
+@pytest.mark.parametrize(
+    "count,expected", [('"Infinity"', None), ("Infinity", None), (-3, 1), (10**9, 10), (2, 2)]
+)
+def test_count_is_clamped(tmp_path, count, expected):
+    brain, _, _ = make(tmp_path, '{"kind":"amenity","count":%s}' % count)
+    task = brain.classify("r1", "x", "02:10")
+    assert (task.count if task else None) == expected
+
+
+def test_client_gets_timeout_and_retries(tmp_path, monkeypatch):
+    import anthropic
+
+    seen = {}
+
+    class Rec:
+        def __init__(self, **kw):
+            seen.update(kw)
+            self.messages = FakeClient('{"kind":"tray"}')
+
+    monkeypatch.setattr(anthropic, "Anthropic", Rec)
+    guard = CostGuard(30.0, tmp_path / "spend.json")
+    brain = Brain(settings(), guard)
+    assert brain.classify("r1", "x", "02:10").kind == FakeKind.tray
+    assert seen["timeout"] == 15 and seen["max_retries"] == 1

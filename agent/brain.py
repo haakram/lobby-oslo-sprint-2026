@@ -43,6 +43,15 @@ _JUDGE_PROMPT = (
 )
 
 
+CLIENT_TIMEOUT_S = 15
+CLIENT_MAX_RETRIES = 1
+MAX_COUNT = 10
+
+
+class LedgerError(Exception):
+    """The spend ledger exists but cannot be trusted (corrupt, wrong schema, unreadable)."""
+
+
 class CostGuard:
     """File-backed spend ledger; safe across threads (lock) and processes (flock)."""
 
@@ -54,9 +63,18 @@ class CostGuard:
 
     def _read(self) -> float:
         try:
-            return float(json.loads(self.ledger.read_text())["spent_usd"])
-        except (OSError, ValueError, KeyError, TypeError):
-            return 0.0
+            text = self.ledger.read_text()
+        except FileNotFoundError:
+            return 0.0  # no ledger yet: nothing spent
+        except OSError as exc:
+            raise LedgerError(f"ledger unreadable ({type(exc).__name__})") from None
+        try:
+            value = float(json.loads(text)["spent_usd"])
+        except (ValueError, KeyError, TypeError):
+            raise LedgerError("ledger corrupt") from None
+        if not value >= 0 or value == float("inf"):
+            raise LedgerError("ledger value invalid")
+        return value
 
     @property
     def spent(self) -> float:
@@ -64,7 +82,14 @@ class CostGuard:
             return self._read()
 
     def can_spend(self, est_usd: float) -> bool:
-        return self.spent + est_usd <= self.budget_usd
+        # Fails closed: an unreadable ledger means no spending. Known limitation: check and
+        # record are separate steps, so N parallel shifts can overshoot the cap by at most
+        # N calls' cost (a few cents); accepted against a USD 30 cap.
+        try:
+            return self.spent + est_usd <= self.budget_usd
+        except LedgerError as exc:
+            log.warning("brain: %s, refusing to spend", exc)
+            return False
 
     def record(self, usd: float) -> None:
         self.ledger.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +116,9 @@ class Brain:
         if self._client is None:
             import anthropic
 
-            self._client = anthropic.Anthropic(api_key=self._key)
+            self._client = anthropic.Anthropic(
+                api_key=self._key, timeout=CLIENT_TIMEOUT_S, max_retries=CLIENT_MAX_RETRIES
+            )
         return self._client
 
     def _ask(self, prompt: str) -> str | None:
@@ -111,15 +138,15 @@ class Brain:
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
             )
+            usage = resp.usage
+            self.guard.record(
+                (usage.input_tokens * PRICE_IN_PER_MTOK + usage.output_tokens * PRICE_OUT_PER_MTOK)
+                / 1e6
+            )
+            return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
         except Exception as exc:  # noqa: BLE001 - never leak details, never crash the shift
             log.warning("brain: Claude call failed (%s)", type(exc).__name__)
             return None
-        usage = resp.usage
-        self.guard.record(
-            (usage.input_tokens * PRICE_IN_PER_MTOK + usage.output_tokens * PRICE_OUT_PER_MTOK)
-            / 1e6
-        )
-        return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
 
     @staticmethod
     def _json(text: str | None) -> dict | None:
@@ -142,8 +169,8 @@ class Brain:
 
         try:
             kind = Kind(data.get("kind"))
-            count = int(data.get("count") or 1)
-        except (ValueError, TypeError):
+            count = max(1, min(MAX_COUNT, int(data.get("count") or 1)))
+        except (ValueError, TypeError, OverflowError):
             return None
 
         def s(name):

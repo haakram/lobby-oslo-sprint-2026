@@ -171,7 +171,8 @@ def test_recovers_when_map_differs(tmp_path):
     assert out.status == "done", out
     assert fake.reports == {"R-001": "done"} and not fake.false_done
     looks = [e for e in calls(fake, "look", since=start) if not e["args"]]
-    assert len(looks) == 1
+    assert looks  # Task 19: one look per place on the first visit; the detour is learnt from them
+    assert not any(e["cmd"] == "move" and not e["ok"] for e in fake.log[start:])  # seen, not bumped
     # The detour through the new node was learnt, so it is in the map for the next trip.
     assert {e.b for e in ex.hotel.neighbors("corridor-1ab")} >= {"corridor-1a", "corridor-1b"}
     assert "corridor-1b" not in {e.b for e in ex.hotel.neighbors("corridor-1a")}
@@ -228,7 +229,13 @@ def test_no_reward_after_place_means_failed(tmp_path, monkeypatch):
 def test_slip_marks_the_edge_wet(tmp_path):
     fake, _, ex, out = run_one(tmp_path, "R-001", wet={frozenset({"lobby", "corridor-1a"})})
     assert out.status == "done"
-    assert any(ev["type"] == "slip" for e in fake.log for ev in e["events"])
+    # Task 19: the first-visit look in the lobby warns about the patch, so the robot creeps over
+    # it instead of slipping; the spot is known wet either way.
+    assert not any(ev["type"] == "slip" for e in fake.log for ev in e["events"])
+    assert ex.hotel.is_wet("lobby", "corridor-1a")
+    ex.hotel._wet_spots.clear()  # the move path still marks it: a move reply that says wet
+    ex.go("lobby")
+    assert ex.move("corridor-1a").ok
     assert ex.hotel.is_wet("lobby", "corridor-1a")
 
 
@@ -243,7 +250,8 @@ def test_wrong_bridge_guess_falls_back_to_known_route(tmp_path):
     start = len(fake.log)
     out = ex.run(task)
     assert out.status == "done", out
-    assert len([e for e in calls(fake, "look", since=start) if not e["args"]]) == 1
+    looks = [e for e in calls(fake, "look", since=start) if not e["args"]]
+    assert looks and not any(e["ok"] is False for e in looks)  # Task 19: one look per place visited
     assert "corridor-1b" not in {e.b for e in ex.hotel.neighbors("alcove")}
 
 
@@ -326,7 +334,8 @@ def test_go_from_an_unknown_place_looks_once_then_routes(tmp_path):
     ex.state.location = "somewhere-new"  # e.g. a place name our map has never seen
     ex.go("lobby")
     assert ex.state.location == "lobby"
-    assert len([e for e in calls(fake, "look") if not e["args"]]) == 1
+    cmds = [e["cmd"] for e in fake.log]
+    assert cmds[:cmds.index("move")].count("look") == 1  # one look to learn where, then it routes
 
 
 # --- fix round 1 -----------------------------------------------------------------------------------

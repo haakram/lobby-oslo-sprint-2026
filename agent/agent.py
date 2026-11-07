@@ -19,7 +19,7 @@ import httpx
 from agent import flows
 from agent.client import ShiftEnded, ShiftSession, WybeClient, WybeError
 from agent.config import Settings
-from agent.executor import ActionFailed, Executor
+from agent.executor import NOTE_MAX, ActionFailed, Executor
 from agent.offline import FakeWybe
 from agent.planner import Params, choose_next, opening_plan
 from agent.tasks import Kind, Task, parse_request, vet_brain_task
@@ -27,7 +27,8 @@ from agent.world import Hotel, RobotState, clock_to_seconds
 
 PARAMS_FILE = Path(__file__).parent / "data" / "params_best.json"
 LIVE_RUNS = Path("temp/live_runs.jsonl")
-MAX_CONSECUTIVE_ERRORS = 25
+MAX_CONSECUTIVE_ERRORS = 25  # practice only: a final shift backs off and keeps trying instead
+ERROR_BACKOFF_MAX_S = 30.0
 _live_lock = threading.Lock()
 
 
@@ -141,16 +142,31 @@ def run_shift(
     real_time_limit_s: float | None = None,
     stop: threading.Event | None = None,
     clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] | None = None,
 ) -> dict:
+    """One shift from start to the `end` log line. With a real-time limit (the final), an error
+    streak never ends the shift: the loop backs off (capped at ERROR_BACKOFF_MAX_S) and keeps
+    trying until the limit; a practice shift stops after MAX_CONSECUTIVE_ERRORS."""
     params = params or load_params()
     session = client.start_shift(mode, seed)
     hotel, state = Hotel.load(), RobotState()
     # Claude classifies unknown requests in ONE place (here), so the executor gets no brain.
     ex = Executor(session, hotel, state, max_scans=params.max_scans)
     deadline = clock() + real_time_limit_s if real_time_limit_s else None
+    pause = sleep or (stop.wait if stop is not None else time.sleep)
 
     def out_of_time() -> bool:
         return (stop is not None and stop.is_set()) or (deadline is not None and clock() >= deadline)
+
+    def hold_on(errors: int) -> bool:
+        """After an error: True to keep going (after a backoff in the final), False to stop."""
+        if deadline is None:
+            return errors < MAX_CONSECUTIVE_ERRORS
+        delay = min(ERROR_BACKOFF_MAX_S, 2.0 ** (errors - 1))
+        delay = min(delay, max(0.0, deadline - clock()))
+        if delay > 0:
+            pause(delay)
+        return True
 
     sim_end_s = clock_to_seconds(sim_end) if sim_end else None
     result: dict = {"shift": session.shift_id, "seed": seed, "score": None,
@@ -158,10 +174,12 @@ def run_shift(
     pending: list[Task] = []
     ex.queue = pending  # the same list: a follow-up that runs its original removes it here
     seen: set[str] = set()
+    retried: set[str] = set()  # tasks put back once after a mid-task server error
     errors = 0
     opened = False
     try:
         while True:
+            task = None
             if stop is not None and stop.is_set():
                 result["reason"] = "stopped"
                 break
@@ -198,7 +216,9 @@ def run_shift(
             except WybeError as exc:
                 errors += 1
                 session.log_decision("wybe_error", {"error": str(exc)[:200], "streak": errors})
-                if errors >= MAX_CONSECUTIVE_ERRORS:
+                if task is not None:
+                    _rescue(ex, task, pending, retried, str(exc), time_left=not out_of_time())
+                if not hold_on(errors):
                     result["reason"] = "too many errors"
                     break
             except Exception as exc:  # noqa: BLE001 - one odd bug must not kill the shift
@@ -207,7 +227,7 @@ def run_shift(
                     "note",
                     {"error": type(exc).__name__, "message": str(exc)[:200], "streak": errors},
                 )
-                if errors >= MAX_CONSECUTIVE_ERRORS:
+                if not hold_on(errors):
                     result["reason"] = "too many errors"
                     break
     except ShiftEnded as exc:
@@ -226,6 +246,27 @@ def run_shift(
         result["requests_served"] = ex.ledger.served()  # also originals a follow-up ran or redelivered
         session.log_end(result)
     return result
+
+
+def _rescue(ex: Executor, task: Task, pending: list[Task], retried: set[str], error: str,
+            *, time_left: bool) -> None:
+    """A server error in the middle of a task must not lose it: put it back once while time
+    remains, else report it failed with the reason (never done: nothing was verified)."""
+    entry = ex.ledger.get(task.request)
+    if entry is not None and entry.status != "pending":
+        return  # the report went through before the error
+    if time_left and task.request not in retried:
+        retried.add(task.request)
+        pending.insert(0, task)
+        ex.log("task_requeued", request=task.request, error=error[:200])
+        return
+    ex.log("task_given_up", request=task.request, error=error[:200], time_left=time_left)
+    try:
+        reply = ex.cmd("report", request=task.request, outcome="failed",
+                       note=f"server error during the task: {error}"[:NOTE_MAX])
+        ex.ledger.set_status(task.request, "failed" if reply.ok else "skipped")
+    except WybeError as exc:
+        ex.log("report_failed", request=task.request, error=str(exc)[:200])
 
 
 def _end(ex: Executor, session: ShiftSession) -> None:

@@ -264,3 +264,53 @@ def test_practice_start_still_works(tmp_path):
     client = make_client(tmp_path, recording_handler(reqs))
     assert client.start_shift("practice", seed=1).shift_id == "w2-abc"
     assert len(reqs) == 1
+
+
+# --- Task 18 / C3: 429 is retried with backoff, honouring Retry-After -------------------------------
+
+
+def _rate_limited(n, retry_after=None):
+    state = {"n": 0}
+
+    def replies(request):
+        state["n"] += 1
+        if state["n"] <= n:
+            headers = {"Retry-After": str(retry_after)} if retry_after is not None else {}
+            return httpx.Response(429, text="slow down", headers=headers)
+        return ok_reply("fine")
+
+    return replies, state
+
+
+def test_429_is_retried_after_the_retry_after_header(tmp_path):
+    replies, state = _rate_limited(1, retry_after=3)
+    delays = []
+    client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
+                        sleep=delays.append)
+    session = client.start_shift("practice", seed=1)
+    assert session.cmd("status").ok and state["n"] == 2
+    assert delays == [3]
+
+
+def test_429_without_retry_after_uses_the_backoff_and_a_long_header_is_capped(tmp_path):
+    replies, _ = _rate_limited(2)
+    delays = []
+    client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
+                        sleep=delays.append)
+    session = client.start_shift("practice", seed=1)
+    assert session.cmd("status").ok and delays == [0.5, 1]
+    replies, _ = _rate_limited(1, retry_after=600)
+    delays = []
+    client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
+                        sleep=delays.append)
+    session = client.start_shift("practice", seed=1)
+    assert session.cmd("status").ok and delays == [30]
+
+
+def test_persistent_429_raises_wybe_error_after_the_retries(tmp_path):
+    replies, state = _rate_limited(99)
+    client = make_client(tmp_path, recording_handler([], replies))
+    session = client.start_shift("practice", seed=1)
+    with pytest.raises(WybeError, match="429"):
+        session.cmd("status")
+    assert state["n"] == 4

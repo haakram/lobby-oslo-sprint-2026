@@ -1,6 +1,7 @@
 """HTTP client for the Wybe Night Shift server: auth, X-Shift, retries, rate limit, run log v1."""
 
 import json
+import math
 import threading
 import time
 from collections.abc import Callable
@@ -14,7 +15,19 @@ from agent.config import Settings
 from agent.guard import check_mode
 
 BACKOFF = (0.5, 1, 2)
+RETRY_AFTER_MAX_S = 30.0  # a 429's Retry-After is honoured up to this
 STATE_FIELDS = ("clock", "location", "score", "battery", "hands", "cart")
+
+
+def _retry_after(value: str | None) -> float | None:
+    """Seconds from a Retry-After header (delay-seconds form), clamped; None when absent or odd."""
+    try:
+        seconds = float(value) if value is not None else None
+    except ValueError:
+        return None
+    if seconds is None or math.isnan(seconds):
+        return None
+    return min(max(seconds, 0.0), RETRY_AFTER_MAX_S)
 
 
 class ShiftEnded(Exception):
@@ -81,9 +94,11 @@ class WybeClient:
         if shift_id:
             headers["X-Shift"] = shift_id
         last = "unknown error"
+        wait: float | None = None  # a 429's Retry-After replaces the next backoff step
         for attempt in range(len(BACKOFF) + 1):
             if attempt:
-                self._sleep(BACKOFF[attempt - 1])
+                self._sleep(BACKOFF[attempt - 1] if wait is None else wait)
+            wait = None
             self.limiter.wait()
             started = time.monotonic()
             try:
@@ -96,6 +111,10 @@ class WybeClient:
                 raise ShiftEnded(resp.text[:200])
             if resp.status_code >= 500 or (resp.status_code == 403 and "1010" in resp.text):
                 last = f"HTTP {resp.status_code}"
+                continue
+            if resp.status_code == 429:  # too fast: back off (Retry-After if given) and retry
+                last = "HTTP 429"
+                wait = _retry_after(resp.headers.get("Retry-After"))
                 continue
             if resp.status_code >= 400:
                 raise WybeError(f"HTTP {resp.status_code}: {resp.text[:200]}")

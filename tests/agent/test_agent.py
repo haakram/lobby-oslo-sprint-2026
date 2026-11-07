@@ -371,3 +371,97 @@ def test_brain_room_check_rejected_for_noise_texts_and_unknown_rooms(tmp_path):
     rejected = _decisions(tmp_path, result, "brain_rejected")
     assert {d["request"] for d in rejected} == {"R-001", "R-002"}
     assert not _decisions(tmp_path, result, "brain_classified")
+
+
+# --- Task 18 / I2, C3: a mid-task server error loses no task; the final never gives up ---------------
+
+
+def _failing_place(fake, fail_attempts, on_fail=None):
+    """A transport where the first `fail_attempts` POSTs of `place` raise ConnectError (4 attempts
+    make one WybeError); on_fail runs on each failure."""
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content).get("cmd") == "place":
+            attempts["n"] += 1
+            if attempts["n"] <= fail_attempts:
+                if on_fail:
+                    on_fail()
+                raise httpx.ConnectError("boom")
+        return fake.handler(request)
+
+    return handler
+
+
+def test_mid_task_wybe_error_requeues_the_task_once(tmp_path):
+    fake = FakeWybe(requests=[("22:03:30", "R-001", "319 wants a phone charger.")])
+    result = run_shift(client_for(tmp_path, _failing_place(fake, 4)), seed=1, sim_end="22:40:00")
+    assert fake.reports == {"R-001": "done"} and not fake.false_done
+    requeued = _decisions(tmp_path, result, "task_requeued")
+    assert len(requeued) == 1 and requeued[0]["request"] == "R-001"
+    assert "place" in requeued[0]["error"]
+
+
+def test_mid_task_wybe_error_twice_reports_failed_with_the_reason(tmp_path):
+    fake = FakeWybe(requests=[("22:03:30", "R-001", "319 wants a phone charger.")])
+    result = run_shift(client_for(tmp_path, _failing_place(fake, 10_000)), seed=1, sim_end="22:40:00")
+    assert fake.reports == {"R-001": "failed"} and not fake.false_done
+    assert len(_decisions(tmp_path, result, "task_requeued")) == 1
+    given_up = _decisions(tmp_path, result, "task_given_up")
+    assert len(given_up) == 1 and given_up[0]["request"] == "R-001" and "place" in given_up[0]["error"]
+    note = next(e["args"]["note"] for e in fake.log if e["cmd"] == "report")
+    assert "server error" in note and "place" in note
+
+
+def test_mid_task_wybe_error_with_no_time_left_reports_failed_at_once(tmp_path):
+    fake = FakeWybe(requests=[("22:03:30", "R-001", "319 wants a phone charger.")])
+    now = {"t": 0.0}
+
+    def jump():  # the real-time limit passes while the server is down
+        now["t"] = 10_000.0
+
+    client = client_for(tmp_path, _failing_place(fake, 4, on_fail=jump))
+    result = run_shift(client, seed=1, real_time_limit_s=60.0, clock=lambda: now["t"])
+    assert fake.reports == {"R-001": "failed"}
+    assert not _decisions(tmp_path, result, "task_requeued")
+    assert _decisions(tmp_path, result, "task_given_up")
+    assert result["reason"] == "real time limit"
+
+
+def test_real_time_limit_ends_the_shift_cleanly(tmp_path):
+    fake = FakeWybe()
+    ticks = {"t": 0.0}
+
+    def clock() -> float:
+        ticks["t"] += 1.0
+        return ticks["t"]
+
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, real_time_limit_s=30.0, clock=clock)
+    assert result["reason"] == "real time limit"
+    assert fake.log[-1]["cmd"] == "end_shift" and fake._ended
+    lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
+    assert lines[-1]["type"] == "end" and lines[-1]["reason"] == "real time limit"
+
+
+def test_with_a_real_time_limit_an_error_streak_backs_off_and_never_ends_the_shift(tmp_path, monkeypatch):
+    import agent.agent as mod
+
+    def always(*a, **kw):
+        raise RuntimeError("stuck")
+
+    monkeypatch.setattr(mod, "choose_next", always)
+    fake = FakeWybe()
+    now, sleeps = {"t": 0.0}, []
+
+    def sleep(s: float) -> None:
+        sleeps.append(s)
+        now["t"] += s
+
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, real_time_limit_s=2000.0,
+                       clock=lambda: now["t"], sleep=sleep)
+    assert result["reason"] == "real time limit"
+    notes = _decisions(tmp_path, result, "note")
+    assert len(notes) > mod.MAX_CONSECUTIVE_ERRORS  # practice would have stopped at the cap
+    assert max(sleeps) == 30 and sleeps[:5] == [1, 2, 4, 8, 16]
+    assert sum(sleeps) >= 2000 - 30
+    assert fake.log[-1]["cmd"] == "end_shift"

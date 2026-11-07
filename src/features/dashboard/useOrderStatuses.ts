@@ -38,9 +38,27 @@ export function useOrderStatuses() {
     () => new Set(Object.entries(statuses).flatMap(([id, status]) => (status === "lost" ? [id] : []))),
     [statuses],
   );
-  const advance = useCallback((id: string) => setStatuses((current) => ({ ...current, [id]: nextOrderStatus(current[id] ?? "ny") })), []);
+  /**
+   * One step along. `from` is the status the row shows now, when its source already put it past Ny
+   * (a pre-assigned work order, a request already in progress): the first click then counts.
+   */
+  const advance = useCallback(
+    (id: string, from?: OrderStatus) => setStatuses((current) => ({ ...current, [id]: nextOrderStatus(current[id] ?? from ?? "ny") })),
+    [],
+  );
   const undo = useCallback((id: string) => setStatuses((current) => ({ ...current, [id]: "tildelt" })), []);
+  /** Puts back exactly what was stored before an action (`undefined`: nothing was), for *Angre*. */
+  const restore = useCallback(
+    (id: string, previous: OrderStatus | undefined) =>
+      setStatuses((current) => {
+        const next = { ...current };
+        if (previous === undefined || previous === "ny") delete next[id];
+        else next[id] = previous;
+        return next;
+      }),
+    [],
+  );
   const statusOf = useCallback((id: string): OrderStatus => statuses[id] ?? "ny", [statuses]);
 
-  return { statuses: statuses as Statuses, resolved, advance, undo, statusOf };
+  return { statuses: statuses as Statuses, resolved, advance, undo, restore, statusOf };
 }

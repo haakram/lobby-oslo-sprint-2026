@@ -23,7 +23,8 @@ export type RequestStatus = "venter" | "pagar" | "fullfort" | "feilet";
 
 export const REQUEST_STATUS: Record<RequestStatus, { word: string; tone: "neutral" | "accent" | "success" | "danger" | "warning" }> = {
   venter: { word: "Venter", tone: "warning" },
-  pagar: { word: "Pågår", tone: "accent" },
+  // The accent is the robot and the one primary action, never a state (DESIGN.md).
+  pagar: { word: "Pågår", tone: "neutral" },
   fullfort: { word: "Fullført", tone: "success" },
   feilet: { word: "Feilet", tone: "danger" },
 };
@@ -42,7 +43,7 @@ export type RequestView = {
   at: string | null;
   handler: string;
   status: RequestStatus;
-  /** Staff can move this one along (not the robot's own tasks, which the robot reports). */
+  /** Staff can move this one along: everything but the robot's done and running tasks, which the robot reports. */
   actionable: boolean;
   /** Where the night happened: the robot's requests carry the shift clock, not today's time. */
   tonight: boolean;
@@ -50,6 +51,8 @@ export type RequestView = {
 
 function fromTask(task: Task, ended: boolean): RequestView {
   const status: RequestStatus = task.outcome === "done" ? "fullfort" : task.outcome === "failed" ? "feilet" : ended ? "venter" : "pagar";
+  // A person can take over what the robot failed or left open; done and running tasks stay the robot's.
+  const needsPerson = status === "venter" || status === "feilet";
   return {
     id: `robot:${task.request}`,
     source: "robot",
@@ -58,9 +61,9 @@ function fromTask(task: Task, ended: boolean): RequestView {
     text: task.text,
     lang: task.text ? "en" : null,
     at: hhmm(task.startedAt),
-    handler: "Roboten",
+    handler: needsPerson ? "Roboten · trenger en person" : "Roboten",
     status,
-    actionable: false,
+    actionable: needsPerson,
     tonight: true,
   };
 }
@@ -71,10 +74,11 @@ function fromCall(call: CallSummary): RequestView {
     source: "telefon",
     kind: call.requestType === "booking" ? "Booking" : "Ring tilbake",
     room: null,
-    text: call.summary ?? call.title,
+    // The caller is the guest, not the one who has the case: their name goes in the text.
+    text: [call.callerName ? `Ring tilbake til ${call.callerName}` : null, call.summary ?? call.title].filter(Boolean).join(": ") || null,
     lang: "nb",
     at: formatClock(call.startedAt) || null,
-    handler: call.callerName ? `Resepsjon · ${call.callerName}` : "Resepsjon",
+    handler: "Resepsjon",
     status: "venter",
     actionable: true,
     tonight: false,
@@ -100,7 +104,13 @@ function fromManual(request: ManualRequest): RequestView {
 /** A staff-kept status (Ny → Tildelt → Løst) over a request's own: Tildelt is "pågår", Løst "fullført". */
 function withStaffStatus(request: RequestView, status: OrderStatus): RequestView {
   if (!request.actionable || status === "ny") return request;
-  return { ...request, status: status === "tildelt" ? "pagar" : "fullfort" };
+  const handler = request.source === "robot" ? "Personalet tok over fra roboten" : request.handler;
+  return { ...request, status: status === "tildelt" ? "pagar" : "fullfort", handler };
+}
+
+/** The Ny → Tildelt → Løst step a row shows now, so the first click on it moves it one step on. */
+export function orderStatusOf(request: RequestView): OrderStatus {
+  return request.status === "pagar" ? "tildelt" : request.status === "fullfort" ? "lost" : "ny";
 }
 
 export function selectRequests({

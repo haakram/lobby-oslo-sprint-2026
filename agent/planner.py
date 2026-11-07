@@ -18,7 +18,7 @@ def _base_values() -> dict[str, float]:
 
 
 def _cart_stock() -> dict[str, int]:
-    return {"towel": 2, "water-bottle": 3, "phone-charger": 2, "toiletry-kit": 2, "pillow": 2}
+    return {"towel": 2, "water-bottle": 2, "phone-charger": 1, "toiletry-kit": 1, "pillow": 1}
 
 
 def _action_seconds() -> dict[str, float]:

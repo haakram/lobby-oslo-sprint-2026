@@ -5,7 +5,7 @@ import { probeViewer, type ReplaySource, resolveViewerUrl, useHotelReplay } from
 import { Badge, Button, Card, cx, EmptyState, ErrorState, Skeleton, Stat } from "@/ui";
 import { Hotel3D, StatusLegend } from "./Hotel3D";
 import { PlaybackControls } from "./PlaybackControls";
-import { EventFeed, TaskCard } from "./ReplayPanels";
+import { EventFeed, RoomCard, TaskCard } from "./ReplayPanels";
 
 /**
  * /hotell: the whole hotel in 3D with the robot's night played back. Follows the live viewer server
@@ -32,6 +32,7 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
   const replay = useHotelReplay(source, { viewerUrl: base });
   const ready = replay.status === "ready";
   const snapshot = replay.snapshot;
+  const [room, setRoom] = useState<string | null>(null);
 
   return (
     <main data-surface="dark" className="flex-1 bg-bg px-4 pt-8 pb-12 text-text sm:px-8 lg:px-12 lg:pt-12">
@@ -95,7 +96,7 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
       {(replay.status === "loading" || ready) && (
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
           <div className="flex min-w-0 flex-col gap-4">
-            <Hotel3D replay={replay} variant="full" />
+            <Hotel3D replay={replay} variant="full" selectedRoom={room} onSelectRoom={setRoom} />
             <StatusLegend className="px-1 sm:hidden" />
             <Card>
               <PlaybackControls replay={replay} />
@@ -105,6 +106,7 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
           <aside className="flex min-w-0 flex-col gap-4" aria-label="Status nå">
             {ready && snapshot ? (
               <>
+                {room && <RoomCard roomId={room} snapshot={snapshot} timeline={replay.timeline} onClose={() => setRoom(null)} />}
                 <TaskCard snapshot={snapshot} finished={snapshot.finished} />
                 <Card role="group" aria-label="Natten i tall">
                   <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4 lg:grid-cols-2">

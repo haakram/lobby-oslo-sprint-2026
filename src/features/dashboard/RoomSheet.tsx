@@ -65,6 +65,16 @@ export function RoomSheet({
             </span>
           </div>
 
+          {/* The room's actions sit with its status, above the night's log, so a long night never buries them. */}
+          <div className="flex flex-wrap gap-2">
+            <Link href={cleaningHref([...new Set([...dirtyIds, room.id])])} className={buttonClasses("secondary")}>
+              Legg i renholdsrute
+            </Link>
+            <Link href={`/hotell?rom=${encodeURIComponent(room.id)}`} className={buttonClasses("secondary")}>
+              Vis i 3D-kartet
+            </Link>
+          </div>
+
           {entries.length === 0 ? (
             <div className="flex flex-col gap-1">
               <p className="text-base font-semibold">Roboten var ikke innom rommet i natt</p>
@@ -83,14 +93,6 @@ export function RoomSheet({
             </ol>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            <Link href={cleaningHref([...new Set([...dirtyIds, room.id])])} className={buttonClasses("secondary")}>
-              Legg i renholdsrute
-            </Link>
-            <Link href={`/hotell?rom=${encodeURIComponent(room.id)}`} className={buttonClasses("secondary")}>
-              Vis i 3D-kartet
-            </Link>
-          </div>
         </div>
       )}
     </Sheet>

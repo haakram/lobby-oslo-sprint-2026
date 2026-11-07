@@ -329,8 +329,9 @@ def test_full_night_with_the_live_request_types(tmp_path):
     for rid, kind in kinds.items():
         if kind in ("bags", "noise", "spill") or (kind == "amenity" and rid == "R-008"):
             assert fake.reports.get(rid) == "done", (rid, kind, fake.reports.get(rid))
-        if kind == "followup":
-            assert fake.reports.get(rid) == "declined", rid
+        if kind == "followup":  # declined (+5 live); the DND room's order is retried and fails again
+            dnd = fake._requests[rid].room in fake._dnd
+            assert fake.reports.get(rid) == ("failed" if dnd else "declined"), rid
     ids = {d["id"] for d in _decisions(tmp_path, result, "hypothesis")}
     assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill", "H-duplicate"} <= ids
     assert result["score"] >= 250

@@ -23,7 +23,7 @@ from agent.client import ShiftEnded, ShiftSession, WybeClient, WybeError
 from agent.config import Settings
 from agent.executor import NOTE_MAX, ActionFailed, Executor
 from agent.offline import FakeWybe
-from agent.planner import Params, choose_next, opening_plan
+from agent.planner import Params, backlog_seconds, choose_next, opening_plan, overloaded
 from agent.tasks import Kind, Task, is_override, parse_request, vet_brain_task
 from agent.world import Hotel, RobotState, clock_to_seconds
 
@@ -245,6 +245,19 @@ def _too_late(task: Task, state: RobotState, hotel: Hotel, params: Params) -> bo
     return now + secs > NIGHT_END_S
 
 
+def _plan_mode(ex: Executor, pending: list[Task], params: Params, battery: float | None,
+               was_overloaded: bool) -> bool:
+    """The planner's mode for this choice: True ("overload") when the queue cannot all be served
+    before 06:00 or on the battery left, else shortest-first ("spt"). One `plan_mode` decision when
+    the mode flips, with the queue length, backlog minutes and battery."""
+    over = params.order != "ratio" and overloaded(pending, ex.state, ex.hotel, params, battery)
+    if over != was_overloaded:
+        backlog = backlog_seconds(pending, ex.state, ex.hotel, params)
+        ex.log("plan_mode", mode="overload" if over else "spt", queue=len(pending),
+               backlog_min=round(backlog / 60, 1), battery=None if battery is None else round(battery, 1))
+    return over
+
+
 def _close_out(ex: Executor, pending: list[Task]) -> None:
     """Nothing left can finish before the day shift: every pending request is reported declined
     (never punished; other teams' notes suggest an unanswered request may cost ~15 at 06:00)."""
@@ -355,6 +368,7 @@ def run_shift(
     retried: set[str] = set()  # tasks put back once after a mid-task server error
     errors = 0
     opened = False
+    plan_overload = False  # the planner's mode (Task 4), logged when it flips
     try:
         while True:
             task = None
@@ -383,7 +397,9 @@ def run_shift(
                             ex.log("opening_failed", step=step, reason=str(exc))
                     continue
                 ex.ensure_battery()  # below 25 %: charge at the dock before the next task or wait
-                task = choose_next(pending, state, hotel, params)
+                battery = ex._battery()
+                plan_overload = _plan_mode(ex, pending, params, battery, plan_overload)
+                task = choose_next(pending, state, hotel, params, battery, overload=plan_overload)
                 if task is not None and _too_late(task, state, hotel, params):
                     _close_out(ex, pending)  # the shortest cannot finish by 06:00: none can
                     task = None

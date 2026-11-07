@@ -11,13 +11,27 @@ from agent.world import Hotel, RobotState, clock_to_seconds
 
 VALUE_FLOOR = 5.0
 UNREACHABLE_S = 1.0e6
+SHIFT_START_S = clock_to_seconds("22:00:00")
+SHIFT_END_S = clock_to_seconds("06:00:00")  # the server ends the shift at 06:00; nothing pays after it
+GROWTH_PER_HOUR = 0.08  # the same request pays ~8 % more per hour of the night (fitted on live pay)
+BACKLOG_FACTOR = 1.25  # margin on the summed estimates of a queue (they run short live)
+OVERLOAD_DRAIN_PER_MIN = 0.75  # % battery per minute of backlog (the fake drains 0.75 %/min busy)
+OVERLOAD_BATTERY_FLOOR = 10.0  # % the backlog must leave in the battery
 
 
 def _base_values() -> dict[str, float]:
-    # bags/noise/spill: Task 13 hypotheses (bags: the false "done" cost 35); a follow-up earns
+    # bags/noise: Task 13 hypotheses (bags: the false "done" cost 35); spill: measured by two teams
+    # (a sign on the new patch pays ~52 fresh, 51.2 at 22:00 in the per-hour fit); a follow-up earns
     # nothing itself, so it ranks by its tiny cost (it is mostly a report).
     return {"amenity": 20, "message": 20, "tray": 33, "room_check": 32, "lost_item": 40,
-            "bags": 35, "noise": 25, "spill": 25, "followup": VALUE_FLOOR}
+            "bags": 35, "noise": 25, "spill": 52, "followup": VALUE_FLOOR}
+
+
+def _decay_by_kind() -> dict[str, float]:
+    # points lost per minute of waiting, measured live by two teams over ~1,600 served requests:
+    # messages 24 -> 0 after 90 min, trays 39 -> 15 at 45 min, lost items 46 -> 12, spills 52 -> 44 at 22
+    return {"message": 0.27, "tray": 0.53, "room_check": 0.53, "spill": 0.36, "lost_item": 0.75,
+            "amenity": 0.40, "bags": 0.84, "noise": 0.49, "followup": 0.0}
 
 
 def _cart_stock() -> dict[str, int]:
@@ -32,7 +46,8 @@ def _action_seconds() -> dict[str, float]:
 @dataclass
 class Params:
     base_values: dict[str, float] = field(default_factory=_base_values)
-    decay_per_min: float = 1.0
+    decay_per_min: float = 0.5  # fallback for a kind missing from decay_by_kind
+    decay_by_kind: dict[str, float] = field(default_factory=_decay_by_kind)
     cart_stock: dict[str, int] = field(default_factory=_cart_stock)
     use_cart: bool = True
     max_scans: int = 6
@@ -45,7 +60,8 @@ class Params:
     @classmethod
     def from_json(cls, s: str) -> Params:
         data = json.loads(s)
-        for key, default in (("base_values", _base_values), ("action_seconds", _action_seconds)):
+        for key, default in (("base_values", _base_values), ("action_seconds", _action_seconds),
+                             ("decay_by_kind", _decay_by_kind)):
             if isinstance(data.get(key), dict):  # older files lack the newer kinds
                 data[key] = {**default(), **data[key]}
         return cls(**data)
@@ -120,29 +136,74 @@ def estimate_seconds(task: Task, state: RobotState, hotel: Hotel, params: Params
     return total + params.action_seconds.get(task.kind.value, 30.0)
 
 
+def _decay(task: Task, params: Params) -> float:
+    return params.decay_by_kind.get(task.kind.value, params.decay_per_min)
+
+
 def estimate_value(task: Task, now_s: int, params: Params) -> float:
     """Value if the task is finished at sim second `now_s` (waiting time decays the base)."""
     base = params.base_values.get(task.kind.value, VALUE_FLOOR)
     waited_min = max(0.0, now_s - clock_to_seconds(task.arrived)) / 60.0
-    return max(VALUE_FLOOR, base - params.decay_per_min * waited_min)
+    return max(VALUE_FLOOR, base - _decay(task, params) * waited_min)
 
 
-def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Params) -> Task | None:
-    """Shortest task first. Every request loses about a point a minute while it waits, whatever
-    its kind, so the order that minimises the sum of waits (shortest processing time first) loses
-    the fewest points; the old value-per-second order ran a 10-minute lost-item search ahead of
-    three 2-minute deliveries and let decayed requests starve (live seed 6: a tray waited 86 min).
-    Params.order = "ratio" keeps the old rule."""
+def value_at(task: Task, finish_s: float, params: Params) -> float:
+    """What the server pays for `task` finished at sim second `finish_s`: the kind's base, ~8 % more
+    per hour since 22:00, less the kind's decay per minute waited; at least VALUE_FLOOR, and 0 once
+    the shift is over (06:00)."""
+    if finish_s > SHIFT_END_S:
+        return 0.0
+    base = params.base_values.get(task.kind.value, VALUE_FLOOR)
+    hours = max(0.0, finish_s - SHIFT_START_S) / 3600.0
+    waited_min = max(0.0, finish_s - clock_to_seconds(task.arrived)) / 60.0
+    return max(VALUE_FLOOR, base * (1 + GROWTH_PER_HOUR * hours) - _decay(task, params) * waited_min)
+
+
+def backlog_seconds(tasks: list[Task], state: RobotState, hotel: Hotel, params: Params) -> float:
+    """BACKLOG_FACTOR x the summed estimates of the tasks that can be priced (an unreachable or
+    unpriced one is the flow's to explore, not a known cost)."""
+    secs = (estimate_seconds(t, state, hotel, params) for t in tasks)
+    return BACKLOG_FACTOR * sum(s for s in secs if s < UNREACHABLE_S)
+
+
+def overloaded(tasks: list[Task], state: RobotState, hotel: Hotel, params: Params,
+               battery: float | None) -> bool:
+    """The queue cannot all be served: its backlog runs past 06:00, or the battery cannot cover it
+    (battery - backlog minutes x OVERLOAD_DRAIN_PER_MIN < OVERLOAD_BATTERY_FLOOR). An unknown
+    battery (None) skips the battery test; an empty backlog always fits."""
+    backlog = backlog_seconds(tasks, state, hotel, params)
+    if backlog <= 0:
+        return False
+    if clock_to_seconds(state.clock) + backlog > SHIFT_END_S:
+        return True
+    return battery is not None and battery - backlog / 60.0 * OVERLOAD_DRAIN_PER_MIN < OVERLOAD_BATTERY_FLOOR
+
+
+def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Params,
+                battery: float | None = None, overload: bool | None = None) -> Task | None:
+    """Shortest task first while the queue can all be served. Every request loses points while it
+    waits, so the order that minimises the sum of waits (shortest processing time first) loses the
+    fewest; the old value-per-second order ran a 10-minute lost-item search ahead of three 2-minute
+    deliveries and let decayed requests starve (live seed 6: a tray waited 86 min).
+    Once the queue is overloaded (see `overloaded`; `overload` passes a mode the caller already
+    worked out) not everything will be served, and shortest-first starves long, valuable, slowly
+    decaying work (live seed 23: four spills, ~52 points and -0.36/min each, never started behind
+    newer 2-3 min deliveries); then the order is value at the finish per robot-second, ties by
+    seconds. Unknown kinds go last either way. Params.order = "ratio" keeps the old rule."""
     now = clock_to_seconds(state.clock)
+    if overload is None:
+        overload = params.order != "ratio" and overloaded(tasks, state, hotel, params, battery)
     best: tuple | None = None
     pick: Task | None = None
     for idx, t in enumerate(tasks):
         secs = estimate_seconds(t, state, hotel, params)
         if params.order == "ratio":
-            rank = -estimate_value(t, int(now + secs), params) / max(secs, 1.0)
+            rank: tuple = (-estimate_value(t, int(now + secs), params) / max(secs, 1.0),)
+        elif overload:
+            rank = (-value_at(t, now + BACKLOG_FACTOR * secs, params) / max(secs, 1.0), secs)
         else:
-            rank = secs
-        key = (t.kind is Kind.UNKNOWN, rank, clock_to_seconds(t.arrived), idx)
+            rank = (secs,)
+        key = (t.kind is Kind.UNKNOWN, *rank, clock_to_seconds(t.arrived), idx)
         if best is None or key < best:
             best, pick = key, t
     return pick

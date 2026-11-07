@@ -38,7 +38,8 @@ const text = (value: unknown) => (typeof value === "string" && value.trim() ? sc
 
 function field(results: Record<string, unknown> | null | undefined, id: string): unknown {
   const entry = results?.[id];
-  return entry && typeof entry === "object" && "value" in entry ? entry.value : undefined;
+  // Either { value: X } (the API shape) or the plain value X.
+  return entry && typeof entry === "object" && "value" in entry ? entry.value : entry;
 }
 
 /** Turns the ElevenLabs conversations list into staff-readable notes; malformed items are dropped. */
@@ -60,7 +61,7 @@ export function toCallNotes(raw: unknown): CallNote[] {
         durationSecs: s.callDurationSecs,
         status: scrubText(s.status, 40),
         title: text(s.callSummaryTitle),
-        summary: text(s.transcriptSummary),
+        summary: text(field(data, "summary_no")) ?? text(s.transcriptSummary),
         language: text(s.mainLanguage),
         callerName: text(field(data, "caller_name")),
         callbackNumber: text(field(data, "callback_number")),

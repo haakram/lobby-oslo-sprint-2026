@@ -77,12 +77,14 @@ function ReceptionSession() {
               </>
             )}
           </section>
-          {/* The shared transcript's empty state speaks of Fettero, so it shows once the call has words. */}
-          {voice.turns.length > 0 && (
-            <Card>
-              <Transcript turns={voice.turns} language={voice.language} />
-            </Card>
-          )}
+          <Card>
+            <Transcript
+              turns={voice.turns}
+              language={voice.language}
+              agentLabel="Resepsjonist"
+              emptyText="Trykk Ring resepsjonen og snakk som en gjest. Samtalen vises her."
+            />
+          </Card>
         </div>
 
         <div className="flex min-w-0 flex-col gap-10">

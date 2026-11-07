@@ -23,6 +23,22 @@ const item = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("toCallNotes", () => {
+  it("prefers the Norwegian summary and falls back to the transcript summary", () => {
+    const withNo = item({
+      dataCollectionResults: { summary_no: { value: "Gjesten ringte." } },
+    });
+    expect(toCallNotes({ conversations: [withNo] })[0].summary).toBe("Gjesten ringte.");
+    expect(toCallNotes({ conversations: [item()] })[0].summary).toBe("Gjesten vil booke.");
+  });
+
+  it("accepts plain data-collection values as well as { value } objects", () => {
+    const plain = item({
+      dataCollectionResults: { caller_name: "Ola", guests: 3, needs_callback: true, summary_no: "Kort." },
+    });
+    const [note] = toCallNotes({ conversations: [plain] });
+    expect(note).toMatchObject({ callerName: "Ola", guests: 3, needsCallback: true, summary: "Kort." });
+  });
+
   it("returns [] for junk", () => {
     expect(toCallNotes(null)).toEqual([]);
     expect(toCallNotes({})).toEqual([]);

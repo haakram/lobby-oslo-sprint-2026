@@ -8,6 +8,7 @@ import type { BookingRecord, MessageRecord, ReceptionRecord } from "./records";
 const fake = vi.hoisted(() => ({
   onRecord: null as ((record: unknown) => void) | null,
   connected: false,
+  turns: [] as unknown[],
   start: vi.fn(),
   stop: vi.fn(),
 }));
@@ -24,7 +25,7 @@ vi.mock("./useReceptionVoice", () => ({
       connected: fake.connected,
       problem: null,
       dismissProblem: vi.fn(),
-      turns: [],
+      turns: fake.turns,
       language: null,
       start: fake.start,
       stop: fake.stop,
@@ -99,12 +100,24 @@ describe("ReceptionScreen", () => {
     localStorage.clear();
     fake.onRecord = null;
     fake.connected = false;
+    fake.turns = [];
     fake.start.mockReset();
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("labels the agent's turns Resepsjonist, not Fettero", () => {
+    fake.turns = [
+      { id: "t1", role: "agent", text: "Hei, velkommen.", language: null },
+      { id: "t2", role: "user", text: "Hei.", language: null },
+    ];
+    stubCalls(ok({ calls: [] }));
+    render(<ReceptionScreen />);
+    expect(screen.getByText("Resepsjonist")).toBeInTheDocument();
+    expect(screen.queryByText("Fettero")).not.toBeInTheDocument();
   });
 
   it("starts with one way to call the receptionist and no requests yet", async () => {

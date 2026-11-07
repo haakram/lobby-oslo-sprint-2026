@@ -10,6 +10,10 @@
 // stores the secret at ElevenLabs as a workspace secret and the tools become webhooks to
 // /api/reception/tools/<name> carrying it in the x-reception-secret header.
 //
+// WARNING: webhook mode sends ALL tool calls to the server, so the browser's live cards ("Denne
+// samtalen") stay empty and requests appear only in Samtalelogg after the call. Stay in client mode
+// (RECEPTION_PUBLIC_URL unset) for the browser demo; use a separate phone agent if you need both.
+//
 // This script never prints or stores a key or the secret. Put the printed id in .env as
 // ELEVENLABS_RECEPTION_AGENT_ID (and in Vercel's project settings).
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";

@@ -25,18 +25,18 @@ const ENTRIES = [
     Icon: MicIcon,
   },
   {
-    href: "/resepsjon",
-    title: "Resepsjon",
-    body: "Svarer gjester på telefonen, på deres språk, og tar imot bookinger direkte.",
-    surface: "light",
-    Icon: PhoneIcon,
-  },
-  {
     href: "/natteskift",
     title: "Natteskift",
     body: "Se hva roboten gjorde i natt: oppgaver, klokke og poeng.",
     surface: "dark",
     Icon: MoonIcon,
+  },
+  {
+    href: "/resepsjon",
+    title: "Resepsjon",
+    body: "Svarer gjester på telefonen, på deres språk, og tar imot bookinger direkte.",
+    surface: "light",
+    Icon: PhoneIcon,
   },
 ] as const;
 
@@ -52,7 +52,7 @@ export default function Home() {
       </header>
       <ul className="mt-10 grid max-w-5xl gap-3 sm:grid-cols-2 lg:mt-14 lg:gap-4">
         {ENTRIES.map(({ href, title, body, surface, Icon }, index) => (
-          <li key={href} className="animate-rise" style={{ animationDelay: `${index * 60}ms` }}>
+          <li key={href} className={`animate-rise${href === "/resepsjon" ? " sm:col-span-2" : ""}`} style={{ animationDelay: `${index * 60}ms` }}>
             <Link href={href} className="group block h-full rounded-lg">
               <Card
                 data-surface={surface}

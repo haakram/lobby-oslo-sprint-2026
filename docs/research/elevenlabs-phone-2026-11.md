@@ -29,8 +29,11 @@ webhook tools when `RECEPTION_PUBLIC_URL` is set.
 1. Deploy the app (Vercel) so `/api/reception/tools/*` is reachable on `https://`.
 2. Set `RECEPTION_PUBLIC_URL` (the deploy URL) and `RECEPTION_TOOL_SECRET` (a random string, at least
    24 characters) in `.env` and in the Vercel project settings. Never in git.
-3. Re-run `npx tsx --env-file=.env src/features/reception/setup-agent.ts`. It creates the workspace
-   secret and updates the agent to webhook tools. (Creating/updating the agent needs ShirazIQ's yes.)
+3. Re-run `npx tsx --conditions=react-server --env-file=.env src/features/reception/setup-agent.ts`. It
+   creates the workspace secret and updates the agent to webhook tools. (Creating/updating the agent
+   needs ShirazIQ's yes.) **Warning:** stay in client mode for the browser demo. In webhook mode all
+   tool calls go to the server, so "Denne samtalen" stays empty and requests appear only in
+   Samtalelogg after the call. Use a separate phone agent if you need both.
 4. **$** Create a Twilio account and buy a number with **voice** capability. A Norwegian (+47) number
    needs Twilio's regulatory bundle (business name and address, approval can take days); a US or UK
    number is usually available at once and is enough for a demo.

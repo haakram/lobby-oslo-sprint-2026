@@ -63,6 +63,14 @@ describe("reception prompt", () => {
 });
 
 describe("reception agent settings", () => {
+  it("writes call summaries in Norwegian", () => {
+    expect(client.platformSettings.summaryLanguage).toBe("no");
+  });
+
+  it("tells the agent to say goodbye and end the call", () => {
+    expect(client.conversationConfig.agent.prompt.prompt).toMatch(/goodbye and use end_call/i);
+  });
+
   it("speaks Norwegian first, with the other languages as presets", () => {
     expect(client.conversationConfig.agent.language).toBe("no");
     expect(Object.keys(client.conversationConfig.languagePresets)).toEqual([...RECEPTION_LANGUAGES]);

@@ -6,8 +6,18 @@ import { Badge, EmptyState, fadeRise } from "@/ui";
 import { languageLabel, type LanguageCode } from "./language";
 import type { Turn } from "./useFetteroVoice";
 
-/** The live conversation, newest at the bottom, with the language Fettero hears as a badge. */
-export function Transcript({ turns, language }: { turns: Turn[]; language: LanguageCode | null }) {
+/** The live conversation, newest at the bottom, with the language heard as a badge. */
+export function Transcript({
+  turns,
+  language,
+  agentLabel = "Fettero",
+  emptyText = "Trykk Snakk med Fettero og spør om en vare, en rute eller en arbeidsoppgave. Snakk det språket du vil.",
+}: {
+  turns: Turn[];
+  language: LanguageCode | null;
+  agentLabel?: string;
+  emptyText?: string;
+}) {
   const reduced = useReducedMotion();
   const end = useRef<HTMLLIElement>(null);
 
@@ -37,7 +47,7 @@ export function Transcript({ turns, language }: { turns: Turn[]; language: Langu
         <EmptyState
           className="mt-6"
           title="Ingen samtale ennå"
-          body="Trykk Snakk med Fettero og spør om en vare, en rute eller en arbeidsoppgave. Snakk det språket du vil."
+          body={emptyText}
         />
       ) : (
         <ol aria-label="Samtalen så langt" className="mt-4 flex max-h-[44dvh] flex-col gap-3 overflow-y-auto pr-1">
@@ -52,7 +62,7 @@ export function Transcript({ turns, language }: { turns: Turn[]; language: Langu
               >
                 <div className="flex flex-col items-start gap-1">
                   <span className={turn.role === "agent" ? "text-sm font-semibold text-accent-text" : "text-sm font-semibold text-muted"}>
-                    {turn.role === "agent" ? "Fettero" : "Du"}
+                    {turn.role === "agent" ? agentLabel : "Du"}
                   </span>
                   {turn.language && (
                     // Visual only; the badge above tells screen readers the language.

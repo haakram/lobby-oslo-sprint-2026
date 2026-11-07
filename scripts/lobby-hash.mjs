@@ -2,7 +2,7 @@
 // Lobby login values for the server environment (docs/OPERATIONS.md, ARCHITECTURE.md § 4.4). node:crypto only.
 //
 //   node scripts/lobby-hash.mjs <password>            one scrypt hash: scrypt$N$r$p$salt$hash
-//   node scripts/lobby-hash.mjs --users <password>    LOBBY_USERS=… for the four accounts, base64url JSON
+//   node scripts/lobby-hash.mjs --users <password>    LOBBY_USERS=… for the five accounts, base64url JSON
 //   node scripts/lobby-hash.mjs --users-json <pw>     the same as plain JSON (for the Vercel settings page)
 //   node scripts/lobby-hash.mjs --secret              LOBBY_AUTH_SECRET=… (32 random bytes)
 //
@@ -18,6 +18,8 @@ const ACCOUNTS = [
   { u: "shiraz", name: "Shiraz", role: "admin" },
   { u: "resepsjon", name: "Resepsjonist", role: "receptionist" },
   { u: "robot", name: "Robotansvarlig", role: "robot" },
+  // The Airbnb host: their own app under /vert, no hotel screens, no view switcher.
+  { u: "vert", name: "Ingrid Berge", role: "host" },
 ];
 
 function hash(password) {

@@ -184,7 +184,7 @@ describe("Sheet", () => {
 });
 
 describe("AppNav", () => {
-  it("has a Resepsjon link in its own group, marked active on /resepsjon, after every other module", () => {
+  it("has a Resepsjon link in its own group, marked active on /resepsjon, after every other hotel module", () => {
     const admin = { user: { u: "hamad", name: "Hamad", role: "admin" as const }, view: "admin" as const, effectiveRole: "admin" as const, exp: 0 };
     render(
       <SessionProvider session={admin}>
@@ -196,6 +196,7 @@ describe("AppNav", () => {
     expect(link).toHaveAttribute("aria-current", "page");
     const labels = screen.getAllByRole("link").map((a) => a.textContent);
     expect(labels.slice(1)).toEqual(MODULES.map((module) => module.name));
-    expect(labels.at(-1)).toBe("Resepsjon");
+    // Resepsjon closes the hotel's groups; only the host's Utleie group (admins see it too) comes after.
+    expect(labels.slice(labels.indexOf("Resepsjon") + 1)).toEqual(MODULES.filter((module) => module.group === "utleie").map((module) => module.name));
   });
 });

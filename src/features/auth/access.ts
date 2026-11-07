@@ -1,4 +1,4 @@
-import { canAccess, type Role } from "./roles";
+import { canAccess, homeFor, type Role } from "./roles";
 
 /**
  * What the proxy does with one request. Pure: the proxy (src/proxy.ts) turns the decision into a
@@ -72,7 +72,7 @@ export function safeNext(raw: unknown): string {
 export function decide({ pathname, search, session, hadCookie = false }: DecideInput): Decision {
   if (session && stripSlash(pathname) === "/login") {
     const next = safeNext(new URLSearchParams(search).get("next"));
-    return { kind: "redirect", location: canAccess(session.view, next) ? next : "/", clearCookie: false };
+    return { kind: "redirect", location: canAccess(session.view, next) ? next : homeFor(session.view), clearCookie: false };
   }
   if (isPublic(pathname)) return { kind: "next" };
 
@@ -83,5 +83,9 @@ export function decide({ pathname, search, session, hadCookie = false }: DecideI
   }
 
   if (canAccess(session.view, pathname)) return { kind: "next" };
+  // A role without Oversikt (the host) is sent to its own start page instead of a 403 on "/".
+  if (stripSlash(pathname) === "/" && homeFor(session.view) !== "/") {
+    return { kind: "redirect", location: homeFor(session.view), clearCookie: false };
+  }
   return { kind: "forbidden", api: isApi(pathname) };
 }

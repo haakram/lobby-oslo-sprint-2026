@@ -48,7 +48,7 @@ CLIENT_TIMEOUT_S = 15
 CLIENT_MAX_RETRIES = 1
 MAX_COUNT = 10
 FIELD_CAPS = {"item": 60, "area_hint": 60, "guest": 60, "message": 300}
-_ROOM_RE = re.compile(r"(?:room-)?(\d{3})", re.IGNORECASE)
+_ROOM_RE = re.compile(r"(?:room-)?([0-9]{3})", re.IGNORECASE)
 _CLOSE_TAG_RE = re.compile(r"<\s*/\s*untrusted_text\s*>", re.IGNORECASE)
 
 
@@ -192,19 +192,16 @@ class Brain:
 
         raw_kind = data.get("kind")
         try:
-            kind = Kind(raw_kind) if isinstance(raw_kind, str) else Kind.unknown
+            kind = Kind(raw_kind) if isinstance(raw_kind, str) else Kind.UNKNOWN
         except ValueError:
-            kind = Kind.unknown
+            kind = Kind.UNKNOWN
         raw_count = data.get("count")
         if raw_count is None:
             count = 1
-        elif isinstance(raw_count, bool):
-            return None
+        elif isinstance(raw_count, int) and not isinstance(raw_count, bool):
+            count = max(1, min(MAX_COUNT, raw_count))
         else:
-            try:
-                count = max(1, min(MAX_COUNT, int(raw_count or 1)))
-            except (ValueError, TypeError, OverflowError):
-                return None
+            return None
 
         return Task(
             request=request_id, kind=kind, text=text, arrived=arrived,

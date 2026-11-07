@@ -49,9 +49,9 @@ def run_copy_with_tty(repo):
             ["bash", "scripts/secrets.sh", "copy"], cwd=repo, env=env(repo), stdout=slave,
             stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, timeout=20, check=False,
         )
-        os.close(slave)
-        out = os.read(master, 65536).decode()
+        out = os.read(master, 65536).decode()  # read before closing the slave end
     finally:
+        os.close(slave)
         os.close(master)
     return proc, out
 
@@ -104,3 +104,21 @@ def test_paste_creates_env_as_600_from_example(repo):
     )
     assert r.returncode == 0
     assert mode(repo / ".env") == 0o600
+
+
+@pytest.mark.parametrize("bad", ["abc", "0", "-5", "1.5", ""])
+def test_invalid_clear_delay_falls_back_to_60(repo, bad):
+    (repo / ".env").write_text(DUMMY)
+    e = env(repo)
+    e["SECRETS_CLEAR_AFTER"] = bad
+    master, slave = pty.openpty()
+    try:
+        proc = subprocess.run(
+            ["bash", "scripts/secrets.sh", "copy"], cwd=repo, env=e, stdout=slave,
+            stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, timeout=20, check=False,
+        )
+        out = os.read(master, 65536).decode()  # read before closing the slave end
+    finally:
+        os.close(slave)
+        os.close(master)
+    assert proc.returncode == 0 and "cleared in 60s" in out

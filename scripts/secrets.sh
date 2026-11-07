@@ -44,12 +44,15 @@ case "${1:-}" in
       printf '%s' "$out" | pbcopy
       # Clear the clipboard after a minute, but only if it still holds exactly what we put there.
       sum=$(printf '%s' "$out" | cksum)
+      delay=${SECRETS_CLEAR_AFTER:-60}
+      case "$delay" in ''|*[!0-9]*|0*) delay=60 ;; esac # positive integer, else 60
       (
-        sleep "${SECRETS_CLEAR_AFTER:-60}"
+        trap '' HUP # survive the terminal closing
+        sleep "$delay"
         [ "$(pbpaste | cksum)" = "$sum" ] && pbcopy < /dev/null
       ) > /dev/null 2>&1 &
       echo "✓ copied to the clipboard:$names"
-      echo "  The clipboard is cleared in ${SECRETS_CLEAR_AFTER:-60}s. Turn off Universal Clipboard and pause clipboard managers while you transfer."
+      echo "  The clipboard is cleared in ${delay}s. Turn off Universal Clipboard and pause clipboard managers while you transfer."
       echo "  Send it privately (AirDrop, or a one-time password-manager share). The receiver runs: ./scripts/secrets.sh paste"
     else
       printf '%s' "$out"

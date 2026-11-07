@@ -96,7 +96,8 @@ For a new teammate. ShirazIQ was invited on 2026-11-07.
 - [-] `./scripts/protect-main.sh`: dropped. GitHub's free plan has no branch protection on private
       repos; the local hooks and the team rules protect `main`.
 - [ ] Team name **Fettero** and photo handed in by Sat 12:00. [owner: Hamad]
-- [ ] Invite accepted, `setup.sh` run, first small PR (own lane in `MEMORY.md`). [owner: ShirazIQ]
+- [x] Invite accepted, `setup.sh` run, first small PR (own lane in `MEMORY.md`). [owner: ShirazIQ]
+      Verified: `setup.sh` showed all 4 plugins ✓, `secrets.sh status` shows all 3 keys set. PR: this one.
 - [ ] **Matches the brief** · [ ] **Seen working**
 
 ## Phase 1 — Recon and design (Sat, until ~13:00)

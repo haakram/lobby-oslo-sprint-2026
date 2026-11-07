@@ -264,8 +264,36 @@ def amenity(ex: Executor, task: Task) -> Result:
         raise ActionFailed("no item in the request")
     _corridor(ex, task.room)  # an unknown room fails before the trip to the stock room
     _refuse_known_dnd(ex, task.room, task.request)  # a named guest's room is known only here
+    had = ex.count(task.item)
     ex.gather(task.item, task.count)
+    if ex.count(task.item) > had:  # a stock room was visited: top up for the other waiting orders
+        _top_up_for_others(ex, task)
     return _deliver(ex, task.room, task.item, task.count)
+
+
+def _top_up_for_others(ex: Executor, task: Task) -> None:
+    """At a stock room anyway: also take what other pending amenity orders need from here, while
+    the cart has a free slot (the opening stock runs out on a rich night; each later order then
+    made its own trip). The orders still deliver and verify on their own."""
+    from agent.flows_extra import CART_SLOTS
+
+    here = ex.state.location
+    for other in list(ex.queue):
+        if len(ex.state.cart or []) >= CART_SLOTS - 1:
+            return
+        if other.kind is not Kind.AMENITY or not other.item or other.request == task.request:
+            continue
+        if ex.count(other.item) >= max(1, other.count):
+            continue
+        if ex.hotel.stock.get(here, {}).get(other.item, 0) <= 0:
+            continue
+        try:
+            ex.gather(other.item, max(1, other.count))
+            ex.log("picked_for_later", request=other.request, item=other.item, during=task.request)
+        except ActionFailed as exc:
+            ex.log("note", request=other.request, text=f"top-up of {other.item} failed: {exc}"[:160])
+        if ex.state.location != here:
+            return  # gather went elsewhere: no further top-ups from here
 
 
 def tray(ex: Executor, task: Task) -> Result:

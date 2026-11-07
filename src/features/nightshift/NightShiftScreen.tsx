@@ -1,89 +1,82 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
-import {
-  Badge,
-  type BadgeTone,
-  Button,
-  buttonClasses,
-  Card,
-  cx,
-  EmptyState,
-  ErrorState,
-  fadeRise,
-  MoonIcon,
-  Skeleton,
-  Stat,
-} from "@/ui";
-import type { Decision, RunSummary } from "./runlog";
-import { type RunView, useLive, useReplay, viewerBase } from "./useRun";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { Hotel3D } from "@/features/hotel3d/Hotel3D";
+import { PlaybackControls } from "@/features/hotel3d/PlaybackControls";
+import { EventFeed, TaskCard, WorkOrderList } from "@/features/hotel3d/ReplayPanels";
+import { type HotelReplay, placeName, type ReplaySource, useHotelReplay } from "@/features/replay";
+import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, MoonIcon, Skeleton, Stat } from "@/ui";
+import { viewerBase } from "./useRun";
 
-// TODO(phase-2): real run from Hamad. Until then this is a copy of fixtures/sample.jsonl (test data).
-const DEMO_RUN = "/runs/demo.jsonl";
+const MAX_DECISIONS = 40;
 
-type Tab = "replay" | "live";
-
-const KIND: Record<string, { label: string; tone: BadgeTone }> = {
-  plan: { label: "Plan", tone: "neutral" },
-  task_start: { label: "Startet", tone: "neutral" },
-  task_done: { label: "Fullført", tone: "success" },
-  task_failed: { label: "Feilet", tone: "danger" },
-  brain: { label: "Claude", tone: "accent" },
-  note: { label: "Notat", tone: "neutral" },
-};
-
-/** The robot's night shift, from run log v1: a replay of the recording, or the live shift. */
+/**
+ * The robot's night shift, from run log v1: the hotel in 3D, the clock, and every decision the agent
+ * took (tasks done or failed, refusals, hypotheses). A replay of the demo night, or the live shift
+ * when a viewer URL is configured.
+ */
 export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   const base = viewerBase(viewerUrl);
-  const [tab, setTab] = useState<Tab>("replay");
-  const replay = useReplay(DEMO_RUN);
-  const live = useLive(base, tab === "live");
-  const view: RunView = tab === "live" ? live : replay;
-  const ready = view.status === "ready";
+  const [source, setSource] = useState<ReplaySource>("demo");
+  const replay = useHotelReplay(source, { viewerUrl: base });
+  const ready = replay.status === "ready";
+  const snapshot = replay.snapshot;
+
+  const decisions = useMemo(() => {
+    if (!replay.timeline || !snapshot) return [];
+    const upTo = replay.timeline.events.slice(0, snapshot.eventCount);
+    const picked = [];
+    for (let index = upTo.length - 1; index >= 0 && picked.length < MAX_DECISIONS; index -= 1) {
+      if (upTo[index].decision) picked.push(upTo[index]);
+    }
+    return picked;
+  }, [replay.timeline, snapshot]);
 
   return (
-    <main data-surface="dark" className="flex-1 bg-bg px-4 pt-10 pb-12 sm:px-8 lg:px-12 lg:pt-16">
+    <main data-surface="dark" className="flex-1 bg-bg px-4 pt-10 pb-12 text-text sm:px-8 lg:px-12 lg:pt-16">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-extrabold tracking-[-0.03em]">Natteskift</h1>
-            {ready && <Badge tone={view.summary.live ? "accent" : "success"}>{view.summary.live ? "Pågår" : "Ferdig"}</Badge>}
+            {ready && <ShiftBadge replay={replay} />}
           </div>
           <p className="mt-3 max-w-[48ch] text-lg text-muted">Robotens skift i natt, steg for steg.</p>
         </div>
-        {base && (
-          <a href={base} target="_blank" rel="noreferrer" className={buttonClasses("secondary")}>
-            Åpne 3D
-          </a>
-        )}
+        <Link href="/hotell" className={buttonClasses("secondary")}>
+          Åpne hotellet i 3D
+        </Link>
       </header>
 
-      {base && <Tabs tab={tab} onChange={setTab} />}
+      {base && <Tabs source={source} onChange={setSource} />}
 
-      <div className="mt-8 max-w-4xl">
-        {view.status === "loading" && <LoadingRun />}
-        {view.status === "error" &&
-          (tab === "live" ? (
+      <div className="mt-8">
+        {replay.status === "loading" && <LoadingRun />}
+        {replay.status === "error" &&
+          (source === "live" ? (
             <ErrorState
               title="Fikk ikke kontakt med viewer-serveren"
               body="Sjekk at viewer-serveren kjører på denne maskinen. Vi prøver igjen hvert andre sekund."
-              action={<Button variant="secondary" onClick={live.retry}>Prøv igjen</Button>}
+              action={
+                <Button variant="secondary" onClick={replay.retry}>
+                  Prøv igjen
+                </Button>
+              }
             />
           ) : (
             <ErrorState
               title="Fikk ikke lastet opptaket"
               body="Sjekk nettet og prøv igjen."
-              action={<Button variant="secondary" onClick={replay.retry}>Prøv igjen</Button>}
+              action={
+                <Button variant="secondary" onClick={replay.retry}>
+                  Prøv igjen
+                </Button>
+              }
             />
           ))}
-        {view.status === "empty" &&
-          (tab === "live" ? (
-            <EmptyState
-              icon={<MoonIcon className="size-8" />}
-              title="Ingen skift ennå"
-              body="Start et skift med agenten, så dukker det opp her."
-            />
+        {replay.status === "empty" &&
+          (source === "live" ? (
+            <EmptyState icon={<MoonIcon className="size-8" />} title="Ingen skift ennå" body="Start et skift med agenten, så dukker det opp her." />
           ) : (
             <EmptyState
               icon={<MoonIcon className="size-8" />}
@@ -91,24 +84,34 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
               body="Legg inn en kjøringslogg fra roboten, så spilles skiftet av her."
             />
           ))}
-        {ready && (
+        {ready && snapshot && (
           <>
-            <StatRow summary={view.summary} />
-            {tab === "replay" && (
-              <div className="mt-6 flex flex-wrap items-center gap-4">
-                <Button size="lg" loading={replay.playing} onClick={replay.play}>
-                  Spill av
-                </Button>
-                <span className="text-sm text-muted">Spilles av i 10 × fart.</span>
-              </div>
-            )}
-            {view.skipped > 0 && (
+            <StatRow replay={replay} />
+            <div className="mt-6 flex flex-col gap-4">
+              <Hotel3D replay={replay} variant="panel" />
+              <Card>
+                <PlaybackControls replay={replay} compact />
+              </Card>
+            </div>
+            {replay.skipped > 0 && (
               <p className="mt-4 text-sm text-muted">
-                <span className="font-mono tabular-nums">{view.skipped}</span>{" "}
-                {view.skipped === 1 ? "linje" : "linjer"} i loggen kunne ikke leses og er hoppet over.
+                <span className="font-mono tabular-nums">{replay.skipped}</span> {replay.skipped === 1 ? "linje" : "linjer"} i loggen kunne
+                ikke leses og er hoppet over.
               </p>
             )}
-            <DecisionFeed decisions={view.summary.decisions} />
+            <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+              <div className="flex min-w-0 flex-col gap-8">
+                <TaskCard snapshot={snapshot} finished={snapshot.finished} />
+                <WorkOrderList orders={snapshot.workOrders} />
+              </div>
+              <EventFeed
+                id="decisions-heading"
+                title="Beslutninger"
+                emptyText="Roboten har ikke tatt noen valg ennå."
+                events={decisions}
+                className="min-w-0"
+              />
+            </div>
           </>
         )}
       </div>
@@ -116,9 +119,16 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   );
 }
 
-function Tabs({ tab, onChange }: { tab: Tab; onChange: (tab: Tab) => void }) {
-  const tabs: Array<{ id: Tab; label: string }> = [
-    { id: "replay", label: "Opptak" },
+function ShiftBadge({ replay }: { replay: HotelReplay }) {
+  if (replay.live) return <Badge tone="accent">Pågår</Badge>;
+  if (replay.playing) return <Badge tone="accent">Spilles av</Badge>;
+  if (replay.t < replay.duration - 0.5) return <Badge tone="neutral">Pauset</Badge>;
+  return <Badge tone="success">Ferdig</Badge>;
+}
+
+function Tabs({ source, onChange }: { source: ReplaySource; onChange: (source: ReplaySource) => void }) {
+  const tabs: Array<{ id: ReplaySource; label: string }> = [
+    { id: "demo", label: "Opptak" },
     { id: "live", label: "Live" },
   ];
   return (
@@ -128,87 +138,52 @@ function Tabs({ tab, onChange }: { tab: Tab; onChange: (tab: Tab) => void }) {
           key={id}
           type="button"
           role="tab"
-          aria-selected={tab === id}
+          aria-selected={source === id}
           onClick={() => onChange(id)}
           className={cx(
             "relative min-h-12 rounded-md px-5 text-base font-semibold transition-colors duration-150 ease-standard",
-            tab === id ? "bg-sunken text-text" : "text-muted hover:text-text",
+            source === id ? "bg-sunken text-text" : "text-muted hover:text-text",
           )}
         >
           {label}
-          {tab === id && <span aria-hidden="true" className="absolute inset-x-4 bottom-1 h-0.5 rounded-sm bg-accent" />}
+          {source === id && <span aria-hidden="true" className="absolute inset-x-4 bottom-1 h-0.5 rounded-sm bg-accent" />}
         </button>
       ))}
     </div>
   );
 }
 
-function StatRow({ summary }: { summary: RunSummary }) {
+function StatRow({ replay }: { replay: HotelReplay }) {
+  const snapshot = replay.snapshot!;
   return (
     <Card role="group" aria-label="Skiftet i tall">
       <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
-        <Stat label="Poeng" value={summary.score} tone="accent" />
-        <Stat label="Klokke" value={summary.clock ?? "–"} />
-        <Stat label="Oppgaver fullført" value={summary.tasksDone} tone="success" />
-        <Stat label="Oppgaver feilet" value={summary.tasksFailed} />
+        <Stat label="Poeng" value={snapshot.score} tone="accent" />
+        <Stat label="Klokke" value={snapshot.clock} />
+        <Stat label="Oppgaver fullført" value={snapshot.tasksDone} tone="success" />
+        <Stat label="Oppgaver feilet" value={snapshot.tasksFailed} />
       </div>
       <dl className="mt-5 flex flex-wrap gap-x-6 gap-y-1 border-t border-line pt-4 text-sm text-muted">
         <div className="flex gap-2">
           <dt>Posisjon</dt>
-          <dd className="font-mono text-text">{summary.location ?? "–"}</dd>
+          <dd className="text-text">{placeName(snapshot.robot.node)}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt>Batteri</dt>
+          <dd className="font-mono tabular-nums text-text">{snapshot.battery === null ? "–" : `${Math.round(snapshot.battery)} %`}</dd>
         </div>
         <div className="flex gap-2">
           <dt>Skift</dt>
-          <dd className="max-w-[24ch] truncate font-mono text-text">{summary.shift ?? "–"}</dd>
+          <dd className="max-w-[24ch] truncate font-mono text-text">{replay.shift ?? "–"}</dd>
         </div>
-        {summary.seed !== null && (
+        {replay.seed !== null && (
           <div className="flex gap-2">
             <dt>Seed</dt>
-            <dd className="font-mono tabular-nums text-text">{summary.seed}</dd>
+            <dd className="font-mono tabular-nums text-text">{replay.seed}</dd>
           </div>
         )}
       </dl>
     </Card>
-  );
-}
-
-function DecisionFeed({ decisions }: { decisions: Decision[] }) {
-  const reduced = useReducedMotion();
-  const variants = fadeRise(reduced);
-
-  return (
-    <section aria-labelledby="decisions-heading" className="mt-10">
-      <h2 id="decisions-heading" className="text-xl font-bold tracking-[-0.02em]">
-        Beslutninger
-      </h2>
-      {decisions.length === 0 ? (
-        <p className="mt-3 text-base text-muted">Roboten har ikke tatt noen valg ennå.</p>
-      ) : (
-        <ul className="mt-4 flex flex-col gap-2">
-          <AnimatePresence initial={false}>
-            {decisions.map((decision) => {
-              const kind = KIND[decision.kind] ?? { label: decision.kind, tone: "neutral" as const };
-              return (
-                <motion.li
-                  key={decision.id}
-                  layout={!reduced}
-                  variants={variants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  className="flex items-start gap-3 rounded-md border border-line bg-surface px-4 py-3"
-                >
-                  <Badge tone={kind.tone} className="mt-0.5">
-                    {kind.label}
-                  </Badge>
-                  <span className="min-w-0 text-base break-words">{decision.text || "Uten detaljer"}</span>
-                </motion.li>
-              );
-            })}
-          </AnimatePresence>
-        </ul>
-      )}
-    </section>
   );
 }
 
@@ -223,7 +198,8 @@ function LoadingRun() {
           </div>
         ))}
       </div>
-      <Skeleton className="mt-6 h-14 w-36" />
+      <Skeleton className="mt-6 h-[300px] w-full rounded-lg" />
+      <Skeleton className="mt-4 h-14 w-36" />
       <div className="mt-10 flex flex-col gap-2">
         {[0, 1, 2, 3, 4].map((index) => (
           <Skeleton key={index} className="h-12 w-full" />

@@ -533,12 +533,36 @@ def solo(tmp_path, text, **fake_kw):
     return fake, session, ex, task
 
 
-def test_every_knock_is_preceded_by_a_door_look(tmp_path):
+def test_a_delivery_knock_issues_no_door_look(tmp_path):
+    """Task 8: the knock reply names a DND sign, so a plain knock is not preceded by a door look."""
     for rid in ("R-001", "R-002", "R-003", "R-005"):
         fake, _, _, out = run_one(tmp_path, rid)
         assert out.status == "done", (rid, out)
         assert calls(fake, "knock")
-        assert_every_knock_looked_first(fake)
+        assert not [e for e in calls(fake, "look") if (e["args"] or {}).get("at")], rid
+
+
+def test_a_room_check_still_looks_at_the_door_before_its_knock(tmp_path):
+    fake, _, _, out = run_one(tmp_path, "R-004", absent_rooms={"room-103"})
+    assert out.status == "done", out
+    assert calls(fake, "knock")
+    assert_every_knock_looked_first(fake)
+
+
+def test_a_dnd_knock_reply_marks_the_room_and_stops_the_delivery(tmp_path):
+    fake, _session, ex, task = solo(tmp_path, "208 wants a water bottle.", dnd_rooms={"room-208"})
+    out = ex.run(task)
+    assert out.status == "failed" and "Do Not Disturb" in out.note
+    assert not [e for e in calls(fake, "look") if (e["args"] or {}).get("at")]
+    assert "room-208" in ex.ledger.dnd and not calls(fake, "place") and not calls(fake, "use")
+    assert fake.score == 0 and not fake.unsafe
+
+
+def test_look_before_knock_switch_restores_the_look(tmp_path, monkeypatch):
+    monkeypatch.setattr("agent.flows.LOOK_BEFORE_KNOCK", True)
+    fake, _, _, out = run_one(tmp_path, "R-001")
+    assert out.status == "done", out
+    assert_every_knock_looked_first(fake)
 
 
 DND_208 = [
@@ -563,7 +587,8 @@ def test_dnd_door_is_never_knocked_or_keycarded_in_any_flow(tmp_path):
         out = ex.run(task)
         assert out.status == "failed", (text, out)
         assert "Do Not Disturb" in out.note, (text, out.note)
-        assert not [e for e in calls(fake, "knock") if e["args"]["door"] == "room-208"], text
+        if text in (DND_208[4], DND_208[5]):  # bags, room check: the look first, never a knock
+            assert not [e for e in calls(fake, "knock") if e["args"]["door"] == "room-208"], text
         assert not [e for e in calls(fake, "use") if e["args"].get("on") == "room-208"], text
         assert not fake.unsafe and fake.score == 0 and fake.reports == {"R-001": "failed"}, text
 
@@ -619,7 +644,7 @@ def test_noise_complaint_asks_the_named_room_to_keep_it_down(tmp_path):
     out = ex.run(task)
     assert out.status == "done", out
     assert [e["args"]["door"] for e in calls(fake, "knock")] == ["room-202"]
-    assert_every_knock_looked_first(fake)
+    assert not [e for e in calls(fake, "look") if (e["args"] or {}).get("at")]  # a plain knock: no door look
     said = calls(fake, "say")[0]["args"]["text"]
     assert "keep the noise down" in said
     assert fake.reports == {"R-001": "done"} and not fake.false_done
@@ -658,12 +683,12 @@ def test_spill_sign_placed_on_the_wet_patch(tmp_path):
     assert hypotheses(session, "H-spill")
 
 
-def test_spill_not_found_reports_failed_with_what_was_seen(tmp_path):
+def test_spill_not_found_reports_declined_with_what_was_seen(tmp_path):
     fake, _session, ex, task = solo(tmp_path, "Someone mentioned a spill on floor 2.", spill_spots={2: None})
     out = ex.run(task)
-    assert out.status == "failed" and "corridor-2" in out.note
+    assert out.status == "declined" and "corridor-2" in out.note
     assert not [e for e in calls(fake, "place") if e["args"].get("item") == "wet-floor-sign"]
-    assert fake.reports == {"R-001": "failed"}
+    assert fake.reports == {"R-001": "declined"}
 
 
 # H-followup
@@ -857,7 +882,8 @@ def test_room_status_ikke_forstyrr_on_a_dnd_door(tmp_path):
     _, session, _, out = run_one(tmp_path, "R-006", dnd_rooms={"room-208"})
     assert out.status == "failed"
     assert decisions(session, "room_status") == [
-        {"room": "room-208", "status": "ikke_forstyrr", "source": "door_sign", "note": "Do Not Disturb sign"}]
+        {"room": "room-208", "status": "ikke_forstyrr", "source": "knock",
+         "note": "No answer. A Do Not Disturb sign hangs on the handle."}]
 
 
 def test_room_status_opptatt_when_a_guest_answers(tmp_path):
@@ -933,15 +959,15 @@ HYPOTHESIS_RUNS = {
     "bags not at the desk": (BAGS_TEXT.format(206), {}, lambda f, e, m: f._objects["front-desk"].pop("bags-206"),
                              "H-bags", "declined"),
     "noise done": (NOISE_201, NOISY_203_HOME, None, "H-noise", "done"),
-    "noise door unseen": (NOISE_201, NOISY_203_HOME, lambda f, e, m: _door_unseen(f, m), "H-noise", "failed"),
+    "noise door unseen": (NOISE_201, NOISY_203_HOME, lambda f, e, m: _door_unseen(f, m), "H-noise", "done"),  # no door look any more
     "noise dnd": (NOISE_201, {**NOISY_203_HOME, "dnd_rooms": {"room-203"}}, None, "H-noise", "failed"),
     "noise nothing named": (NOISE_201, {"noise_sources": {"room-201": None}}, None, "H-noise", "failed"),
     "spill done": ("Someone mentioned a spill on floor 3.", {"spill_spots": {3: "corridor-3c"}}, None,
                    "H-spill", "done"),
     "spill no signs": ("Someone mentioned a spill on floor 3.", {"spill_spots": {3: "corridor-3c"}},
-                       lambda f, e, m: f._objects["storage"].pop("wet-floor-sign"), "H-spill", "failed"),
+                       lambda f, e, m: f._objects["storage"].pop("wet-floor-sign"), "H-spill", "declined"),
     "spill not found": ("Someone mentioned a spill on floor 2.", {"spill_spots": {2: None}}, None,
-                        "H-spill", "failed"),
+                        "H-spill", "declined"),
     "followup no order": (FOLLOW.format(319, "water bottle"), {}, None, "H-followup", "declined"),
     "named done": ("Mr Aas would like a pillow.", {"guests": {"Mr Aas": "room-318"}}, None, "H-named", "done"),
     "named unknown guest": ("Mr Nobody would like a pillow.", {"guests": {}}, None, "H-named", "failed"),

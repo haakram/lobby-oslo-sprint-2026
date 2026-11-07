@@ -193,6 +193,9 @@ WAIT_DECAY_PER_MIN = 0.6  # [obs] fitted; anything in 0-1 fits the 1-5 min waits
 MIN_POINTS = 5
 VERIFIED_BONUS = 5  # [obs] 20 of 20 verified "done" reports; none for room checks
 JUDGEMENT_BONUS = 5  # [obs] scout: declined on a false follow-up, cancelled on a skipped request
+REPLY_BONUS = 10  # [obs] seeds 16, 23 (and 24 of 25 for another team): a reply on a room described, not
+# numbered, scores +10 at once; once per request [hyp]
+REPLY_SENT = "Sent. The night manager answers quickly."  # [obs] verbatim
 OUTCOMES = ("done", "failed", "declined", "cancelled")  # [obs] the server's own list
 FALSE_DONE = -35  # [obs] 4 of 4 (all bags); never seen on another kind, applied everywhere
 WRONG_ITEM = -10  # [hyp] a non-matching item into a room with an open request (never observed live)
@@ -325,10 +328,12 @@ class _Request:
     delivered: int = 0
     completed: bool = False
     checked: bool = False  # room check: keycard used on the room, robot inside, look done
-    floor: int | None = None  # spill
+    floor: int | None = None  # spill; the floor of a room described by place
     source: str | None = None  # noise: the room the noise comes from
     dup_of: str | None = None  # [hyp] a repeat of an earlier request (same text and room)
     skipped: bool = False  # [obs] after "Skip R-NNN" it scores 0, done or not (live seed 4 R-019)
+    described: bool = False  # [obs] "the room next to the elevator on floor 2": the room is per request
+    replied: bool = False  # a reply on a described room was rewarded (once per request [hyp])
 
 
 def _item_in(text: str) -> str | None:
@@ -368,6 +373,16 @@ def parse_request(
     elif guest_room and (m := re.match(r"let .+? know (.+?)\.?$", low)):
         req.kind, req.room = "message", guest_room
         req.keywords = tuple(w for w in re.findall(r"[a-z]+", m[1]) if len(w) >= 4 and w not in STOP_WORDS)
+    elif m := re.match(r"(?:please )?(?:(tell|let) )?the guest in the room next to the elevator "
+                       r"on floor (\d) (?:know )?(?:that )?(.+?)\.?$", low):
+        req.described, req.floor = True, int(m[2])  # its room is set per request (_place_described)
+        if m[1]:
+            req.kind = "message"
+            req.keywords = tuple(w for w in re.findall(r"[a-z]+", m[3])
+                                 if len(w) >= 4 and w not in STOP_WORDS)
+        elif item := _item_in(m[3]):
+            req.kind, req.item = "amenity", item
+            req.count = next((n for word, n in COUNT_WORDS.items() if re.search(rf"\b{word}\b", m[3])), 1)
     elif m := re.search(r"\btray\b.*?\bto (\d{3})\b", low):
         req.kind, req.room, req.item = "tray", room(m[1]), f"tray-{m[1]}"
     elif " lost " in f" {low} ":
@@ -427,8 +442,12 @@ class FakeWybe:
         wet_spots: list[tuple[str, str]] | None = None,
         people_events: list[tuple[str, str, str]] | None = None,
         skips: list[tuple[str, str, str]] | None = None,
+        described_rooms: dict[str, str] | None = None,
     ):
-        """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`."""
+        """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`.
+        `described_rooms` names the room of a request whose room is described ("next to the elevator
+        on floor 2"), by request id; otherwise such requests take the rooms on the corridor by that
+        floor's elevator landing in turn [hyp] (live seed 23: R-014's was 201, R-031's was not)."""
         data = hotel if hotel is not None else json.loads(Path(hotel_path or DEFAULT_MAP).read_text())
         self._nodes: dict[str, dict] = data["nodes"]
         self._adj: dict[str, dict[str, dict]] = {}
@@ -458,6 +477,7 @@ class FakeWybe:
         self._spill_spots = dict(DEFAULT_SPILL_SPOTS if spill_spots is None else spill_spots)
         self._wet_spots0 = list(DEFAULT_WET_SPOTS if wet_spots is None else wet_spots)
         self._people0 = list(DEFAULT_PEOPLE if people_events is None else people_events)
+        self._described_rooms = dict(described_rooms or {})
         self._lock = threading.Lock()
 
         self.log: list[dict] = []
@@ -604,8 +624,29 @@ class FakeWybe:
         pending += [parse_request(rid, clock_to_seconds(t), text, rooms, self._guests)
                     for t, rid, text in self._specs]
         self._pending = sorted(pending, key=lambda r: r.due_s)
+        self._place_described()
         self._check_rooms = {r.room for r in self._pending  # empty rooms: room checks and bags
                              if r.kind in ("room_check", "bags") and r.room}
+
+    def _place_described(self) -> None:
+        """Each request whose room is described by place gets its own room: the one named in
+        `described_rooms`, else the next room on the corridor by that floor's landing [hyp]."""
+        by_lift: dict[int, list[str]] = {}
+        for node, v in self._nodes.items():
+            if v["kind"] == "elevator":
+                corridors = [c for c in self._adj.get(node, {})
+                             if self._nodes.get(c, {}).get("kind") == "corridor"]
+                by_lift[v["floor"]] = sorted(r for c in corridors for r in self._adj.get(c, {})
+                                             if self._nodes.get(r, {}).get("kind") == "room")
+        turn: dict[int, int] = {}
+        for req in self._pending:
+            if not req.described:
+                continue
+            if req.rid in self._described_rooms:
+                req.room = self._described_rooms[req.rid]
+            elif rooms := by_lift.get(req.floor):
+                req.room = rooms[turn.get(req.floor, 0) % len(rooms)]
+                turn[req.floor] = turn.get(req.floor, 0) + 1
 
     def _robot(self, cmd: str, args: dict) -> dict:
         self._events = []
@@ -892,6 +933,15 @@ class FakeWybe:
             return False, 'reply needs request, e.g. {"request": "R-001", "text": "..."}'
         if rid not in self._requests:
             return False, f"No request called '{rid}'."
+        req = self._requests[rid]
+        if req.described and req.room:  # [obs] seeds 16, 23: +10; the answer in the next inbox, same clock
+            if not req.replied:
+                req.replied = True
+                self.score += REPLY_BONUS
+            self._unread.append({"from": "night manager", "at": self._clock(),
+                                 "text": f"{rid}: Sorry: {req.room.removeprefix('room-')}.", "request": rid})
+            self._events.append(dict(INBOX_EVENT))  # [hyp] the live reply's events were not logged
+            return True, REPLY_SENT
         return True, f"{rid} is exactly as written."
 
     def _cmd_end_shift(self, args: dict) -> tuple[bool, dict]:

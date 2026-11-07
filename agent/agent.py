@@ -207,6 +207,7 @@ def _vet_brain(ex: Executor, original: Task, better: Task) -> Task:
 
 
 _SKIP = re.compile(r"^\s*Skip (R-\d+)\b")
+_CHECKED_OUT = re.compile(r"(?<!\d)(\d{3}) checked out\b", re.IGNORECASE)  # "309" or "room-309"
 
 
 def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]) -> None:
@@ -228,6 +229,24 @@ def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]
                    note="Skipped as instructed: the guest checked out.")
     ex.log("request_skipped", request=rid, text=text[:120], was_queued=bool(dropped),
            reported=reply.ok, reply=str(reply.result)[:80])
+    if m := _CHECKED_OUT.search(text):
+        _checked_out(ex, f"room-{m[1]}", rid, pending)
+
+
+def _checked_out(ex: Executor, room: str, rid: str, pending: list[Task]) -> None:
+    """Live seed 16: after "Skip R-053, 309 checked out" the robot knocked on 309 for another request
+    (-10); every task for a checked-out room is worth 0. The room is remembered (the flows decline a
+    later request for it before any knock), and its other queued tasks are dropped and reported
+    declined (costs nothing). A task already running finishes; only queued ones are dropped."""
+    ex.checked_out.add(room)
+    dropped = []
+    for task in [t for t in pending if t.room == room and t.request != rid]:
+        ex.cmd("report", request=task.request, outcome="declined",
+               note=f"Guest checked out (manager's skip of {rid})")
+        pending.remove(task)  # after the report: a server error leaves it queued (the flows decline it)
+        ex.ledger.set_status(task.request, "declined")
+        dropped.append(task.request)
+    ex.log("room_checked_out", room=room, request=rid, dropped=dropped)
 
 
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:
@@ -240,6 +259,8 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
         rid = msg["request"]
         text = str(msg.get("text", ""))
         sender = str(msg.get("from", "")).lower()
+        if rid in seen:  # an answer, a skip or a follow-up on a known request: kept for the flows
+            ex.answers.setdefault(rid, []).append(text)
         if (m := _SKIP.match(text)) and "manager" in sender:  # only the manager's inbox instructs
             _skip(ex, m.group(1), text, seen, pending)
             continue
@@ -252,6 +273,8 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
             better = brain.classify(task.request, task.text, task.arrived)
             if better is not None and better.kind is not Kind.UNKNOWN:
                 task = _vet_brain(ex, task, flows.normalize(better))
+        if task.kind is Kind.SPILL:  # a patch wet before this read is not this spill's (H-spill)
+            ex.wet_at_read[rid] = frozenset(ex.hotel.wet_spots())
         ex.log("request", request=rid, kind=task.kind.value, text=task.text)
         ex.ledger.add(task)
         pending.append(task)
@@ -319,6 +342,7 @@ def run_shift(
                     "requests_served": None, "reason": ""}
     pending: list[Task] = []
     ex.queue = pending  # the same list: a follow-up that runs its original removes it here
+    ex.read_inbox = lambda: _read_inbox(ex, brain, seen, pending)
     seen: set[str] = set()
     # The executor's inbox hook: mid-task skip checkpoints and the forced charge block read through it.
     ex.read_inbox = lambda: _read_inbox(ex, brain, seen, pending)

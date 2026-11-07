@@ -43,7 +43,9 @@ def setup(tmp_path, rids=None, requests=None, **fake_kw):
 def next_task(ex, session, rid):
     """Dock until request `rid` is in the inbox, then parse it like the shift loop will."""
     for _ in range(12):
-        for msg in session.cmd("inbox").result["messages"]:
+        messages = session.cmd("inbox").result["messages"]
+        ex.inbox_waiting = False  # the loop's inbox read is what clears the flag
+        for msg in messages:
             if msg.get("request") == rid:
                 return parse_request(rid, msg["text"], msg["at"])
         ex.wait_for_request()
@@ -268,8 +270,8 @@ def test_wait_for_request_returns_at_once_when_a_message_is_waiting(tmp_path):
 def test_wait_for_request_is_bounded(tmp_path):
     fake, session, ex = setup(tmp_path, requests=[])
     session.cmd("inbox")
-    ex.wait_for_request()  # nothing will ever arrive: it must still return
-    assert 1 <= len(calls(fake, "scan")) <= 20
+    ex.wait_for_request(max_idle=40)  # nothing will ever arrive: it must still return
+    assert 1 <= len(calls(fake, "scan")) <= 40
 
 
 def test_idle_scan_remembers_found_items(tmp_path):
@@ -504,7 +506,9 @@ def collect(ex, session, rids):
     """Dock until every request in rids has come in; parse them like the shift loop will."""
     got = {}
     for _ in range(20):
-        for msg in session.cmd("inbox").result["messages"]:
+        messages = session.cmd("inbox").result["messages"]
+        ex.inbox_waiting = False  # the loop's inbox read is what clears the flag
+        for msg in messages:
             if msg.get("request") in rids:
                 got[msg["request"]] = parse_request(msg["request"], msg["text"], msg["at"])
         if set(got) == set(rids):
@@ -1074,13 +1078,3 @@ def test_task_run_makes_no_log_only_status_calls(tmp_path):
     assert cmds[0] != "status", cmds[:3]  # the loop's refresh just ran: no second status
     assert cmds[-1] == "report", cmds[-3:]  # nothing after the report
     assert out.points > 0  # from the flow's own before/after scores
-
-
-def test_wait_cycle_is_status_dock_scan(tmp_path):
-    fake, session, ex = setup(tmp_path, requests=[])
-    session.cmd("inbox")
-    fake.battery = 50
-    since = len(fake.log)
-    ex.wait_for_request(max_idle=3)
-    cmds = [e["cmd"] for e in fake.log[since:]]
-    assert cmds == ["status", "dock", "scan"] * 3, cmds

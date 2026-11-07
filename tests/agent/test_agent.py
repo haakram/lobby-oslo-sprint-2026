@@ -1,6 +1,7 @@
 """Shift loop and CLI against the offline fake (no network)."""
 
 import json
+from itertools import pairwise
 
 import httpx
 
@@ -341,4 +342,4 @@ def test_loop_reads_the_inbox_only_when_a_message_is_waiting(tmp_path):
     assert delivered >= 6  # the welcome and R-001..R-005
     assert inbox_calls <= delivered + 1, (inbox_calls, delivered)
     cmds = [e["cmd"] for e in fake.log]
-    assert "inbox" not in {b for a, b in zip(cmds, cmds[1:]) if a == "scan"}  # not read after idle scans
+    assert "inbox" not in {b for a, b in pairwise(cmds) if a == "scan"}  # not read after idle scans

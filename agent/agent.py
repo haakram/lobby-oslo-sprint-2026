@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -123,13 +124,18 @@ def run_shift(
     sim_end: str | None = None,
     real_time_limit_s: float | None = None,
     stop: threading.Event | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> dict:
     params = params or load_params()
     session = client.start_shift(mode, seed)
     hotel, state = Hotel.load(), RobotState()
     # Claude classifies unknown requests in ONE place (here), so the executor gets no brain.
     ex = Executor(session, hotel, state, max_scans=params.max_scans)
-    deadline = time.monotonic() + real_time_limit_s if real_time_limit_s else None
+    deadline = clock() + real_time_limit_s if real_time_limit_s else None
+
+    def out_of_time() -> bool:
+        return (stop is not None and stop.is_set()) or (deadline is not None and clock() >= deadline)
+
     sim_end_s = clock_to_seconds(sim_end) if sim_end else None
     result: dict = {"shift": session.shift_id, "seed": seed, "score": None,
                     "requests_served": None, "reason": ""}
@@ -143,7 +149,7 @@ def run_shift(
             if stop is not None and stop.is_set():
                 result["reason"] = "stopped"
                 break
-            if deadline is not None and time.monotonic() >= deadline:
+            if deadline is not None and clock() >= deadline:
                 result["reason"] = "real time limit"
                 break
             try:
@@ -166,7 +172,7 @@ def run_shift(
                     continue
                 task = choose_next(pending, state, hotel, params)
                 if task is None:
-                    ex.wait_for_request()
+                    ex.wait_for_request(should_stop=out_of_time)
                 else:
                     pending.remove(task)
                     ex.run(task)

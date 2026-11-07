@@ -50,26 +50,26 @@ ITEM_ALIASES: dict[str, str] = {
 
 _NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
 
-_PREFIX = re.compile(r"^\s*R-\d+\s*:\s*", re.I)
+_PREFIX = re.compile(r"^\s*R-\d+\s*:\s*", re.IGNORECASE)
 _ROOM = re.compile(r"(?<!\d)(\d{3})(?!\d)")
-_COUNT = re.compile(r"\b(one|two|three|four|five|[1-9])\b(?!\d)", re.I)
+_COUNT = re.compile(r"\b(one|two|three|four|five|[1-9])\b(?!\d)", re.IGNORECASE)
 _ITEM_RE = re.compile(
     r"\b(" + "|".join(re.escape(k) for k in sorted(ITEM_ALIASES, key=len, reverse=True)) + r")\b",
-    re.I,
+    re.IGNORECASE,
 )
-_LOST = re.compile(r"\blost\b", re.I)
-_TRAY = re.compile(r"\btray\b", re.I)
+_LOST = re.compile(r"\blost\b", re.IGNORECASE)
+_TRAY = re.compile(r"\btray\b", re.IGNORECASE)
 _MESSAGE = re.compile(
     r"^(?:(?:please|could you|can you)\s+)?(?:tell|let|inform|notify|message)\s+"
     r"(?:the\s+)?(?:guest\s+)?(?:in\s+)?(?:room\s+)?(\d{3})\b[,:]?\s*(?:know\s+)?(?:that\s+)?(.+?)\s*[.!]?$",
-    re.I,
+    re.IGNORECASE,
 )
-_CHECK = re.compile(r"\b(empty|tidy|occupied|vacant)\b", re.I)
-_CHECK_VERB = re.compile(r"\b(check|is|are|verify|see)\b", re.I)
+_CHECK = re.compile(r"\b(empty|tidy|occupied|vacant)\b", re.IGNORECASE)
+_CHECK_VERB = re.compile(r"\b(check|is|are|verify|see)\b", re.IGNORECASE)
 _HINT = re.compile(
     r"\b(?:maybe|probably|perhaps|possibly)\s+(?:somewhere\s+)?(?:around|in|near|at|by)?\s*"
     r"(?:the\s+)?(.+?)\s*[.!]?$",
-    re.I,
+    re.IGNORECASE,
 )
 _GUEST = re.compile(r"^((?:Mr|Mrs|Ms|Mx|Miss|Dr)\.?\s+[A-Z][\w'-]*)")
 
@@ -93,7 +93,7 @@ def _item(text: str) -> str | None:
 
 def parse_request(request_id: str, text: str, arrived: str) -> Task:
     body = _PREFIX.sub("", text or "").strip()
-    base = dict(request=request_id, text=body, arrived=arrived)
+    base = {"request": request_id, "text": body, "arrived": arrived}
     room = _room(body)
 
     if _LOST.search(body):
@@ -116,6 +116,5 @@ def parse_request(request_id: str, text: str, arrived: str) -> Task:
         return Task(kind=Kind.ROOM_CHECK, room=room, **base)
     item = _item(body)
     if room and item:
-        # count only from words outside the room number
         return Task(kind=Kind.AMENITY, room=room, item=item, count=_count(body), **base)
     return Task(kind=Kind.UNKNOWN, room=room, **base)

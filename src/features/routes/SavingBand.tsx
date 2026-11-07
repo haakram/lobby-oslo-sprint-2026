@@ -22,11 +22,27 @@ export function SavingBand({ plan }: { plan: CleaningPlan }) {
               kortere
             </p>
           ) : (
-            <p className="text-xl font-bold tracking-tight">Rommene står allerede i beste rekkefølge</p>
+            // Nothing to save against the order given: the round itself is the headline (Holio pain 6).
+            <p className="text-2xl font-bold tracking-[-0.03em] sm:text-3xl">
+              <span className="whitespace-nowrap">
+                <span className="font-mono font-medium tabular-nums">{metres.format(Math.round(plan.tour.metres))}</span> m
+              </span>{" "}
+              ·{" "}
+              <span className="whitespace-nowrap">
+                ca. <span className="font-mono font-medium tabular-nums">{Math.max(1, Math.round(plan.tour.seconds / 60))}</span> min
+              </span>{" "}
+              for {plan.tour.order.length} rom
+            </p>
           )}
           <p className="mt-2 text-sm text-muted">
-            Mot rekkefølgen rommene ble valgt i:{" "}
-            <span className="font-mono whitespace-nowrap text-text tabular-nums">{metres.format(Math.round(plan.givenMetres))} m</span>
+            {saved.metres > 0 ? (
+              <>
+                Mot rekkefølgen rommene ble valgt i:{" "}
+                <span className="font-mono whitespace-nowrap text-text tabular-nums">{metres.format(Math.round(plan.givenMetres))} m</span>
+              </>
+            ) : (
+              "Korteste runde på tvers av etasjene. Rommene sto allerede i beste rekkefølge."
+            )}
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-4 border-t border-line pt-4 sm:grid-cols-4 lg:w-auto lg:gap-x-8 lg:border-t-0 lg:pt-0">

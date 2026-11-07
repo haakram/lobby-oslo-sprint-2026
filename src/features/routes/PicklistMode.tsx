@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useLayoutEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { productBySku, type Product } from "@/features/catalog/products";
 import { usePicklist } from "@/features/picklist/PicklistProvider";
+import { UndoStatus } from "@/features/requests/UndoStatus";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, RouteIcon } from "@/ui";
 import { FloorMap } from "./FloorMap";
 import { loadRoutes, type LoadedRoutes } from "./loadRoutes";
@@ -33,6 +34,17 @@ function plan(m: RouteMatrix, products: Product[]) {
 /** Plukkliste: the shortest walk to every product on the pick list (Øyne and Stemme fill it). */
 export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: RouteMatrix }) {
   const { skus, add, remove, clear } = usePicklist();
+  // The scanned list can't be rebuilt from anywhere else: Tøm keeps it for Angre.
+  const [cleared, setCleared] = useState<string[] | null>(null);
+  if (cleared && skus.length > 0) setCleared(null);
+  const empty = () => {
+    setCleared([...skus]);
+    clear();
+  };
+  const undoEmpty = () => {
+    cleared?.forEach(add);
+    setCleared(null);
+  };
 
   // ?sku= from Øyne's "Vis vei". Layout effect: the route includes it before the first paint.
   useLayoutEffect(() => {
@@ -69,18 +81,27 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
 
   if (!result) {
     return (
-      <Card className="p-4 sm:p-5">
-        <EmptyState
-          icon={<RouteIcon className="size-8" />}
-          title="Plukklisten er tom"
-          body="Legg til varer fra Øyne."
-          action={
-            <Link href="/oyne" className={buttonClasses("primary")}>
-              Åpne Øyne
-            </Link>
-          }
-        />
-      </Card>
+      <div className="flex flex-col gap-4">
+        {cleared && cleared.length > 0 && (
+          <UndoStatus
+            message={cleared.length === 1 ? "Plukklisten er tømt for 1 vare." : `Plukklisten er tømt for ${cleared.length} varer.`}
+            onUndo={undoEmpty}
+            undoLabel="Angre: legg varene tilbake"
+          />
+        )}
+        <Card className="p-4 sm:p-5">
+          <EmptyState
+            icon={<RouteIcon className="size-8" />}
+            title="Plukklisten er tom"
+            body="Legg til varer fra Øyne."
+            action={
+              <Link href="/oyne" className={buttonClasses("primary")}>
+                Åpne Øyne
+              </Link>
+            }
+          />
+        </Card>
+      </div>
     );
   }
 
@@ -105,7 +126,7 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
           }
         />
         <Card className="flex flex-col gap-2">
-          <h2 className="text-xl font-semibold tracking-tight">Plukkliste</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.01em]">Plukkliste</h2>
           {products.map((p) => (
             <ProductRow key={p.sku} product={p} onRemove={remove} />
           ))}
@@ -130,7 +151,7 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
           </Card>
         </div>
         <Card className="flex flex-col gap-5 animate-rise [animation-delay:60ms]">
-          <h2 className="text-xl font-semibold tracking-tight">Plukkrekkefølge</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.01em]">Plukkrekkefølge</h2>
           <StopList
             matrix={m}
             legs={result.legs}
@@ -142,7 +163,7 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
             <Link href="/oyne" className={buttonClasses("secondary")}>
               Legg til flere varer
             </Link>
-            <Button variant="ghost" onClick={clear}>
+            <Button variant="ghost" onClick={empty}>
               Tøm plukklisten
             </Button>
           </div>

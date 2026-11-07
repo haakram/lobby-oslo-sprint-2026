@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { UndoStatus } from "@/features/requests/UndoStatus";
 import { Button, Card, EmptyState, ErrorState, RegenIcon, Skeleton } from "@/ui";
 import { CleaningControls } from "./CleaningControls";
 import { CleaningStops } from "./CleaningStops";
@@ -61,6 +62,8 @@ export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: Nigh
   const { presets, doNotDisturb } = useMemo(() => cleaningPresets(statuses), [statuses]);
 
   const [rooms, setRooms] = useState(initial.rooms);
+  // "Fjern alle rom" keeps the round it cleared until the next change, for Angre.
+  const [cleared, setCleared] = useState<string[] | null>(null);
   const [start, setStart] = useState<CleaningStart>(initial.start ?? "laundry");
   const [cart, setCart] = useState(initial.cart ?? true);
   // Rooms from the link draw themselves on arrival; taps change the route without replaying it.
@@ -88,11 +91,22 @@ export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: Nigh
     replaceQuery({ rom: rooms.length ? rooms.join(",") : null, start, vogn: cart ? "1" : "0" });
   }, [rooms, start, cart]);
 
-  const toggle = (room: string) =>
+  const toggle = (room: string) => {
+    setCleared(null);
     setRooms((current) => (current.includes(room) ? current.filter((r) => r !== room) : [...current, room]));
+  };
   const load = (preset: RoomPreset) => {
+    setCleared(null);
     setRooms(preset.rooms);
     redraw();
+  };
+  const clearAll = () => {
+    setCleared(rooms);
+    setRooms([]);
+  };
+  const undoClear = () => {
+    if (cleared) setRooms(cleared);
+    setCleared(null);
   };
 
   const mustClean = presets.find((p) => p.id === "ma_vaskes");
@@ -109,6 +123,14 @@ export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: Nigh
         <p role="status" className="rounded-md border-l-4 border-warning bg-warning-soft px-4 py-3 text-base text-warning">
           Lenken hadde noe som ikke er et romnummer: {initial.unknown.join(", ")}. Rommene i lenken er med.
         </p>
+      )}
+
+      {cleared && rooms.length === 0 && (
+        <UndoStatus
+          message={cleared.length === 1 ? "Rommet er fjernet fra runden." : `${cleared.length} rom er fjernet fra runden.`}
+          onUndo={undoClear}
+          undoLabel="Angre: legg rommene tilbake"
+        />
       )}
 
       {rooms.length === 0 ? (
@@ -218,13 +240,13 @@ export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: Nigh
         <Card className="p-4 sm:p-5">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <div>
-              <h2 className="text-xl font-semibold tracking-tight">Rekkefølge</h2>
+              <h2 className="text-lg font-semibold tracking-[-0.01em]">Rekkefølge</h2>
               <p className="text-sm text-muted">
                 Start og slutt: <span className="text-text">{placeLabel(start)}</span>
                 {cart ? " · med vogn" : ""}
               </p>
             </div>
-            <Button variant="ghost" onClick={() => setRooms([])}>
+            <Button variant="ghost" onClick={clearAll}>
               Fjern alle rom
             </Button>
           </div>

@@ -24,7 +24,7 @@ function StartPicker({ value, onChange }: { value: CleaningStart; onChange: (sta
             <span
               className={cx(
                 "inline-flex min-h-12 cursor-pointer items-center rounded-md border px-4 text-base font-semibold",
-                "transition-colors duration-150 ease-standard",
+                "transition-colors duration-[120ms] ease-standard",
                 "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-focus",
                 value === s.id ? "border-line bg-surface text-text" : "border-transparent text-muted hover:text-text",
               )}
@@ -56,13 +56,13 @@ function CartSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) => 
         <span
           aria-hidden="true"
           className={cx(
-            "relative h-7 w-12 shrink-0 rounded-full border transition-colors duration-150 ease-standard",
+            "relative h-7 w-12 shrink-0 rounded-full border transition-colors duration-[120ms] ease-standard",
             on ? "border-text bg-text" : "border-line-strong bg-sunken",
           )}
         >
           <span
             className={cx(
-              "absolute top-0.5 left-0.5 size-5.5 rounded-full bg-surface transition-transform duration-150 ease-standard",
+              "absolute top-0.5 left-0.5 size-5.5 rounded-full bg-surface transition-transform duration-[120ms] ease-standard",
               on && "translate-x-5",
             )}
           />

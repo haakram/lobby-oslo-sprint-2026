@@ -1,15 +1,21 @@
 import { Badge, type BadgeTone, Button } from "@/ui";
+import { ROOM_STATUS } from "@/ui/roomStatus";
 import { minutesText } from "./cleaningPlan";
 import { placeLabel, type HotelGraph } from "./hotelMap";
 import { STATUS_LABEL, type RoomReport, type RoomStatus } from "./nightRooms";
 import type { TourLeg } from "./types";
 
-// TODO(phase-2): read from src/ui/roomStatus.ts once the design lead lands it (UX audit X2).
+/** The badge for a room status, from the one status map (src/ui/roomStatus.ts): the plan beside it says the same. */
+function badgeOf(status: RoomStatus): BadgeTone {
+  const token = ROOM_STATUS[status].token;
+  return token === "success" ? "success" : token === "warning" ? "warning" : "neutral";
+}
+
 export const STATUS_BADGE: Record<RoomStatus, BadgeTone> = {
-  klar: "success",
-  opptatt: "neutral",
-  ma_vaskes: "accent",
-  ikke_forstyrr: "warning",
+  klar: badgeOf("klar"),
+  opptatt: badgeOf("opptatt"),
+  ma_vaskes: badgeOf("ma_vaskes"),
+  ikke_forstyrr: badgeOf("ikke_forstyrr"),
 };
 
 function via(map: HotelGraph, leg: TourLeg): string {

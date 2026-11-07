@@ -137,7 +137,7 @@ export function FloorMap({ matrix, legs, order }: { matrix: RouteMatrix; legs: T
               onKeyDown={onTabKey}
               className={cx(
                 "inline-flex min-h-12 items-center gap-2 rounded-md border px-4 text-base font-semibold",
-                "transition-colors duration-150 ease-standard",
+                "transition-colors duration-[120ms] ease-standard",
                 selected ? "border-line bg-surface text-text" : "border-transparent text-muted hover:text-text",
               )}
             >

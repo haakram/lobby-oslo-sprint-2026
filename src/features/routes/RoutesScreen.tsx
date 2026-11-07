@@ -86,7 +86,7 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
                   onClick={() => choose(m.id)}
                   onKeyDown={onTabKey}
                   className={cx(
-                    "inline-flex min-h-10 items-center justify-center gap-2 rounded-sm px-3 text-sm font-semibold sm:px-4",
+                    "inline-flex min-h-10 items-center justify-center gap-2 rounded-sm px-3 text-sm font-semibold sm:px-4 pointer-coarse:min-h-11",
                     "transition-colors duration-[120ms] ease-standard",
                     active ? "bg-surface text-text" : "text-muted hover:text-text",
                   )}

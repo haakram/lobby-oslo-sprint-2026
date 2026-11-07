@@ -19,16 +19,16 @@ export function RouteStats({
   return (
     <section aria-label="Rutetall">
       <Card className="p-4 sm:p-5">
-        <div className="grid grid-cols-3 gap-3 sm:gap-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-6">
           <Stat label="Beste rute" value={Math.round(metres)} unit="m" />
           <Stat label="Spart" value={saved.metres} unit="m" tone="success" />
           <Stat label="Kortere" value={saved.percent} unit="%" tone="success" />
         </div>
         <p className="mt-4 border-t border-line pt-3 text-sm text-muted">
           {saved.metres > 0 ? "Mot listerekkefølgen: " : "Listen er allerede i beste rekkefølge: "}
-          <span className="font-mono text-text tabular-nums">{Math.round(naiveMetres)} m</span>
+          <span className="font-mono whitespace-nowrap text-text tabular-nums">{Math.round(naiveMetres)} m</span>
           {" · Gangtid "}
-          <span className="font-mono text-text tabular-nums">{minutes(seconds)}</span>
+          <span className="font-mono whitespace-nowrap text-text tabular-nums">{minutes(seconds)}</span>
         </p>
       </Card>
     </section>

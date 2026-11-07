@@ -61,7 +61,7 @@ export function StopList({
                 <h3 className="text-base font-semibold">{products[0]?.locationLabel ?? matrix.nodes[id].label ?? id}</h3>
                 <p className="text-sm text-muted">
                   {matrix.nodes[id].floor}. etasje ·{" "}
-                  <span className="font-mono tabular-nums">{Math.round(leg.metres)} m</span>
+                  <span className="font-mono whitespace-nowrap tabular-nums">{Math.round(leg.metres)} m</span>
                   {i === 0 ? " fra start" : ` fra stopp ${i}`}
                   {via(matrix, leg)}
                 </p>
@@ -77,7 +77,7 @@ export function StopList({
       </ol>
       {back && (
         <p className="mt-4 border-t border-line pt-3 text-sm text-muted">
-          Tilbake til start: <span className="font-mono text-text tabular-nums">{Math.round(back.metres)} m</span>
+          Tilbake til start: <span className="font-mono whitespace-nowrap text-text tabular-nums">{Math.round(back.metres)} m</span>
           {via(matrix, back)}
         </p>
       )}

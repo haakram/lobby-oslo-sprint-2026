@@ -193,6 +193,8 @@ live-log calibration; plan Tasks 15–19):
 - [ ] Task 18: final readiness: fit a night in the 44-min cap at the shared rate, retry final starts, never end
       a final shift on errors, stricter room checks, the 10-shift topology tested offline.
 - [ ] Task 19: adapt to the night's real map and stock (practice seed 2: same rooms, other metres, stock moved).
+- [x] Task 20: fail fast on rooms already seen with a Do-Not-Disturb sign (live: room 208 got 6 requests). Reviewed.
+      PR: this one.
 - [-] Batching (step 4): dropped: 0 batchable trips on the live replay; the gain is in calls (Task 18).
 
 ### Drift — the 06:00 handover dashboard (team lead, 2026-11-07 ~13:40)

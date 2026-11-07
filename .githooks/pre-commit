@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Shared pre-commit hook, installed by scripts/setup.sh (core.hooksPath). Fast on purpose: a slow hook
+# gets skipped with --no-verify, so the heavy checks live in pre-push and CI. docs/OPERATIONS.md § 3.
+set -euo pipefail
+
+# 1. No commits on main. The first commit of a brand-new repo is allowed (there's no HEAD yet).
+branch=$(git symbolic-ref --short HEAD 2> /dev/null || echo "")
+if [ "$branch" = "main" ] && git rev-parse --verify -q HEAD > /dev/null && [ "${ALLOW_MAIN:-}" != "1" ]; then
+  echo "✗ You're committing on main. Move your staged changes to a branch and commit there:" >&2
+  echo "    git switch -c <your-name>/<topic>" >&2
+  exit 1
+fi
+
+# 2. No env files (only .env.example).
+staged_env=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$' || true)
+if [ -n "$staged_env" ]; then
+  echo "✗ Refusing to commit env files:" >&2
+  echo "$staged_env" | sed 's/^/    /' >&2
+  echo "  Unstage with: git restore --staged <file>" >&2
+  exit 1
+fi
+
+# 3. Secrets in the staged changes.
+if command -v gitleaks > /dev/null 2>&1; then
+  if ! gitleaks git --pre-commit --staged --no-banner --redact --verbose --log-level warn .; then
+    echo "✗ gitleaks found what looks like a secret in the staged changes. Remove it and use .env." >&2
+    echo "  False positive? Add a narrow allowlist entry to .gitleaks.toml (docs/OPERATIONS.md § 4)." >&2
+    exit 1
+  fi
+else
+  echo "! gitleaks not installed: staged changes were not scanned for secrets (brew install gitleaks)" >&2
+fi

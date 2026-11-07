@@ -1,0 +1,11 @@
+# gitleaks: the default rules, plus narrow allowlists for known false positives (docs/OPERATIONS.md § 4).
+# Add an entry only for something that is provably not a secret, with a comment saying why. Prefer this
+# file to .gitleaksignore: its fingerprints carry a commit id in history scans (CI, check.sh), so they
+# stop matching once the commit changes.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Placeholders in documentation, e.g. TOKEN=\"<your-token>\" in the vendored Scrapling skill"
+regexTarget = "line"
+regexes = ['''<your-[a-z-]+>''']

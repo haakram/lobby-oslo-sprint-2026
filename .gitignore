@@ -1,0 +1,46 @@
+# Secrets: commit .env.example only
+.env
+.env.*
+!.env.example
+
+# OS and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Claude Code: personal settings stay personal (shared commands in .claude/commands/ are committed)
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Scratch: Playwright screenshots, logs, experiments (docs/OPERATIONS.md)
+/temp/
+.playwright-mcp/
+test-results/
+playwright-report/
+
+# JavaScript / TypeScript
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+.turbo/
+.vercel/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/

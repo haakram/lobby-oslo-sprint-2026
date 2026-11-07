@@ -1,0 +1,107 @@
+# ARCHITECTURE.md — Technical architecture
+
+> How the app is built. PRD says what; this says how. Sections 3 and 4 are what let several people
+> build in parallel without breaking each other: who owns which part, and the contracts between parts.
+
+## 1. Tech stack
+
+| Layer | Choice | Why |
+|---|---|---|
+| Frontend | TBD | |
+| Backend / API | TBD | |
+| Database | TBD | |
+| Auth | TBD (or "none: seeded demo user") | |
+| AI / LLM | TBD | |
+| Hosting | TBD | |
+| Package manager | TBD | One per language; the lockfile is committed. |
+
+## 2. Folder layout
+
+```
+.
+├── CLAUDE.md · AGENTS.md · MEMORY.md · DESIGN.md · README.md · CONTRIBUTING.md
+├── docs/            # the docs in CLAUDE.md's reading order
+│   ├── sessions/    #   one handoff note per work session
+│   ├── superpowers/ #   specs/ and plans/ from the brainstorming and planning skills
+│   ├── research/    #   research notes
+│   └── checks/      #   reviews, audits, test reports
+├── src/             # app code (inner layout below)
+├── tests/           # integration and e2e tests (unit tests sit next to the code)
+├── scripts/         # setup.sh, check.sh, protect-main.sh, plus project scripts
+├── .githooks/       # shared git hooks (installed by setup.sh)
+├── .github/         # CI workflow, PR template
+├── .claude/         # shared Claude Code commands (/kickoff, /handoff)
+└── temp/            # gitignored: screenshots, scratch output
+```
+
+**`src/` layout: TBD at the rehearsal.** Rule of thumb: split by feature (`src/features/<name>/`)
+rather than by file type, so two people rarely touch the same folder. Shared code (types, UI
+primitives, API client) gets one clearly owned home.
+
+## 3. Module ownership
+
+<!-- Who owns which part. Owners review changes to their area; others ask before editing it.
+     Keep in sync with CONTEXT.md § 9. -->
+
+| Area | Paths | Owner | Backup |
+|---|---|---|---|
+| Track A: Night Shift agent | TBD (set in the design spec) | ShirazIQ | Hamad |
+| Track B: Fettero app | TBD (set in the design spec) | Hamad | ShirazIQ |
+| Shared contracts (the agent's log format the app reads, env vars) | TBD | Hamad | ShirazIQ |
+| Repo tooling, CI, docs | `scripts/`, `.githooks/`, `.github/`, `.claude/`, `docs/` | Hamad | |
+
+## 4. Contracts
+
+> Change any of these only with the doc updated in the same PR, `[contract]` in the PR title, and
+> the team told. Everyone else's code depends on them.
+
+### 4.1 Data model
+
+TBD — entities, fields, relations. A table per entity is enough.
+
+### 4.2 API
+
+| Method | Path | Request | Response | Owner |
+|---|---|---|---|---|
+| TBD | | | | |
+
+### 4.3 Shared types and events
+
+TBD — where they live (one file or folder) and their names.
+
+### 4.4 Environment variables
+
+Every variable in `.env.example`, with what reads it. Added (blank) to `.env.example` and here in the
+same PR that first reads it.
+
+| Name | Read by | Secret? | Real value lives in |
+|---|---|---|---|
+| `WYBE_NIGHTSHIFT_URL` | Track A agent | no (default in `.env.example`) | `.env.example` |
+| `WYBE_NIGHTSHIFT_KEY` | Track A agent | **yes**: one team, one key | Hamad's `.env`, sent privately |
+| `ANTHROPIC_API_KEY` | Track A agent, Track B server | **yes** | Hamad's `.env`, sent privately |
+| `ANTHROPIC_BUDGET_USD` | everything that calls Claude | no (default 30) | `.env.example` |
+| `ELEVENLABS_API_KEY` | Track B server | **yes** | each person's ElevenLabs account (free Creator code on Discord) |
+
+## 5. External services
+
+| Service | What for | Free tier / cost | Account owner |
+|---|---|---|---|
+| GitHub | repo, CI, PRs | free on a public repo | Hamad |
+| TBD | | | |
+
+## 6. Security basics
+
+- Secrets only in env vars, read server-side. Nothing secret in client code or a public env prefix
+  (`NEXT_PUBLIC_`, `VITE_`, …).
+- Every input is validated at the boundary (request bodies, params, uploads, LLM output used as data).
+- No real personal data anywhere; demo and seed data are made up.
+- TBD — anything stack-specific (auth, row-level security, CORS, rate limits).
+
+## 7. Testing strategy
+
+TBD — what we test (the demo path first, then tricky logic), with which tools, and how
+`scripts/check.sh` runs them.
+
+## 8. Deployment
+
+TBD — platform, what a merge to `main` deploys, preview URLs per PR, how to roll back.

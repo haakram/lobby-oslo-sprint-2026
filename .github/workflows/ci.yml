@@ -1,0 +1,64 @@
+name: CI
+
+# Two jobs on every PR and every push to main (docs/OPERATIONS.md § 6). Their names, `check` and
+# `secrets`, are the required status checks scripts/protect-main.sh puts on main: rename a job here,
+# rename it there, or every PR waits for a check that never comes.
+#
+# No paths-ignore on purpose: a required check that never runs leaves docs-only PRs stuck on
+# "Expected — waiting for status to be reported".
+#
+# Cost: free on a public repo. On a private repo every minute counts against the account's monthly
+# allowance: don't add jobs, matrices or schedules without writing the cost into OPERATIONS § 6.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Toolchains are set up only for the languages the repo actually has.
+      - uses: pnpm/action-setup@v4 # reads the version from package.json "packageManager"
+        if: hashFiles('pnpm-lock.yaml') != ''
+      - uses: actions/setup-node@v4
+        if: hashFiles('package.json') != ''
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        if: hashFiles('pyproject.toml', 'requirements.txt') != ''
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: ./scripts/setup.sh --ci
+      - name: Gate
+        run: ./scripts/check.sh --ci
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the whole history: a secret removed in a later commit is still leaked
+      # The gitleaks CLI (MIT) at a pinned version and checksum, rather than gitleaks-action, which needs
+      # a paid licence on organisation-owned repos.
+      - name: Install gitleaks 8.30.1
+        run: |
+          curl -sSfL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+      - name: Scan the full history
+        run: ./gitleaks git --no-banner --redact --verbose .

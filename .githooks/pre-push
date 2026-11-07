@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Shared pre-push hook, installed by scripts/setup.sh (core.hooksPath). docs/OPERATIONS.md § 3.
+# Blocks pushes to an existing main, then runs the fast gate.
+set -euo pipefail
+
+# git passes one line per ref: <local ref> <local sha> <remote ref> <remote sha>
+while read -r _local_ref _local_sha remote_ref remote_sha; do
+  if [ "$remote_ref" = "refs/heads/main" ] && [ "${ALLOW_MAIN:-}" != "1" ]; then
+    case "$remote_sha" in
+      *[!0]*) # main already exists on the remote: changes go through a PR
+        echo "✗ Pushing straight to main. Push your branch and open a PR instead:" >&2
+        echo "    git push -u origin <your-name>/<topic>" >&2
+        exit 1
+        ;;
+      *) ;; # all zeros: the first push that creates main on a new repo
+    esac
+  fi
+done
+
+exec "$(git rev-parse --show-toplevel)/scripts/check.sh" --fast

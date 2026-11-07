@@ -77,7 +77,6 @@ NIGHT_END = "06:00:00"  # the server ends the shift here
 # ... and no new dock after this long once the battery is back to BATTERY_LOW: live manager skips come
 # 7-30 min after a request (median 18.7) and a skipped request scores 0 even when done.
 FORCED_BLOCK_MAX_S = 15 * 60
-DRAIN_EST_PER_MIN = 0.75  # [obs] real active drain 0.70-0.76 %/min: new estimates (DRAIN_PER_MIN keeps reserves)
 # Floor-1 top-up: a task's way about to leave the dock's floor by elevator, with the battery under
 # TOP_UP_BELOW and the dock within TOP_UP_DOCK_M, docks first (the dock ends on the next message).
 # Offline bench (seeds 2-13), off -> on: scale 1.0 1648.7 -> 1628.8, 1.3 2021.2 -> 2018.1 (stress:
@@ -1111,17 +1110,20 @@ class Executor:
             self.inbox_waiting = False
 
     def _needed_to_six(self) -> float:
-        """% a robot working without a break until 06:00 still drains (DRAIN_EST_PER_MIN), plus
-        DOCK_MARGIN; infinite when the clock is unknown. clock_to_seconds puts times before noon
-        on the next day, so the minutes left are right on both sides of midnight."""
+        """% a robot working without a break until 06:00 still drains, plus DOCK_MARGIN; infinite
+        when the clock is unknown. Conservative like the dock reserve: DRAIN_PER_MIN (0.9), not the
+        measured 0.70-0.76 (at 0.75 a robot at 50 % with 60 min left passed, and at a real 0.9 it
+        strands ~5 min before 06:00, -200). clock_to_seconds puts times before noon on the next
+        day, so the minutes left are right on both sides of midnight."""
         now = self._now_s()
         if now is None:
             return float("inf")
         left = max(0.0, (clock_to_seconds(NIGHT_END) - now) / 60)
-        return DRAIN_EST_PER_MIN * left + DOCK_MARGIN
+        return DRAIN_PER_MIN * left + DOCK_MARGIN
 
     def _lasts_the_night(self, battery: float) -> bool:
-        """The battery carries the robot to 06:00: no forced charge (a charge then is lost work)."""
+        """The battery carries the robot to 06:00: no charge forced by BATTERY_CRITICAL (a charge
+        then is lost work). A battery under the dock reserve is charged anyway (_charge)."""
         return battery >= self._needed_to_six()
 
     def _decline_if_skipped(self) -> None:
@@ -1173,7 +1175,9 @@ class Executor:
         reserve = self._dock_reserve(dock)
         if battery >= max(low, reserve):
             return False
-        forced = battery < max(BATTERY_CRITICAL, reserve) and not self._lasts_the_night(battery)
+        # The end-of-night guard skips only a charge forced by BATTERY_CRITICAL: never one under the
+        # dock reserve (that robot could not get back to the dock).
+        forced = battery < max(BATTERY_CRITICAL, reserve) and (battery < reserve or not self._lasts_the_night(battery))
         if not forced and self._work_waiting():
             self.log("charge_deferred", battery=battery, queued=len(self.queue), inbox=self.inbox_waiting,
                      running=self.current.request if self.current is not None else None)

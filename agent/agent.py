@@ -228,12 +228,6 @@ def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]
            reported=reply.ok, reply=str(reply.result)[:80])
 
 
-# The server ends the shift at 06:00; clock_to_seconds already puts it on the next day (108,000 s).
-# No close-out before it: a declined real request pays 0 and a request still open at 06:00 costs
-# nothing (live, two teams and our scout), so the loop keeps trying the best task to the end.
-NIGHT_END_S = clock_to_seconds("06:00:00")
-
-
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:
     reply = ex.cmd("inbox")
     ex.inbox_waiting = False
@@ -356,6 +350,8 @@ def run_shift(
                             ex.log("opening_failed", step=step, reason=str(exc))
                     continue
                 ex.ensure_battery()  # below 25 %: charge at the dock before the next task or wait
+                # No close-out before 06:00: a declined real request pays 0 and a request still open
+                # at 06:00 costs nothing (live), so the best task is tried to the end.
                 task = choose_next(pending, state, hotel, params)
                 if task is None:
                     ex.wait_for_request(should_stop=out_of_time)

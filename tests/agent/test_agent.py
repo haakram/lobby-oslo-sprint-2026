@@ -552,13 +552,6 @@ def test_manager_skip_drops_the_queued_request(tmp_path):
 # --- no close-out near 06:00: a declined real request pays 0, an open one at 06:00 costs nothing ------
 
 
-def test_night_end_is_on_the_clock_to_seconds_scale():
-    from agent.agent import NIGHT_END_S
-    from agent.world import clock_to_seconds
-
-    assert NIGHT_END_S == clock_to_seconds("06:00:00") == 30 * 3600  # 06:00 the next day, not a day later
-
-
 def test_a_request_near_six_is_tried_not_declined(tmp_path):
     # Live: declining a real request pays 0 and a request open at 06:00 costs nothing, so the loop
     # never declines what its estimate says cannot finish (offline seed 3 at 1.3: a spill priced at
@@ -568,7 +561,7 @@ def test_a_request_near_six_is_tried_not_declined(tmp_path):
     from agent.tasks import parse_request
     from agent.world import Hotel, RobotState, clock_to_seconds
 
-    assert not hasattr(mod, "_close_out") and not hasattr(mod, "_too_late")
+    assert not any(hasattr(mod, name) for name in ("_close_out", "_too_late", "NIGHT_END_S"))
     state = RobotState()
     state.location = "charging-dock"
     task = parse_request("R-001", "319 wants a towel.", "05:58:00")

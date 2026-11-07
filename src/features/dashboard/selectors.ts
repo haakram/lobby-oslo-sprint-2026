@@ -293,20 +293,30 @@ export function selectWorkOrders(night: Night): OrderView[] {
 
 export type Kpis = {
   roomsReady: number;
+  roomsDirty: number;
   roomsTotal: number;
   ordersOpen: number;
+  /** Open orders where a guest is waiting: a complaint, or the robot's own task failed. */
+  guestsWaiting: number;
   tasksDone: number;
   tasksFailed: number;
+  /** Tasks still running when the night ended (the "feilet" number elsewhere may count these). */
+  tasksOpen: number;
   score: number;
 };
 
 export function selectKpis(night: Night, resolved: ReadonlySet<string> = NONE): Kpis {
+  const rooms = selectRooms(night);
+  const open = selectWorkOrders(night).filter((order) => !resolved.has(order.id));
   return {
-    roomsReady: selectRooms(night).filter((room) => room.status === "klar").length,
+    roomsReady: rooms.filter((room) => room.status === "klar").length,
+    roomsDirty: rooms.filter((room) => room.status === "ma_vaskes").length,
     roomsTotal: HOTEL_ROOMS.length,
-    ordersOpen: night.workOrders.filter((order) => !resolved.has(order.id)).length,
+    ordersOpen: open.length,
+    guestsWaiting: open.filter((order) => order.type === "gjesteklage" || order.robot === "failed").length,
     tasksDone: night.tasksDone,
     tasksFailed: night.tasksFailed,
+    tasksOpen: night.ended ? [...night.tasks.values()].filter((task) => task.outcome === "running").length : 0,
     score: night.score,
   };
 }

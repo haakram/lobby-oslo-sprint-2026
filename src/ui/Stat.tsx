@@ -16,7 +16,7 @@ export function Stat({
   label: string;
   value: ReactNode;
   unit?: string;
-  tone?: "default" | "accent" | "success" | "danger";
+  tone?: "default" | "accent" | "success" | "warning" | "danger";
   size?: "md" | "lg";
   className?: string;
 }) {
@@ -28,6 +28,7 @@ export function Stat({
           size === "lg" ? "text-2xl" : "text-xl",
           tone === "accent" && "text-accent-text",
           tone === "success" && "text-success",
+          tone === "warning" && "text-warning",
           tone === "danger" && "text-danger",
         )}
       >

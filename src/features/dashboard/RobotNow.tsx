@@ -1,9 +1,10 @@
 import type { HotelReplay } from "@/features/replay";
-import { Badge, Card, Skeleton } from "@/ui";
+import { Badge, Card, cx, RegenIcon, Skeleton } from "@/ui";
 import { hhmm, percent } from "./format";
 import { itemLabel, OUTCOME, placeLabel, requestKindLabel } from "./labels";
 import { RobotPanel } from "./RobotPanel";
 import type { RobotView, Task } from "./selectors";
+import { batteryLow } from "./TopBar";
 
 const QUEUE_SHOWN = 3;
 
@@ -15,12 +16,17 @@ function list(items: string[]): string {
 export function RobotNow({
   robot,
   replay,
+  selectedRoom,
+  onSelectRoom,
   className,
 }: {
   robot: RobotView | null;
   replay: HotelReplay;
+  selectedRoom: string | null;
+  onSelectRoom: (room: string | null) => void;
   className?: string;
 }) {
+  const low = batteryLow(robot);
   const state = !robot
     ? null
     : robot.ended
@@ -39,13 +45,17 @@ export function RobotNow({
           {state && <Badge tone={state.tone}>{state.word}</Badge>}
         </div>
 
-        {robot ? <RobotPanel robot={robot} replay={replay} /> : <Skeleton className="aspect-[16/10] w-full" />}
+        {robot ? <RobotPanel robot={robot} replay={replay} selectedRoom={selectedRoom} onSelectRoom={onSelectRoom} /> : <Skeleton className="aspect-[16/10] w-full" />}
 
         {robot ? (
           <>
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
               <dt className="text-muted">Batteri</dt>
-              <dd className="tabular-nums">{percent(robot.battery)}</dd>
+              <dd className={cx("flex items-center gap-1 tabular-nums", low && "font-semibold text-warning")}>
+                {low && <RegenIcon name="battery-low" size={16} />}
+                {percent(robot.battery)}
+                {low && " · lavt"}
+              </dd>
               <dt className="text-muted">I hendene</dt>
               <dd>{list(robot.hands)}</dd>
               <dt className="text-muted">I vogna</dt>

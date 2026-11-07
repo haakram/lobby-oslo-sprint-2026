@@ -4,7 +4,7 @@ import { cleaningHref, type RoomView } from "./selectors";
 
 /**
  * Renhold: the rooms the robot's checks marked "må vaskes", and the screen's one primary action,
- * Send renholderne, which hands them to Ruter for the shortest round across floors.
+ * Lag renholdsrute, which hands them to Ruter for the shortest round across floors.
  */
 export function Cleaning({ rooms, className }: { rooms: RoomView[] | null; className?: string }) {
   const dirty = rooms?.filter((room) => room.status === "ma_vaskes") ?? [];
@@ -55,11 +55,11 @@ export function Cleaning({ rooms, className }: { rooms: RoomView[] | null; class
             <div>
               <Link
                 href={cleaningHref(dirty.map((room) => room.id))}
-                className={cx(buttonClasses("primary", "lg"), "w-full active:scale-[0.97]")}
+                className={cx(buttonClasses("secondary"), "w-full")}
               >
-                Send renholderne
+                Lag renholdsrute
               </Link>
-              <p className="mt-2 text-sm text-muted">Ruter finner korteste runde på tvers av etasjene.</p>
+              <p className="mt-2 text-sm text-muted">Ruter finner korteste runde på tvers av etasjene. Ingen varsles før du deler ruten.</p>
             </div>
           </div>
         )}

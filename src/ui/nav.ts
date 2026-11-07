@@ -25,8 +25,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "Roboten",
     items: [
       { href: "/natteskift", label: "Natteskift", hint: "Robotens natt, steg for steg", icon: "moon" },
-      { href: "/oyne", label: "Øyne", hint: "Robotens øyne", icon: "eye" },
-      { href: "/stemme", label: "Stemme", hint: "Snakk gjennom roboten", icon: "mic" },
+      { href: "/oyne", label: "Robotens øyne", hint: "Det roboten ser og kjenner igjen", icon: "eye" },
+      { href: "/stemme", label: "Snakk gjennom roboten", hint: "Roboten oversetter mellom deg og gjesten", icon: "mic" },
     ],
   },
   {

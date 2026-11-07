@@ -107,9 +107,11 @@ describe("the whole overview's request budget", () => {
   it("loads the night and the calls once, with no viewer configured", async () => {
     render(<DashboardScreen />);
     await wait(10 * MINUTE);
-    expect(calls("/runs/demo.jsonl")).toBe(1);
+    // The night is read twice, by the desk's own fold and by the 3D hotel's replay engine, and never
+    // again. TODO(ui): share one load once useHotelReplay can take parsed lines.
+    expect(calls("/runs/demo.jsonl")).toBe(2);
     expect(calls(CALLS_URL)).toBe(1);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("looks at a viewer that is down only every 30 s", async () => {

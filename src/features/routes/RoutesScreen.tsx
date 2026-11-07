@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState, type KeyboardEvent } from "react";
 import { usePicklist } from "@/features/picklist/PicklistProvider";
-import { cx, RegenIcon, type RegenName } from "@/ui";
+import { cx, PageHeader, RegenIcon, type RegenName } from "@/ui";
 import { CleaningMode, type CleaningInitial } from "./CleaningMode";
 import { guestRooms, hotelMap } from "./hotelMap";
 import { PicklistMode } from "./PicklistMode";
@@ -59,17 +59,18 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
   }
 
   const intro = MODES.find((m) => m.id === mode)?.intro;
+  // The pick list is the robot's restocking route; its tab shows only while a list is in use (UX audit, Ruter 4).
+  const shown = MODES.filter((m) => m.id !== "plukk" || mode === "plukk" || skus.length > 0 || Boolean(sku));
 
   return (
-    <main className="flex-1 px-4 pt-8 pb-12 sm:px-8 lg:px-12 lg:pt-10">
-      <div className="mx-auto max-w-[100rem]">
-        <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-[-0.03em]">Ruter</h1>
-            <p className="mt-2 max-w-[52ch] text-lg text-muted">{intro}</p>
-          </div>
-          <div role="tablist" aria-label="Hva skal rutes" className="grid w-full grid-cols-3 gap-1 rounded-md bg-sunken p-1 sm:flex sm:w-auto">
-            {MODES.map((m) => {
+    <main className="flex-1 px-4 pt-6 pb-12 sm:px-6 lg:px-10 lg:pt-10">
+      <div className="mx-auto max-w-[1600px]">
+        <PageHeader
+          title="Ruter"
+          lede={intro}
+          actions={
+          <div role="tablist" aria-label="Hva skal rutes" className={cx("grid w-full gap-0.5 rounded-sm bg-sunken p-0.5 sm:flex sm:w-auto", shown.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+            {shown.map((m) => {
               const active = m.id === mode;
               return (
                 <button
@@ -83,18 +84,19 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
                   onClick={() => choose(m.id)}
                   onKeyDown={onTabKey}
                   className={cx(
-                    "inline-flex min-h-12 items-center justify-center gap-2 rounded-md border px-3 text-base font-semibold sm:px-4",
-                    "transition-colors duration-150 ease-standard",
-                    active ? "border-line bg-surface text-text" : "border-transparent text-muted hover:text-text",
+                    "inline-flex min-h-10 items-center justify-center gap-2 rounded-sm px-3 text-sm font-semibold sm:px-4",
+                    "transition-colors duration-[120ms] ease-standard",
+                    active ? "bg-surface text-text" : "text-muted hover:text-text",
                   )}
                 >
-                  <RegenIcon name={m.icon} size={20} className="hidden sm:block" />
+                  <RegenIcon name={m.icon} size={18} className="hidden sm:block" />
                   {m.label}
                 </button>
               );
             })}
           </div>
-        </header>
+          }
+        />
 
         {MODES.map((m) =>
           opened.has(m.id) ? (

@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHotelReplay } from "@/features/replay";
 import { Button, buttonClasses, Card, EmptyState, ErrorState } from "@/ui";
 import { Cleaning } from "./Cleaning";
-import { DashboardHeader } from "./DashboardHeader";
 import { nightLabel } from "./format";
 import { KpiStrip } from "./KpiStrip";
+import { NowBand } from "./NowBand";
 import { ReceptionPanel } from "./ReceptionPanel";
 import { RobotNow } from "./RobotNow";
 import { RoomBoard } from "./RoomBoard";
@@ -22,15 +22,33 @@ import {
   selectRooms,
   selectWorkOrders,
 } from "./selectors";
+import { TopBar } from "./TopBar";
 import { useDashboardRun } from "./useDashboardRun";
 import { useEntrance } from "./useEntrance";
 import { WorkOrders } from "./WorkOrders";
 
+const STATUS_KEY = "lobby:work-orders";
+
+type Statuses = Record<string, OrderStatus>;
+
+function readStatuses(): Statuses {
+  try {
+    const raw = typeof window === "undefined" ? null : localStorage.getItem(STATUS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).filter((entry): entry is [string, OrderStatus] => entry[1] === "tildelt" || entry[1] === "lost"),
+    );
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Oversikt, the admin's desk: the whole hotel at the 06:00 handover (or live, while a shift runs).
- * Layer cake: the header band and five figures, then the key rack and the robot in the hotel,
- * then what needs a person. On a phone the panels stack in that order; the DOM order is the
- * priority order.
+ * Layer cake: the top bar, what needs a person now (with the one primary action), the night's
+ * figures, then the key rack and the robot in the hotel, then the lists. On a phone the panels stack
+ * in that order; the DOM order is the priority order.
  */
 export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   const run = useDashboardRun(viewerUrl);
@@ -39,8 +57,15 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   // The 3D hotel follows the same night; it stands at the end of it, like the figures.
   const replay = useHotelReplay(run.source === "live" ? "live" : "demo", { viewerUrl });
 
-  // TODO(phase-3): no backend for work orders yet; Tildelt and Løst are kept in this tab only.
-  const [statuses, setStatuses] = useState<Record<string, OrderStatus>>({});
+  // TODO(phase-3): no backend for work orders yet; Tildelt and Løst live in this browser (localStorage).
+  const [statuses, setStatuses] = useState<Statuses>(readStatuses);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STATUS_KEY, JSON.stringify(statuses));
+    } catch {
+      // Storage blocked: the statuses still hold for this tab.
+    }
+  }, [statuses]);
   const resolved = useMemo(
     () => new Set(Object.entries(statuses).flatMap(([id, status]) => (status === "lost" ? [id] : []))),
     [statuses],
@@ -57,6 +82,9 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   const robot = useMemo(() => (night ? selectRobot(night) : null), [night]);
 
   const [sheet, setSheet] = useState<{ room: string; open: boolean } | null>(null);
+  const openRoom = useCallback((room: string | null) => {
+    if (room) setSheet({ room, open: true });
+  }, []);
   const sheetRoom = sheet && rooms ? (rooms.find((room) => room.id === sheet.room) ?? null) : null;
   const sheetEntries = useMemo(() => (night && sheet ? selectRoomNight(night, sheet.room) : []), [night, sheet]);
 
@@ -65,12 +93,7 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
 
   return (
     <main className="flex-1">
-      <DashboardHeader
-        night={night ? nightLabel(night.startedAt) : null}
-        robot={robot}
-        source={run.source}
-        loading={run.status === "loading"}
-      />
+      <TopBar night={night ? nightLabel(night.startedAt) : null} robot={robot} source={run.source} loading={run.status === "loading"} />
 
       <div ref={scope} className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:gap-8 lg:px-10 lg:py-8">
         {run.status === "error" || run.status === "empty" ? (
@@ -102,19 +125,20 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
           </>
         ) : (
           <>
+            <NowBand rooms={rooms} orders={orders} resolved={resolved} robot={robot} />
             <KpiStrip kpis={kpis} />
             {/* Desktop: the rack over work orders on the left; the robot, cleaning and reception stacked on the right. */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:grid-rows-[auto_auto_1fr] lg:items-start lg:gap-8">
-              <RoomBoard rooms={rooms} onOpen={(room) => setSheet({ room, open: true })} className="lg:col-start-1 lg:row-start-1" />
-              <RobotNow robot={robot} replay={replay} className="lg:col-start-2 lg:row-start-1" />
-              <Cleaning rooms={rooms} className="lg:col-start-2 lg:row-start-2" />
-              <WorkOrders
-                orders={orders}
-                statuses={statuses}
-                onAdvance={advance}
-                onUndo={undo}
-                className="lg:col-start-1 lg:row-span-2 lg:row-start-2"
+              <RoomBoard rooms={rooms} clock={robot?.clock ?? null} onOpen={openRoom} className="lg:col-start-1 lg:row-start-1" />
+              <RobotNow
+                robot={robot}
+                replay={replay}
+                selectedRoom={sheet?.open ? sheet.room : null}
+                onSelectRoom={openRoom}
+                className="lg:col-start-2 lg:row-start-1"
               />
+              <Cleaning rooms={rooms} className="lg:col-start-2 lg:row-start-2" />
+              <WorkOrders orders={orders} statuses={statuses} onAdvance={advance} onUndo={undo} className="lg:col-start-1 lg:row-span-2 lg:row-start-2" />
               <ReceptionPanel className="lg:col-start-2 lg:row-start-3" />
             </div>
           </>

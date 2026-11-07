@@ -107,6 +107,6 @@ describe("AppNav", () => {
     expect(link).toHaveAttribute("href", "/resepsjon");
     expect(link).toHaveAttribute("aria-current", "page");
     const labels = screen.getAllByRole("link").map((a) => a.textContent);
-    expect(labels.slice(1)).toEqual(["Oversikt", "3D-kart", "Ruter", "Natteskift", "Øyne", "Stemme", "Resepsjon"]);
+    expect(labels.slice(1)).toEqual(["Oversikt", "3D-kart", "Ruter", "Natteskift", "Robotens øyne", "Snakk gjennom roboten", "Resepsjon"]);
   });
 });

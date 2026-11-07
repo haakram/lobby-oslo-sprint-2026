@@ -1,3 +1,4 @@
+import { ROOM_STATUS, ROOM_STATUS_ORDER } from "@/ui/roomStatus";
 import type { BadgeTone } from "@/ui";
 
 /**
@@ -10,34 +11,39 @@ export type KnownStatus = (typeof KNOWN_STATUSES)[number];
 /** `ukjent`: the robot never looked at the room tonight. Never shown as ready. */
 export type RoomStatus = KnownStatus | "ukjent";
 
-export const STATUS_ORDER: readonly RoomStatus[] = ["klar", "ma_vaskes", "opptatt", "ikke_forstyrr", "ukjent"];
+export const STATUS_ORDER: readonly RoomStatus[] = ROOM_STATUS_ORDER;
 
 type StatusLook = {
   word: string;
   /** The pigeonhole: a plane, or an outline for a hanger / an unchecked room. */
   tile: string;
-  /** The key tag along the top edge, in the status colour. */
+  /** The key tag along the top edge, in the status colour (from the shared map). */
   tag: string;
   word_class: string;
+  loud: boolean;
 };
 
-export const STATUS_LOOK: Record<RoomStatus, StatusLook> = {
-  klar: { word: "Klar", tile: "bg-sunken", tag: "bg-success", word_class: "text-success" },
-  ma_vaskes: { word: "Må vaskes", tile: "bg-sunken", tag: "bg-warning", word_class: "text-warning" },
-  opptatt: { word: "Opptatt", tile: "bg-sunken", tag: "bg-line-strong", word_class: "text-muted" },
-  ikke_forstyrr: {
-    word: "Ikke forstyrr",
-    tile: "bg-sunken ring-1 ring-inset ring-text/70",
-    tag: "bg-text",
-    word_class: "text-text",
-  },
-  ukjent: {
-    word: "Ikke sjekket",
-    tile: "border border-dashed border-line-strong",
-    tag: "border border-dashed border-line-strong",
-    word_class: "text-muted",
-  },
+const TILE: Record<RoomStatus, string> = {
+  klar: "bg-sunken",
+  ma_vaskes: "bg-warning-soft",
+  opptatt: "bg-sunken",
+  ikke_forstyrr: "bg-sunken ring-1 ring-inset ring-text/70",
+  ukjent: "border border-dashed border-line-strong",
 };
+
+/** Oversikt's tiles, built on the one status map every screen shares (src/ui/roomStatus.ts). */
+export const STATUS_LOOK: Record<RoomStatus, StatusLook> = Object.fromEntries(
+  (Object.keys(ROOM_STATUS) as RoomStatus[]).map((status) => [
+    status,
+    {
+      word: ROOM_STATUS[status].word,
+      tile: TILE[status],
+      tag: status === "ukjent" ? "border border-dashed border-line-strong" : ROOM_STATUS[status].fill,
+      word_class: ROOM_STATUS[status].ink,
+      loud: ROOM_STATUS[status].loud,
+    },
+  ]),
+) as Record<RoomStatus, StatusLook>;
 
 export const SOURCE_WORD: Record<string, string> = {
   room_check: "Romsjekk",

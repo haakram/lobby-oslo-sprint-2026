@@ -1,4 +1,5 @@
-import { Badge, type BadgeTone, Button, Sheet } from "@/ui";
+import Link from "next/link";
+import { Badge, type BadgeTone, Button, buttonClasses, Sheet } from "@/ui";
 import { hhmm } from "./format";
 import {
   humanizeText,
@@ -10,7 +11,7 @@ import {
   SOURCE_WORD,
   STATUS_LOOK,
 } from "./labels";
-import type { RoomNightEntry, RoomView } from "./selectors";
+import { cleaningHref, type RoomNightEntry, type RoomView } from "./selectors";
 
 export const STATUS_TONE: Record<RoomStatus, BadgeTone> = {
   klar: "success",
@@ -78,9 +79,17 @@ export function RoomSheet({
             </ol>
           )}
 
-          <Button variant="secondary" onClick={onClose} className="self-start">
-            Lukk
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Link href={cleaningHref([room.id])} className={buttonClasses("secondary")}>
+              Legg i renholdsrute
+            </Link>
+            <Link href={`/hotell?rom=${encodeURIComponent(room.id)}`} className={buttonClasses("secondary")}>
+              Vis i 3D-kartet
+            </Link>
+            <Button variant="ghost" onClick={onClose}>
+              Lukk
+            </Button>
+          </div>
         </div>
       )}
     </Sheet>

@@ -16,7 +16,7 @@ const FOG = {
 };
 
 /**
- * The ambient backdrop behind the overview header only (DESIGN.md "Ambient background"). Vanta
+ * The ambient backdrop behind the login page only (DESIGN.md "Motion", ambient). Vanta
  * needs three r134, shipped as `three-vanta`. Off under reduced motion, torn down while the tab is
  * hidden, and silent when WebGL is missing (the band's solid colour stays).
  */

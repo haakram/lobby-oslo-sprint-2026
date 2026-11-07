@@ -7,14 +7,25 @@ import type { RobotView } from "./selectors";
 
 /**
  * The hotel in the robot's panel: B1's 3D hotel (`Hotel3D`, a 2D plan without WebGL) at the
- * same moment as the rest of the desk, with the way into the full 3D-kart under it.
+ * same moment as the rest of the desk. A tap on a room opens the same room sheet as the rack; the
+ * way into the full 3D-kart sits under it.
  */
-export function RobotPanel({ robot, replay }: { robot: RobotView; replay: HotelReplay }) {
+export function RobotPanel({
+  robot,
+  replay,
+  selectedRoom,
+  onSelectRoom,
+}: {
+  robot: RobotView;
+  replay: HotelReplay;
+  selectedRoom: string | null;
+  onSelectRoom: (room: string | null) => void;
+}) {
   const floor = robot.floor ?? 1;
 
   return (
     <figure data-surface="dark" className="overflow-hidden rounded-md bg-bg">
-      <Hotel3D replay={replay} variant="panel" className="rounded-none border-0" />
+      <Hotel3D replay={replay} variant="panel" className="rounded-none! border-0!" selectedRoom={selectedRoom} onSelectRoom={onSelectRoom} />
       <figcaption className="flex items-center justify-between gap-3 pl-3">
         <span className="min-w-0 truncate text-sm">
           <span className="font-semibold">{floor}. etasje</span>

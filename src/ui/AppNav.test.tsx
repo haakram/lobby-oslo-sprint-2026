@@ -25,8 +25,8 @@ describe("AppNav, grouped by job", () => {
       "3D-kart",
       "Ruter",
       "Natteskift",
-      "Øyne",
-      "Stemme",
+      "Robotens øyne",
+      "Snakk gjennom roboten",
       "Resepsjon",
     ]);
     for (const group of ["Hotellet", "Roboten", "Resepsjon"]) expect(screen.getAllByText(group).length).toBeGreaterThan(0);

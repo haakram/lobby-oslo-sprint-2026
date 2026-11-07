@@ -1,4 +1,5 @@
 import { Card, cx, Skeleton } from "@/ui";
+import { hhmm } from "./format";
 import { STATUS_LOOK, STATUS_ORDER } from "./labels";
 import { countRooms, FLOORS, HOTEL_ROOMS, type RoomView } from "./selectors";
 
@@ -10,12 +11,18 @@ const FLOORS_DOWN = [...FLOORS].reverse();
  * margin like a lift indicator. The status word is always written; the coloured tag only repeats
  * it. An open work order adds the red "Avvik" mark.
  */
+/** A check older than this (sim hours) is marked with its time on the tile. */
+const STALE_HOURS = 3;
+
 export function RoomBoard({
   rooms,
+  clock,
   onOpen,
   className,
 }: {
   rooms: RoomView[] | null;
+  /** The shift clock ("05:58:07"), to tell a stale check from a fresh one. */
+  clock: string | null;
   onOpen: (room: string) => void;
   className?: string;
 }) {
@@ -64,10 +71,10 @@ export function RoomBoard({
                   <span className="font-display text-2xl font-medium tabular-nums">{floor}</span>
                   <span className="mt-1 text-xs text-muted">etasje</span>
                 </h3>
-                <ul className="grid grid-cols-[repeat(auto-fill,minmax(68px,1fr))] gap-1.5">
+                <ul className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-1.5">
                   {onFloor.map((room) => (
                     <li key={room.id}>
-                      {rooms ? <RoomTile room={room as RoomView} onOpen={onOpen} /> : <Skeleton className="h-[72px] w-full rounded-sm" />}
+                      {rooms ? <RoomTile room={room as RoomView} clock={clock} onOpen={onOpen} /> : <Skeleton className="h-[84px] w-full rounded-sm" />}
                     </li>
                   ))}
                 </ul>
@@ -80,10 +87,19 @@ export function RoomBoard({
   );
 }
 
-function RoomTile({ room, onOpen }: { room: RoomView; onOpen: (room: string) => void }) {
+/** Hours between two shift clocks across midnight ("23:10:00" → "05:58:07" is 6.8). */
+function hoursBetween(from: string, to: string): number {
+  const [fh, fm] = from.split(":").map(Number);
+  const [th, tm] = to.split(":").map(Number);
+  const minutes = (th * 60 + tm - (fh * 60 + fm) + 24 * 60) % (24 * 60);
+  return minutes / 60;
+}
+
+function RoomTile({ room, clock, onOpen }: { room: RoomView; clock: string | null; onOpen: (room: string) => void }) {
   const look = STATUS_LOOK[room.status];
   const avvik = room.openOrders > 0;
-  const label = `Rom ${room.number}: ${look.word}${avvik ? `, ${room.openOrders} åpne avvik` : ""}`;
+  const stale = room.statusAt && clock ? hoursBetween(room.statusAt, clock) >= STALE_HOURS : false;
+  const label = `Rom ${room.number}: ${look.word}${avvik ? `, ${room.openOrders} åpne avvik` : ""}${stale ? `, sjekket ${hhmm(room.statusAt)}` : ""}`;
 
   return (
     <button
@@ -96,20 +112,24 @@ function RoomTile({ room, onOpen }: { room: RoomView; onOpen: (room: string) => 
     >
       <span
         className={cx(
-          "flex h-full min-h-[72px] flex-col justify-between rounded-sm p-2",
+          "relative flex h-full min-h-[84px] flex-col justify-between rounded-sm p-2",
           "transition-[filter] duration-[120ms] ease-standard group-hover:brightness-110",
           look.tile,
+          avvik && "shadow-[inset_3px_0_0_0_var(--danger)]",
         )}
       >
         <span className="flex items-center justify-between gap-1">
           <span aria-hidden="true" className={cx("h-1.5 w-5 rounded-full", look.tag)} />
-          {avvik && <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-danger" />}
+          {stale && !avvik && <span className="text-xs leading-4 text-muted tabular-nums">{hhmm(room.statusAt)}</span>}
+          {avvik && (
+            <span className="text-xs leading-4 font-semibold text-danger">
+              Avvik{room.openOrders > 1 ? ` ${room.openOrders}` : ""}
+            </span>
+          )}
         </span>
         <span>
           <span className="block font-display text-[22px] leading-none font-semibold tabular-nums">{room.number}</span>
-          <span className={cx("mt-1 block truncate text-xs leading-4 font-medium", avvik ? "text-danger" : look.word_class)}>
-            {avvik ? "Avvik" : look.word}
-          </span>
+          <span className={cx("mt-1 block truncate text-sm leading-5", look.loud ? "font-semibold" : "font-medium", look.word_class)}>{look.word}</span>
         </span>
       </span>
     </button>

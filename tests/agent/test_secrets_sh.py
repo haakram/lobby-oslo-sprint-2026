@@ -47,7 +47,7 @@ def run_copy_with_tty(repo):
     try:
         proc = subprocess.run(
             ["bash", "scripts/secrets.sh", "copy"], cwd=repo, env=env(repo), stdout=slave,
-            stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, timeout=20,
+            stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, timeout=20, check=False,
         )
         os.close(slave)
         out = os.read(master, 65536).decode()
@@ -87,7 +87,7 @@ def test_paste_tightens_env_mode_and_new_files_are_600(repo):
     (repo / ".env").chmod(0o644)
     r = subprocess.run(
         ["bash", "scripts/secrets.sh", "paste"], cwd=repo, env=env(repo), input=DUMMY,
-        capture_output=True, text=True, timeout=20,
+        capture_output=True, text=True, timeout=20, check=False,
     )
     assert r.returncode == 0
     assert "dummy-wybe-111" not in r.stdout + r.stderr
@@ -100,7 +100,7 @@ def test_paste_creates_env_as_600_from_example(repo):
     (repo / ".env.example").chmod(0o644)
     r = subprocess.run(
         ["bash", "scripts/secrets.sh", "paste"], cwd=repo, env=env(repo), input=DUMMY,
-        capture_output=True, text=True, timeout=20,
+        capture_output=True, text=True, timeout=20, check=False,
     )
     assert r.returncode == 0
     assert mode(repo / ".env") == 0o600

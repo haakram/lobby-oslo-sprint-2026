@@ -100,10 +100,10 @@ def test_update_from_look_invalidates_cache(hotel):
     # (a) wet-warning exit on the existing edge
     hotel.update_from_look(src, {"exits": [{"to": dst, "metres": m, "warning": "wet floor"}]})
     assert route_seconds(hotel, src, dst) == m + 10
-    # (b) a new 5 m shortcut beats the wet 18 m edge (+10)
-    hotel.update_from_look(src, {"exits": [{"to": "corridor-3c", "metres": 5}]})
+    # (b) a new 1 m shortcut still ends on the wet spot (+10) but beats the 18 m edge
+    hotel.update_from_look(src, {"exits": [{"to": "corridor-3c", "metres": 1}]})
     c_to_d = EDGE[frozenset(("corridor-3c", dst))]["m"]
-    assert route_seconds(hotel, src, dst) == 5 + c_to_d
+    assert route_seconds(hotel, src, dst) == 1 + c_to_d + 10
 
 
 def test_best_tour_exact_small(hotel):
@@ -134,3 +134,22 @@ def test_no_route_raises(hotel):
         shortest_route(hotel, "storage", "island")
     with pytest.raises(NoRoute):
         route_seconds(hotel, "storage", "nowhere")
+
+
+def test_wet_spot_prices_every_approach_at_10_not_a_detour(hotel):
+    # A known wet spot costs only +10 s in the game ("creeps carefully"), so a long dry detour to the
+    # same spot is never worth it; and every approach to the spot is priced, not just the slipped edge.
+    hotel.mark_wet("elevator-3", "corridor-3a")
+    m = EDGE[frozenset(("corridor-3d", "corridor-3a"))]["m"]
+    assert route_seconds(hotel, "corridor-3d", "corridor-3a") == m + 10
+    assert route_seconds(hotel, "corridor-3a", "corridor-3d") == m
+    r = shortest_route(hotel, "corridor-3d", "corridor-3a")
+    assert r.path == ["corridor-3d", "corridor-3a"]
+
+
+def test_wet_spot_is_avoided_only_when_a_dry_way_through_is_cheaper(hotel):
+    # Passing through a wet hub costs +10 once; a dry way round that is shorter than that wins.
+    hotel.mark_wet("corridor-3d", "corridor-3a")
+    r = shortest_route(hotel, "corridor-3d", "corridor-3b")
+    direct = route_seconds(hotel, "corridor-3d", "corridor-3a") + route_seconds(hotel, "corridor-3a", "corridor-3b")
+    assert r.seconds <= direct

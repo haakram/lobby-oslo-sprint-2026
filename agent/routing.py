@@ -13,6 +13,8 @@ DOOR_S = 3.0
 STAIRS_S_PER_M = 3.0
 ELEVATOR_CALL_S = 45.0
 ELEVATOR_RIDE_S = 15.0
+# A known wet spot really costs only +10 s ("creeps carefully"); the -15 points are for the first
+# step onto an UNSEEN wet floor, which routing cannot price. Do not raise this to the penalty.
 WET_KNOWN_S = 10.0
 
 _DOOR_KINDS = ("room", "service")
@@ -102,7 +104,7 @@ def shortest_route(hotel: Hotel, src: str, dst: str, *, with_cart: bool = False)
 def _version(hotel: Hotel):
     # Key assumes existing edges are never edited in place (only added or marked wet).
     n_edges = sum(len(v) for v in hotel._adj.values())
-    return (frozenset(hotel._wet), n_edges, len(hotel.nodes))
+    return (frozenset(hotel._wet_spots), n_edges, len(hotel.nodes))
 
 
 def route_seconds(hotel: Hotel, src: str, dst: str, *, with_cart: bool = False) -> float:

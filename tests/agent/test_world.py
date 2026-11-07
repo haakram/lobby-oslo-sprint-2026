@@ -49,8 +49,18 @@ def test_update_from_look_adds_edge_and_wet(hotel):
     assert dist(hotel, "corridor-3a", "corridor-3x").metres == 9
     assert hotel.floor("corridor-3x") == 3
     assert hotel.is_wet("corridor-3a", "corridor-3x")
-    assert hotel.is_wet("corridor-3x", "corridor-3a")
+    assert not hotel.is_wet("corridor-3x", "corridor-3a")  # wet is the spot you step onto
     assert not hotel.is_wet("corridor-3a", "corridor-3b")
+
+
+def test_wet_is_per_spot_not_per_edge_and_persists(hotel):
+    # Live night 23:44-23:53: slip elevator-3 -> corridor-3a, then 3d -> 3a and 3b -> 3a were
+    # "creeps carefully" (already known), so the game keys wetness on the destination spot.
+    hotel.mark_wet("elevator-3", "corridor-3a")
+    for src in ("elevator-3", "corridor-3b", "corridor-3d"):
+        assert hotel.is_wet(src, "corridor-3a")
+    assert not hotel.is_wet("corridor-3a", "corridor-3d")  # stepping off it is dry
+    assert hotel.is_wet("elevator-3", "corridor-3a")  # never forgotten
 
 
 def test_clock_to_seconds():

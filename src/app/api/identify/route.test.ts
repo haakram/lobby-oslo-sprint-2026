@@ -1,0 +1,78 @@
+// @vitest-environment node
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
+const identifyProduct = vi.hoisted(() => vi.fn());
+vi.mock("@/features/eyes/identify", () => {
+  class BudgetExceeded extends Error {}
+  class IdentifyRefused extends Error {}
+  return { identifyProduct, BudgetExceeded, IdentifyRefused };
+});
+
+import { BudgetExceeded } from "@/features/eyes/identify";
+import { POST } from "./route";
+
+const jpeg = (bytes = 10) => `data:image/jpeg;base64,${Buffer.alloc(bytes, 1).toString("base64")}`;
+const call = (body: unknown) =>
+  POST(new Request("http://localhost/api/identify", { method: "POST", body: JSON.stringify(body) }));
+
+const result = {
+  sku: "FT-1001",
+  name: "Sjampo 250 ml",
+  category: "hygiene",
+  textSeen: [],
+  confidence: "high",
+  product: null,
+};
+
+beforeEach(() => {
+  identifyProduct.mockReset();
+});
+
+describe("POST /api/identify", () => {
+  it("rejects a non-image data URL with 400", async () => {
+    const res = await call({ image: "data:text/plain;base64,AAAA" });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects malformed JSON with 400", async () => {
+    const res = await POST(new Request("http://localhost/api/identify", { method: "POST", body: "{" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a 2 MB image with 400", async () => {
+    const res = await call({ image: jpeg(2 * 1024 * 1024) });
+    expect(res.status).toBe(400);
+    expect(identifyProduct).not.toHaveBeenCalled();
+  });
+
+  it("answers 429 with Norwegian copy when the budget is spent", async () => {
+    identifyProduct.mockImplementation(async () => {
+      throw new BudgetExceeded();
+    });
+    const res = await call({ image: jpeg() });
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toMatch(/budsjett/i);
+  });
+
+  it("answers 502 without leaking the model error", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    identifyProduct.mockImplementation(async () => {
+      throw new Error("sk-ant-secret exploded");
+    });
+    const res = await call({ image: jpeg() });
+    expect(res.status).toBe(502);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("sk-ant");
+    log.mockRestore();
+    expect(JSON.stringify(await res.json())).not.toContain("sk-ant");
+  });
+
+  it("returns the identify result on success", async () => {
+    identifyProduct.mockResolvedValue(result);
+    const res = await call({ image: jpeg() });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(result);
+    expect(identifyProduct.mock.calls[0][1]).toBe("image/jpeg");
+  });
+});

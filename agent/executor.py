@@ -11,6 +11,13 @@ Rules that win or lose points (spec § Task handling, controller rulings):
 - never open a room for a person who asks to be let in (H-bathrobe: a polite no, no keycard);
 - a move that fails with "No way" -> one look, update the map, replan once.
 
+Score-blind mode (NS_SCORE_BLIND=1, side branch hamad/blind, off by default): no score, score delta or
+report reply decides a "done" or what is reported. Each gate that waits for a score rise (Executor.done_gate)
+takes instead what the robot observed itself: the place reply putting the item inside the room, a guest's
+answer to what was said, the sign reply putting it over the spill. No report's reply refutes an experiment
+and a sign is movable from a spill the robot itself reported done (not one the server thanked for). The
+scores are still read where they were (same calls) and logged on a `blind_check` line, to be measured later.
+
 The final's shifts differ from seed 1 (same plan, other metres, moved stock), so the JSON map is a
 belief and what the robot sees is the truth: every look and move updates the world model, each
 non-room place is looked at on the first visit (wet warnings, metres, stock), the stock places are
@@ -190,6 +197,36 @@ class Declined(ActionFailed):
     with no order on record reported declined scores +5; the same as failed scores 0, and as done -20."""
 
 
+def score_blind() -> bool:
+    """NS_SCORE_BLIND=1: the score-blind mode (module doc). Read once per shift, by the Executor."""
+    return os.environ.get("NS_SCORE_BLIND") == "1"
+
+
+def placed_inside(reply: Reply, item: str, room: str) -> bool:
+    """What the robot saw of a place in a room: the reply puts the item inside the room
+    (live: "Placed towel inside room-303.", 3,500+ such replies)."""
+    text = str(reply.result).lower()
+    return reply.ok and "inside" in text and room.lower() in text and item.lower() in text
+
+
+def heard(reply: Reply) -> str:
+    """What the robot heard after a `say` (the reply's `heard`: the guests' own words, in the world)."""
+    result = reply.result if isinstance(reply.result, dict) else {}
+    return " | ".join(str(h) for h in result.get("heard") or [] if h)
+
+
+NOT_UNDERSTOOD = ("what was that", "pardon", "didn't catch", "excuse me?")
+MESSAGE_ACK = ("thank", "got it", "will do", "okay", "great", "cheers")  # live: Ms Okafor calls back: "Thanks!"
+NOISE_ACK = (*MESSAGE_ACK, "stops", "sorry", "quiet", "turns it down", "silence")  # live: The music stops. A
+# muffled "sorry!" (1,116 of 1,116); an empty `heard` came with no rise; the offline fake: a guest's "Thanks!"
+
+
+def answered(reply: Reply, words: tuple[str, ...]) -> bool:
+    """Someone at the door answered what the robot said, in words that take it in (not a "what was that?")."""
+    text = heard(reply).lower()
+    return reply.ok and any(w in text for w in words) and not any(w in text for w in NOT_UNDERSTOOD)
+
+
 def experiment_names() -> list[str]:
     """The score experiments a shift starts with: NS_EXPERIMENTS=a,b, else DEFAULT_EXPERIMENTS."""
     names = [n.strip() for n in os.environ.get("NS_EXPERIMENTS", "").split(",") if n.strip()]
@@ -249,6 +286,8 @@ class Executor:
         self.wet_first_seen: dict[str, int] = dict.fromkeys(hotel.wet_spots(), night_seconds(SHIFT_START))
         self.signs_placed: dict[str, str] = {}  # place -> the spill request its wet-floor sign serves, oldest first
         self.verified: set[str] = set()  # requests whose "done" report the server thanked for
+        self.blind = score_blind()  # NS_SCORE_BLIND=1: no score or report reply decides a "done"
+        self.reported_done: set[str] = set()  # "done" reports the server accepted (the robot's own call)
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
         # Task 10: requests that delivered their own numbered tray or bags (tray-104-7): the server
         # credits such an object to its own request only, so the rise after it is never a twin's.
@@ -296,8 +335,21 @@ class Executor:
         self._price_cache: tuple[tuple, tuple[float, float | None, float]] | None = None
 
     def experiment(self, name: str) -> bool:
-        """True while the named experiment is switched on and not yet refuted this shift."""
+        """True while the named experiment is switched on and not yet refuted this shift. Score-blind:
+        switched on is enough (no report's reply refutes it)."""
+        if self.blind:
+            return name in self.experiments
         return name in self.experiments and self.experiments[name] is not False
+
+    def done_gate(self, check: str, observed: bool, evidence: str, before, after) -> bool:
+        """The gate in front of a "done" (a place in a room, a message or a quiet word said, a sign set):
+        the score rose from `before` to `after`, or score-blind, `observed`, what the robot itself saw or
+        heard (`evidence`). Score-blind, one `blind_check` line keeps both, for the measurement only."""
+        if not self.blind:
+            return before is not None and after is not None and after > before
+        self.log("blind_check", request=self.current.request if self.current is not None else None,
+                 check=check, observed=observed, evidence=evidence[:200], score_before=before, score_after=after)
+        return observed
 
     def exp_claim(self, name: str) -> None:
         """The task about to be reported done rides on this experiment."""
@@ -317,10 +369,12 @@ class Executor:
     def movable_signs(self) -> list[str]:
         """Where our wet-floor signs stand over spills already reported done and verified, oldest
         first: what a new patch may take when storage is out. None while sign_move or spill_done is
-        off (live the place never raises the score: without spill_done no done report is made)."""
+        off (live the place never raises the score: without spill_done no done report is made).
+        Score-blind: over spills the robot reported done (its own call, not the server's thanks)."""
         if not (self.experiment("sign_move") and self.experiment("spill_done")):
             return []
-        return [place for place, rid in self.signs_placed.items() if rid in self.verified]
+        done = self.reported_done if self.blind else self.verified
+        return [place for place, rid in self.signs_placed.items() if rid in done]
 
     # --- server calls --------------------------------------------------------------------------
 
@@ -1976,14 +2030,17 @@ class Executor:
             if not reply.ok:
                 status, note = "skipped", f"{note} (report refused: {text})"[:NOTE_MAX]
             elif outcome == "done" and "thanks" not in text.lower():
-                self.log("report_unverified", request=task.request, reply=text)
-            elif outcome == "done":
+                self.log("report_unverified", request=task.request, reply=text)  # a log line only
+            elif outcome == "done" and not self.blind:  # score-blind: the thanks is never kept
                 self.verified.add(task.request)
+            if reply.ok and outcome == "done":
+                self.reported_done.add(task.request)
             if self._exp_pending and outcome == "done":
                 verified = reply.ok and "thanks" in text.lower()
                 # Proven once this shift, a rule stays proven: a later "Noted." is that report's own
                 # miss (a spill sign on another request's patch), not the server's rule changing.
-                self.experiments[self._exp_pending] = verified or self.experiments.get(self._exp_pending) is True
+                if not self.blind:  # score-blind: the reply is logged, never acted on
+                    self.experiments[self._exp_pending] = verified or self.experiments.get(self._exp_pending) is True
                 self.log("experiment", name=self._exp_pending, request=task.request,
                          verified=verified, reply=text[:120], score=self.state.score)
         self._exp_pending = None

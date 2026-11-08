@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useLayoutEffect, useMemo, useState } from "react";
 import { productBySku, type Product } from "@/features/catalog/products";
+import { PickingGuides } from "@/features/picklist/PickingGuides";
 import { usePicklist } from "@/features/picklist/PicklistProvider";
 import { UndoStatus } from "@/features/requests/UndoStatus";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, RouteIcon } from "@/ui";
@@ -121,6 +122,7 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
             }
           />
         </Card>
+        <PickingGuides />
       </div>
     );
   }
@@ -191,6 +193,7 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
           </div>
         </Card>
       </div>
+      <PickingGuides className="mt-6" />
     </div>
   );
 }

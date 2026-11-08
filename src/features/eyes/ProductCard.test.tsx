@@ -63,6 +63,17 @@ describe("ProductCard", () => {
     expect(add).toHaveBeenCalledWith("FT-1001");
   });
 
+  it("asks for the label instead of one tap when the camera is not sure, and hides the guessed SKU", () => {
+    render(<ProductCard result={{ ...match, confidence: "medium" }} />);
+    expect(screen.queryByRole("button", { name: "Legg i plukkliste" })).not.toBeInTheDocument();
+    expect(screen.queryByText("FT-1001")).not.toBeInTheDocument();
+    expect(screen.getByText("Sjekkes mot etiketten")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Vis vei" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Bekreft med etiketten"), { target: { value: "1001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Bekreft og legg i plukkliste" }));
+    expect(add).toHaveBeenCalledWith("FT-1001");
+  });
+
   it("opens the route to the product", () => {
     render(<ProductCard result={match} />);
     fireEvent.click(screen.getByRole("button", { name: "Vis vei" }));

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { usePicklist } from "@/features/picklist/PicklistProvider";
+import { ShelfLabelCheck } from "@/features/picklist/ShelfLabelCheck";
 import { Badge, Button, RouteIcon, type BadgeTone } from "@/ui";
 import type { IdentifyResult } from "./schema";
 
@@ -17,6 +18,9 @@ export function ProductCard({ result }: { result: IdentifyResult }) {
   const { skus, add } = usePicklist();
   const product = result.product;
   const confidence = CONFIDENCE[result.confidence];
+  // Not sure: the label decides before anything goes on the pick list (jury round 3, the Holio juror).
+  const unsure = result.confidence !== "high";
+  const added = product ? skus.includes(product.sku) : false;
 
   return (
     <div className="flex flex-col gap-5">
@@ -34,7 +38,8 @@ export function ProductCard({ result }: { result: IdentifyResult }) {
       {product && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 border-y border-line py-4">
           <dt className="text-sm text-muted">SKU</dt>
-          <dd className="font-mono text-sm tabular-nums">{product.sku}</dd>
+          {/* While unsure the guess's SKU stays hidden, so the label check is a real check, not a copy. */}
+          <dd className="font-mono text-sm tabular-nums">{unsure && !added ? <span className="font-sans text-muted">Sjekkes mot etiketten</span> : product.sku}</dd>
           <dt className="text-sm text-muted">Plassering</dt>
           <dd className="text-base font-medium">{product.locationLabel}</dd>
         </dl>
@@ -60,10 +65,15 @@ export function ProductCard({ result }: { result: IdentifyResult }) {
             <RouteIcon />
             Vis vei
           </Button>
-          {skus.includes(product.sku) ? (
+          {added ? (
             <Button disabled>I plukklisten</Button>
-          ) : (
+          ) : unsure ? null : (
             <Button onClick={() => add(product.sku)}>Legg i plukkliste</Button>
+          )}
+          {unsure && !added && (
+            <div className="min-[400px]:col-span-2">
+              <ShelfLabelCheck guess={product} onConfirm={add} />
+            </div>
           )}
         </div>
       ) : (

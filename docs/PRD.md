@@ -159,8 +159,8 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
   cross-night precision from `docs/runs/ledger.csv`, declines split by whether the referee credited
   them, wet-floor signs, Do-Not-Disturb doors) (`src/features/hotel3d/`, `src/features/nightshift/`).
 - **The run log** of a real live practice night of the final agent (`public/runs/demo.jsonl`, seed 16).
-- **The Night Shift agent** (`agent/` on `hamad/final`): plays Wybe's simulation on its own, scored by
-  Wybe's server.
+- **The Night Shift agent** (`agent/` on `hamad/final`, and on `main` since 05:59 Sun: PR #25, merge
+  `93f71d4`, `8de9ffc`'s agent): plays Wybe's simulation on its own, scored by Wybe's server.
 
 ### Should (makes the demo clearly better) — built
 
@@ -258,7 +258,10 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
     battery reserve and never takes a sign off a wet floor. What the hotel's rules cost in the sim,
     measured in the replay bed on 164 real nights (`hamad/hotelrules`): −125.8 points a night for all
     four, almost all of it (−105.2) from never moving a sign with only three in store; the knock costs
-    −12.4. A sign stock per floor makes the safe rule nearly free.
+    −12.4. A sign stock per floor makes the safe rule nearly free. Live on Wybe's server (hotel-rules
+    mode, `NS_HOTEL_RULES=1` on `70d5be4`, about 05:55 Sun, seeds 10/16/23/5): 2,605 / 2,584 / 2,393 /
+    2,453 against the final build's 2,760 / 2,748 / 2,298 / 2,559, mean 2,509 against 2,591: −82 points
+    a night, with a knock before 59 of 59 keycard entries (the final build: 26 of 61 on the same seeds).
   - Lifts and doors need a per-building integration with the lift maker's API: the pilot's hard part,
     not "only the API adapter changes".
 - **Linen counting by camera** (Drift spec "should"): cut for time; Lager og lin shows test stock.

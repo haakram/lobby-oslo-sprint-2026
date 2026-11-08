@@ -1,0 +1,13 @@
+{
+  "_doc": "What the hotel's rules cost in Wybe's sim (jury round 5, the Wybe juror and the Wybe engineer). Hotel-rules mode on side branch hamad/hotelrules at 70d5be4 (NS_HOTEL_RULES=1; default off, byte-identical): knock before every keycard entry, never move a sign off a wet floor, avoid known-wet corridors, sign an unreported patch after a slip. Live: four practice nights started 05:49 Sun 8 Nov, measured complete at ~05:55 on seeds 10/16/23/5 (ledger.csv rows of commit 70d5be4); the final build's nights on the same seeds are c3801e0's (013f90d, the same agent as 8de9ffc, scored 1 point lower on seed 10). Keycard entries and knocks counted with masterKeyEntries (conduct.ts) over the eight logs. Replay: the replay bed on 164 real nights, as reported by the controller.",
+  "branch": "hamad/hotelrules",
+  "commit": "70d5be4",
+  "flag": "NS_HOTEL_RULES=1",
+  "measuredAt": "05:55",
+  "seeds": [10, 16, 23, 5],
+  "scores": [2605, 2584, 2393, 2453],
+  "finalScores": [2760, 2748, 2298, 2559],
+  "keycard": { "entries": 59, "knockedFirst": 59 },
+  "finalKeycard": { "entries": 61, "knockedFirst": 26 },
+  "replay": { "nights": 164, "plain": -125.8, "seedWeighted": -100.4, "signsInStore": 3 }
+}

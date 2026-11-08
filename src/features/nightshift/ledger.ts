@@ -1,4 +1,5 @@
 import faults from "./data/fault-bed.json";
+import hotelRules from "./data/hotel-rules.json";
 import data from "./data/ledger.json";
 import type { RunLine } from "./runlog";
 
@@ -188,6 +189,28 @@ export const FAULT_BED: {
   sightedSignsFalseDone: number;
   lookAlikeMissed: number;
 } = faults;
+
+/**
+ * What the hotel's rules cost (data/hotel-rules.json, hamad/hotelrules): the hotel-rules mode live on four
+ * seeds against the final build's nights on the same seeds, the knocks, and the replay bed's cost.
+ */
+export const HOTEL_RULES: {
+  branch: string;
+  commit: string;
+  flag: string;
+  measuredAt: string;
+  seeds: number[];
+  scores: number[];
+  finalScores: number[];
+  keycard: { entries: number; knockedFirst: number };
+  finalKeycard: { entries: number; knockedFirst: number };
+  replay: { nights: number; plain: number; seedWeighted: number; signsInStore: number };
+} = hotelRules;
+
+/** The mean of a few scores, rounded to a whole point. */
+export function meanScore(scores: readonly number[]): number {
+  return scores.length > 0 ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
+}
 
 /** "98,5 %", "91 %": a share as Norwegian per cent, a decimal only where it says something. */
 export function shareText(share: number): string {

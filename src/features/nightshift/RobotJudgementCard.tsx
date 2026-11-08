@@ -29,8 +29,10 @@ import {
   type DistinctClaims,
   FAULT_BED,
   grouped,
+  HOTEL_RULES,
   intervalText,
   LEDGER_META,
+  meanScore,
   percentText,
   shareText,
   shiftOf,
@@ -486,7 +488,7 @@ function contradictionText(entry: SelfContradiction): string {
   } og meldte det tomt (${entry.request}). Kameraet og robotens egen oppgavelogg er uenige, så Fettero regner den ikke som holdt.`;
 }
 
-/** "Skled i korridor 2b kl. 23:51 og krysset det samme våte gulvet 27 ganger til uten å sette skilt der." */
+/** "Skled i korridor 2B kl. 23:51 og krysset det samme våte gulvet 27 ganger til uten å sette skilt der." */
 function slipText(slip: SlipCrossing): string {
   const where = inSentence(place(slip.place));
   const when = slip.clock ? ` kl. ${slip.clock.slice(0, 5)}` : "";
@@ -645,6 +647,7 @@ function HowWeKnow({
           </p>
         )}
         {FAULT_BED.rates.length > 0 && <FaultBed />}
+        {HOTEL_RULES.scores.length > 0 && <HotelRules />}
         {distinct && distinct.claims > 0 && (
           <p>
             Talt som ulike påstander (samme natt og forespørsel spilt på nytt teller én gang), sluttgrenens {distinct.nights} netter: {distinct.credited} av{" "}
@@ -695,6 +698,30 @@ function FaultBed() {
       {shareText(bed.sightedSignsFalseDone)} av skiltene satt ved siden av sølet falske «ferdig». Den bommer på en gjest som sover i et «sjekket» rom (det gjør
       poengsummen også), et høflig svar som ikke handler om saken, musikk som starter igjen og en hittegjenstand som ligner ({shareText(bed.lookAlikeMissed)}).
       Feilformuleringene er skrevet av oss: de viser hva slags svar som lurer sjekken, ikke hvor ofte det skjer.
+    </p>
+  );
+}
+
+/**
+ * What the hotel's rules cost, behind "Slik vet vi det" (round 5, the Wybe juror and the Wybe engineer): the hotel-rules mode live
+ * on four seeds against the final build's nights on the same seeds, the knocks counted from the logs, and the
+ * replay bed's cost over 164 nights (data/hotel-rules.json, hamad/hotelrules).
+ */
+function HotelRules() {
+  const rules = HOTEL_RULES;
+  const scores = (list: readonly number[]) => list.map(grouped).join(" / ");
+  const nb = (n: number) => n.toLocaleString("nb-NO");
+  const mean = meanScore(rules.scores);
+  const finalMean = meanScore(rules.finalScores);
+  return (
+    <p>
+      Hotellregler: en egen modus (<span className="font-mono text-xs">{rules.flag}</span>, <span className="font-mono text-xs">{rules.branch}</span>{" "}
+      <span className="font-mono text-xs">{rules.commit}</span>) banker på før hver inngang med nøkkelkort, flytter aldri et skilt fra et vått gulv, går utenom
+      korridorer den vet er våte og setter skilt på et søl ingen har meldt når den har skledd. Live på seed {joinNo(rules.seeds.map(String))} (kl.{" "}
+      {rules.measuredAt}): {scores(rules.scores)} mot finalebyggets {scores(rules.finalScores)} på de samme seedene, snitt {grouped(mean)} mot {grouped(finalMean)},{" "}
+      {nb(mean - finalMean)} poeng natten. Den banket på før {rules.keycard.knockedFirst} av {rules.keycard.entries} innganger med nøkkelkort (finalebygget{" "}
+      {rules.finalKeycard.knockedFirst} av {rules.finalKeycard.entries} de samme nettene). Gjenspilt på {rules.replay.nights} ekte netter koster reglene{" "}
+      {nb(rules.replay.plain)} poeng natten; det meste er skiltene, for lageret har bare {rules.replay.signsInStore}.
     </p>
   );
 }

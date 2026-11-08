@@ -66,9 +66,9 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
 
 ## The Night Shift agent
 
-- **Where:** the final agent is on the `hamad/final` branch ([`agent/`](./agent/) in Python, tests in
-  [`tests/agent/`](./tests/agent/); `agent/` on this branch is older until `hamad/final` is merged to
-  `main`). It plays Wybe's simulated hotel robot through Wybe's API and is scored only by Wybe's server.
+- **Where:** the final agent is on **`main`** since 05:59 Sun (PR #25, merge `93f71d4`: `8de9ffc`'s
+  `agent/`, byte for byte) and on the `hamad/final` branch ([`agent/`](./agent/) in Python, tests in
+  [`tests/agent/`](./tests/agent/); `agent/` on this branch, `hamad/jury-loop`, is older). It plays Wybe's simulated hotel robot through Wybe's API and is scored only by Wybe's server.
   It plans on exact simulation time, reports "done" for a delivery only after the server's score rises,
   and refuses unsafe moves in code. Room checks and spill reports rest on what it saw (it looked inside;
   its sign stands over the patch), because the server credits those on the report itself; that a spill
@@ -92,7 +92,8 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   started 05:02, all 10 complete at 05:50): **22: 2,085 · 34: 2,166 · 53: 2,481 · 55: 2,138 · 67: 2,312
   · 70: 2,186 · 78: 2,008 · 83: 2,236 · 86: 1,786 · 93: 1,969; the final's statistic, the mean of the
   best 9 of 10, is 2,176**, with 573 of 573 "done" credited ([`docs/runs/builds.csv`](./docs/runs/builds.csv)). If the
-  head moves before 12:00, the forecast below is regenerated for it.
+  head moves before 12:00, the forecast below is regenerated for it. This agent is the one on `main`
+  (PR #25, merged 05:59), as the submission requires.
 
 - **What we expect in the final: a median of 2,050, 80 % between 1,759 and 2,393, not 2,760**, for
   `8de9ffc` ([`docs/runs/forecast.txt`](./docs/runs/forecast.txt), from `python3 scripts/forecast.py`,
@@ -156,8 +157,14 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   floor costs −105.2, because the store holds three signs, so across the 164 nights the robot declined
   415 spill reports for "no sign left"; a knock before every keycard entry costs −12.4; signing a patch nobody reported
   −30.1; avoiding a known wet corridor 0 (with the cart there is no dry way round). So the safe rule is
-  nearly free with a stock of signs on every floor, which is what a hotel would do. A live check on four
-  seeds is queued (numbers follow).
+  nearly free with a stock of signs on every floor, which is what a hotel would do. **Live on Wybe's
+  server** (hotel-rules mode, `NS_HOTEL_RULES=1` on `70d5be4`, four nights complete at about 05:55 Sun,
+  seeds 10/16/23/5): **2,605 · 2,584 · 2,393 · 2,453 against the final build's 2,760 · 2,748 · 2,298 ·
+  2,559 on the same seeds, mean 2,509 against 2,591: −82 points a night**, less than the replay's
+  −125.8. It knocked before **59 of 59** keycard entries (the final build on the same seeds: 26 of
+  61; both counted from the logs with the card's own rule, `masterKeyEntries`). The rows are in
+  [`docs/runs/builds.csv`](./docs/runs/builds.csv) (commit `70d5be4`); the card shows the same numbers
+  behind *Slik vet vi det* (`src/features/nightshift/data/hotel-rules.json`).
 - **How we test a change before a live shift:** a replay bed (`agent/replaybed.py` on `hamad/final`)
   rebuilds every full live night offline from its log (72 when we ran it at 02:55 Sun). Replayed with the code
   that played them, 50 nights land within 61 points of live on average (**3.2 %**, 48 of 50 within

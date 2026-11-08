@@ -46,6 +46,12 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(disclosure).toHaveTextContent("Det måler feiltesten: uten nett, i 20 gjenoppbygde ekte netter × 5 trekninger med 13 slags innlagte feil");
     expect(disclosure).toHaveTextContent("Uten poengsummen holdt 98,5 % / 95,5 % / 91 % av «ferdig» ved 5 / 15 / 30 % feil, og sjekken fant 99,8 % / 99,7 % / 99,7 % av det som virkelig var gjort");
     expect(disclosure).toHaveTextContent("Feilformuleringene er skrevet av oss: de viser hva slags svar som lurer sjekken, ikke hvor ofte det skjer.");
+    // What the hotel's rules cost (data/hotel-rules.json, hamad/hotelrules 70d5be4): live on four seeds, the knocks, the replay bed.
+    expect(disclosure).toHaveTextContent(
+      "Live på seed 10, 16, 23 og 5 (kl. 05:55): 2 605 / 2 584 / 2 393 / 2 453 mot finalebyggets 2 760 / 2 748 / 2 298 / 2 559 på de samme seedene, snitt 2 509 mot 2 591, −82 poeng natten.",
+    );
+    expect(disclosure).toHaveTextContent("Den banket på før 59 av 59 innganger med nøkkelkort (finalebygget 26 av 61 de samme nettene).");
+    expect(disclosure).toHaveTextContent("Gjenspilt på 164 ekte netter koster reglene −125,8 poeng natten; det meste er skiltene, for lageret har bare 3.");
     expect(disclosure).toHaveTextContent("I natt godkjente simulatoren 9 av 9 på egen vurdering (få tilfeller: 95 %-intervall 70–100 %); én av dem motsies av robotens egen logg (rom 209).");
     // The simulator, the referee, the score, the ledger path and the commit hash only inside "Slik vet vi det" (the design juror, round 5).
     const main = card.cloneNode(true) as HTMLElement;

@@ -49,3 +49,27 @@ describe("nightSafety: what can hurt a guest, from the run log", () => {
     expect(corridorName("corridor-2b")).toBe("korridor 2B");
   });
 });
+
+describe("nightSafety: the night clerk's entries are added to the robot's, never dropped", () => {
+  const staff = (id: string, kind: string, data: Record<string, unknown>): RunLine => ({ v: 1, type: "decision", kind, data: { id, ...data, source: "staff", by: "Kjersti Lund" } });
+
+  it("reads the robot alone without her log (the bell, Oversikt and Vedlikehold read it so)", () => {
+    const { wetFloors, staff: extra } = nightSafety(lines);
+    expect(wetFloors.every((floor) => floor.source === "robot" && floor.reported === null)).toBe(true);
+    expect(extra).toBeUndefined();
+  });
+
+  it("adds her wet floor where the robot reported none, with her answer to «Skilt satt ut?», and keeps it open (no work order to close)", () => {
+    const lobby = staff("l1", "hazard", { place: "lobby", hazard: "wet", since: "02:15:00", at: "02:15:00", signed: false });
+    const { wetFloors } = nightSafety(lines, [lobby]);
+    const floor = wetFloors.find((entry) => entry.place === "lobby");
+    expect(floor).toMatchObject({ source: "staff", orderIds: [], since: "02:15:00", signed: false, sign: "uten skilt siden 02:15", reported: { by: "Kjersti Lund", at: "02:15:00" }, waited: null });
+    expect(openWetFloors(wetFloors, () => true).map((entry) => entry.place)).toEqual(["lobby"]);
+  });
+
+  it("times each robot hazard to the first person who knew, else to 06:00", () => {
+    const { wetFloors, stranger } = nightSafety(lines);
+    expect(wetFloors.find((floor) => floor.place === "corridor-2b")?.waited).toMatchObject({ minutes: 369, acknowledged: false });
+    expect(stranger?.waited).toMatchObject({ minutes: 283, acknowledged: false });
+  });
+});

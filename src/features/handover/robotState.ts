@@ -1,7 +1,7 @@
 import type { RunLine } from "@/features/nightshift/runlog";
 
 /**
- * The robot itself at the handover (jury round 4, the Wybe engineer: "at 06:00 the robot is not docked and still
+ * The robot itself at the handover (round 4, domain review: "at 06:00 the robot is not docked and still
  * holds the master keycard; for a hotel, key custody at shift change is the first thing on the list").
  * Read from the run log's last word on the robot: its place (a move's `at`, a status's or state line's
  * `location`), battery, what it holds and what is on its cart, and whether it is on its charger (a

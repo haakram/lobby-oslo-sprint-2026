@@ -7,13 +7,15 @@ import type { RunLine } from "@/features/nightshift/runlog";
 import type { PhoneTask } from "@/features/requests/phoneTasks";
 import type { RequestView } from "@/features/requests/select";
 import { HANDOVER_AT, hoursEarlier, type RoomMoney, roomMoney, shortDate, tonightLine } from "@/features/rooms/money";
-import { bookedTonight, type PmsRoom, pmsLastNight, type RoomRevenue } from "@/features/rooms/pms";
+import { bookedTonight, type PmsRoom, pmsLastNight, type RoomRevenue, sellableValue } from "@/features/rooms/pms";
 import type { Contradiction, Held, Reconciliation, RoomCheckMark } from "@/features/rooms/reconcile";
 import { osloToday } from "@/features/reception/dates";
 import { HOTEL } from "@/features/reception/hotel";
 import { byRole, cleanersToday } from "@/features/staff/testData";
+import { inNightHours, placePhrase } from "@/features/staffinput/read";
+import { waitText } from "@/features/staffinput/robotHazards";
 import { BREAKFAST_BATTERY, type RobotAtHandover, robotNeedsPerson } from "./robotState";
-import { corridorName, type NightSafety, type Notified, openWetFloors, SAFETY_DUE, STRANGER_CHECK, STRANGER_OWNER, WET_FLOOR_OWNER, type WetFloor } from "./safety";
+import { type NightSafety, type Notified, openWetFloors, SAFETY_DUE, STRANGER_OWNER, type StaffSafety, type Waited, WET_FLOOR_OWNER, type WetFloor } from "./safety";
 
 /**
  * Overlevering 06:00: the night on one page for the morning manager, composed from what the other
@@ -39,6 +41,11 @@ export type Figures = {
   revenue: RoomRevenue;
   /** What can hurt a guest and has no owner yet: unsigned wet floors, the stranger. */
   safety: { wetFloors: number; stranger: boolean };
+  /**
+   * A room in use with no booking (round 6, product review: the certain cost leads the money): a night
+   * nobody bills, and a room the booking system may sell again today. Last night's average rate per room.
+   */
+  unbilled: { rooms: string[]; value: number };
 };
 
 export type Highlight = { at: string; text: string; by: "robot" | "ai" | "staff" };
@@ -46,7 +53,7 @@ export type Highlight = { at: string; text: string; by: "robot" | "ai" | "staff"
 export type OpenItem = {
   id: string;
   text: string;
-  /** A role the hotel has (jury round 4, the design juror: "seven of nine are Siri Haugen"): Vaktmester, Resepsjon, Renhold, Nattevakt. */
+  /** A role the hotel has (round 4, design review: "seven of nine are Siri Haugen"): Vaktmester, Resepsjon, Renhold, Nattevakt. */
   owner: string;
   /** Who in that role is on, from the shift plan, when it is someone other than the desk reading the page. */
   who?: string;
@@ -61,8 +68,22 @@ export type OpenItem = {
   urgent: boolean;
   /** Can hurt a guest (a wet floor, a stranger at the doors): first on the page, said with a word. */
   safety?: boolean;
-  /** A safety item: whether a person was told in the night ("Ingen ble varslet i natt: varsle nå."). */
-  escalation?: string;
+  /** A safety item: how many of its hazards nobody was told about in the night (the sign-off warns while one is). */
+  untold?: number;
+  /** How many saker the row holds (the wet floors are one row, one line and one sak each). Default 1. */
+  count?: number;
+  /**
+   * The row's one line when it shows its facts as marks (source chips, a timeline, the kroner) instead
+   * of prose (round 6, design review: show the evidence, don't write it). `text` keeps the whole
+   * sentence for print and for other composers (the robot-free page appends its evidence to it).
+   */
+  lead?: string;
+  /** The room whose sources (the door lock, the night clerk, the robot) the row shows as chips. */
+  evidenceRoom?: string;
+  /** The robot's own contradiction as two points: "01:29 bagasje inn", then "03:47 meldt tomt". */
+  points?: { at: string; label: string }[];
+  /** Kroner on the row, when they are certain (a night nobody bills). */
+  kroner?: number;
   /** Rooms to sell right here, in two steps (rooms/SellSteps.tsx). */
   sell?: string[];
   /**
@@ -112,63 +133,81 @@ export { SAFETY_DUE, STRANGER_CHECK, STRANGER_OWNER, WET_FLOOR_OWNER } from "./s
 
 /** The desk: reception's tasks are the role's, whoever is on (the day receptionist often reads this page herself). */
 export const DESK_OWNER = "Resepsjon";
-/** The robot's own state is the outgoing night shift's to settle before it leaves (jury round 4, the Wybe engineer). */
+/** The robot's own state is the outgoing night shift's to settle before it leaves (round 4, domain review). */
 export const ROBOT_OWNER = "Nattevakt";
 /** Before the night shift leaves: the master keycard back and the robot on its charger. */
 export const ROBOT_DUE = "06:15";
 
-const WET_ACTION = "Sett ut skilt eller tørk opp før gjestene står opp.";
-/** Nobody was told in the night: say it, and say what to do (jury round 4, the law juror). */
-export const NOT_NOTIFIED = "Ingen ble varslet i natt: varsle nå.";
+/** What to do about a wet floor, after a colon on the row (round 6, design review: a third fewer words on the page). */
+const WET_TODO = "sett ut skilt eller tørk opp";
+/** The row's short form of STRANGER_CHECK (the bell keeps the whole routine). */
+const STRANGER_TODO = "Sjekk først om en gjest var låst ute; ved tvil, avvik etter rutinen.";
 
-function wetWhy(floor: WetFloor): string {
-  if (floor.signMoved) return ` Roboten flyttet skiltet herfra til ${floor.signMoved.to ? corridorName(floor.signMoved.to) : "et nytt søl"}.`;
-  return floor.slippedAt ? " Roboten skled der." : "";
+/** "3C" from "corridor-3c"; any other place as it reads inside a sentence. */
+function shortPlace(place: string): string {
+  return placePhrase(place).replace(/^(i|på|ved) /, "").replace(/^korridor /, "");
 }
 
-/** " Nattevakten meldte det kl. 02:10 (Kjersti Lund)." */
-function toldPart(notified: Notified | null): string {
-  if (!notified) return "";
-  return ` Nattevakten meldte det${notified.at ? ` kl. ${hhmm(notified.at)}` : ""}${notified.by ? ` (${notified.by})` : ""}.`;
+/** "Korridor 2B" · "Lobbyen" · "Heisen, 1. etasje": a place at the start of a line. */
+function placeStart(place: string): string {
+  const phrase = placePhrase(place).replace(/^(i|på|ved) /, "");
+  return `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}`;
 }
 
-/** "Vått gulv uten skilt i korridor 2B siden 23:51. Roboten skled der." */
-export function wetFloorText(floor: WetFloor): string {
-  const since = floor.since ? ` siden ${hhmm(floor.since)}` : "";
-  return `Vått gulv uten skilt i ${corridorName(floor.place)}${since}.${wetWhy(floor)} ${WET_ACTION}`;
+/**
+ * Who knew in the night, or how long it waited for nobody (round 6, domain review): "Kjersti Lund
+ * kvitterte kl. 23:53, etter 2 min" · "6 t 9 min uten at noen ble varslet". A clock typed by day (a demo)
+ * is said without a clock.
+ */
+export function waitedLine(notified: Notified | null, waited: Waited | null): string | null {
+  if (notified) {
+    const who = notified.by ?? "Nattevakten";
+    const verb = notified.how === "ack" ? "kvitterte" : "meldte det";
+    const when = inNightHours(notified.at) ? ` kl. ${hhmm(notified.at)}` : "";
+    const after = when && waited?.minutes !== null && waited?.minutes !== undefined ? `, etter ${waitText(waited.minutes)}` : "";
+    return `${who} ${verb}${when}${after}`;
+  }
+  return waited?.minutes !== null && waited?.minutes !== undefined ? `${waitText(waited.minutes)} uten at noen ble varslet` : "Ingen ble varslet i natt";
 }
 
-/** "Korridor 2B siden 23:51. Roboten skled der.": one wet floor's line under the grouped item. */
+/**
+ * One wet floor's line under the grouped item, a scan line: "Korridor 2B siden 23:51 · roboten skled der
+ * · 6 t 9 min uten at noen ble varslet" · "Lobbyen · meldt av Kjersti Lund kl. 02:15 · skilt satt ut 02:16".
+ */
 export function wetFloorLine(floor: WetFloor): string {
-  const where = corridorName(floor.place);
+  if (floor.source === "staff") {
+    const by = floor.reported?.by ?? "nattevakten";
+    const when = inNightHours(floor.reported?.at) ? ` ${hhmm(floor.reported.at)}` : "";
+    return [`${placeStart(floor.place)} · meldt${when} av ${by}`, floor.sign].filter(Boolean).join(" · ");
+  }
   const since = floor.since ? ` siden ${hhmm(floor.since)}` : "";
-  return `${where.charAt(0).toUpperCase()}${where.slice(1)}${since}.${wetWhy(floor)}${toldPart(floor.notified)}`;
+  const why = floor.signMoved ? `skiltet flyttet til ${floor.signMoved.to ? shortPlace(floor.signMoved.to) : "et nytt søl"}` : floor.slippedAt ? "roboten skled" : null;
+  return [`${placeStart(floor.place)}${since}`, why, floor.signed ? floor.sign : null, waitedLine(floor.notified, floor.waited)].filter(Boolean).join(" · ");
 }
 
-/** Who was told about the wet floors: nobody ("varsle nå"), some of them, or every one (then nothing to add). */
-function wetEscalation(floors: readonly WetFloor[]): string | undefined {
-  const untold = floors.filter((floor) => !floor.notified);
-  if (untold.length === 0) return undefined;
-  if (untold.length === floors.length) return NOT_NOTIFIED;
-  return `Ikke varslet: ${joinNb(untold.map((floor) => corridorName(floor.place)))}. Varsle nå.`;
+/** "Vått gulv uten skilt i korridor 2B: sett ut skilt …" · "4 våte gulv, 3 uten skilt: sett ut skilt …": the wet floors' row. */
+export function wetFloorText(floors: readonly WetFloor[]): string {
+  const unsigned = floors.filter((floor) => !floor.signed).length;
+  if (floors.length === 1) return `Vått gulv${unsigned ? " uten skilt" : ""} ${placePhrase(floors[0].place)}: ${WET_TODO}.`;
+  const signs = unsigned === floors.length ? " uten skilt" : unsigned > 0 ? `, ${unsigned} uten skilt` : ", alle med skilt";
+  return `${floors.length} våte gulv${signs}: ${WET_TODO}.`;
 }
 
 /** "En person i badekåpe ba roboten slippe ham inn på 7 rom mellom 01:17 og 05:11 …" (neutral: who he is, nobody knows). */
 export function strangerText(stranger: NonNullable<NightSafety["stranger"]>): string {
   const count = stranger.refusals.length;
   const rooms = stranger.rooms.length || count;
-  const span = count > 1 ? ` mellom ${hhmm(stranger.first)} og ${hhmm(stranger.last)}` : ` kl. ${hhmm(stranger.first)}`;
-  const said = count > 1 ? "Roboten sa nei hver gang" : "Roboten sa nei";
-  const waits = stranger.keycardWaits.length > 0 ? ` og ventet med å åpne ${joinNb(stranger.keycardWaits.map(number))} til han var gått` : "";
-  // Neutral first (jury round 3, the law juror): the likely innocent explanation, then the hotel's own routine.
-  return `En person i badekåpe ba roboten slippe ham inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}${span}. ${said}${waits}. ${STRANGER_CHECK}`;
+  const span = count > 1 ? `, ${hhmm(stranger.first)}–${hhmm(stranger.last)}` : ` kl. ${hhmm(stranger.first)}`;
+  // Neutral first (round 3, legal review): the likely innocent explanation, then the hotel's own routine. The doors are on the card.
+  return `En person i badekåpe ba roboten slippe ham inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}${span}. Roboten sa nei. ${STRANGER_TODO}`;
 }
 
-
-/** "rom 212 (00:31, 01:58 og 04:43)". */
-function roomTimes(room: string, times: readonly (string | null)[]): string {
-  const clocks = times.flatMap((time) => (time ? [hhmm(time)] : []));
-  return `rom ${number(room)}${clocks.length > 0 ? ` (${joinNb(clocks)})` : ""}`;
+/** A door or a person the night clerk logged that the robot's log has no item for, in the robot-free page's words. */
+function staffSafetyText(entry: StaffSafety): string {
+  const when = inNightHours(entry.at) ? ` kl. ${hhmm(entry.at)}` : "";
+  const note = entry.note ? ` ${entry.note.replace(/[.!]?$/, ".")}` : "";
+  if (entry.hazard === "door") return `Dør ${placePhrase(entry.place)}, meldt av ${entry.by}${when}.${note} Sjekk at den er lukket og låst.`;
+  return `En person ${placePhrase(entry.place)}, meldt av ${entry.by}${when}.${note} Sjekk først om en gjest var låst ute. Ved tvil: avvik etter hotellets rutine.`;
 }
 
 /** "2 × håndkle, toalettsett": what the robot still carries, as the 3D-kart's tooltip says it. */
@@ -179,40 +218,43 @@ function carried(list: readonly string[]): string {
 }
 
 /**
- * "Roboten står ved heis, 1. etasje, ikke på lader, 20 % batteri. Den har fortsatt hovednøkkelkortet
- * (har også med 2 × håndkle, toalettsett). Hent nøkkelkortet og sett roboten på lader."
+ * "Roboten står ved heis, 1. etasje med hovednøkkelkortet, ikke på lader, 20 % batteri. Hent kortet og
+ * sett den på lader." (What else it carries is on 3D-kart.)
  */
 export function robotStateText(robot: RobotAtHandover): string {
   const where = robot.location === "charging-dock" ? "på ladestasjonen" : `ved ${placeLabel(robot.location).toLowerCase()}`;
   const battery = robot.battery !== null ? `, ${Math.round(robot.battery)} % batteri` : "";
   const dock = robot.docked ? "på lader" : "ikke på lader";
-  const others = carried([...robot.hands, ...robot.cart].filter((item) => !/keycard/.test(item)));
-  const holds = robot.keycard
-    ? ` Den har fortsatt hovednøkkelkortet${others ? ` (har også med ${others})` : ""}.`
-    : others
-      ? ` Den har med ${others}.`
-      : "";
-  const todo = [robot.keycard ? "hent nøkkelkortet" : null, !robot.docked ? "sett roboten på lader" : robot.battery !== null && robot.battery < BREAKFAST_BATTERY ? "la den lade før frokost" : null].filter(Boolean).join(" og ");
-  return `Roboten står ${where}, ${dock}${battery}.${holds}${todo ? ` ${todo.charAt(0).toUpperCase()}${todo.slice(1)}.` : ""}`;
+  const others = robot.keycard ? "" : carried([...robot.hands, ...robot.cart]);
+  const state = robot.keycard ? `Roboten står ${where} med hovednøkkelkortet, ${dock}${battery}.` : `Roboten står ${where}, ${dock}${battery}.${others ? ` Den har med ${others}.` : ""}`;
+  const todo = [robot.keycard ? "hent kortet" : null, !robot.docked ? "sett den på lader" : robot.battery !== null && robot.battery < BREAKFAST_BATTERY ? "la den lade før frokost" : null].filter(Boolean).join(" og ");
+  return `${state}${todo ? ` ${todo.charAt(0).toUpperCase()}${todo.slice(1)}.` : ""}`;
 }
 
-/** "Rom 209: roboten meldte rommet tomt og ryddig kl. 03:47, men egen logg sier at den satte inn bagasje der kl. 01:29." */
-export function contradictionText(row: Contradiction, credited: boolean): string {
-  const what = row.arrival ? "bagasje" : itemLabel(row.item);
-  const counted = credited ? " Romsjekken ble likevel regnet som utført." : "";
-  return `Rom ${number(row.room)}: roboten meldte rommet tomt og ryddig kl. ${hhmm(row.checkedAt)}, men egen logg sier at den satte inn ${what} der kl. ${hhmm(row.placedAt)}.${counted}`;
+/**
+ * "Rom 209: bagasje levert i et rom roboten senere meldte tomt." Said as what the log shows (round 6,
+ * domain review: "dobbelt tildelt?" read the simulator's habit of stacking bag requests on one room as
+ * a booking signal); the two clocks are the row's points.
+ */
+export function contradictionText(row: Contradiction): string {
+  const what = row.arrival ? "Bagasje" : itemLabel(row.item).replace(/^./, (first) => first.toUpperCase());
+  return `Rom ${number(row.room)}: ${what.charAt(0).toLowerCase()}${what.slice(1)} levert i et rom roboten senere meldte tomt.`;
 }
 
-/** The booking system's side of a held room: the consequence (a double allocation), under the robot's own contradiction. */
+/** The two points of the robot's own contradiction: what went in, then "meldt tomt". */
+export function contradictionPoints(row: Contradiction): { at: string; label: string }[] {
+  return [
+    { at: hhmm(row.placedAt), label: row.arrival ? "bagasje inn" : `${itemLabel(row.item)} inn` },
+    { at: hhmm(row.checkedAt), label: "meldt tomt" },
+  ];
+}
+
+/** The booking system's side of a held room, and reception decides (never "dobbelt tildelt?"). */
 function heldConsequence(row: Held, lead: boolean): string {
-  const bags =
-    row.arrivals > 1
-      ? `bagasje for ${row.arrivals} ankomster (${joinNb(row.deliveries.filter((delivery) => delivery.arrival).map((delivery) => hhmm(delivery.at)))})`
-      : `bagasje for dagens ankomst (sist kl. ${hhmm(row.deliveredAt)})`;
   const guest = `${row.guest ?? "en gjest"} der${row.departure ? ` til ${shortDate(row.departure)}` : ""}`;
   return lead
-    ? `Systemet har dessuten ${guest}, og roboten bar inn ${bags}: dobbelt tildelt? Flytt én av dem før innsjekk kl. ${HOTEL.checkIn}.`
-    : `Rom ${number(row.room)}: dobbelt tildelt? Roboten bar inn ${bags}, men systemet har ${guest}. Flytt én av dem før innsjekk kl. ${HOTEL.checkIn}.`;
+    ? `Systemet har ${guest}. Resepsjonen avgjør.`
+    : `Rom ${number(row.room)}: roboten bar inn bagasje kl. ${hhmm(row.deliveredAt)}, etter romsjekken, og systemet har ${guest}. Resepsjonen avgjør før innsjekk kl. ${HOTEL.checkIn}.`;
 }
 
 export function composeHandover({
@@ -265,8 +307,7 @@ export function composeHandover({
   const money = roomMoney({ reconciliation, marks, revenue, rooms, pms });
   const wetFloors = openWetFloors(safety.wetFloors, resolved).sort((a, b) => NIGHT_ORDER(a.since ?? "00:00") - NIGHT_ORDER(b.since ?? "00:00"));
   const booked = tonight ?? { booked: bookedTonight(today), rooms: rooms.length };
-  // A contradicted room check the robot's report still counted as done (owner C's selfContradictions names the request).
-  const credited = (row: Contradiction) => row.request !== null && night.tasks.get(row.request)?.verdict === "done";
+  const unbilledRooms = reconciliation.guestFound.map((row) => row.room);
 
   const figures: Figures = {
     roomsReady: money.readyToSell ?? 0,
@@ -279,6 +320,7 @@ export function composeHandover({
     guestIssues: { noise: doneOf("noise"), lost: doneOf("lost_item"), spill: doneOf("spill") },
     revenue,
     safety: { wetFloors: wetFloors.length, stranger: safety.stranger !== null },
+    unbilled: { rooms: unbilledRooms, value: sellableValue(unbilledRooms.length, revenue) },
   };
 
   // What happened: a few lines, most telling first, then shown in the night's order.
@@ -294,7 +336,7 @@ export function composeHandover({
       by: "robot",
     });
   }
-  // The robot's own contradiction leads 209 (jury round 4, the Wybe engineer): its camera against its own task log, no booking needed.
+  // The robot's own contradiction leads 209 (round 4, domain review): its camera against its own task log, no booking needed.
   const contradiction = reconciliation.contradicted[0];
   const held = reconciliation.held[0];
   if (contradiction?.checkedAt) {
@@ -314,6 +356,11 @@ export function composeHandover({
   }
   const guest = reconciliation.guestFound[0];
   if (guest?.at) ranked.push({ at: hhmm(guest.at), text: `Roboten møtte en gjest på rom ${number(guest.room)}, som systemet har som ledig.`, by: "robot" });
+  // The night clerk's own floors stand in the night beside the robot's (round 6: added, never dropped).
+  for (const floor of safety.wetFloors.filter((entry) => entry.source === "staff" && inNightHours(entry.reported?.at))) {
+    const sign = floor.sign ? `, ${floor.sign}` : "";
+    ranked.push({ at: hhmm(floor.reported?.at ?? null), text: `${floor.reported?.by ?? "Nattevakten"} meldte vått gulv ${placePhrase(floor.place)}${sign}.`, by: "staff" });
+  }
   const calls = [...phone].sort((a, b) => NIGHT_ORDER(a.at || "00:00") - NIGHT_ORDER(b.at || "00:00"));
   if (calls[0]) ranked.push({ at: calls[0].at, text: `AI-resepsjonisten tok en samtale og la den i Forespørsler: ${calls[0].record.message}`, by: "ai" });
   const noise = night.workOrders.find((order) => order.type === "stoy");
@@ -328,56 +375,64 @@ export function composeHandover({
     .slice(0, MAX_HIGHLIGHTS)
     .sort((a, b) => NIGHT_ORDER(a.at) - NIGHT_ORDER(b.at));
 
-  // What can hurt a guest comes first, each with an owner, "straks", and whether anyone was told in the
-  // night (jury round 4, the law juror: a hazard the hotel knew of is acted on at once, never "innen 06:30").
-  // The wet floors share one owner, so they are one item with a line per corridor (jury round 3, the design juror).
+  // What can hurt a guest comes first, each with an owner, "straks", and how long it waited for a person
+  // (round 4, legal review: a hazard the hotel knew of is acted on at once; round 6, domain review: the
+  // wait is the number). The wet floors share one owner, so they are one row with a line and a sak each.
   const caretaker = byRole("Vedlikehold").find((member) => member.shift === "dag")?.name;
   const wetLink = {
     href: canOpen("/vedlikehold") ? "/vedlikehold" : canOpen("/hotell") ? "/hotell" : null,
     linkLabel: canOpen("/vedlikehold") ? "Åpne Vedlikehold" : "Vis i 3D-kartet",
   };
-  const wetOwner = { owner: WET_FLOOR_OWNER, ...(caretaker ? { who: caretaker } : {}), due: SAFETY_DUE };
-  const first: OpenItem[] =
-    wetFloors.length > 1
-      ? [
-          {
-            id: "wet-floors",
-            text: `${wetFloors.length} våte gulv uten skilt. ${WET_ACTION}`,
-            lines: wetFloors.map(wetFloorLine),
-            ...wetOwner,
-            ...wetLink,
-            urgent: false,
-            safety: true,
-            escalation: wetEscalation(wetFloors),
-          },
-        ]
-      : wetFloors.map((floor) => ({
-          id: `wet-${floor.place}`,
-          text: `${wetFloorText(floor)}${toldPart(floor.notified)}`,
-          ...wetOwner,
-          ...wetLink,
-          urgent: false,
-          safety: true,
-          escalation: wetEscalation([floor]),
-        }));
+  const first: OpenItem[] = [];
+  if (wetFloors.length > 0) {
+    first.push({
+      id: wetFloors.length > 1 ? "wet-floors" : `wet-${wetFloors[0].place}`,
+      text: wetFloorText(wetFloors),
+      lines: wetFloors.map(wetFloorLine),
+      owner: WET_FLOOR_OWNER,
+      ...(caretaker ? { who: caretaker } : {}),
+      due: SAFETY_DUE,
+      ...wetLink,
+      urgent: false,
+      safety: true,
+      count: wetFloors.length,
+      untold: wetFloors.filter((floor) => !floor.notified).length,
+    });
+  }
   if (safety.stranger) {
+    const told = waitedLine(safety.stranger.notified, safety.stranger.waited);
     first.push({
       id: "stranger",
-      text: `${strangerText(safety.stranger)}${toldPart(safety.stranger.notified)}`,
+      text: strangerText(safety.stranger),
+      ...(told ? { lines: [told] } : {}),
       owner: STRANGER_OWNER,
       due: SAFETY_DUE,
       href: "#vurderinger-overlevering",
       linkLabel: "Se robotens vurderinger",
       urgent: false,
       safety: true,
-      escalation: safety.stranger.notified ? undefined : NOT_NOTIFIED,
+      untold: safety.stranger.notified ? 0 : 1,
+    });
+  }
+  // The night clerk's own doors and persons: the same rows the robot-free page shows (same ids).
+  for (const entry of safety.staff ?? []) {
+    first.push({
+      id: `staff-${entry.id}`,
+      text: staffSafetyText(entry),
+      owner: STRANGER_OWNER,
+      due: SAFETY_DUE,
+      href: canOpen("/natt") ? "/natt" : null,
+      linkLabel: "Åpne nattevaktens logg",
+      urgent: false,
+      safety: true,
+      untold: 0,
     });
   }
 
-  // Then everything else by its deadline (jury round 4, the design juror: the earliest deadline was fourth).
+  // Then everything else by its deadline (round 4, design review: the earliest deadline was fourth).
   const rest: OpenItem[] = [];
 
-  // The robot itself at the handover: off its charger, low, or still holding the master keycard (the Wybe engineer).
+  // The robot itself at the handover: off its charger, low, or still holding the master keycard (domain review).
   if (robot && robotNeedsPerson(robot)) {
     const nightWatch = byRole("Nattevakt").find((member) => member.shift === "natt" && member.name !== "Roboten")?.name;
     rest.push({
@@ -400,7 +455,8 @@ export function composeHandover({
     const delivered = `Rom ${number(row.room)}: roboten leverte noe inn etter romsjekken kl. ${hhmm(row.deliveredAt)}, så rommet er i bruk. Sjekk bookingen før det selges.`;
     rest.push({
       id: `held-${row.room}`,
-      text: own ? contradictionText(own, credited(own)) : row.arrival ? heldConsequence(row, false) : delivered,
+      text: own ? contradictionText(own) : row.arrival ? heldConsequence(row, false) : delivered,
+      ...(own ? { points: contradictionPoints(own) } : {}),
       ...(own && row.arrival ? { lines: [heldConsequence(row, true)] } : {}),
       owner: DESK_OWNER,
       due: "12:00",
@@ -416,7 +472,8 @@ export function composeHandover({
   for (const row of reconciliation.contradicted.filter((entry) => !heldRooms.has(entry.room))) {
     rest.push({
       id: `held-${row.room}`,
-      text: `${contradictionText(row, credited(row))} Se på rommet før det selges.`,
+      text: `${contradictionText(row)} Se på rommet før det selges.`,
+      points: contradictionPoints(row),
       owner: DESK_OWNER,
       due: "12:00",
       href: canOpen("/rom") ? "/rom" : null,
@@ -430,8 +487,12 @@ export function composeHandover({
     const toSell = money.toSell;
     const hours = hoursEarlier();
     const condition = `hvis natten blir utsolgt (${tonightLine(booked.booked, booked.rooms)})`;
+    const rows = toSell.length > 0 ? toSell : money.released;
+    const found = `${joinNb(rows.map((row) => `Rom ${number(row.room)}`))}: funnet ledig${rows.length > 1 ? "e" : ""} ${hours} ${hours === 1 ? "time" : "timer"} tidligere`;
     rest.push({
       id: "sellable",
+      // What the room check buys is time (round 6, product review: the kroner lead on 210, a certain cost).
+      lead: toSell.length > 0 ? `${found}.${sellReason(toSell, today, true)}` : `${found}, sendt til resepsjonen.`,
       text:
         toSell.length > 0
           ? `${joinNb(toSell.map((row) => `Rom ${number(row.room)}`))} kan selges fra kl. ${HANDOVER_AT}, ${hours} timer før renholdet ellers finner ${toSell.length === 1 ? "det" : "dem"} etter utsjekk kl. ${HOTEL.checkOut}: ca. ${formatKroner(money.toSellValue)} kr ${condition}.${sellReason(toSell, today)} Roboten fant ${toSell.length === 1 ? `det tomt og ryddig kl. ${hhmm(toSell[0].at)}` : "dem tomme og ryddige"}.`
@@ -446,13 +507,14 @@ export function composeHandover({
       booking: true,
     });
   }
-  // From the robot's own log, no booking system: more arrivals' bags in one room than it holds (the Wybe juror).
+  // From the robot's own log, no booking system: more arrivals' bags in one room than it holds (domain review).
   if (reconciliation.crowded.length > 0) {
-    const [one, ...more] = reconciliation.crowded;
-    const others = more.map((row) => `${row.arrivals} på ${roomTimes(row.room, row.at)}`);
+    // The robot's log, said as it is; reception decides (round 6, domain review: partly how the simulator stacks bag requests).
+    const crowded = reconciliation.crowded;
+    const which = crowded.length === 1 ? `Rom ${number(crowded[0].room)}: bagasje for ${crowded[0].arrivals} ankomster` : `Rom ${joinNb(crowded.map((row) => number(row.room)))}: bagasje for flere ankomster (${joinNb(crowded.map((row) => String(row.arrivals)))})`;
     rest.push({
       id: "crowded",
-      text: `Flere ankomster i samme rom: sjekk med resepsjonen. Roboten bar inn bagasje for ${one.arrivals} ankomster på ${roomTimes(one.room, one.at)}${others.length > 0 ? ` og for ${joinNb(others)}` : ""}.`,
+      text: `${which} i natt. Resepsjonen avgjør.`,
       owner: DESK_OWNER,
       due: "12:00",
       href: canOpen("/rom") ? "/rom" : null,
@@ -465,7 +527,8 @@ export function composeHandover({
     const where = [...new Set(waitingPhone.map((request) => number(request.room ?? "")))];
     rest.push({
       id: "phone",
-      text: `${waitingPhone.length === 1 ? "1 sak" : `${waitingPhone.length} saker`} fra telefonen venter på å bli fordelt (rom ${joinNb(where)}).`,
+      // "samtaler", never "saker": a sak is a row on this page, and the page counts its rows.
+      text: `${waitingPhone.length === 1 ? "1 samtale" : `${waitingPhone.length} samtaler`} venter på å bli fordelt: rom ${joinNb(where)}.`,
       owner: DESK_OWNER,
       due: "07:00",
       href: "/foresporsler",
@@ -478,6 +541,10 @@ export function composeHandover({
     rest.push({
       id: `guest-${row.room}`,
       text: `${placeLabel(row.room)}: en gjest uten booking. Sjekk registreringen${tasked ? " (oppgave laget)" : ""}.`,
+      // A certain cost, not "if tonight sells out" (round 6, product review): neutral, a walk-in or a room move nobody recorded.
+      lead: `${placeLabel(row.room)}: i bruk uten booking. Sjekk registreringen før rommet selges igjen${tasked ? " (oppgave laget)" : ""}.`,
+      kroner: sellableValue(1, revenue),
+      evidenceRoom: row.room,
       owner: DESK_OWNER,
       due: "08:00",
       href: tasked ? "/foresporsler" : "/rom",
@@ -490,7 +557,7 @@ export function composeHandover({
   if (needPerson.length > 0) {
     rest.push({
       id: "robot",
-      text: `${needPerson.length === 1 ? "1 forespørsel" : `${needPerson.length} forespørsler`} roboten ikke fikk til eller ikke rakk, trenger en person.`,
+      text: `${needPerson.length === 1 ? "1 forespørsel" : `${needPerson.length} forespørsler`} roboten ikke fikk til, trenger en person.`,
       owner: DESK_OWNER,
       due: "10:00",
       // Opens on the robot's requests, so the first hand-back is row 1 (owner B's ?filter=robot).
@@ -523,34 +590,75 @@ export function composeHandover({
  * " Ola Nygård skulle reist 7.11, men utsjekken ble aldri registrert, så systemet holder rommet i natt."
  * for one room; a stay-over's end otherwise.
  */
-function sellReason(rows: readonly { guest: string | null; departure: string | null }[], today: string): string {
+function sellReason(rows: readonly { guest: string | null; departure: string | null }[], today: string, short = false): string {
   if (rows.length !== 1) return "";
   const [row] = rows;
   if (!row.guest || !row.departure) return "";
-  if (row.departure < today) return ` ${row.guest} skulle reist ${shortDate(row.departure)}, men utsjekken ble aldri registrert, så systemet holder rommet i natt.`;
+  if (row.departure < today) return ` ${row.guest} skulle reist ${shortDate(row.departure)}, men utsjekken ble aldri registrert${short ? "" : ", så systemet holder rommet i natt"}.`;
   if (row.departure === today) return ` ${row.guest} reiser i dag.`;
   return ` ${row.guest} står i systemet til ${shortDate(row.departure)}.`;
 }
 
-/** How many open items still need someone: every one, a room sent to reception included (the PMS has not said it is free). */
+/**
+ * How many saker are open: every row, a room sent to reception included (the PMS has not said it is
+ * free), and each wet floor in the grouped row (round 6, design review: the safety figure, *Åpent nå*
+ * and the receipt count the same things).
+ */
 export function openCount(open: readonly OpenItem[]): number {
-  return open.length;
+  return open.reduce((sum, item) => sum + (item.count ?? 1), 0);
+}
+
+/** The saker that can hurt a guest: the safety figure's number. */
+export function safetyCount(open: readonly OpenItem[]): number {
+  return openCount(open.filter((item) => item.safety));
+}
+
+/** Safety saker nobody was told about, in the night or on this page (`told`: the rows a *Varsle* tap recorded). */
+export function untoldCount(open: readonly OpenItem[], told: (id: string) => boolean): number {
+  return open.filter((item) => item.safety && !told(item.id)).reduce((sum, item) => sum + (item.untold ?? 0), 0);
+}
+
+/** The caretaker on the day shift, whom the wet floors' *Varsle* tells. */
+const CARETAKER = byRole("Vedlikehold").find((member) => member.shift === "dag")?.name ?? null;
+
+/** Whom a safety row's *Varsle* names: the person on in its role, or the desk ("Trond Eikeland" · "resepsjonen"). */
+export function notifyTarget(item: Pick<OpenItem, "owner" | "who">): string {
+  if (item.who) return item.who;
+  if (item.owner === WET_FLOOR_OWNER) return CARETAKER ?? "vaktmesteren";
+  if (item.owner === STRANGER_OWNER || item.owner === DESK_OWNER) return "resepsjonen";
+  return item.owner.toLowerCase();
 }
 
 /**
- * The demo band's first words, from the run log's start line, never hard-coded (jury round 4, the creative juror:
+ * Rows from another source (Øyne's *Ingen av disse*, eyes/deviations.ts) placed by their deadline after
+ * the safety rows, whichever night the page shows (the composers sort their own rows the same way).
+ */
+export function withExtraItems(open: readonly OpenItem[], extra: readonly OpenItem[]): OpenItem[] {
+  const list = [...open];
+  for (const item of extra) {
+    if (list.some((entry) => entry.id === item.id)) continue;
+    const at = list.findIndex((entry) => !entry.safety && entry.due !== SAFETY_DUE && entry.due.localeCompare(item.due) > 0);
+    if (at === -1) list.push(item);
+    else list.splice(at, 0, item);
+  }
+  return list;
+}
+
+/**
+ * The demo band's first words, from the run log's start line, never hard-coded (round 4, design review:
  * the test-data chips become one quiet band): "én ekte natt fra Wybe-simulatoren (seed 16)".
  */
-export function nightSourceLine(lines: readonly RunLine[]): string {
+export function nightSourceLine(lines: readonly RunLine[], withSeed = false): string {
   const start = lines.find((line) => line.type === "start");
   if (!start || start.type !== "start") return "en natt fra kjøringsloggen";
   if (start.source === "open-rmf") return "en eksempelnatt fra en Open-RMF-robot";
   const seed = typeof start.seed === "number" ? ` (seed ${start.seed})` : "";
-  if (!start.source || start.source === "wybe-nightshift") return `én ekte natt fra Wybe-simulatoren${seed}`;
+  // The seed is for the robot screens, not the manager's band (round 6, design review).
+  if (!start.source || start.source === "wybe-nightshift") return withSeed ? `én ekte natt fra Wybe-simulatoren${seed}` : "én ekte natt fra robotens simulator";
   return `en natt fra kjøringsloggen (${start.source})`;
 }
 
-/** Where a figure on top jumps to (jury round 4, the product juror/the design juror): the row's id on the page. */
+/** Where a figure on top jumps to (round 4, product and design review): the row's id on the page. */
 export function itemAnchor(id: string): string {
   return `sak-${id}`;
 }
@@ -566,4 +674,6 @@ export type Signoff = {
   stamp?: string;
   /** How many items were open when it was signed: what the morning took over. */
   open?: number;
+  /** Safety saker nobody had been told about when it was signed (round 6: the receipt says what was not done). */
+  untold?: number;
 };

@@ -30,6 +30,8 @@ type SheetContent = {
   error?: { title: string; quota: boolean };
 };
 
+/** The status line under the title: also why the shutter and Omgivelser are off while the cover is. */
+const HINT_ID = "eyes-hint";
 const RETRY_BODY = "Hold varen stille med teksten mot kameraet, og prøv igjen.";
 const QUOTA_BODY = "Les SKU-en på etiketten, eller spør skiftlederen.";
 
@@ -47,20 +49,27 @@ export function EyesScreen() {
   const request = useRef<AbortController | null>(null);
 
   const detector = useDetector(video, cameraStatus === "ready" && !sheetOpen);
-  // The people in view, painted over on the phone before any whole frame is sent.
+  // Fail closed: until the detector has read the video, or after it has failed, nobody in view can be
+  // covered, so no image leaves the phone (the shutter, a tap, live recognition and Omgivelser alike).
+  const coverReady = detector.status === "ready";
+  // The people in view, painted over on the phone before any image is sent: the boxes on screen and every
+  // person the detector found beyond them (the screen draws five boxes; the cover has no cap).
   const latestBoxes = useRef<Box[]>([]);
+  const latestPeople = useRef<Box[]>([]);
   useEffect(() => {
     latestBoxes.current = detector.boxes;
-  }, [detector.boxes]);
-  const peopleInView = useCallback(() => personBoxes(latestBoxes.current), []);
+    latestPeople.current = detector.people;
+  }, [detector.boxes, detector.people]);
+  const peopleInView = useCallback(() => [...personBoxes(latestBoxes.current), ...latestPeople.current], []);
   const { results, busy, send } = useLiveIdentify(video, detector.boxes, {
     auto: autoOn,
-    paused: sheetOpen,
+    paused: sheetOpen || !coverReady,
     stopped: quotaReached,
     onQuota,
+    cover: peopleInView,
   });
   const scene = useScene(video, {
-    on: sceneOn && cameraStatus === "ready",
+    on: sceneOn && cameraStatus === "ready" && coverReady,
     paused: sheetOpen,
     stopped: quotaReached,
     onQuota,
@@ -86,7 +95,7 @@ export function EyesScreen() {
   const run = useCallback(
     async (box: Box | null) => {
       const element = video.current;
-      if (!element || cameraStatus !== "ready") return;
+      if (!element || cameraStatus !== "ready" || !coverReady) return;
       // The people in view are painted over on the phone first, on a product crop and on the whole frame
       // (the shutter) alike; a product crop draws only the product's own box back on top.
       const image = cropFrame(element, box, undefined, peopleInView());
@@ -104,7 +113,7 @@ export function EyesScreen() {
         setSheet((current) => current && { ...current, error: { title: known.title, quota: known.quota } });
       }
     },
-    [video, cameraStatus, send, peopleInView],
+    [video, cameraStatus, coverReady, send, peopleInView],
   );
 
   const select = useCallback(
@@ -137,11 +146,12 @@ export function EyesScreen() {
   const problem = cameraStatus !== "idle" && cameraStatus !== "starting" && cameraStatus !== "ready" ? cameraStatus : null;
   const ready = cameraStatus === "ready";
   const autoActive = autoOn && !quotaReached;
+  const sceneActive = sceneOn && !quotaReached && coverReady;
 
   let hint = "Pek kameraet mot en vare, eller ta bilde av hele varen.";
   if (!ready) hint = "Starter kameraet";
-  else if (detector.status === "loading") hint = "Laster gjenkjenning";
-  else if (detector.status === "failed") hint = "Live-bokser er av. Ta bilde av varen med utløseren.";
+  else if (detector.status === "loading") hint = "Laster gjenkjenning. Ingen bilder sendes før persondekkingen er i gang.";
+  else if (detector.status === "failed") hint = "Persondekkingen er av, så Fettero sender ingen bilder. Les SKU-en på etiketten.";
   else if (detector.boxes.length > 0 && autoActive && productsOnlyNearPeople(detector.boxes))
     hint = "Trykk på boksen for å kjenne igjen varen. Varer nær en person kjennes ikke igjen automatisk.";
   else if (detector.boxes.length > 0 && autoActive) hint = "Hold varen stille, så kjenner Fettero den igjen.";
@@ -176,7 +186,7 @@ export function EyesScreen() {
       ) : problem ? (
         <>
           <h1 className="px-4 pt-8 text-2xl font-bold tracking-[-0.02em] sm:px-6 lg:px-10 lg:pt-10">Robotens øyne</h1>
-          <PermissionState problem={problem} onRetry={retryCamera} />
+          <PermissionState problem={problem} onRetry={retryCamera} note={<WhatLeavesThePhone />} />
         </>
       ) : (
         <>
@@ -219,16 +229,17 @@ export function EyesScreen() {
                 />
                 <Switch
                   label="Omgivelser"
-                  on={sceneOn && !quotaReached}
-                  disabled={quotaReached}
+                  on={sceneActive}
+                  disabled={quotaReached || !coverReady}
+                  describedBy={coverReady ? undefined : HINT_ID}
                   onToggle={() => setSceneOn((on) => !on)}
                 />
               </div>
             </div>
-            <p aria-live="polite" className="rounded-md bg-bg/75 px-3 py-1 text-sm text-text backdrop-blur-sm">
+            <p id={HINT_ID} aria-live="polite" className="rounded-md bg-bg/75 px-3 py-1 text-sm text-text backdrop-blur-sm">
               {hint}
             </p>
-            {sceneOn && !quotaReached && (
+            {sceneActive && (
               <p className="rounded-md bg-bg/75 px-3 py-1 text-sm text-text backdrop-blur-sm">
                 Omgivelser sender hele bildet hvert 10. sekund. Personer kameraet finner, dekkes til først.
               </p>
@@ -250,7 +261,8 @@ export function EyesScreen() {
             <button
               type="button"
               onClick={() => void run(null)}
-              disabled={!ready}
+              disabled={!ready || !coverReady}
+              aria-describedby={ready && !coverReady ? HINT_ID : undefined}
               className="group pointer-events-auto flex flex-col items-center gap-2 rounded-lg p-1 disabled:opacity-50"
             >
               <span className="grid size-[76px] place-items-center rounded-full border-[3px] border-text">
@@ -299,13 +311,25 @@ function CameraStart({ onStart }: { onStart: () => void }) {
             </Button>
           }
         />
-        <p className="border-t border-line pt-4 text-sm text-muted">
-          Utsnitt av varer sendes til Claude (Anthropic, USA) for å kjennes igjen. Personer sendes aldri som utsnitt:
-          de dekkes til på telefonen før et bilde sendes, og en vare nær en person sendes bare når du trykker på den. Gjesters ting, som mobil, veske, koffert og bok, sendes aldri. Hele bildet sendes bare
-          når du slår på Omgivelser eller trykker Identifiser hele bildet. Ingenting lagres hos oss.
-        </p>
+        <WhatLeavesThePhone />
       </div>
     </div>
+  );
+}
+
+/**
+ * What leaves the phone, word for word what the code does: crops of products only, people covered when the
+ * detector finds them (it has no cap, but it can miss someone), and nothing at all while the cover is not running.
+ */
+function WhatLeavesThePhone() {
+  return (
+    <p className="border-t border-line pt-4 text-sm text-muted">
+      Utsnitt av varer sendes til Claude (Anthropic, USA) for å kjennes igjen. Personer og gjesters ting, som mobil,
+      veske, koffert og bok, sendes aldri som utsnitt. Personer kameraet finner, dekkes til på telefonen før et bilde
+      sendes, og en vare nær en person sendes bare når du trykker på den. Hele bildet sendes bare når du slår på
+      Omgivelser eller trykker Identifiser hele bildet. Laster persondekkingen, eller er den av, sendes ingen bilder.
+      Ingenting lagres hos oss.
+    </p>
   );
 }
 
@@ -317,7 +341,7 @@ function ObjectCard({ label, belonging }: { label: string; belonging: boolean })
       <p className="text-2xl font-bold tracking-[-0.02em]">{label}</p>
       <p className="text-base text-muted">
         {belonging
-          ? "Gjesters ting sendes aldri til gjenkjenning: Fettero kjenner igjen dette selv, så det kostet ingenting. Er det en vare fra lageret, bruk Identifiser hele bildet."
+          ? "Gjesters ting sendes aldri til gjenkjenning: Fettero kjenner igjen dette selv, så det kostet ingenting. Er det en vare fra lageret, les SKU-en på etiketten."
           : "Fettero kjenner igjen dette selv, så det kostet ingenting. Bare utsnitt av varer sendes til gjenkjenning."}{" "}
         Hele bildet sendes bare med Omgivelser eller Identifiser hele bildet, og da dekkes personer kameraet finner, til først.
       </p>
@@ -337,11 +361,14 @@ function Switch({
   label,
   on,
   disabled,
+  describedBy,
   onToggle,
 }: {
   label: string;
   on: boolean;
   disabled: boolean;
+  /** The line that says why the switch is off, while it is. */
+  describedBy?: string;
   onToggle: () => void;
 }) {
   return (
@@ -349,6 +376,7 @@ function Switch({
       type="button"
       role="switch"
       aria-checked={on}
+      aria-describedby={describedBy}
       disabled={disabled}
       onClick={onToggle}
       className="pointer-events-auto flex min-h-12 items-center gap-3 rounded-md bg-bg/75 px-3 text-sm font-semibold backdrop-blur-sm disabled:cursor-not-allowed disabled:opacity-60"

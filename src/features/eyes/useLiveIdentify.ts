@@ -21,16 +21,24 @@ export function useLiveIdentify(
     paused,
     stopped,
     onQuota,
-  }: { auto: boolean; paused: boolean; stopped: boolean; onQuota: () => void },
+    cover,
+  }: {
+    auto: boolean;
+    paused: boolean;
+    stopped: boolean;
+    onQuota: () => void;
+    /** Every person to keep out of a crop (the detector's full list); the tracked person boxes when left out. */
+    cover?: () => readonly Box[];
+  },
 ) {
   const [results, setResults] = useState<Record<string, IdentifyResult>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
   // Latest options for the timer and callbacks. `stopped`: the shared quota ran out (here or in the scene scan).
-  const outside = useRef({ paused: paused || !auto, stopped, onQuota });
+  const outside = useRef({ paused: paused || !auto, stopped, onQuota, cover });
   useEffect(() => {
-    outside.current = { paused: paused || !auto, stopped, onQuota };
-  }, [paused, auto, stopped, onQuota]);
+    outside.current = { paused: paused || !auto, stopped, onQuota, cover };
+  }, [paused, auto, stopped, onQuota, cover]);
 
   const latestBoxes = useRef(boxes);
   useEffect(() => {
@@ -96,8 +104,8 @@ export function useLiveIdentify(
       const state = book.current;
       const now = performance.now();
       const seen = latestBoxes.current.filter((box) => missedFrames(box) === 0);
-      // Every tracked person, seen this frame or not: a box near one is not sent, and any crop covers them.
-      const people = personBoxes(latestBoxes.current);
+      // Every person, seen this frame or not: a box near one is not sent, and any crop covers them.
+      const people = personBoxes(outside.current.cover?.() ?? latestBoxes.current);
       state.firstSeen = trackFirstSeen(state.firstSeen, seen, now);
       const decision = nextAutoIdentify({
         boxes: seen,

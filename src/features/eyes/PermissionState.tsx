@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { APP_NAME } from "@/ui/brand";
 import { Button, EmptyState, ErrorState, RegenIcon, buttonClasses } from "@/ui";
 import type { CameraProblem } from "./useCamera";
@@ -29,18 +30,24 @@ const COPY: Record<CameraProblem, { title: string; body: string; canRetry: boole
   },
 };
 
-/** Its own screen when the camera can't start: what happened, and how to fix it. */
-export function PermissionState({ problem, onRetry }: { problem: CameraProblem; onRetry: () => void }) {
+/**
+ * Its own screen when the camera can't start: what happened, and how to fix it. `note` (what leaves the
+ * phone) sits under a calm one, so a person who unblocks the camera has read it first, as on the start screen.
+ */
+export function PermissionState({ problem, onRetry, note }: { problem: CameraProblem; onRetry: () => void; note?: ReactNode }) {
   const copy = COPY[problem];
   if (copy.calm) {
     return (
       <div className="flex flex-1 items-center px-4 py-12 sm:px-8 lg:px-12">
-        <EmptyState
-          icon={<RegenIcon name="eye" size={32} />}
-          title={copy.title}
-          body={copy.body}
-          action={<Button onClick={onRetry}>Slå på kameraet</Button>}
-        />
+        <div className="flex max-w-md flex-col gap-5">
+          <EmptyState
+            icon={<RegenIcon name="eye" size={32} />}
+            title={copy.title}
+            body={copy.body}
+            action={<Button onClick={onRetry}>Slå på kameraet</Button>}
+          />
+          {note}
+        </div>
       </div>
     );
   }

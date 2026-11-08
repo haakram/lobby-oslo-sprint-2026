@@ -55,9 +55,16 @@ export function roleLabel(role: Role): string {
   return LABEL[role];
 }
 
-/** Where a role starts: Oversikt when it may open it, else its first page (the host: /vert). */
+/**
+ * Where a role starts. The pilot accounts (admin: siri, hamad, jury) start on Overlevering, the product's one
+ * page (jury round 5, the product juror and the creative juror: "the cut you claim should be the cut I see first"); Oversikt stays
+ * one tap away in the rail. Other roles: Oversikt when they may open it, else their first page (the host: /vert).
+ */
+export const PILOT_HOME = "/overlevering";
+
 export function homeFor(role: Role): string {
-  if (role === "admin" || ROUTES_BY_ROLE[role].includes("/")) return "/";
+  if (role === "admin") return PILOT_HOME;
+  if (ROUTES_BY_ROLE[role].includes("/")) return "/";
   return ROUTES_BY_ROLE[role][0] ?? "/";
 }
 

@@ -139,8 +139,9 @@ export async function handleLogin(
 
   const payload = newSession(user.u, user.role, now());
   const session: Session = { user: { u: user.u, name: user.name, role: user.role }, view: payload.view, effectiveRole: payload.view, exp: payload.exp };
+  // No page asked for ("/" is safeNext's default): the role's own start page, Overlevering for the pilot accounts.
   const next = safeNext(parsed.data.next);
-  return setSession(json({ session, next: canAccess(user.role, next) ? next : homeFor(user.role) }), signSession(payload, config.secret));
+  return setSession(json({ session, next: next !== "/" && canAccess(user.role, next) ? next : homeFor(user.role) }), signSession(payload, config.secret));
 }
 
 export async function handleLogout(request: NextRequest): Promise<NextResponse> {

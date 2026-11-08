@@ -63,6 +63,18 @@ describe("HotelScreen", () => {
     expect(select).toHaveValue("");
   });
 
+  it("counts the night with the one tally Natteskift and Overlevering use: done of the robot's tasks, and what went to a person", async () => {
+    await renderReady();
+    const { nightOutcomes } = await import("@/features/nightshift/outcomes");
+    const { parseRunLog } = await import("@/features/nightshift/runlog");
+    // The replay starts at the end of the night; the sample's tally is what Natteskift shows for it.
+    const { tally } = nightOutcomes(parseRunLog(SAMPLE).lines);
+    const figures = screen.getByRole("group", { name: "Natten i tall" });
+    expect(within(figures).getByText("Oppdrag fullført").previousElementSibling).toHaveTextContent(`${tally.done}av ${tally.total}`);
+    expect(within(figures).getByText("Ga videre til en person").previousElementSibling).toHaveTextContent(String(tally.handedBack));
+    expect(figures).not.toHaveTextContent("Ikke fullført");
+  });
+
   it("asks no viewer server when NEXT_PUBLIC_VIEWER_URL is unset: the recording plays and the console stays clean", async () => {
     await renderReady();
     const asked = vi.mocked(fetch).mock.calls.map(([input]) => String(input));

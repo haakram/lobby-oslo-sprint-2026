@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { probeViewer, type ReplaySource, resolveViewerUrl, useHotelReplay } from "@/features/replay";
 import { Badge, Button, cx, EmptyState, ErrorState, RegenIcon, Skeleton, Stat } from "@/ui";
 import { Hotel3D, StatusLegend } from "./Hotel3D";
 import { PlaybackControls } from "./PlaybackControls";
 import { forManagers } from "@/features/nightshift/eventFilter";
+import { outcomesAt } from "@/features/nightshift/outcomes";
 import { EventFeed, RoomCard, TaskCard } from "./ReplayPanels";
 import { RoomPicker } from "./RoomPicker";
 import { useHeldReplay } from "./useHeldReplay";
@@ -61,6 +62,12 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
   const replay = useHeldReplay(useHotelReplay(source, { viewerUrl: base }));
   const ready = replay.status === "ready";
   const snapshot = replay.snapshot;
+  // The one tally of the robot's night (nightshift/outcomes.ts), as Oversikt, Natteskift and Overlevering count it
+  // (round 5, the Wybe juror and the Wybe engineer: 3D-kart said "9 Ikke fullført" where the others said 4 to a person and 8 declined).
+  const tally = useMemo(
+    () => (replay.timeline && snapshot ? outcomesAt(replay.timeline, snapshot.eventCount, snapshot.t).tally : null),
+    [replay.timeline, snapshot],
+  );
 
   // `?t=<sim seconds>` from the night report opens the night at that moment.
   const { setT } = replay;
@@ -172,9 +179,9 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
                 )}
                 <TaskCard snapshot={snapshot} finished={snapshot.finished} />
                 <section role="group" aria-label="Natten i tall" className="grid grid-cols-2 gap-x-6 gap-y-4 border-y border-line py-4">
-                  <Stat label="Fullført" value={snapshot.tasksDone} tone="success" />
+                  <Stat label="Oppdrag fullført" value={tally?.done ?? snapshot.tasksDone} unit={tally ? `av ${tally.total}` : undefined} tone="success" />
                   {/* Plain beside the green one: misses are part of the night, not an alarm (red and amber live in the bell). */}
-                  <Stat label="Ikke fullført" value={snapshot.tasksFailed} />
+                  <Stat label="Ga videre til en person" value={tally?.handedBack ?? snapshot.tasksFailed} />
                   <Stat
                     label={snapshot.battery !== null && snapshot.battery < 20 ? "Batteri · lavt" : "Batteri"}
                     value={snapshot.battery === null ? "–" : Math.round(snapshot.battery)}

@@ -89,7 +89,7 @@ export function safeNext(raw: unknown): string {
 export function decide({ pathname, search, session, hadCookie = false }: DecideInput): Decision {
   if (session && stripSlash(pathname) === "/login") {
     const next = safeNext(new URLSearchParams(search).get("next"));
-    return { kind: "redirect", location: canAccess(session.view, next) ? next : homeFor(session.view), clearCookie: false };
+    return { kind: "redirect", location: next !== "/" && canAccess(session.view, next) ? next : homeFor(session.view), clearCookie: false };
   }
   if (isPublic(pathname)) return { kind: "next" };
 

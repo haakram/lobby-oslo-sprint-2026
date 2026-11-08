@@ -118,7 +118,10 @@ describe("decide: logged in", () => {
     expect(decide({ pathname: "/login", search: "", session: as("robot") })).toMatchObject({ kind: "redirect", location: "/" });
     expect(decide({ pathname: "/login", search: "?next=%2Fhotell", session: as("robot") })).toMatchObject({ location: "/hotell" });
     expect(decide({ pathname: "/login", search: "?next=%2Fhotell", session: as("receptionist") })).toMatchObject({ location: "/" });
-    expect(decide({ pathname: "/login", search: "?next=%2F%2Fevil.example", session: as("admin") })).toMatchObject({ location: "/" });
+    expect(decide({ pathname: "/login", search: "?next=%2F%2Fevil.example", session: as("admin") })).toMatchObject({ location: "/overlevering" });
+    expect(decide({ pathname: "/login", search: "", session: as("admin") })).toMatchObject({ location: "/overlevering" });
+    // The pilot accounts still open Oversikt when they ask for it.
+    expect(decide({ pathname: "/", search: "", session: as("admin") })).toEqual({ kind: "next" });
   });
 });
 

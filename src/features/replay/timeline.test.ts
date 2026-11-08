@@ -95,6 +95,27 @@ describe("buildTimeline on the demo night", () => {
 });
 
 describe("snapshotAt", () => {
+  it("marks a room with an open work order as avvik over its own status, never as a status of its own", () => {
+    const order = timeline.workOrders.find((o) => o.room && timeline.map.nodes[o.room]);
+    if (!order?.room) throw new Error("expected a work order on a room");
+    const before = snapshotAt(timeline, Math.max(0, order.t - 1)).rooms[order.room];
+    const after = snapshotAt(timeline, order.t).rooms[order.room];
+    expect(before.avvik).toBe(false);
+    expect(after.avvik).toBe(true);
+    expect(after.status).not.toBe("avvik");
+    expect(timeline.roomChanges.some((change) => change.status === "avvik")).toBe(false);
+  });
+
+  it("names the refused stranger as a manager's event, in Norwegian", () => {
+    const demo = buildTimeline(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
+    const refused = demo.events.filter((event) => event.kind === "stranger_refused");
+    expect(refused).toHaveLength(7);
+    expect(refused[0]).toMatchObject({ label: "Sa nei", tone: "success", clock: "01:17:02" });
+    expect(refused[0].text).toBe("Åpnet ikke rom 308 for en ukjent person: ga ikke fra seg nøkkelkort og fulgte ikke etter");
+    const plea = demo.events.find((event) => event.kind === "person");
+    expect(plea?.text).toBe("En mann i badekåpe stoppet roboten og ba om å bli sluppet inn i rom 308");
+  });
+
   it("at 22:00 the robot is docked, nothing checked, score 0", () => {
     const snap = snapshotAt(timeline, 0);
     expect(snap.clock).toBe("22:00:00");

@@ -141,7 +141,12 @@ export type RobotView = {
   attention: string | null;
 };
 
-export type RoomView = { status: RoomStatus; note: string | null; since: number | null };
+/**
+ * A room at time t: its last status from the robot, and whether it has an open avvik (a work order
+ * on the room). Avvik is not a status (DESIGN.md, room states): it is a mark over the room's own
+ * status, so a room keeps "Opptatt" or "Klar" under it.
+ */
+export type RoomView = { status: RoomStatus; note: string | null; since: number | null; avvik: boolean };
 
 export type Snapshot = {
   t: number;
@@ -570,7 +575,6 @@ export function buildTimeline(lines: readonly RunLine[]): Timeline {
             text: humanise(str(data.text) ?? ""),
             request,
           });
-          if (room && map.nodes[room]) timeline.roomChanges.push({ t, room, status: "avvik", note: str(data.text) });
         }
         const described = describeDecision(line.kind, data, requests);
         // A refused stranger is a manager's event, not a technical hypothesis (eventFilter.ts).
@@ -690,10 +694,14 @@ export function snapshotAt(timeline: Timeline, t: number): Snapshot {
   const carry = carryIndex >= 0 ? timeline.carry[carryIndex] : null;
 
   const rooms: Record<string, RoomView> = {};
-  for (const room of roomsOf(timeline.map ?? BASE_HOTEL)) rooms[room.id] = { status: "ukjent", note: null, since: null };
+  for (const room of roomsOf(timeline.map ?? BASE_HOTEL)) rooms[room.id] = { status: "ukjent", note: null, since: null, avvik: false };
   for (const change of timeline.roomChanges) {
     if (change.t > t) break;
-    rooms[change.room] = { status: change.status, note: change.note, since: change.t };
+    rooms[change.room] = { status: change.status, note: change.note, since: change.t, avvik: rooms[change.room]?.avvik ?? false };
+  }
+  for (const order of timeline.workOrders) {
+    if (order.t > t) break;
+    if (order.room && rooms[order.room]) rooms[order.room] = { ...rooms[order.room], avvik: true };
   }
 
   const eventCount = lastAtOrBefore(timeline.events, t, eventTime) + 1;

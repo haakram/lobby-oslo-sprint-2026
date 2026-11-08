@@ -171,12 +171,12 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
                 <TaskCard snapshot={snapshot} finished={snapshot.finished} />
                 <section role="group" aria-label="Natten i tall" className="grid grid-cols-2 gap-x-6 gap-y-4 border-y border-line py-4">
                   <Stat label="Fullført" value={snapshot.tasksDone} tone="success" />
-                  <Stat label="Feilet" value={snapshot.tasksFailed} tone={snapshot.tasksFailed > 0 ? "danger" : "default"} />
+                  {/* Plain beside the green one: misses are part of the night, not an alarm (red and amber live in the bell). */}
+                  <Stat label="Ikke fullført" value={snapshot.tasksFailed} />
                   <Stat
                     label={snapshot.battery !== null && snapshot.battery < 20 ? "Batteri · lavt" : "Batteri"}
                     value={snapshot.battery === null ? "–" : Math.round(snapshot.battery)}
                     unit={snapshot.battery === null ? undefined : "%"}
-                    tone={snapshot.battery !== null && snapshot.battery < 20 ? "warning" : "default"}
                   />
                   <Stat label="Avvik meldt" value={snapshot.workOrders.length} />
                 </section>

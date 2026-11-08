@@ -59,11 +59,14 @@
 .h3d-place[data-dim],
 .h3d-floor[data-dim],
 .h3d-room[data-quiet],
-.h3d-place[data-quiet] {
+.h3d-place[data-quiet],
+.h3d-room[data-hidden] {
   opacity: 0;
 }
 
 .h3d-robot {
+  /* Beside the robot, not over it: the scene anchors the left edge at the robot's middle. */
+  margin-left: 22px;
   font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;
   font-weight: 600;

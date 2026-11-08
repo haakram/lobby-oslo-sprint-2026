@@ -14,18 +14,13 @@ import {
   type WorkOrder,
   workOrderType,
 } from "@/features/replay";
-import { Badge, type BadgeTone, Button, Card, cx, fadeRise, RegenIcon } from "@/ui";
-import { STATUS_CSS_VAR } from "./tokens";
+import { AvvikMark, Badge, type BadgeTone, Button, Card, cx, fadeRise, RegenIcon, RoomStatusTag } from "@/ui";
+import { isRoomStatusKey } from "@/ui/roomStatus";
 
-const STATUS_TONE: Record<RoomStatus, BadgeTone> = {
-  klar: "success",
-  ma_vaskes: "warning",
-  opptatt: "neutral",
-  // A door hanger, not a job: warning means "må vaskes" (DESIGN.md, room states).
-  ikke_forstyrr: "neutral",
-  avvik: "danger",
-  ukjent: "neutral",
-};
+/** The replay's status as the shared room-status key (avvik is a mark, not a status). */
+function statusKey(status: RoomStatus) {
+  return isRoomStatusKey(status) ? status : "ukjent";
+}
 
 /** One room, as the night has seen it so far: status, the robot's visits, open faults. */
 export function RoomCard({
@@ -67,8 +62,9 @@ export function RoomCard({
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span aria-hidden="true" className="inline-block size-3 rounded-[2px] border border-line-strong" style={{ background: STATUS_CSS_VAR[status] }} />
-        <Badge tone={STATUS_TONE[status]}>{ROOM_STATUS_LABEL[status]}</Badge>
+        {/* The same tag as the key rack on Rom (src/ui/roomStatus.ts), and the avvik as its quiet mark. */}
+        <RoomStatusTag status={statusKey(status)} />
+        <AvvikMark count={orders.length} />
         {room?.since !== null && room?.since !== undefined && (
           <span className="font-mono text-sm tabular-nums text-muted">siden {simToClock(room.since, false)}</span>
         )}
@@ -78,9 +74,9 @@ export function RoomCard({
         <ul aria-label="Arbeidsordre for rommet" className="flex flex-col gap-1">
           {orders.map((order) => (
             <li key={order.id} className="flex items-start gap-2 text-sm">
-              <RegenIcon name="alert-triangle" className="mt-0.5 size-4 shrink-0 text-danger" />
+              <RegenIcon name="alert-triangle" className="mt-0.5 size-4 shrink-0 text-muted" />
               <span>
-                <Badge tone="danger" className="mr-2">
+                <Badge tone="neutral" className="mr-2">
                   {workOrderType(order.type)}
                 </Badge>
                 {order.text}

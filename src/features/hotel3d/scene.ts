@@ -13,7 +13,8 @@ import {
   type Snapshot,
   type Timeline,
 } from "@/features/replay";
-import { type SceneTokens, STATUS_TOKEN } from "./tokens";
+import { roomPaint } from "@/ui/roomStatus";
+import { type SceneTokens, STATUS_TOKEN, tokenKey } from "./tokens";
 
 /**
  * The hotel in three.js: floors stacked (or spread apart), rooms as tiles in their status colour,
@@ -48,7 +49,18 @@ type FloorParts = {
   labels: HTMLElement[];
 };
 
-type RoomSlot = { index: number; floor: number; colour: THREE.Color; status: RoomStatus; mesh: THREE.InstancedMesh };
+type RoomSlot = {
+  index: number;
+  floor: number;
+  colour: THREE.Color;
+  status: RoomStatus;
+  mesh: THREE.InstancedMesh;
+  /** The room's number label, shown only when it matters (robot's room, chosen, one floor in view). */
+  tag: HTMLElement;
+  /** The quiet ink frame of an open avvik, drawn over the room's own status colour (never red). */
+  avvikFrame: THREE.LineSegments;
+  avvik: boolean;
+};
 type Link = { line: THREE.Line; base: THREE.Vector3[] };
 export type Pick = { kind: "room" | "place"; id: string; floor: number };
 
@@ -108,6 +120,7 @@ export class HotelScene {
   private attentionTween: gsap.core.Tween | null = null;
   private attentionRoom: string | null = null;
   private selectedRoom: string | null = null;
+  private numbersFloor: number | null = null;
   private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new THREE.Raycaster();
@@ -251,8 +264,10 @@ export class HotelScene {
     this.robotCarry.className = "h3d-robot-carry";
     this.robotLabel.append(this.robotTask, this.robotCarry);
     const robotTag = new CSS2DObject(this.robotLabel);
-    robotTag.center.set(0.5, 1);
-    robotTag.position.y = 1.9;
+    // Beside the robot, not on it (jury round 1: the tooltip hid the robot): its left edge at the
+    // robot's middle, pushed right in CSS (.h3d-robot margin).
+    robotTag.center.set(0, 0.5);
+    robotTag.position.y = 0.9;
     this.robot.add(robotTag);
     this.scene.add(this.robot);
 
@@ -297,6 +312,7 @@ export class HotelScene {
     }
 
     const roomGeometry = this.track(new THREE.BoxGeometry(ROOM_SIZE, ROOM_HEIGHT, ROOM_SIZE));
+    const avvikEdges = this.track(new THREE.EdgesGeometry(this.track(new THREE.BoxGeometry(ROOM_SIZE + 0.25, ROOM_HEIGHT + 0.12, ROOM_SIZE + 0.25))));
     const tileGeometry = this.track(new THREE.BoxGeometry(2.8, TILE_HEIGHT, 2.8));
     const shaftGeometry = this.track(new THREE.BoxGeometry(2.2, SHAFT_HEIGHT, 2.2));
     const unit = this.track(new THREE.BoxGeometry(1, 1, 1));
@@ -379,6 +395,10 @@ export class HotelScene {
         new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, transparent: true, opacity: 1 }),
       );
       const roomMesh = new THREE.InstancedMesh(roomGeometry, roomMaterial, rooms.length);
+      const avvikMaterial = this.track(
+        new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.text), transparent: true, opacity: 0.95 }),
+      );
+      materials.push(avvikMaterial);
       roomMesh.userData.floor = floor;
       roomMesh.userData.rooms = rooms.map((room) => room.id);
       rooms.forEach((room, index) => {
@@ -386,11 +406,17 @@ export class HotelScene {
         roomMesh.setMatrixAt(index, matrix);
         const colour = new THREE.Color(tokens[STATUS_TOKEN.ukjent]);
         roomMesh.setColorAt(index, colour);
-        this.rooms.set(room.id, { index, floor, colour, status: "ukjent", mesh: roomMesh });
         const tag = label(roomNumber(room.id), "h3d-room");
         tag.position.set(room.x, y + ROOM_HEIGHT + 0.05, room.z);
+        // Room numbers are quiet until they matter: 36 of them over stacked floors collide (jury round 1).
+        tag.element.toggleAttribute("data-hidden", true);
         group.add(tag);
         labels.push(tag.element);
+        const avvikFrame = new THREE.LineSegments(avvikEdges, avvikMaterial);
+        avvikFrame.position.set(room.x, y + ROOM_HEIGHT / 2, room.z);
+        avvikFrame.visible = false;
+        group.add(avvikFrame);
+        this.rooms.set(room.id, { index, floor, colour, status: "ukjent", mesh: roomMesh, tag: tag.element, avvikFrame, avvik: false });
       });
       roomMesh.instanceMatrix.needsUpdate = true;
       if (roomMesh.instanceColor) roomMesh.instanceColor.needsUpdate = true;
@@ -513,12 +539,29 @@ export class HotelScene {
     this.flyTo(centre, offset);
   }
 
+  /**
+   * Which floor shows every room number (null: none). The robot's room and the chosen room always
+   * show theirs; the rest stay quiet, so labels never pile up over stacked or spread floors.
+   */
+  setRoomNumbers(floor: number | null) {
+    this.numbersFloor = floor;
+    this.refreshRoomTags();
+  }
+
+  private refreshRoomTags() {
+    for (const [id, slot] of this.rooms) {
+      const show = id === this.attentionRoom || id === this.selectedRoom || (this.numbersFloor !== null && slot.floor === this.numbersFloor);
+      slot.tag.toggleAttribute("data-hidden", !show);
+    }
+  }
+
   /** Shows room and place names on one floor only (null: every floor), so stacked floors don't mix. */
   setLabelFloor(floor: number | null) {
     for (const parts of this.floors) {
       const quiet = floor !== null && parts.floor !== floor;
       for (const element of parts.labels) {
-        if (element.classList.contains("h3d-floor")) continue;
+        // Room numbers have their own rule (setRoomNumbers); floor names always show.
+        if (element.classList.contains("h3d-floor") || element.classList.contains("h3d-room")) continue;
         element.toggleAttribute("data-quiet", quiet);
       }
     }
@@ -623,6 +666,7 @@ export class HotelScene {
     if (roomId === this.selectedRoom) return;
     this.selectedRoom = roomId && this.positions.has(roomId) ? roomId : null;
     this.selection.visible = this.selectedRoom !== null;
+    this.refreshRoomTags();
     if (this.selectedRoom) {
       this.placeMarkers();
       if (!this.reduced) {
@@ -637,10 +681,17 @@ export class HotelScene {
   setSnapshot(snapshot: Snapshot | null) {
     const { tokens } = this;
     for (const [id, slot] of this.rooms) {
-      const status = snapshot?.rooms[id]?.status ?? "ukjent";
+      const view = snapshot?.rooms[id];
+      const status = view?.status ?? "ukjent";
+      const avvik = view?.avvik ?? false;
+      if (avvik !== slot.avvik) {
+        slot.avvik = avvik;
+        slot.avvikFrame.visible = avvik;
+      }
       if (status === slot.status) continue;
       slot.status = status;
-      const target = new THREE.Color(tokens[STATUS_TOKEN[status]]);
+      // One look per state across the app (src/ui/roomStatus.ts): avvik is the ink frame, not a colour.
+      const target = new THREE.Color(tokens[tokenKey(roomPaint(status).fill)]);
       const paint = () => {
         slot.mesh.setColorAt(slot.index, slot.colour);
         if (slot.mesh.instanceColor) slot.mesh.instanceColor.needsUpdate = true;
@@ -667,6 +718,7 @@ export class HotelScene {
     const room = snapshot?.robot.attention ?? null;
     if (room !== this.attentionRoom) {
       this.attentionRoom = room;
+      this.refreshRoomTags();
       const at = room ? this.positions.get(room) : undefined;
       this.attentionTween?.kill();
       this.attentionTween = null;

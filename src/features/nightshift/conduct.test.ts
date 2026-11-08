@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { doneBasis, EVIDENCE_WORDS, evidenceVerdict, masterKeyEntries, multiArrivalRooms, ownAgainstLog, selfContradictions, signalOrigin, signsMovedOffWet, slipCrossings } from "./conduct";
+import { doneBasis, endOfShift, EVIDENCE_WORDS, evidenceVerdict, masterKeyEntries, multiArrivalRooms, ownAgainstLog, selfContradictions, signalOrigin, signsMovedOffWet, slipCrossings } from "./conduct";
 import { parseRunLog, type RunLine } from "./runlog";
 
 const DEMO = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
@@ -191,5 +191,19 @@ describe("selfContradictions", () => {
     expect(selfContradictions([placed, check("R-1"), look(["luggage-101"]), report("R-1")])).toEqual([]);
     expect(selfContradictions([placed, check("R-1"), look([], "Mr Berg is asleep."), report("R-1")])).toEqual([]);
     expect(selfContradictions([check("R-1"), look([]), report("R-1")])).toEqual([]);
+  });
+});
+
+describe("endOfShift (round 6)", () => {
+  it("reads where the demo night ended: at elevator 1, not docked, 19.8 %, still holding the master keycard", () => {
+    expect(endOfShift(DEMO)).toMatchObject({ place: "elevator-1", docked: false, battery: 19.8, keycard: true });
+    expect(endOfShift(DEMO, 4 * 3600)).toBeNull();
+  });
+
+  it("reads the hotel-rules night: docked at 06:00 with 20 %, the keycard picked up at 00:28 still in hand", () => {
+    const lines = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/hotel-rules-seed16.jsonl"), "utf8")).lines;
+    expect(endOfShift(lines)).toMatchObject({ place: "charging-dock", docked: true, battery: 20, keycard: true });
+    expect(masterKeyEntries(lines).withoutKnock).toBe(0);
+    expect(signsMovedOffWet(lines).filter((move) => move.stillWet)).toHaveLength(0);
   });
 });

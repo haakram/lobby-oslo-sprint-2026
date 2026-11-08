@@ -269,9 +269,10 @@ export function multiArrivalRooms(lines: readonly RunLine[], until?: number): Mu
 
 /**
  * A room check the robot reported "done" as empty while its own log says it had put something inside that
- * room earlier the same night (jury round 5, the Wybe engineer): at 01:29 it placed luggage-209 inside room-209, at
+ * room earlier the same night (jury round 5, domain review): at 01:29 it placed luggage-209 inside room-209, at
  * 03:47 it looked in, saw "Nobody is here. The room is tidy." with no bags, and reported the room empty.
- * Two signals from the same robot that disagree: its camera against its own task log.
+ * Two signals from the same robot that disagree: its look (the simulator's text reply, not a camera) against its
+ * own task log. scripts/ledger.py runs the same rule over every night (round 6).
  */
 export type SelfContradiction = {
   request: string;
@@ -408,6 +409,52 @@ export function signsMovedOffWet(lines: readonly RunLine[], until?: number): Sig
     }
   }
   return moves;
+}
+
+/** Where the robot ended the shift: its place, whether it docked, its battery, and whether it still holds the master keycard. */
+export type EndOfShift = { place: string | null; docked: boolean; battery: number | null; keycard: boolean; clock: string | null };
+
+const DOCK_BATTERY = /\bto (\d+(?:\.\d+)?)\s*%/i;
+
+/**
+ * The robot at the end of the shift (round 6, the domain review: a robot that ends in a corridor, or holding the
+ * master keycard, is what a hotel acts on at 06:00). Read only once the log's `end` line is within `until`; null
+ * while the night runs. The keycard counts while it is in the robot's hands or cart on the last state line, or
+ * picked up after it and not put down.
+ */
+export function endOfShift(lines: readonly RunLine[], until?: number): EndOfShift | null {
+  const seen = linesUntil(lines, until);
+  if (!seen.some((line) => line.type === "end")) return null;
+  let place: string | null = null;
+  let docked = false;
+  let battery: number | null = null;
+  let keycard = false;
+  let clock: string | null = null;
+  for (const line of seen) {
+    place = placeAfter(line, place);
+    if ((line.type === "call" || line.type === "state") && line.clock) clock = line.clock;
+    if (line.type === "state") {
+      if (typeof line.battery === "number") battery = line.battery;
+      keycard = [...(line.hands ?? []), ...(line.cart ?? [])].some((item) => item === "keycard");
+      continue;
+    }
+    if (line.type !== "call" || !line.ok) continue;
+    const item = str(rec(line.args)?.item);
+    const result = rec(line.result);
+    if (line.cmd === "move") docked = false;
+    if (line.cmd === "dock") {
+      docked = true;
+      const charged = DOCK_BATTERY.exec(str(result?.outcome) ?? "");
+      if (charged) battery = Number(charged[1]);
+    }
+    if (line.cmd === "status" && result) {
+      if (typeof result.battery === "number") battery = result.battery;
+      if (typeof result.docked === "boolean") docked = result.docked;
+    }
+    if (item === "keycard" && line.cmd === "pick") keycard = true;
+    if (item === "keycard" && (line.cmd === "place" || line.cmd === "drop")) keycard = false;
+  }
+  return { place, docked, battery, keycard, clock };
 }
 
 export type UnfinishedTask = { request: string; status: string; note: string | null; room: string | null };

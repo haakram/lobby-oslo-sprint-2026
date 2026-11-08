@@ -12,11 +12,14 @@ import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, PageHea
 import { forManagers } from "./eventFilter";
 import { HANDED_BACK, type NightOutcomes, type OutcomeRow, outcomeRows, outcomesAt, reasonGroups, RIGHTLY_NOT_DONE } from "./outcomes";
 import rmfSample from "./fixtures/open-rmf-night.json";
-import { fromOpenRmf, type RmfSample } from "./openRmf";
+import { fromOpenRmf, type RmfSample, rmfTiles } from "./openRmf";
 import { RobotJudgementCard } from "./RobotJudgementCard";
+import type { RunLine } from "./runlog";
 import { viewerBase } from "./useRun";
 
 const MAX_EVENTS = 40;
+/** The hotel-rules night (round 6): the same seed as the demo night, played live by hamad/hotelrules 70d5be4 (NS_HOTEL_RULES=1). */
+export const HOTEL_RULES_RUN_URL = "/runs/hotel-rules-seed16.jsonl";
 
 /**
  * Natteskift, the night report for the robot manager: how the night went, what failed and why
@@ -27,15 +30,18 @@ const MAX_EVENTS = 40;
 export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   const base = viewerBase(viewerUrl);
   const [source, setSource] = useState<ReplaySource>("demo");
+  // Which robot log the whole page reads (round 6): the night played for points, the same night under the hotel's
+  // rules, or a second producer's sample through the Open-RMF adapter. Only for the recording; Direkte is the live shift.
+  const [logChoice, setLog] = useState<LogSource>("wybe");
+  const log: LogSource = source === "demo" ? logChoice : "wybe";
   // The room check applied to the map and the room card (hotel3d/held.ts): 209, held back, never a green Klar.
-  const replay = useHeldReplay(useHotelReplay(source, { viewerUrl: base }));
+  const replay = useHeldReplay(useHotelReplay(source, { viewerUrl: base, demoUrl: log === "hotelrules" ? HOTEL_RULES_RUN_URL : undefined }));
   const ready = replay.status === "ready";
   const snapshot = replay.snapshot;
   const [room, setRoom] = useState<string | null>(null);
   const [technical, setTechnical] = useState(false);
-  // The judgement card's log: this night, or a second producer's sample through the Open-RMF adapter (the Wybe engineer).
-  const [cardSource, setCardSource] = useState<CardSource>("wybe");
   const rmfLines = useMemo(() => fromOpenRmf(rmfSample as RmfSample), []);
+  const rmf = log === "rmf";
   const roomCard = useRef<HTMLDivElement>(null);
   const scrollToRoom = useRef(false);
   // The room's card opens right under the map it was chosen on, and comes into view.
@@ -74,7 +80,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 py-6 sm:px-6 lg:gap-10 lg:px-10 lg:py-10">
         <PageHeader
           title="Natteskift"
-          meta={ready && <ShiftBadge replay={replay} />}
+          meta={ready && !rmf && <ShiftBadge replay={replay} />}
           lede="Rapporten fra robotens natt: hva som ble gjort, hva som feilet og hvorfor."
           actions={
             <>
@@ -86,8 +92,20 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
           }
         />
 
-        {replay.status === "loading" && <LoadingRun />}
-        {replay.status === "error" &&
+        {source === "demo" && <LogSwitch value={log} onChange={setLog} />}
+
+        {rmf && (
+          <>
+            <RmfStatRow lines={rmfLines} />
+            <RobotJudgementCard lines={rmfLines} id="vurderinger-rmf" />
+            <p className="text-sm text-muted">
+              Open-RMF-eksempelet har ingen hotellkart og ingen avspilling, så resten av siden hører til Wybe-nettene. Velg en av dem for å se natten steg for steg.
+            </p>
+          </>
+        )}
+
+        {!rmf && replay.status === "loading" && <LoadingRun />}
+        {!rmf && replay.status === "error" &&
           (source === "live" ? (
             <ErrorState
               title="Fikk ikke kontakt med viewer-serveren"
@@ -109,7 +127,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
               }
             />
           ))}
-        {replay.status === "empty" &&
+        {!rmf && replay.status === "empty" &&
           (source === "live" ? (
             <EmptyState icon={<RegenIcon name="moon" size={32} />} title="Ingen skift ennå" body="Start et skift med agenten, så dukker det opp her." />
           ) : (
@@ -120,19 +138,17 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
             />
           ))}
 
-        {ready && snapshot && (
+        {!rmf && ready && snapshot && (
           <>
             {verdicts && <StatRow replay={replay} verdicts={verdicts} />}
 
             {replay.timeline && (
-              <div className="flex flex-col gap-3">
-                <CardSourceToggle value={cardSource} onChange={setCardSource} />
-                {cardSource === "rmf" ? (
-                  <RobotJudgementCard lines={rmfLines} id="vurderinger-rmf" />
-                ) : (
-                  <RobotJudgementCard lines={replay.timeline.lines} until={snapshot.t} asOf={snapshot.finished ? null : snapshot.clock} />
-                )}
-              </div>
+              <RobotJudgementCard
+                key={log}
+                lines={replay.timeline.lines}
+                until={snapshot.t}
+                asOf={snapshot.finished ? null : snapshot.clock}
+              />
             )}
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8">
@@ -303,35 +319,61 @@ function Tabs({ source, onChange }: { source: ReplaySource; onChange: (source: R
   );
 }
 
-type CardSource = "wybe" | "rmf";
+type LogSource = "wybe" | "hotelrules" | "rmf";
 
-/** Which robot log the judgement card reads: the night on screen, or the Open-RMF sample (test data). */
-function CardSourceToggle({ value, onChange }: { value: CardSource; onChange: (source: CardSource) => void }) {
-  const options: Array<{ id: CardSource; label: string }> = [
-    { id: "wybe", label: "Wybe-natten" },
-    { id: "rmf", label: "Open-RMF (eksempel)" },
-  ];
+const LOGS: Array<{ id: LogSource; label: string; about: string }> = [
+  { id: "wybe", label: "Spillbygget", about: "Natten roboten spilte for poeng på Wybes simulator." },
+  {
+    id: "hotelrules",
+    label: "Hotellregler",
+    about: "Samme natt, live, med hotellets regler: banker på før hver inngang med nøkkelkort og flytter aldri et skilt fra et vått gulv. Bygget vi ville kjørt i et hotell.",
+  },
+  { id: "rmf", label: "Open-RMF (eksempel)", about: "En annen robots oppgavelogg i Open-RMF-format: testdata skrevet av teamet, ingen dommer og ingen poeng." },
+];
+
+/** Which robot log the whole page reads: the figures, the card and (for the two Wybe nights) the night itself. */
+function LogSwitch({ value, onChange }: { value: LogSource; onChange: (source: LogSource) => void }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <span className="text-sm text-muted">Robotlogg</span>
-      <div role="group" aria-label="Robotlogg for vurderingene" className="inline-flex gap-0.5 rounded-sm bg-sunken p-0.5">
-        {options.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            aria-pressed={value === id}
-            onClick={() => onChange(id)}
-            className={cx(
-              "min-h-10 rounded-sm px-4 text-sm font-semibold transition-colors duration-[120ms] ease-standard pointer-coarse:min-h-11",
-              value === id ? "bg-surface text-text" : "text-muted hover:text-text",
-            )}
-          >
-            {label}
-          </button>
-        ))}
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-sm text-muted">Robotlogg</span>
+        <div role="group" aria-label="Robotlogg" className="inline-flex max-w-full flex-wrap gap-0.5 rounded-sm bg-sunken p-0.5">
+          {LOGS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={value === id}
+              onClick={() => onChange(id)}
+              className={cx(
+                "min-h-10 rounded-sm px-4 text-sm font-semibold transition-colors duration-[120ms] ease-standard pointer-coarse:min-h-11",
+                value === id ? "bg-surface text-text" : "text-muted hover:text-text",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      {value === "rmf" && <span className="text-sm text-muted">Samme kort, en annen robots oppgavelogg: testdata skrevet av teamet.</span>}
+      <p className="max-w-[80ch] text-sm text-muted">{LOGS.find((entry) => entry.id === value)?.about}</p>
     </div>
+  );
+}
+
+/** The figures for the Open-RMF sample: tasks, what an outside signal confirmed, what is unfinished, the battery. No score. */
+function RmfStatRow({ lines }: { lines: readonly RunLine[] }) {
+  const tiles = useMemo(() => rmfTiles(lines), [lines]);
+  return (
+    <section role="group" aria-label="Skiftet i tall" className="border-y border-line py-5">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
+        <Stat label="Oppdrag fullført" value={tiles.done} unit={`av ${tiles.tasks}`} />
+        <Stat label="«Ferdig» bekreftet utenfra" value={tiles.confirmed} unit={`av ${tiles.reported}`} />
+        <Stat label="Robotens egen observasjon" value={tiles.robotOnly} />
+        <Stat label="Ikke fullført" value={tiles.unfinished} />
+        <Stat label="Siste melding" value={tiles.clock ? tiles.clock.slice(0, 5) : "–"} />
+        <Stat label="Batteri" value={tiles.battery === null ? "–" : Math.round(tiles.battery)} unit={tiles.battery === null ? undefined : "%"} />
+      </div>
+      <p className="mt-4 text-sm text-muted">Ingen poeng: Open-RMF har ingen dommer, bare robotens egne meldinger og signalene i dem.</p>
+    </section>
   );
 }
 

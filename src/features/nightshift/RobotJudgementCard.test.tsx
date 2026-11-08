@@ -79,10 +79,17 @@ describe("RobotJudgementCard on the demo night", () => {
     render(<RobotJudgementCard lines={DEMO} />);
     const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
     expect(card.querySelector(".text-success")).toBeNull();
-    // 209 (8 of 9) and the doors (10 of 15 without a knock) are the robot's faults: amber, each with "Robotens feil".
+    // 209 (8 of 9), the doors (10 of 15 without a knock) and the end of the shift are the robot's faults: amber, each
+    // with "Robotens feil".
     const rows = within(card).getAllByRole("listitem").filter((item) => within(item).queryByText("Robotens feil"));
-    expect(rows.map((row) => row.querySelector(".font-mono")?.textContent)).toEqual(["8 av 9", "10 av 15"]);
-    for (const row of rows) expect(row.querySelector(".font-mono")).toHaveClass("text-warning");
+    expect(rows.map((row) => row.querySelector(".font-mono")?.textContent ?? row.querySelector(".font-semibold")?.textContent)).toEqual([
+      "8 av 9",
+      "10 av 15",
+      "Ved skiftslutt",
+    ]);
+    for (const row of rows.slice(0, 2)) expect(row.querySelector(".font-mono")).toHaveClass("text-warning");
+    // The demo night ends at the lift, off the charger, with the master keycard in hand.
+    expect(rows[2]).toHaveTextContent("Står ved heis 1, ikke på lader, 20 % batteri.Har fortsatt hovednøkkelkortet. I et hotell leveres det tilbake før vakten slutter.");
     // The slip and the moved sign carry the words too; the signs set and the refusals stay ink.
     expect(card.textContent!.match(/Robotens feil\.Skled|Robotens feil\.Flyttet/g)).toHaveLength(2);
     const signs = within(card).getAllByRole("listitem").find((item) => item.textContent!.includes("Skilt for vått gulv satt ut"))!;

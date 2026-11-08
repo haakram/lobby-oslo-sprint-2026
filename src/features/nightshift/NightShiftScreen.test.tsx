@@ -57,6 +57,32 @@ describe("NightShiftScreen, replay", () => {
     expect(screen.getByRole("button", { name: /Spill av/ })).toBeEnabled();
   });
 
+  it("lets the Robotlogg switch drive the whole page: the hotel-rules night loads its own log, Open-RMF its own figures (round 6)", async () => {
+    serveDemo();
+    render(<NightShiftScreen />);
+    expect(await screen.findByText("Ferdig")).toBeInTheDocument();
+    const logs = screen.getByRole("group", { name: "Robotlogg" });
+    expect(within(logs).getByRole("button", { name: "Spillbygget" })).toHaveAttribute("aria-pressed", "true");
+
+    // The hotel-rules night: a second real log, the same page (figures, card, the night) read from it.
+    fireEvent.click(within(logs).getByRole("button", { name: "Hotellregler" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/runs/hotel-rules-seed16.jsonl", expect.anything()));
+    expect(await screen.findByText("Ferdig")).toBeInTheDocument();
+    expect(screen.getByText(/Samme natt, live, med hotellets regler/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Robotens vurderinger i natt" })).toBeInTheDocument();
+
+    // Open-RMF: its own figures (no score), its card, and no Wybe night under it.
+    fireEvent.click(within(logs).getByRole("button", { name: "Open-RMF (eksempel)" }));
+    const stats = screen.getByRole("group", { name: "Skiftet i tall" });
+    expect(within(stats).getByText("Oppdrag fullført").previousElementSibling).toHaveTextContent("4av 7");
+    expect(within(stats).getByText("Ikke fullført").previousElementSibling).toHaveTextContent("3");
+    expect(within(stats).getByText("Batteri").previousElementSibling).toHaveTextContent("38%");
+    expect(within(stats).queryByText("Wybe-poeng (simulering)")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Robotens vurderinger i natt" })).toHaveTextContent("Fra Open-RMF-eksempelet (testdata)");
+    expect(screen.queryByRole("heading", { name: "Natten, steg for steg" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Ferdig")).not.toBeInTheDocument();
+  });
+
   it("hides the Direkte source when no viewer URL is set, and links to the 3D hotel", async () => {
     serveDemo();
     render(<NightShiftScreen />);

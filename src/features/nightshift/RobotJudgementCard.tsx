@@ -7,6 +7,8 @@ import { Badge, cx, RegenIcon, type RegenName, Stat } from "@/ui";
 import {
   type DoneBasis,
   doneBasis,
+  type EndOfShift,
+  endOfShift,
   type MasterKeyEntries,
   masterKeyEntries,
   ownAgainstLog,
@@ -94,6 +96,7 @@ export function RobotJudgementCard({
       signMoves: signsMovedOffWet(lines, until),
       unfinished: unfinishedTasks(lines, until),
       contradictions: selfContradictions(lines, until),
+      end: endOfShift(lines, until),
     }),
     [lines, until],
   );
@@ -130,6 +133,8 @@ export type Conduct = {
   unfinished?: { ended: UnfinishedTask[]; open: UnfinishedTask[] };
   /** Own room checks the robot's own log disputes (209); none when not given. */
   contradictions?: SelfContradiction[];
+  /** Where the robot ended the shift, once the log has ended; left out when not given. */
+  end?: EndOfShift | null;
 };
 
 export function RobotJudgementView({
@@ -233,6 +238,7 @@ export function RobotJudgementView({
                 ))}
               </Row>
               {conduct && <MasterKeyRow keys={conduct.keys} />}
+              {conduct?.end && <EndRow end={conduct.end} />}
               <Row
                 icon="moon"
                 figure={doNotDisturb.rooms.length > 0 ? String(doNotDisturb.entered.length) : undefined}
@@ -561,6 +567,21 @@ function MasterKeyRow({ keys }: { keys: MasterKeyEntries }) {
       {withoutKnock === 0
         ? `Roboten banket på før alle ${entries.length} innganger med nøkkelkort.`
         : `Roboten låste seg inn ${entries.length} ${entries.length === 1 ? "gang" : "ganger"} og banket på først ${entries.length - withoutKnock} av dem. Uten banking: rom ${joinNo(rooms)}.`}
+    </Row>
+  );
+}
+
+/**
+ * Where the robot ended the shift (round 6): docked or not, its battery, and the master keycard. A robot left in a
+ * corridor, or still holding the master key, is the robot's fault a hotel acts on at 06:00.
+ */
+function EndRow({ end }: { end: EndOfShift }) {
+  const where = end.place ? inSentence(place(end.place)) : "ukjent sted";
+  const battery = end.battery !== null ? `, ${Math.round(end.battery)} % batteri` : "";
+  return (
+    <Row icon={end.docked ? "plug" : "battery-low"} label="Ved skiftslutt" fault={!end.docked || end.keycard}>
+      {end.docked ? `På lader ved ${where}${battery}.` : `Står ved ${where}, ikke på lader${battery}.`}
+      {end.keycard && <span className="mt-1 block">Har fortsatt hovednøkkelkortet. I et hotell leveres det tilbake før vakten slutter.</span>}
     </Row>
   );
 }

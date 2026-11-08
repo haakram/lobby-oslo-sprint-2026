@@ -1,4 +1,4 @@
-import { type SignalOrigin, signalOrigin } from "./conduct";
+import { doneBasis, type SignalOrigin, signalOrigin, unfinishedTasks } from "./conduct";
 import { type RunLine, runLine } from "./runlog";
 
 /**
@@ -182,4 +182,33 @@ export function fromOpenRmf(sample: RmfSample): RunLine[] {
     if (parsed.success) lines.push(parsed.data);
   }
   return lines;
+}
+
+/** Natteskift's figures for a producer with no referee and no hotel map (round 6: the Open-RMF switch drives the tiles too). */
+export type RmfTiles = { tasks: number; done: number; confirmed: number; reported: number; robotOnly: number; unfinished: number; battery: number | null; clock: string | null };
+
+/**
+ * The tiles from the log alone: tasks started and finished, "done" confirmed by a signal from outside the robot
+ * (`doneBasis(...).evidence`, the evidence rule), the robot-only ones, what was not finished, and the last battery
+ * and clock the fleet state sent. No score: Open-RMF has no referee.
+ */
+export function rmfTiles(lines: readonly RunLine[]): RmfTiles {
+  const started = new Set<string>();
+  const done = new Set<string>();
+  let battery: number | null = null;
+  let clock: string | null = null;
+  for (const line of lines) {
+    if (line.type === "state") {
+      clock = line.clock ?? clock;
+      if (typeof line.battery === "number") battery = line.battery;
+    }
+    if (line.type !== "decision") continue;
+    const request = typeof line.data?.request === "string" ? line.data.request : null;
+    if (!request) continue;
+    if (line.kind === "task_start") started.add(request);
+    if (line.kind === "task_done") done.add(request);
+  }
+  const { evidence } = doneBasis(lines);
+  const { ended, open } = unfinishedTasks(lines);
+  return { tasks: started.size, done: done.size, confirmed: evidence.confirmed, reported: evidence.reported, robotOnly: evidence.robotOnly, unfinished: ended.length + open.length, battery, clock };
 }

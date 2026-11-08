@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { doneBasis, unfinishedTasks } from "./conduct";
-import { fromOpenRmf, rmfClock, type RmfSample } from "./openRmf";
+import { fromOpenRmf, rmfClock, type RmfSample, rmfTiles } from "./openRmf";
 import { RobotJudgementCard, sourceOf } from "./RobotJudgementCard";
 import { SHIFT_ID } from "./runlog";
 
@@ -87,5 +87,13 @@ describe("the judgement card on the Open-RMF sample", () => {
     expect(card).toHaveTextContent("Åpen ved slutten: delivery.tray.0007 (rom 203).");
     expect(card).not.toHaveTextContent(/Skilt for vått gulv|nøkkelkort|Ikke forstyrr|live-netter|ledger\.csv/);
     expect(card).toHaveTextContent("Her finnes ingen dommer.");
+  });
+});
+
+describe("rmfTiles (round 6: the switch drives Natteskift's figures)", () => {
+  it("counts the sample's tasks, what an outside signal confirmed, what is unfinished, and the last battery and clock", () => {
+    const tiles = rmfTiles(fromOpenRmf(SAMPLE));
+    expect(tiles).toMatchObject({ tasks: 7, done: 4, reported: 4, unfinished: 3, battery: 38, clock: "05:35:00" });
+    expect(tiles.confirmed + tiles.robotOnly).toBeLessThanOrEqual(tiles.reported);
   });
 });

@@ -27,10 +27,12 @@ import {
   crossNightPrecision,
   DISTINCT_OWN,
   type DistinctClaims,
+  FAULT_BED,
   grouped,
   intervalText,
   LEDGER_META,
   percentText,
+  shareText,
   shiftOf,
   wilson,
 } from "./ledger";
@@ -249,6 +251,19 @@ const REAL_HOTEL = (
 );
 
 /**
+ * The fault bed in one plain line (round 5, the controller's wording): how much of the robot's "done" held when
+ * failures were put in on purpose, at the lowest and the highest rate. The rest is behind "Slik vet vi det".
+ */
+function faultLine(): string | null {
+  const rates = FAULT_BED.rates;
+  if (rates.length === 0) return null;
+  const low = rates[0];
+  const high = rates.at(-1)!;
+  const pct = (rate: number) => `${Math.round(rate * 100)} %`;
+  return `Testet med innlagte feil, uten nett: ${shareText(low.blind.precision)} av robotens «ferdig» holder ved ${pct(low.rate)} feil, ${shareText(high.blind.precision)} ved ${pct(high.rate)}.`;
+}
+
+/**
  * Overlevering's card (round 5, the creative juror and the Wybe engineer): three figures with plain labels and one short line
  * each, then the real-hotel rule. The same selectors as the full card, so the two never disagree; no
  * simulator, referee or score-hidden figure here (those are behind "Slik vet vi det").
@@ -336,6 +351,7 @@ function CompactFigures({
         ))}
       </ul>
       <p className="mt-3 max-w-[80ch] text-sm text-muted">{REAL_HOTEL}</p>
+      {!source && faultLine() && <p className="mt-1 max-w-[80ch] text-sm text-muted">{faultLine()}</p>}
     </>
   );
 }
@@ -455,6 +471,7 @@ function DoneRow({ basis, contradictions = [] }: { basis: DoneBasis; contradicti
       ))}
       {rest.length > 0 && <span className="mt-1 block">{`${rest.join("; ")} (${confirmed} av ${reported} i alt).`}</span>}
       {realHotel}
+      {faultLine() && <span className="mt-1 block">{faultLine()}</span>}
     </Row>
   );
 }
@@ -626,6 +643,7 @@ function HowWeKnow({
               : null}
           </p>
         )}
+        {FAULT_BED.rates.length > 0 && <FaultBed />}
         {distinct && distinct.claims > 0 && (
           <p>
             Talt som ulike påstander (samme natt og forespørsel spilt på nytt teller én gang), sluttgrenens {distinct.nights} netter: {distinct.credited} av{" "}
@@ -655,6 +673,28 @@ function HowWeKnow({
         </p>
       </div>
     </details>
+  );
+}
+
+/** The fault bed behind "Slik vet vi det": what was injected, precision and recall, where it misses, and the limit. */
+function FaultBed() {
+  const bed = FAULT_BED;
+  const rates = bed.rates;
+  const list = (pick: (rate: (typeof rates)[number]) => string) => rates.map(pick).join(" / ");
+  const at = rates.map((rate) => `${Math.round(rate.rate * 100)}`).join(" / ");
+  return (
+    <p>
+      Det måler feiltesten: uten nett, i {bed.realNights} gjenoppbygde ekte netter × {bed.draws} trekninger med {bed.faultTypes} slags innlagte feil (feil rom,
+      utenfor døren, skilt ved siden av sølet, ingen svar, …), med og uten poengsummen på de samme feilene ({grouped(bed.nights)} netter,{" "}
+      <span className="font-mono text-xs">{bed.branch}</span> <span className="font-mono text-xs">{bed.commit}</span>). Uten poengsummen holdt {list((rate) => shareText(rate.blind.precision))} av
+      «ferdig» ved {at} % feil, og sjekken fant {list((rate) => shareText(rate.blind.recall))} av det som virkelig var gjort (med poengsummen{" "}
+      {rates.map((rate) => `${shareText(rate.sighted.precision)}/${shareText(rate.sighted.recall)}`).join(", ")}). Sjekken sa «ikke ferdig»{" "}
+      {list((rate) => grouped(rate.saidNotDone))} ganger, mot {bed.saidNotDoneWithoutFaults === 1 ? "én gang" : `${bed.saidNotDoneWithoutFaults} ganger`} uten feil. På feil som
+      synes i svaret den leser, holdt {list((rate) => shareText(rate.visible.precision))}, og den fanget {bed.visibleCaught}; med poengsummen ble{" "}
+      {shareText(bed.sightedSignsFalseDone)} av skiltene satt ved siden av sølet falske «ferdig». Den bommer på en gjest som sover i et «sjekket» rom (det gjør
+      poengsummen også), et høflig svar som ikke handler om saken, musikk som starter igjen og en hittegjenstand som ligner ({shareText(bed.lookAlikeMissed)}).
+      Feilformuleringene er skrevet av oss: de viser hva slags svar som lurer sjekken, ikke hvor ofte det skjer.
+    </p>
   );
 }
 

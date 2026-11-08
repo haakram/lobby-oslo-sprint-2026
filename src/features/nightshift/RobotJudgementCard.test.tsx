@@ -43,6 +43,9 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(disclosure).toHaveTextContent(
       `Robotens egen sjekk sa aldri nei på disse nettene (0 av ${checks.checks} sjekker): det viser at poengsummen ikke trengtes der, ikke hvor godt roboten oppdager en feil.`,
     );
+    expect(disclosure).toHaveTextContent("Det måler feiltesten: uten nett, i 20 gjenoppbygde ekte netter × 5 trekninger med 13 slags innlagte feil");
+    expect(disclosure).toHaveTextContent("Uten poengsummen holdt 98,5 % / 95,5 % / 91 % av «ferdig» ved 5 / 15 / 30 % feil, og sjekken fant 99,8 % / 99,7 % / 99,7 % av det som virkelig var gjort");
+    expect(disclosure).toHaveTextContent("Feilformuleringene er skrevet av oss: de viser hva slags svar som lurer sjekken, ikke hvor ofte det skjer.");
     expect(disclosure).toHaveTextContent("I natt godkjente simulatoren 9 av 9 på egen vurdering (få tilfeller: 95 %-intervall 70–100 %); én av dem motsies av robotens egen logg (rom 209).");
     // The simulator, the referee, the score, the ledger path and the commit hash only inside "Slik vet vi det" (the design juror, round 5).
     const main = card.cloneNode(true) as HTMLElement;
@@ -110,6 +113,8 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(items[1]).toHaveTextContent("7ganger sa nei til en ukjent person01:17–05:11, 7 rom · holdt nøkkelkortet ved 209 og 304.");
     expect(items[2]).toHaveTextContent("10av 15nøkkelkortinnganger uten å banke påOgså: skled i korridor 2B 23:51, krysset 27 ganger til uten skilt.");
     expect(card).toHaveTextContent("I et ekte hotell er «ferdig» bekreftet først når minst ett signal kommer utenfra roboten");
+    // The fault bed in one plain line (data/fault-bed.json, hamad/faults 4571de3); the rest behind Slik vet vi det.
+    expect(card).toHaveTextContent("Testet med innlagte feil, uten nett: 98,5 % av robotens «ferdig» holder ved 5 % feil, 91 % ved 30 %.");
     // No jury words on the manager's read, and no second "290 av 291".
     expect(card).not.toHaveTextContent(/simulator|dommer|poengsum|290 av 291|cb72845/i);
     // "Vis alt" replaces the figures with the full card; it never shows both (the design juror).

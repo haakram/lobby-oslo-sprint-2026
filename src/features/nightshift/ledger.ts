@@ -1,3 +1,4 @@
+import faults from "./data/fault-bed.json";
 import data from "./data/ledger.json";
 import type { RunLine } from "./runlog";
 
@@ -160,4 +161,36 @@ export function grouped(n: number): string {
 /** "99,2 %". */
 export function percentText(percent: number): string {
   return `${percent.toLocaleString("nb-NO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
+}
+
+/** One fault rate of the offline fault bed: the done check's precision and recall, blind and sighted. */
+export type FaultRate = {
+  rate: number;
+  blind: { precision: number; recall: number };
+  sighted: { precision: number; recall: number };
+  /** Blind precision on the faults the reply it reads can show. */
+  visible: { precision: number };
+  /** How often the blind check said "not done". */
+  saidNotDone: number;
+};
+
+/** The fault bed (data/fault-bed.json, hamad/faults): failures injected at known rates, offline. */
+export const FAULT_BED: {
+  branch: string;
+  commit: string;
+  nights: number;
+  realNights: number;
+  draws: number;
+  faultTypes: number;
+  rates: FaultRate[];
+  saidNotDoneWithoutFaults: number;
+  visibleCaught: string;
+  sightedSignsFalseDone: number;
+  lookAlikeMissed: number;
+} = faults;
+
+/** "98,5 %", "91 %": a share as Norwegian per cent, a decimal only where it says something. */
+export function shareText(share: number): string {
+  const percent = Math.round(share * 1000) / 10;
+  return `${percent.toLocaleString("nb-NO", { maximumFractionDigits: 1 })} %`;
 }

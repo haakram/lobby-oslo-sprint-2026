@@ -1,0 +1,18 @@
+{
+  "_doc": "The offline fault bed's result (jury round 5, the Wybe juror and the data juror: give the done check negatives). Failures injected at a known rate into 20 rebuilt real nights x 5 fault draws, 13 fault types, the score-blind done check and the sighted agent on the same faults (640 nights). Run on branch hamad/faults at 4571de3 (agent/faultbed.py, output in temp/faults/ of that checkout); figures as reported by the controller on Sun 8 Nov, 05:40. Offline only: no Wybe server. The fault wordings are written by the team, so the misses show the kind of reply that fools the check, not how often it happens.",
+  "branch": "hamad/faults",
+  "commit": "4571de3",
+  "nights": 640,
+  "realNights": 20,
+  "draws": 5,
+  "faultTypes": 13,
+  "rates": [
+    { "rate": 0.05, "blind": { "precision": 0.985, "recall": 0.998 }, "sighted": { "precision": 0.988, "recall": 0.995 }, "visible": { "precision": 0.997 }, "saidNotDone": 256 },
+    { "rate": 0.15, "blind": { "precision": 0.955, "recall": 0.997 }, "sighted": { "precision": 0.964, "recall": 0.99 }, "visible": { "precision": 0.994 }, "saidNotDone": 734 },
+    { "rate": 0.3, "blind": { "precision": 0.91, "recall": 0.997 }, "sighted": { "precision": 0.92, "recall": 0.983 }, "visible": { "precision": 0.989 }, "saidNotDone": 1578 }
+  ],
+  "saidNotDoneWithoutFaults": 1,
+  "visibleCaught": "99–100 %",
+  "sightedSignsFalseDone": 0.86,
+  "lookAlikeMissed": 0.29
+}

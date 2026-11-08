@@ -2,8 +2,10 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { z } from "zod";
+import { osloToday } from "./dates";
 import { ROOM_TYPE_IDS } from "./hotel";
 import { MESSAGE_TOPICS, type ReceptionRecord } from "./records";
+import { isExpired } from "./retention";
 
 export const RECORDS_STORAGE = "resepsjon-records-v1";
 
@@ -41,16 +43,23 @@ const StoredRecord = z.discriminatedUnion("kind", [Booking, Message]);
 
 const EMPTY: ReceptionRecord[] = [];
 
-/** Reads the stored records; anything blocked, broken or unknown counts as none. */
+/**
+ * Reads the stored records; anything blocked, broken or unknown counts as none. Records past their
+ * deletion day (retention.ts) are dropped and the browser's copy is rewritten without them.
+ */
 function readRecords(): ReceptionRecord[] {
   try {
     const raw = localStorage.getItem(RECORDS_STORAGE);
     const parsed: unknown = raw ? JSON.parse(raw) : null;
     if (!Array.isArray(parsed)) return EMPTY;
-    return parsed.flatMap((item) => {
+    const today = osloToday();
+    const records = parsed.flatMap((item) => {
       const result = StoredRecord.safeParse(item);
       return result.success ? [result.data as ReceptionRecord] : [];
     });
+    const kept = records.filter((record) => !isExpired(record, today));
+    if (kept.length < parsed.length) localStorage.setItem(RECORDS_STORAGE, JSON.stringify(kept));
+    return kept;
   } catch {
     return EMPTY;
   }
@@ -90,7 +99,8 @@ function save(next: ReceptionRecord[]): void {
 
 /**
  * What the AI receptionist took down, newest first, kept in this browser across reloads and calls, so
- * a booking or a callback waits until staff settle it, as the screen promises.
+ * a booking or a callback waits until staff settle it, as the screen promises, and deleted when its
+ * time is up (retention.ts).
  * TODO(phase-3): a shared store, so every desk sees the same records.
  */
 export function useStoredRecords() {

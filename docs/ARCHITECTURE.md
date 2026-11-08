@@ -169,6 +169,11 @@ ignore fields they do not know. Schema for every line type: `docs/runlog.schema.
     `{"room", "signal": "no_card" | "card_in", "source": "door_lock"}` plus `"since": null` on `no_card`
     (the window from 18:00), never who and never when: `card_in` carries no clock (a time sent there is
     dropped on read).
+- A writer without a robot, Øyne (round 6, owner E, additive): *Ingen av disse* on an unsure camera match,
+  or *Meld som avvik* for an item not in the catalogue, writes a `work_order` (`type: "annet"`,
+  `data.source: "eyes"`, SKUs and the text on the package, `by`, `at`; no guest data) to the device's avvik
+  log (`lobby:oyne-avvik`, per handover day, 30 days, `src/features/eyes/deviations.ts`); Overlevering lists
+  it under *Åpent nå* with owner Renhold and 10:00 (`eyesOpenItem`). `TODO(phase-3)` a server store.
 
 **Read by the app (Lobby), additive, jury branch.** Rom og renhold compares the last `room_status` per
 room with the booking system's test snapshot (`src/features/rooms/pms.ts`, `TODO(phase-3)`):

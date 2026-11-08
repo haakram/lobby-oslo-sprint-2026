@@ -628,7 +628,7 @@ and what happens when you're wrong?"* (ShirazIQ)
 > pack can only read the size if the sticker is legible. When it isn't sure it says so, *Usikker*, and
 > shows the two or three products it could be, each with its description and shelf; the worker taps
 > *Ja, det er denne* or *Ingen av disse*. Nothing goes on the pick list or gets a route on the camera's
-> word, and *Ingen av disse* becomes an avvik with an owner and a deadline. In a warehouse the
+> word, and *Ingen av disse* becomes an avvik with an owner and a deadline on the morning handover. In a warehouse the
 > candidates should come from what's expected, the purchase order at receiving or the customer's order
 > at returns, plus the shop's own product photos: that's where accuracy jumps, and it isn't built. And
 > it isn't measured yet, so I won't give you a number."

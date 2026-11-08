@@ -85,25 +85,27 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   | `8eac151` | 01:50–01:58 | **10: 2,760** · 16: 2,679 · 23: 2,240 · 5: 2,559 | 2,560 |
   | `c3801e0`: the head of `hamad/final` at 03:30 (`8eac151`'s agent plus the end-of-night battery guard and a spill look) | 03:26 | **10: 2,760** · 16: 2,748 · 23: 2,298 · 5: 2,559 | 2,591 (not played on 9 or 11) |
 
-  **The build that plays at 12:00 is the head of `hamad/final`: `8de9ffc` at 05:30** (`c3801e0` plus a
+  **The build that plays at 12:00 is the head of `hamad/final`: `8de9ffc` at 05:50** (`c3801e0` plus a
   corridor closed for cleaning avoided for 90 minutes instead of 30; `013f90d` has the same agent). On
   the tuned seeds (04:50) it scored 10: 2,759 · 16: 2,748 · 23: 2,298 · 5: 2,559 (mean 2,591). **The
   dress rehearsal, on ten seeds no build had ever played** (22, 34, 53, 55, 67, 70, 78, 83, 86, 93,
-  started 05:02): 4 of 10 complete at 05:30, **22: 2,085 · 34: 2,166 · 53: 2,481 · 55: 2,138, mean
-  2,218**, with 231 of 231 "done" credited ([`docs/runs/builds.csv`](./docs/runs/builds.csv)). If the
+  started 05:02, all 10 complete at 05:50): **22: 2,085 · 34: 2,166 · 53: 2,481 · 55: 2,138 · 67: 2,312
+  · 70: 2,186 · 78: 2,008 · 83: 2,236 · 86: 1,786 · 93: 1,969; the final's statistic, the mean of the
+  best 9 of 10, is 2,176**, with 573 of 573 "done" credited ([`docs/runs/builds.csv`](./docs/runs/builds.csv)). If the
   head moves before 12:00, the forecast below is regenerated for it.
 
 - **What we expect in the final: a median of 2,050, 80 % between 1,759 and 2,393, not 2,760**, for
   `8de9ffc` ([`docs/runs/forecast.txt`](./docs/runs/forecast.txt), from `python3 scripts/forecast.py`,
-  regenerated 05:30 Sun, before the final). The model is log score = build + seed, fitted on every
+  regenerated 05:50 Sun with the whole rehearsal, before the final). The model is log score = build + seed, fitted on every
   complete live build night (67 build×seed cells), then 20,000 simulated finals of the best 9 of 10
   unseen seeds. Why lower than the 2,591 on tuned seeds: **mostly seed difficulty**. The four seeds the
   build played are easy ones, which alone is −19 %; the tuning penalty we can measure is about −5 %,
   from two nights (`d4e445c` on seeds 9 and 11), so it is rough, and the band now carries its
   uncertainty (drawn per simulated final) and the leave-one-cell-out error (the data juror; round 4's
   narrower method gave 1,903–2,196). **Out of sample:** the forecast committed at 04:08, before the
-  dress rehearsal, expected a mean night of 1,989 on unseen seeds; the four rehearsal nights complete at
-  05:30 average 2,218, **11 % above it** (5 % above the forecast without the tuning penalty). Practice
+  dress rehearsal, gave a final median of 2,035 (80 % 1,898–2,186) and a mean night of 1,989 on unseen
+  seeds; the rehearsal's best 9 of 10 came in at **2,176, inside that committed interval**, and its mean
+  night, 2,137, was 7 % above the forecast (2 % above it without the tuning penalty). Practice
   seeds go to 999, so a holdout was always there; the larger risk no band covers is that the final may
   use another map and other tasks (the note at the top of `docs/research/wybe-api.md`).
 - **"Done" is checked, and we say what it rests on:** over the 18 nights of the four builds in the

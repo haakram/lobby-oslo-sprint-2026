@@ -60,6 +60,8 @@ export type WorkOrder = {
   place: string | null;
   request: string | null;
   at: string | null;
+  /** A wet-floor sign that the robot later moved to another spill (`sign_moved`): this place has no sign any more. */
+  signMoved?: boolean;
 };
 
 export type RoomEvent =
@@ -248,6 +250,13 @@ function foldDecision(night: Night, kind: string, data: Record<string, unknown> 
       pushEvent(night, room, { kind: "status", at, status: status as KnownStatus, source });
       break;
     }
+    case "sign_moved": {
+      // The robot took the sign from an earlier spill to a new one: the old place is wet without a sign again.
+      const old = str(data, "old_request");
+      const order = old ? night.workOrders.find((entry) => entry.request === old && /varselskilt/i.test(entry.text)) : undefined;
+      if (order) order.signMoved = true;
+      break;
+    }
     case "work_order": {
       const text = str(data, "text");
       if (!text) break;
@@ -421,6 +430,9 @@ export function selectRoomNight(night: Night, room: string): RoomNightEntry[] {
 export function selectCleaning(rooms: readonly RoomView[]): string[] {
   return rooms.filter((room) => room.status === "ma_vaskes").map((room) => room.id);
 }
+
+/** Ruter with no rooms opens on Dagens renhold: the night's dirty rooms and today's departures (routes/dayRooms.ts). */
+export const DAY_ROUND = "/ruter";
 
 /** Ruter takes the rooms in the query string: `/ruter?rom=room-201,room-214`. */
 export function cleaningHref(rooms: readonly string[]): string {

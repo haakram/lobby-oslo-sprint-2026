@@ -16,8 +16,10 @@ const ORDERS: OrderView[] = [
 ];
 
 describe("Vedlikehold: safety first, and no 'never came' complaint the robot found no order for", () => {
-  it("finds the wet floors nobody has signed yet", () => {
+  it("finds the wet floors nobody has signed yet, and the one whose sign was moved to another spill", () => {
     expect([...unsignedWetFloors(ORDERS)]).toEqual(["wo-1"]);
+    const moved = ORDERS.map((order) => (order.id === "wo-4" ? { ...order, signMoved: true } : order));
+    expect([...unsignedWetFloors(moved)]).toEqual(["wo-3", "wo-1"]);
   });
 
   it("puts an unsigned wet floor at the top as Høy, and a refused complaint down as Lav", () => {
@@ -32,5 +34,24 @@ describe("Vedlikehold: safety first, and no 'never came' complaint the robot fou
     expect(priorityOf(robot("x", { type: "gjesteklage", verdict: "failed", request: "R-9" }))).toBe("hoy");
     expect(priorityOf(robot("x", { type: "gjesteklage", verdict: "cancelled", request: "R-9" }))).toBe("lav");
     expect(priorityOf(robot("x", { text: "Søl ved corridor-3a: varselskilt satt ut", request: "R-1", verdict: "done" }))).toBe("middels");
+  });
+});
+
+describe("the recorded demo night", () => {
+  it("lists every wet floor left without a sign at 06:00, the moved sign's included", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const { parseRunLog } = await import("@/features/nightshift/runlog");
+    const { foldNight, selectWorkOrders } = await import("@/features/dashboard/selectors");
+    const night = foldNight(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
+    const orders = selectWorkOrders(night);
+    const wet = unsignedWetFloors(orders);
+    // Read off the log: a wet place counts when no sign stands there at the end.
+    const places = orders.filter((order) => wet.has(order.id)).map((order) => order.place);
+    for (const place of places) {
+      const signs = orders.filter((order) => order.place === place && /varselskilt/.test(order.text));
+      expect(signs.every((sign) => sign.signMoved)).toBe(true);
+    }
+    expect(places.length).toBeGreaterThan(0);
   });
 });

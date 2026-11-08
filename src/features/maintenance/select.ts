@@ -49,12 +49,15 @@ export function priorityOf(order: OrderView, unsigned = false): Priority {
   return "lav";
 }
 
-/** "Vått gulv ved corridor-2b" with no "varselskilt satt ut" at the same place after it. `orders` newest first. */
+/**
+ * "Vått gulv ved corridor-2b" with no "varselskilt satt ut" at the same place after it, or whose sign
+ * the robot later moved to another spill. `orders` newest first.
+ */
 export function unsignedWetFloors(orders: readonly OrderView[]): Set<string> {
   const unsigned = new Set<string>();
   orders.forEach((order, index) => {
     if (order.type !== "sol" || order.request || !order.place || /varselskilt/i.test(order.text)) return;
-    const signedAfter = orders.slice(0, index).some((later) => later.type === "sol" && later.place === order.place && /varselskilt/i.test(later.text));
+    const signedAfter = orders.slice(0, index).some((later) => later.type === "sol" && later.place === order.place && /varselskilt/i.test(later.text) && !later.signMoved);
     if (!signedAfter) unsigned.add(order.id);
   });
   return unsigned;

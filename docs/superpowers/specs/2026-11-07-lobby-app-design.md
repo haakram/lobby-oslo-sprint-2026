@@ -1,4 +1,4 @@
-# Fettero app — design (Track B)
+# Lobby app — design (Track B)
 
 **Owner:** ShirazIQ · **Date:** 2026-11-07 · **Status:** draft for Hamad's OK. ShirazIQ skipped the
 design questions ("just start") and asked for one thing above all: **it must look and feel
@@ -10,7 +10,7 @@ Claude's call, listed so it can be checked.
 The robot's **eyes, routes and voice**, in one app a new warehouse or hotel worker holds in their
 hand. It solves Holio pains **3** (no barcode), **6** (long walks) and **9** (training in your own
 language), wins the ElevenLabs prize by making voice the way you talk to the robot, and shows Track
-A's Night Shift agent at work, so A and B pitch as one product: **Fettero, the robot co-worker.**
+A's Night Shift agent at work, so A and B pitch as one product: **Lobby, the robot co-worker.**
 
 The judges see it for two minutes. Every choice is weighed against that demo.
 
@@ -22,7 +22,7 @@ The judges see it for two minutes. Every choice is weighed against that demo.
 2. **Routes.** Tap *"Legg i plukkliste"* on two more products, then *"Beste rute"*. The map draws the
    shortest route across floors, stop by stop, and says how much shorter it is than walking the list
    in order (*"212 m spart · 38 % kortere"*).
-3. **Voice.** A new worker presses the mic and asks in Polish where the soap goes. Fettero answers
+3. **Voice.** A new worker presses the mic and asks in Polish where the soap goes. Lobby answers
    out loud in Polish and the screen shows the product and its route. Switch to English or
    Norwegian mid-sentence and it follows.
 4. **Night shift.** One screen shows the robot's own shift from Track A's run log: score, clock,

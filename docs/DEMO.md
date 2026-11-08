@@ -12,15 +12,15 @@
 > PMS; room 210's legal purpose in `docs/PRIVACY.md` § 10.2 and the 210 answer in § 6.1). Every claim below is checked against the
 > code, a run log or a cited source; anything not yet true is marked **[fill]** or **[if]**. Keep § 2
 > in sync with `docs/PRD.md` § 4. Rehearse against a timer, twice, on a laptop that isn't the builder's.
-> The product trades as **Fettero** on this branch (the team lead decides whether `main` follows);
-> *Hotell Nattskift* is only the demo hotel's name.
+> The product trades as **Lobby** (team lead, Sun 8 Nov); *Hotell Nattskift* is only the demo
+> hotel's name.
 
 ## 1. The pitch in one breath
 
-**Fettero is the night shift that reports back. At 06:00 the manager who takes over the hotel gets
+**Lobby is the night shift that reports back. At 06:00 the manager who takes over the hotel gets
 the night on one page: what needs a person now and who owns it, which rooms can be sold today and for
 how much, and what the night robot did and refused to do. Nothing on it says "done" unless it was
-confirmed.** Hotel number one needs no robot: Fettero reads its booking system (read-only), one signal
+confirmed.** Hotel number one needs no robot: Lobby reads its booking system (read-only), one signal
 per room from the door lock, no card id, no clock, and the night clerk's own entries. The robot is how we prove
 "confirmed" can be measured, and we hold it to the same rule: **of the 9 "done" our AI agent claimed on
 its own judgement on the demo night, the simulator credited 9, and its own log contradicts one (209),
@@ -61,11 +61,11 @@ Why it matters (sourced; use one or two on the hook slide, never all):
   night at the test PMS's average rate (NOK 1,467, *ca. 1 500 kr* on screen; *Slik regner vi* says
   *I bruk uten booking: 1 × snittprisen i natt*). That cost is certain: a night nobody bills, and a room
   the booking system could sell again today, so the next guest could be walked into an occupied room.
-  Say it without blaming the clerk: an unrecorded walk-in or room move, not fraud (*Fettero signerer
+  Say it without blaming the clerk: an unrecorded walk-in or room move, not fraud (*Lobby signerer
   for nattevakten, ikke på henne*). The same kroner on **213** are conditional: one room × the same
   rate, and only after the desk confirms. 213's guest was **due out yesterday (7.11)** and the check-out
   was never recorded, so the booking system still has him in house. **Never "otherwise unsold"
-  (founders and domain review):** housekeeping's round would find the room by late morning. What Fettero buys is
+  (founders and domain review):** housekeeping's round would find the room by late morning. What Lobby buys is
   the hours: found free before the round, worth the kroner only **if the night sells out** (the demo
   hotel has 31 of 36 booked tonight, and the money figure says so) or for an early check-in. Say "on the demo
   night", never "per night" or "per hotel".
@@ -204,13 +204,13 @@ never says sold"* next.
 
 | Time | Screen / action | What the presenter says | Criterion it serves |
 |---|---|---|---|
-| 0:00–0:15 | **B1. Top of Overlevering, *Med robot*.** Point at the first figure, **Rom 209 · Robotens minne og øyne er uenige · 01:29 bagasje inn · 03:47 meldt tomt · Sjekk rommet før innsjekk**, then at **5 saker · Sikkerhet, straks**. No tap. | "Six o'clock. Siri takes over the hotel; Fettero gives her the night on one page, and checks the robot: bags into 209 at 01:29, reported empty at 03:47." | A real problem · Innovation · Wybe (domain review) |
+| 0:00–0:15 | **B1. Top of Overlevering, *Med robot*.** Point at the first figure, **Rom 209 · Robotens minne og øyne er uenige · 01:29 bagasje inn · 03:47 meldt tomt · Sjekk rommet før innsjekk**, then at **5 saker · Sikkerhet, straks**. No tap. | "Six o'clock. Siri takes over the hotel; Lobby gives her the night on one page, and checks the robot: bags into 209 at 01:29, reported empty at 03:47." | A real problem · Innovation · Wybe (domain review) |
 | 0:15–0:30 | **B2. Tap the safety figure.** It lands on *Korridor 2B siden 23:51 · roboten skled · 6 t 9 min uten at noen ble varslet*. **Tap *Varsle Trond Eikeland*** → *Varslet Trond Eikeland · Siri Haugen · nå · registrert her, ingen SMS ennå*. | "Safety: this floor waited six hours for a person. In a pilot, this alerts the night clerk at 23:51. Siri tells the caretaker, and it's recorded." | Product · Law · Functionality · Wybe (domain review) |
 | 0:30–0:44 | **B3. Press *Home*, tap *Uten robot*.** The line under the switch: *Uten robot: bookingsystemet, dørlåsen (ett signal per rom, aldri kort-id, aldri klokkeslett) og 4 registreringer fra nattevakten (eksempler)*. | "Hotel number one has no robot: same page, from the booking system, the door lock, no card id, no clock, and the night clerk's taps." | Product · Founders · Law |
-| 0:44–1:07 | **B4. Tap the money figure, *ca. 1 500 kr · Rom 210 i bruk uten booking*.** It lands on *Bookingsystemet og dørlåsen er uenige · 2 rom*: 210 and 213 on one screen, each with its chips and *Bekreftet av to kilder*. | "Fettero finds the rooms where the booking system and the door lock disagree, before housekeeping does. 210: Kjersti heard a guest, the lock agrees, no booking. Her note becomes a billed night with an owner, about 1,500 kroner. 213: booked, no card since six, empty." | Marketing (the pitch line) · Product · Founders · A real problem |
+| 0:44–1:07 | **B4. Tap the money figure, *ca. 1 500 kr · Rom 210 i bruk uten booking*.** It lands on *Bookingsystemet og dørlåsen er uenige · 2 rom*: 210 and 213 on one screen, each with its chips and *Bekreftet av to kilder*. | "Lobby finds the rooms where the booking system and the door lock disagree, before housekeeping does. 210: Kjersti heard a guest, the lock agrees, no booking. Her note becomes a billed night with an owner, about 1,500 kroner. 213: booked, no card since six, empty." | Marketing (the pitch line) · Product · Founders · A real problem |
 | 1:07–1:24 | **B5. Same screen, 213:** type **Hanne Vold** in *Hvem i resepsjonen bekreftet?* (it starts empty); tick **Folioen er gjort opp**, **Ingen bagasje på rommet**, **Nøkkelkortet er sperret**; tap **Bekreft med resepsjonen**, then **Send til resepsjonen**. The row reads *Venter på PMS-en · Sendt av Siri Haugen · nå* and *Bekreftet av Hanne Vold (resepsjon) · registrert av Siri Haugen*. | "Reception confirms, we record who, and the button never says sold: it waits for the booking system." | Product · Law · Functionality |
 | 1:24–1:44 | **B6. Press *Home*, tap *Med robot*, tap the robot figure *73 av 77*.** It lands on *Robotens vurderinger i natt* (**8 av 9** and **10 av 15** in amber with *Robotens feil*, **7** in ink), Kjersti's note and *Kvitter mottatt*, one screen. | "With a robot, the page adds what only a robot sees: a stranger at seven doors, refused seven times. And it's held to the same rule: 8 of its 9 'done' hold against its own log." **After 13:05 add:** "In today's final: [mean], rank [N]." | Innovation · Wybe (domain review) · Data · Design |
-| 1:44–1:55 | **B7. Tap *Kvitter mottatt*.** Above it: *1 sikkerhetssak er ikke varslet til noen. Du kan kvittere likevel.* → *Kvittert av Siri Haugen · nå · … overlevert, med 13 åpne saker, 1 sikkerhetssak ikke varslet.* | "Siri signs; the page says what's still open: the stranger, told to nobody. Fettero: natten, ærlig overlevert. The night, handed over honestly." | Design · all five |
+| 1:44–1:55 | **B7. Tap *Kvitter mottatt*.** Above it: *1 sikkerhetssak er ikke varslet til noen. Du kan kvittere likevel.* → *Kvittert av Siri Haugen · nå · … overlevert, med 13 åpne saker, 1 sikkerhetssak ikke varslet.* | "Siri signs; the page says what's still open: the stranger, told to nobody. Lobby: natten, ærlig overlevert. The night, handed over honestly." | Design · all five |
 
 Facts behind the lines (seed-16 log, `public/runs/demo.jsonl`; the samples): at 01:29:26 the robot ran
 `place luggage-209 → room-209` ("Placed luggage-209 inside room-209"), and at 03:47:31 its look said
@@ -277,7 +277,7 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
    seven doors. "Kjersti wrote 'a calm night', and in the same note she heard a guest in 210 at 23:20,
    a room the booking system has free. On paper that note is lost by six. Here it's a billed night with
    an owner by eight, about 1,500 kroner (round-7 product review). The robot saw the rest. And we check
-   the robot too: at 01:29 it carried bags into 209, at 03:47 it reported 209 empty, so Fettero says
+   the robot too: at 01:29 it carried bags into 209, at 03:47 it reported 209 empty, so Lobby says
    check the room. And 213 was free five hours before housekeeping, though the guest was due out
    yesterday. The wet floor waited six hours for a person; in a pilot it reaches the night clerk at
    23:51, and the 06:00 page shows whether anyone acted." Then one SSB figure (staff churn). Then, inside the first 20 seconds of
@@ -311,7 +311,7 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
 3. **How it works (1 slide, 1 min; IT and security, Innovation).** "The run log is an event stream;
    every screen is a projection of it." `Wybe simulation ⇄ our agent (Python: exact sim-time router,
    value-per-second planner, safety gates in code, "done" only after the server's score rises)` →
-   `run log (JSONL v1, docs/ARCHITECTURE.md § 4.3)` → `Fettero (Next.js 16)`: Overlevering, Rom,
+   `run log (JSONL v1, docs/ARCHITECTURE.md § 4.3)` → `Lobby (Next.js 16)`: Overlevering, Rom,
    Forespørsler, Natteskift, 3D-kart all read the same log through one selector. Beside it: camera →
    MediaPipe on the device → Claude (server-side key, spend cap); voice → ElevenLabs agents with short-
    lived tokens from our server. Login with roles enforced on the server. Evaluation: a replay bed of every full live night (72) screens a change before it gets
@@ -399,9 +399,9 @@ three of our reviews were locked out for minutes during the night. So nobody typ
       the screens in § 2. Until then the only public deployment (`lobby-sandy.vercel.app`) serves `main`: the old name
       *Lobby* and an older CSP without `connect-src` (curl, Sun 02:50). A security juror will curl it;
       the README says so, and the demo runs from the laptop.
-- [ ] Name: the team lead decides whether `main` trades as Fettero (this branch does). The trademark
-      search (Patentstyret, EUIPO TMview, WIPO; classes 9, 42, 43; the Ferrero question) is still to
-      do: `docs/PRIVACY.md` § 9.
+- [x] Name: the product trades as Lobby (team lead, Sun 8 Nov). The trademark search (Patentstyret,
+      EUIPO TMview, WIPO; classes 9, 42, 43; the Zurich company of the same name) is still to do:
+      `docs/PRIVACY.md` § 9.
 - [ ] The ElevenLabs receptionist's live retention checked in the dashboard and dated in
       `docs/PRIVACY.md` § 4 (team).
 - [ ] The receptionist's first message tells a phone caller where the call goes and for how long
@@ -435,8 +435,8 @@ three of our reviews were locked out for minutes during the night. So nobody typ
 - [ ] `/lever` typed in #general with team, repo, one-line description and the jury login, and **no
       URL until this branch is deployed** (the only public URL serves `main` under the old name);
       `/min-innlevering` checked; `/lever` again after any change. Suggested text (owner B): "Team
-      Fettero · repo https://github.com/haakram/oslo-sprint-26 (branch `hamad/jury-loop`; which branch
-      is judged is the team lead's call) · demo runs live from our laptop · Fettero: *Natten, ærlig
+      Lobby · repo https://github.com/haakram/oslo-sprint-26 (branch `hamad/jury-loop`; which branch
+      is judged is the team lead's call) · demo runs live from our laptop · Lobby: *Natten, ærlig
       overlevert.* Morgenvakten på hotellet får natten på én side kl. 06:00: rom som kan selges, det som
       er åpent med eier og frist, og hva som faktisk ble gjort, fra nattevaktens notater og eventuelt en
       robot. · jury login: jury / [password in the message only]".
@@ -595,14 +595,14 @@ it, and what legal hurdle could stop a hotel from sending you even the one signa
 
 **If the follow-up is room 210 (round-6 legal review).** *"Your headline money is room 210: someone in
 a room with no booking. The next question is who coded that card, and the lock's own log answers it.
-On what basis does the hotel use the lock for that, and what stops Fettero becoming the tool that
+On what basis does the hotel use the lock for that, and what stops Lobby becoming the tool that
 investigates the night clerk?"* (Hamad, about 40 s)
 
 > "We don't run 210 as a revenue tool. Its purpose is the occupant's safety: no second guest sold into
 > an occupied room, and a guest register that's right, since a hotel must register everyone who stays
 > the night, utlendingsforskriften section 4-25. That's close to why the hotel runs the lock, so it
 > passes the Article 6(4) test; PRIVACY section 10.2 has a column for 210. The kroner are a side
-> effect. What stops creep is in the contract: DPA point 5 says Fettero is never used to find out who
+> effect. What stops creep is in the contract: DPA point 5 says Lobby is never used to find out who
 > coded a card or to investigate an employee, and never adds up response times per person. We
 > receive no staff or encoder events at all. A 210 is resolved with the guest and the registration.
 > If a hotel wants the encoder log, that's its own control measure under arbeidsmiljøloven 9-1,
@@ -654,7 +654,7 @@ conversion rule), with the minutes from 06:00 to the first room sent to receptio
 and show me one thing a real person got wrong on this page and what you changed because of it."*
 (ShirazIQ)
 
-> [fill from § 8.2, raw numbers] "This morning we put [three] people who had never seen Fettero in front
+> [fill from § 8.2, raw numbers] "This morning we put [three] people who had never seen Lobby in front
 > of this page, cold, with four tasks and a stopwatch. [N of 3] found the room they could sell in [S]
 > seconds; [where the others got lost], so we changed [one thing] (commit [`…`]), and [two new people]
 > then found it in [S] seconds. The raw notes are in DEMO.md § 8.2. What we haven't done is watch a real
@@ -666,16 +666,15 @@ review, not testing; a hallway test is the next thing." Why this look: a calm op
 One grotesk and one mono, light working screens, night steel for the robot's world, one orange action
 per screen, states always in words, red and amber only for what needs a person (`DESIGN.md`).
 Accessibility in one sentence: a skip link, a visible focus ring, contrast that passes, states in words
-as well as colour, and 44 px touch targets. The name: "Fettero is our team's coined name; the line says
-what we do." Said aloud it is close to Ferrero (`docs/PRIVACY.md` § 9), so say the line right after the
-name.
+as well as colour, and 44 px touch targets. The name: "Lobby; the line says what we do." Say the line
+right after the name.
 
 **Domain review, warehouse (Holio).** *"hotelkit, Quore and ALICE already sell a shift log to thousands of
 hotels, and Mews now owns Flexkeeping. On Monday, what does your page do that a hotel with hotelkit
 can't already do, and who outside this building has told you they want it?"* (Hamad)
 
 > "Those tools own the shift log and the task list: what people write and tick off, and they do it
-> well. Fettero checks what was written. In hotelkit, 'room 213 empty' is a claim someone typed. Here it
+> well. Lobby checks what was written. In hotelkit, 'room 213 empty' is a claim someone typed. Here it
 > counts as confirmed only when a second system agrees: the door lock and the energy slot, or the night
 > clerk's look against the booking system. None of those tools reconciles the booking system with the
 > door lock, or a robot's log with what the robot did. And we hold the robot to the same rule: it said
@@ -715,7 +714,7 @@ hotels you called this morning actually say?"* (Hamad)
 > yes. Hotel one goes live on 16 November with the PMS and the night clerk's taps; the lock comes when
 > the lock vendor agrees. The money that's certain on this night is 210: in use with no booking, a night nobody bills and a room the system could sell again today, about 1,500 kroner. 213 is five hours earlier, and kroner only if the night sells out. We both work full-time for four weeks; if fewer than 2 of the
 > first 10 hotels we speak to take a pilot by 8 December, we stop the hotel wedge and sell through robot
-> makers. The 50,000 kroner is runway. [team to confirm before saying it: 'We register Fettero AS on
+> makers. The 50,000 kroner is runway. [team to confirm before saying it: 'We register Lobby AS on
 > Altinn on Monday.']"
 
 Honest version if the calls didn't happen (6 from this review): "Nobody outside this building has told
@@ -735,7 +734,7 @@ that happen with the build that plays our final today, and why doesn't the robot
 > the bags it delivered. On a side branch it now does: the room check's note says NOT EMPTY and names
 > its own bags. In our replay of 202 real nights that fired 368 times on 190 nights and cost 0 points,
 > and live your simulator thanked 389 of 390 room checks of rooms the robot had carried bags into. So
-> your points reward what a hotel would forbid, and Fettero shows the hotel what the robot did instead
+> your points reward what a hotel would forbid, and Lobby shows the hotel what the robot did instead
 > of trusting the score. Not in the build that plays. That's your simulator's gap, not a camera miss, and we don't defend it as one.
 > In a hotel the signal that catches it isn't a camera at all: the delivery in the lock trail or the
 > PMS assignment, and a person confirming before anything is sold."
@@ -759,11 +758,11 @@ occupancy (ASSA ABLOY, Salto, dormakaba).
 | Question | Answer | Who |
 |---|---|---|
 | Is this live or hard-coded? | Live app with login. The night is a real practice night our final agent played against Wybe's server; rooms, requests, routes, the 3D map and the handover are computed from its log through one selector. Bookings, guests, staff, stock and prices are test data, and every list says which is which. | ShirazIQ |
-| Why Fettero, not Lobby? | Lobby is a funded Zurich hotel-AI company (USD 2.2 M, Mar 2026) sold through Apaleo's Agent Hub, our planned channel. Fettero is coined and already our team's and robot's name. The team lead decides whether `main` follows. | ShirazIQ |
+| Isn't Lobby taken? | A funded Zurich hotel-AI company (USD 2.2 M, Mar 2026) trades as Lobby and sells through Apaleo's Agent Hub, our planned channel. We know; the trademark search is still to do (`docs/PRIVACY.md` § 9), and the name is the team lead's call. | ShirazIQ |
 | Doesn't the PMS do this? | The PMS automates the night's accounting (Mews has no night-audit button). Room discrepancies in OPERA or protel are fed by housekeeping in the morning. Nobody puts a robot's night, the phone and the staff into one signed handover. | Hamad |
 | 85 requests a night in a 36-room hotel? | That's game density. A real hotel sees a handful of night requests, which is why we price on rooms found and released, not on tasks or hours saved. | Hamad |
-| What if the robot calls a room empty and the guest's bag is behind the door? | That happened on the demo night, and it's the first thing on the page: at 01:29 the robot carried bags into 209 itself, and at 03:47 it reported 209 "empty and tidy", which the simulator credited. Fettero checks the robot's report against the robot's own actions and holds 209 back, with no booking needed; the card counts it as a miss (8 of 9). A room goes to reception only after a named receptionist confirms the folio, the bags and the key card. | ShirazIQ |
-| Is the money real? | The figure on top is 210: a room in use with no booking, one night at the test PMS's average rate (NOK 1,467). That one is certain: a night nobody bills, and a room the system could sell again. 213 is a real sleeper (due out yesterday, the check-out never recorded); housekeeping would find it by late morning, so what Fettero buys there is hours, and its kroner are real only if the night sells out (the demo hotel has 31 of 36 booked tonight) or for an early check-in; Oslo sold 72 % of its rooms in 2025 at NOK 1,631 a room (SSB table 14169). Say "on the demo night", never "per night". | Hamad |
+| What if the robot calls a room empty and the guest's bag is behind the door? | That happened on the demo night, and it's the first thing on the page: at 01:29 the robot carried bags into 209 itself, and at 03:47 it reported 209 "empty and tidy", which the simulator credited. Lobby checks the robot's report against the robot's own actions and holds 209 back, with no booking needed; the card counts it as a miss (8 of 9). A room goes to reception only after a named receptionist confirms the folio, the bags and the key card. | ShirazIQ |
+| Is the money real? | The figure on top is 210: a room in use with no booking, one night at the test PMS's average rate (NOK 1,467). That one is certain: a night nobody bills, and a room the system could sell again. 213 is a real sleeper (due out yesterday, the check-out never recorded); housekeeping would find it by late morning, so what Lobby buys there is hours, and its kroner are real only if the night sells out (the demo hotel has 31 of 36 booked tonight) or for an early check-in; Oslo sold 72 % of its rooms in 2025 at NOK 1,631 a room (SSB table 14169). Say "on the demo night", never "per night". | Hamad |
 | Doesn't the night audit catch 213? (product review) | The PMS knows the booking, not the room: its due-out report can't tell "left without checking out" from "still asleep, extended at the desk". The missing piece is physical evidence: the lock, the energy slot, a look inside. We ask hotels when they find such rooms today (§ 8.1 Q3). | Hamad |
 | Why doesn't Mews or the lock vendor just build this? (founders review) | They could build the page; each sees only its own silo. Our piece is cross-vendor evidence in one signed record: the staff, the lock, the phone and any robot. "Nobody positions on trust" is positioning, not a moat, and we say so. | ShirazIQ |
 | What does the robot add that the lock doesn't? | Its own night as evidence: what it delivered where (bags for three arrivals in 212 is now an open item for the desk), hazards with place and time, refusals of a stranger, and its own faults (10 of 15 master-key entries without a knock). Finding sleepers is the lock log's job, which is why hotel number one needs no robot. | Hamad |
@@ -776,7 +775,7 @@ occupancy (ASSA ABLOY, Salto, dormakaba).
 Proposals the team presents as hypotheses, not facts. Every outside number links to its source.
 
 **One wedge (decided Sun 8 Nov): independent and chain hotels of 60–200 rooms, software first, the
-robot optional.** Hotel number one needs no robot: Fettero reads its booking system (**read-only: the
+robot optional.** Hotel number one needs no robot: Lobby reads its booking system (**read-only: the
 pilot never writes to the PMS**; a room goes to reception, and reception changes the booking), one
 signal per room from the door lock and the energy slot (no card id, no clock: `docs/PRIVACY.md` § 10) and the
 night clerk's own entries on her phone, and the 06:00 page comes out. On screen: Overlevering's switch
@@ -806,7 +805,7 @@ operations add-ons charge per room per month: HelloShift USD 1.25–4
 ([SoftwareFinder](https://softwarefinder.com/hotel-management/sweeply)); a mid-market cloud PMS is USD
 5–12 ([Roommaster](https://www.roommaster.com/blog/hotel-software-pricing-guide)).
 
-**What Fettero buys is hours, not a room-night (founders and domain review).** Every hotel already has two nets
+**What Lobby buys is hours, not a room-night (founders and domain review).** Every hotel already has two nets
 for a sleeper: the end-of-day routine and housekeeping's morning round, which finds an empty room with
 no bags by late morning. So the money on screen leads with what is certain (founders review): **210,
 in use with no booking**, a night nobody bills and a room the booking system could sell again today,
@@ -831,7 +830,7 @@ Norway NOK 1,471, Oslo NOK 1,631.
 
 **The pilot's conversion rule: on usage (proposal, team to confirm; founders review).** The free
 four-week pilot converts at NOK 30 a room a month when the hotel **uses** it: the 06:00 handover signed
-in Fettero on **at least 5 of 7 mornings in 3 of the 4 weeks, plus the general manager's yes** at the
+in Lobby on **at least 5 of 7 mornings in 3 of the 4 weeks, plus the general manager's yes** at the
 end. That is the same rule as an *active* hotel below, so the pilot and the first-100 slide count one
 thing. Rooms found before the housekeeping round, and the minutes from 06:00 to the first room sent to
 reception, are the numbers we report beside it, not the gate: a hotel with one sleeper a month would
@@ -871,10 +870,10 @@ don't check what was written: none of them reconciles the booking system with th
 robot's log with what the robot did. **Compartment delivery robots already verify a delivery** inside
 their own cloud (the guest's PIN and a lid sensor). Nobody verifies the tasks that aren't deliveries (a
 room check, a hazard, a refusal), or joins them with the lock, the PMS and the staff. That gap is
-Fettero's.
+Lobby's.
 
-**The pitch line for this slide (marketing review):** ***Fettero finner rommene der bookingsystemet
-og dørlåsen er uenige — før renholdet gjør det.*** (Fettero finds the rooms your booking system and
+**The pitch line for this slide (marketing review):** ***Lobby finner rommene der bookingsystemet
+og dørlåsen er uenige — før renholdet gjør det.*** (Lobby finds the rooms your booking system and
 your door locks disagree about, before housekeeping does.) It is the hotel-one differentiator and needs
 no robot; on screen it is *Sjekk disse først* on `/natt` and the 213 and 210 rows on Overlevering. It is
 true where the locks report at night, so the phone round's Q7 says for how many hotels (§ 8.1).
@@ -888,7 +887,7 @@ is cross-vendor evidence in one signed record: a PMS or a lock vendor sees only 
 bought Flexkeeping, so the page alone is a feature they could ship).
 
 **Two lines for the slide and the staff (design review).**
-- ***Fettero signerer for nattevakten, ikke på henne.*** (Fettero signs for the night clerk, not on
+- ***Lobby signerer for nattevakten, ikke på henne.*** (Lobby signs for the night clerk, not on
   her.) The page counts the robot's faults, never a person's; staff cards never reach us
   (`docs/PRIVACY.md` § 10.3). It is the sentence a hotel's *tillitsvalgt* needs before the first pilot.
 - **The tagline image:** the night clerk's note on the page reads ***«Rolig natt.»***; beside it the
@@ -911,11 +910,11 @@ haven't spoken to 10 by 8 December, the check waits until we have, and we say so
 
 **Channel, in order** (the wedge decides it: hotels first, the robot later).
 1. **Direct** for hotel 1: from Sunday's phone round (§ 8), a visit with a printed Overlevering of
-   their own night. The printed page carries the name (*Fettero · Natten, ærlig overlevert. · Team Fettero, Oslo
+   their own night. The printed page carries the name (*Lobby · Natten, ærlig overlevert. · Team Lobby, Oslo
    Sprint 2026*; no contact address on it yet), so it works as the leave-behind;
    print the demo night (*Skriv ut*) and hold it up in the final: "This page is what hotel number one
    gets on Monday."
-2. **Robot makers** (Wybe, on this jury, and others), for the hotels that have a robot: Fettero is the
+2. **Robot makers** (Wybe, on this jury, and others), for the hotels that have a robot: Lobby is the
    manager's page their robot's log feeds. Ask Wybe one concrete thing at the stand before 14:00
    (domain review): "Give us one night of your robot's task log, in any format, and we render it on
    Overlevering within 48 hours." And: "Would you put this handover in front of one pilot hotel's
@@ -931,8 +930,8 @@ haven't spoken to 10 by 8 December, the check waits until we have, and we say so
 
 **Next step if we win tonight.** Monday morning: call back every hotel that said yes or maybe on
 Sunday, with a printed Overlevering and the one-page data processing agreement (`docs/DPA.md`, a draft
-on the Commission's Art. 28 clauses; Fettero must be registered as a company before it is signed).
-Offer a free four-week pilot, software only: Fettero reads the hotel's PMS (read-only, Apaleo or Mews
+on the Commission's Art. 28 clauses; Lobby must be registered as a company before it is signed).
+Offer a free four-week pilot, software only: Lobby reads the hotel's PMS (read-only, Apaleo or Mews
 first), one signal per room from the door lock and the energy slot where the locks are online, and the
 night clerk's own room check and notes (the *Uten robot* input, built Sunday: stored on her device in
 the pilot build, a server store is pilot work), and puts the rooms, the open items with owners and the
@@ -953,7 +952,7 @@ percentages from a handful of calls.
 
 - **Who counts.** A **user** is a person who signs *Kvitter mottatt* on every shift they work (a
   per-shift rule, so the part-timers, about 40 % of the stable workforce, SSB, count too). A hotel is
-  **active** when its 06:00 handover is signed in Fettero on **at least 5 of 7 mornings**. Both come
+  **active** when its 06:00 handover is signed in Lobby on **at least 5 of 7 mornings**. Both come
   from one append-only server event per sign-off (hotel, role, date; no guest data). Not built: today
   the sign-off is kept on one device, and the screen says so (`TODO(phase-3)`, PRD § 6).
 - **100 users = H hotels × S signers per hotel.** S comes from § 8.1 Q5 (**PENDING**). The old
@@ -981,7 +980,7 @@ No paid ads: the segment is too small for them. Two cheap channels to test, no m
 *vaktbok* template, and the staff who move between hotels. The Monday e-mail to user number one
 (Norwegian):
 
-> *Emne: Natten deres, på én side.* Hei [navn], takk for praten søndag. Her er hvordan Fettero ville
+> *Emne: Natten deres, på én side.* Hei [navn], takk for praten søndag. Her er hvordan Lobby ville
 > vist natten deres: hva som er åpent med eier og frist, hvilke rom som kan sendes til resepsjonen
 > før husøkonomens runde, og hva som faktisk ble gjort. Vi tilbyr fire uker gratis, uten robot: vi
 > leser PMS-en (bare lesing), ett signal per rom fra dørlåsen, aldri kort-id, aldri klokkeslett, og nattevaktens egne
@@ -1019,7 +1018,7 @@ Script (five short questions, about three minutes; Q5 only if they have time):
 3. **Q2:** "Kunne dere tenkt dere å teste en skjerm for den overleveringen i fire uker, gratis?"
 4. **Q3 (the counterfactual, founders review):** "Når finner dere i dag et rom som står opptatt, men der
    gjesten har reist: i nattrevisjonen, på husøkonomens runde (hvilket klokkeslett?), eller når neste
-   gjest står i resepsjonen? Hvor mange i uka?" (what Fettero buys is hours: write the time and the
+   gjest står i resepsjonen? Hvor mange i uka?" (what Lobby buys is hours: write the time and the
    number they say; a guest due out *today* doesn't count, the PMS already sells that room)
    **Q3b:** "Hvor mange netter i måneden er dere utsolgt?" (when an earlier room is real money)
 5. **Q4:** "Hvis en skjerm fant de rommene før kl. 07, ville 30 kr per rom i måneden vært verdt det?"
@@ -1029,7 +1028,7 @@ Script (five short questions, about three minutes; Q5 only if they have time):
    **Q6 (if time, the message test, marketing review):** "Hvis du bare fikk se én ting kl. 06:00, hva ville det
    vært: (a) rom som kan selges, (b) hva som er åpent og hvem som eier det, eller (c) hva
    roboten eller nattevakten faktisk gjorde?" Write their exact words: the phrase used most becomes the
-   hook line. And: "Hva tenker du når du hører navnet Fettero?"
+   hook line. And: "Hva tenker du når du hører navnet Lobby?"
    **Q7 (the lock, domain review):** "Hvilket låssystem har dere, og er låsene online, eller leses loggen av
    ved døra? Er energibryteren koblet til et system?" (whether the lock signal exists at night for this
    hotel, `docs/PRIVACY.md` § 10.1)
@@ -1056,7 +1055,7 @@ NOK 30 a room a month: __ yes, __ maybe, __ no; locks online at __ of __; __ peo
 
 **Also before 14:00, at the Wybe stand:** ask Wybe's team for one night of their robot's task log ("we
 render it on Overlevering within 48 hours"), and whether Wybe would introduce one of its hotel
-customers to a Fettero pilot. Write down the answers as given, yes or "not yet": **[fill]**. A partner conversation that happened beats a channel slide; one that didn't is not
+customers to a Lobby pilot. Write down the answers as given, yes or "not yet": **[fill]**. A partner conversation that happened beats a channel slide; one that didn't is not
 mentioned.
 
 ### 8.2 Hallway test: 3 people, 5 minutes each

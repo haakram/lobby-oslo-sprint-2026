@@ -10,7 +10,7 @@ import { RECEPTION_TOOL_NAMES } from "./tools";
 const client = receptionAgentConfig({ kind: "client" });
 const webhook = receptionAgentConfig({
   kind: "webhook",
-  baseUrl: "https://fettero.example",
+  baseUrl: "https://lobby.example",
   secretId: "secret-id-123",
 });
 
@@ -31,7 +31,7 @@ describe("receptionAgentConfig, webhook mode", () => {
     tools.forEach((tool, i) => {
       if (tool.type !== "webhook") throw new Error("expected a webhook tool");
       expect(tool.name).toBe(RECEPTION_TOOL_NAMES[i]);
-      expect(tool.apiSchema.url).toBe(`https://fettero.example/api/reception/tools/${tool.name}`);
+      expect(tool.apiSchema.url).toBe(`https://lobby.example/api/reception/tools/${tool.name}`);
       expect(tool.apiSchema.method).toBe("POST");
       expect(tool.apiSchema.requestHeaders).toEqual({
         "x-reception-secret": { secretId: "secret-id-123" },

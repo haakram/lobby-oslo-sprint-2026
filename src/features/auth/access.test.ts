@@ -57,6 +57,10 @@ describe("decide: not logged in", () => {
       "/icon-192.png",
       "/icon-512.png",
       "/icon-maskable-512.png",
+      "/brand/lobby-mark.png",
+      "/brand/lobby-wordmark.png",
+      "/brand/lobby-logo-full.png",
+      "/brand/lobby-tagline.png",
     ]) {
       expect(decide({ pathname, search: "", session: null })).toEqual({ kind: "next" });
       // And for every role: the receptionist's tab gets the icon too, not a 403 page.

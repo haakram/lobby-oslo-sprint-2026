@@ -3,7 +3,7 @@
 import { ConversationProvider } from "@elevenlabs/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMemo } from "react";
-import type { VoiceProblem } from "@/features/voice/useFetteroVoice";
+import type { VoiceProblem } from "@/features/voice/useLobbyVoice";
 import { Transcript } from "@/features/voice/Transcript";
 import { Button, Card, EmptyState, ErrorState, fadeRise, MicIcon } from "@/ui";
 import { CallLogPanel } from "./CallLogPanel";

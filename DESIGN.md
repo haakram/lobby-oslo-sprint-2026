@@ -1,11 +1,11 @@
-# Design system: Fettero
+# Design system: Lobby
 
 > Every screen reuses these values; components never hard-code a colour, font or size that isn't
 > here. Changing a token is a team decision (it changes every screen). The tokens live in
 > `src/app/globals.css` (CSS variables + Tailwind `@theme`); Tailwind's own colour and radius
 > palettes are switched off there, so only these names exist.
 
-Character: **a calm, precise operations tool for a hotel you trust at 06:00.** Fettero is one place to
+Character: **a calm, precise operations tool for a hotel you trust at 06:00.** Lobby is one place to
 see and run the whole hotel, with AI: a robot that works the night, a receptionist that answers the
 phone, and the rooms, guests, requests, work orders, stores and shifts around them. Industrial, not
 playful: concrete and white paper for the working screens, night steel for the robot's world, one
@@ -19,13 +19,11 @@ code has. Everything below is read from `globals.css`, `layout.tsx` and `src/ui/
 
 One name, one line, the same everywhere a person reads them (review round 1 counted three names and four
 taglines). The words live in `src/ui/brand.ts`; the rail, the phone's top bar, the login page, every
-page title (`Rom og renhold | Fettero`) and the meta description read them from there.
+page title (`Rom og renhold | Lobby`) and the meta description read them from there.
 
-- **Name: Fettero.** The product, the app and its AI ("Fettero foreslår å si ja", "Snakk med Fettero").
-  *Lobby* was the working name until 2026-11-08; it is retired in everything people read, because a funded
-  Zurich hotel-AI company already trades as Lobby on the same PMS channel (Apaleo). Code identifiers keep
-  the old name (`LOBBY_USERS`, `lobby:` storage keys, `scripts/lobby-hash.mjs`); renaming them buys nothing
-  on screen. The team lead decides whether `main` follows this branch.
+- **Name: Lobby.** The product, the app and its AI ("Lobby foreslår å si ja", "Snakk med Lobby").
+  The team lead set it on 2026-11-08; it is the same word as the code identifiers (`LOBBY_USERS`, `lobby:`
+  storage keys, `scripts/lobby-hash.mjs`).
 - **The line: *Natten, ærlig overlevert.*** In English: *The night, handed over honestly.* It names the
   differentiator: the morning gets the night as it was, every "done" confirmed by the server. Login lede,
   meta description, README top, first slide and last spoken line; nowhere a second tagline.
@@ -37,10 +35,14 @@ page title (`Rom og renhold | Fettero`) and the meta description read them from 
 - **The hotel is *Hotell Nattskift*:** only the demo hotel's name, under the product's name in the rail and
   in Oversikt's top bar. The host sees *Korttidsutleie i Oslo* there instead.
 - **The robot is *roboten*,** lower case, in running text ("Roboten fullførte 73 av 77 oppdrag"). It is
-  not called Fettero: Fettero is the product the robot works for.
-- The name is set in Schibsted Grotesk 700, tight (−0.02 em in the rail, −0.03 em on login); no logo mark,
-  no orange in the name (orange is the one action and the robot).
-- **The icon is the name's F:** Schibsted Grotesk 700's F (its stem and arms read from the font, on whole
+  not called Lobby: Lobby is the product the robot works for.
+- **The logo** (team lead, 2026-11-08; original `docs/brand/lobby-logo.png`): cream `#F4ECDE` on alpha, for
+  dark surfaces, never redrawn, recoloured or stretched. The rail and the phone's top bar show the
+  horizontal lockup (`src/ui/BrandLockup.tsx`: `public/brand/lobby-mark.png` 28 px tall beside
+  `lobby-wordmark.png` 20 px tall, alt "Lobby"); the login page shows `lobby-logo-full.png`, 186 px wide.
+  Where the name is text (the printed handover's masthead) it is Schibsted Grotesk 700, tight, no orange
+  (orange is the one action and the robot).
+- **The icon is the name's L:** an L in Schibsted Grotesk 700's proportions (its stem and arms read from the font, on whole
   pixels at 16, 32 and 48) in night steel's ink `#e8edf0` on night steel `#121c24`, 6 px corners on the
   32 px grid: `src/app/favicon.ico`, `icon.svg`, `apple-icon.png`, and `public/icon-192/512.png` plus a
   maskable 512 for the manifest (`src/app/manifest.ts`). A shared link previews with
@@ -156,10 +158,10 @@ Groups for the desk and the robot manager (and the registry's order):
   needs the host sits in the bell; amber and red appear only there, on the items that need action.
 
 The bell (`NotificationBell`) is part of the navigation, so it is on every hotel page for every hotel
-role: at the top of the rail beside the name on desktop, and on a phone in a slim dark top bar (*Fettero*,
+role: at the top of the rail beside the name on desktop, and on a phone in a slim dark top bar (*Lobby*,
 the hotel, the bell) above the page. The host's screens carry their own bell in their top bar, so the
 hotel's bell is never shown to the host, nor on /vert to an admin: one bell per screen. For the host the
-slim bar reads *Fettero* and *Korttidsutleie i Oslo*, and the name links to /vert. On Oversikt that bar runs straight into the dark top bar, so the
+slim bar reads *Lobby* and *Korttidsutleie i Oslo*, and the name links to /vert. On Oversikt that bar runs straight into the dark top bar, so the
 phone reads one dark header.
 
 The phone bar holds the role's first four *pinned* modules (Oversikt, Rom, then Gjester / Forespørsler

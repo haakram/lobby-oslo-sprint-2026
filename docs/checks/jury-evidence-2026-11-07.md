@@ -1,4 +1,4 @@
-# Evidence pack: Team Fettero, Oslo Sprint 2026 (state at Sat 7 Nov ~14:00 Oslo)
+# Evidence pack: Team Lobby, Oslo Sprint 2026 (state at Sat 7 Nov ~14:00 Oslo)
 
 Judge from this pack AND verify in the repo (read-only). Repo root: /Users/hamadaliakram/Oslo_Sprint_26 (git). Building ends Sun 8 Nov 14:00 (code freeze); open-round demo is 2 min + 1 min questions from 14:15.
 
@@ -7,7 +7,7 @@ Judge from this pack AND verify in the repo (read-only). Repo root: /Users/hamad
 - Judging (Saturday-morning deck, docs/Oslo Sprint – Saturday morning.pptx): open round scores 1–10 on Functionality (+ live demo, core flow works; − only slides, hard-coded answers), A real problem (+ clear target group, real need; − a solution looking for a problem), Innovation (+ new angle, smart use of tech; − a copy, a thin chatbot shell), Design (+ understandable without explaining; − messy, needs explaining), Team efficiency (+ a lot done, well prioritised in 48 h; − too big a scope, little works). Final (top 10): each judge scores from their own field: Founders ("Can this become a company? Next step if you win tonight?"), IT and security ("Biggest technical risk?" robustness, security, scaling, data), Product ("What did you leave out, and why?"), Marketing ("How will you get your first 100 users?"), Creative and design ("How have you tested this with users?"), Law ("What legal hurdles could stop this?" privacy, rights, regulation), Domain experts ("Why hasn't anyone solved this before?"). Scale: 9–10 exceptional (works and stands out), 7–8 strong (solid, one clear weakness), 5–6 good (promising, not convincing), 3–4 weak (much missing), 1–2 very weak.
 - Submission: one GitHub repo; the jury looks at the commit history; /lever in #general; code freeze 14:00 locks repos at the latest commit.
 
-## The product: "Fettero, the robot co-worker" (hotel night shift + warehouse/hotel operations)
+## The product: "Lobby, the robot co-worker" (hotel night shift + warehouse/hotel operations)
 Two builds, one story (CLAUDE.md, docs/PLAN.md):
 
 **Track A — Night Shift agent (Hamad), Python** — an autonomous AI agent controlling Wybe's simulated hotel robot via an API (Wybe side challenge, scored by the server: tasks completed, speed, no false "done", no unsafe moves; final = 10 secret shifts Sun 12:00–13:00, average with worst dropped).
@@ -16,7 +16,7 @@ Two builds, one story (CLAUDE.md, docs/PLAN.md):
 - Offline tuning: works but the offline nights aren't yet calibrated (tuned gains are noise, not adopted).
 - 3D viewer: viewer/ (three.js), screenshot temp/viewer-1440.png.
 
-**Track B — Fettero app (ShirazIQ), Next.js** — branch `origin/shiraziq/app` (draft PR #7; design in PR #6 `origin/shiraziq/app-design`). Read with `git show origin/shiraziq/app:<path>` / `git diff --stat origin/main...origin/shiraziq/app`. Screens: Øyne (live camera boxes with MediaPipe; tap → Claude vision identifies the product without a barcode — Holio pain 3), Ruter (shortest multi-floor picking route, saved distance — Holio pain 6, uses Track A's router), Stemme (ElevenLabs hosted agent on Claude, language detection, allowlisted client tools — Holio pain 9 + ElevenLabs prize), Natteskift (replay of the agent's run log). PR #7 says: check.sh gate passed (lint, typecheck, 163+ tests, build); NOT done yet: creating the ElevenLabs agent and first speech, deploy to Vercel, screenshots. Design system: DESIGN.md on that branch.
+**Track B — Lobby app (ShirazIQ), Next.js** — branch `origin/shiraziq/app` (draft PR #7; design in PR #6 `origin/shiraziq/app-design`). Read with `git show origin/shiraziq/app:<path>` / `git diff --stat origin/main...origin/shiraziq/app`. Screens: Øyne (live camera boxes with MediaPipe; tap → Claude vision identifies the product without a barcode — Holio pain 3), Ruter (shortest multi-floor picking route, saved distance — Holio pain 6, uses Track A's router), Stemme (ElevenLabs hosted agent on Claude, language detection, allowlisted client tools — Holio pain 9 + ElevenLabs prize), Natteskift (replay of the agent's run log). PR #7 says: check.sh gate passed (lint, typecheck, 163+ tests, build); NOT done yet: creating the ElevenLabs agent and first speech, deploy to Vercel, screenshots. Design system: DESIGN.md on that branch.
 - Planned next (approved 13:40): **Drift** — the 06:00 hotel-manager handover dashboard, the spine of the 2-minute demo: room-status grid from the robot's night, work orders (robot-found faults, voice complaints, linen deviations), "Send renholderne" (cleaning route), linen counting by camera (Holio 7), guest complaint in Spanish → work order. Spec + 2-minute script: docs/superpowers/specs/2026-11-07-ops-dashboard-design.md (on main). Not built yet.
 
 ## Team and process

@@ -113,7 +113,7 @@ describe("ReceptionScreen", () => {
     vi.unstubAllGlobals();
   });
 
-  it("labels the agent's turns Maria, not Fettero", () => {
+  it("labels the agent's turns Maria, not the voice agent's default Lobby", () => {
     fake.turns = [
       { id: "t1", role: "agent", text: "Hei, velkommen.", language: null },
       { id: "t2", role: "user", text: "Hei.", language: null },
@@ -121,7 +121,9 @@ describe("ReceptionScreen", () => {
     stubCalls(ok({ calls: [] }));
     render(<ReceptionScreen />);
     expect(screen.getAllByText("Maria").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Fettero")).not.toBeInTheDocument();
+    // Only inside the transcript: the phone's heading is the demo hotel, also called Lobby.
+    const transcript = within(screen.getByRole("list", { name: "Samtalen så langt" }));
+    expect(transcript.queryByText("Lobby")).not.toBeInTheDocument();
   });
 
   it("starts with a phone that calls Lobby and no requests yet", async () => {

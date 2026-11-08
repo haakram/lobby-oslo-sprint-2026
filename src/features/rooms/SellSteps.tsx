@@ -147,7 +147,7 @@ export function SellSteps({
             Angre
           </Button>
         </span>
-        <span className="basis-full text-xs text-muted">Steg 2 av 2: resepsjonen sjekker ut gjesten i PMS-en. Fettero leser bookingsystemet, men endrer det ikke.</span>
+        <span className="basis-full text-xs text-muted">Steg 2 av 2: resepsjonen sjekker ut gjesten i PMS-en. Lobby leser bookingsystemet, men endrer det ikke.</span>
       </div>
     );
   }

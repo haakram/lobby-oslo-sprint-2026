@@ -6,13 +6,13 @@
 
 ## What this project is
 
-**Team Fettero** (Hamad and ShirazIQ) at the Oslo Sprint hackathon, 6–8 Nov 2026. Two builds, one
+**Team Lobby** (Hamad and ShirazIQ) at the Oslo Sprint hackathon, 6–8 Nov 2026. Two builds, one
 story:
 
 - **A. Night Shift agent:** the AI brain that plays Wybe's simulated hotel robot on its own, scored
   only by the Wybe server (tasks done, speed, no false "done", no unsafe moves). Must be finished
   **Sun 11:45**; the final runs 12:00–13:00.
-- **B. Fettero app:** the robot's eyes (live camera with boxes, products recognised without a
+- **B. Lobby app:** the robot's eyes (live camera with boxes, products recognised without a
   barcode), routes (shortest path across floors) and voice (ElevenLabs, translation). Pitched for the
   main prize, Holio pains 3, 6 and 9, and ElevenLabs.
 

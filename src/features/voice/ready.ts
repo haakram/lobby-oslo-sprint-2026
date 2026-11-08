@@ -1,7 +1,7 @@
 import type { ModuleService } from "@/features/modules/registry";
 
 /**
- * Whether /stemme can talk: the server has the ElevenLabs key and the Fettero agent's id (the same check
+ * Whether /stemme can talk: the server has the ElevenLabs key and the Lobby agent's id (the same check
  * /api/voice/token makes). Names only, never values. Server only: it reads the server's environment.
  */
 export function voiceAgentReady(): boolean {

@@ -1,4 +1,4 @@
-# PLAN.md — Team Fettero's roadmap
+# PLAN.md — Team Lobby's roadmap
 
 > **Oslo Sprint, 6–8 Nov 2026 · Build deadline Sun 8 Nov 14:00 · Repo:
 > https://github.com/haakram/oslo-sprint-26 (private)**
@@ -9,7 +9,7 @@
 >   towels, lost items, room checks, surprises. Scored only by the Wybe server: completed tasks,
 >   speed, no false "done", no unsafe moves. **Must be finished Sun 11:45**; the final is 10 secret
 >   shifts at 12:00–13:00. Prize NOK 10,000.
-> - **B. Fettero app:** the robot's eyes, routes and voice. A live camera with boxes that recognises
+> - **B. Lobby app:** the robot's eyes, routes and voice. A live camera with boxes that recognises
 >   products (soap, shampoo, food) without a barcode, the shortest route across floors, and talking
 >   and translating with ElevenLabs. Pitched for the main prize (NOK 50,000), Holio pains **3, 6
 >   and 9** (NOK 10,000) and ElevenLabs. It also shows the agent's shifts live, which ties A and B
@@ -66,7 +66,7 @@ For a new teammate. ShirazIQ was invited on 2026-11-07.
 
 | When | Checkpoint |
 |---|---|
-| **Sat 12:00** | Team name **Fettero** and team photo handed in |
+| **Sat 12:00** | Team name **Lobby** (registered at the event as “Fettero”) and team photo handed in |
 | Sat ~13:00 | Wybe API mapped · design spec approved · plans written |
 | Sat ~16:00 | Walking skeletons: the agent completes one task in a practice shift; the app shows camera boxes and a map |
 | **Sat 16:00–17:00** | Jury panel: ask Wybe and Holio the questions in § Team review list |
@@ -95,7 +95,7 @@ For a new teammate. ShirazIQ was invited on 2026-11-07.
       [owner: Hamad]
 - [-] `./scripts/protect-main.sh`: dropped. GitHub's free plan has no branch protection on private
       repos; the local hooks and the team rules protect `main`.
-- [ ] Team name **Fettero** and photo handed in by Sat 12:00. [owner: Hamad]
+- [ ] Team name **Lobby** (registered at the event as “Fettero”) and photo handed in by Sat 12:00. [owner: Hamad]
 - [x] Invite accepted, `setup.sh` run, first small PR (own lane in `MEMORY.md`). [owner: ShirazIQ]
       Verified: `setup.sh` showed all 4 plugins ✓, `secrets.sh status` shows all 3 keys set. PR: this one.
 - [ ] **Matches the brief** · [ ] **Seen working**
@@ -120,7 +120,7 @@ enough that two people and their subagents can build in parallel.
       `docs/research/wybe-api.md`. [owner: Hamad, now, to unblock Track A]
 - [x] Track A design spec `docs/superpowers/specs/2026-11-07-nightshift-agent-design.md` and plan
       `docs/superpowers/plans/2026-11-07-nightshift-agent.md`. [owner: Hamad]
-- [ ] Track B design spec `docs/superpowers/specs/2026-11-07-fettero-app-design.md` (start from
+- [ ] Track B design spec `docs/superpowers/specs/2026-11-07-lobby-app-design.md` (start from
       `docs/research/elevenlabs-2026-11.md`). [owner: ShirazIQ]
 - [ ] One implementation plan per track (`superpowers:writing-plans`) in `docs/superpowers/plans/`.
       [owners: per track]
@@ -230,7 +230,7 @@ speaks up → close. Every beat solves a named hotel problem and maps to a prize
 - [ ] **Track C:** the 2-minute script into `docs/DEMO.md` § 2 and rehearsed twice against a timer;
       sources for the hook's numbers found or the wording softened. [owner: ShirazIQ]
 
-### Track B — Fettero app [owner: ShirazIQ]
+### Track B — Lobby app [owner: ShirazIQ]
 
 - [ ] **Skeleton:** the stack from the spec, a deployed URL, API keys kept on the server side.
 - [ ] **Eyes (Holio 3):** live camera with boxes and labels in real time. Tap a box and Claude

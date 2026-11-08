@@ -95,7 +95,7 @@ export type OpenItem = {
   pending?: boolean;
   /** One line per place under the item (the wet floors, grouped into one item with one owner), or the consequence under a lead. */
   lines?: string[];
-  /** Fettero held the room back from sale (the room check's catch), said with a badge. */
+  /** Lobby held the room back from sale (the room check's catch), said with a badge. */
   caught?: boolean;
   /** Rests on the booking system, whose bookings are test data (while they are): the row carries the small word "testbooking". */
   booking?: boolean;
@@ -363,15 +363,15 @@ export function composeHandover({
   if (contradiction?.checkedAt) {
     ranked.push({
       at: hhmm(contradiction.checkedAt),
-      text: `Roboten meldte rom ${number(contradiction.room)} tomt og ryddig, men egen logg sier at den satte inn ${contradiction.arrival ? "bagasje" : itemLabel(contradiction.item)} der kl. ${hhmm(contradiction.placedAt)}. ${OWN_CONFLICT}: Fettero ba resepsjonen sjekke rommet.`,
+      text: `Roboten meldte rom ${number(contradiction.room)} tomt og ryddig, men egen logg sier at den satte inn ${contradiction.arrival ? "bagasje" : itemLabel(contradiction.item)} der kl. ${hhmm(contradiction.placedAt)}. ${OWN_CONFLICT}: Lobby ba resepsjonen sjekke rommet.`,
       by: "robot",
     });
   } else if (held?.deliveredAt) {
     ranked.push({
       at: hhmm(held.deliveredAt),
       text: held.arrival
-        ? `Roboten bar bagasje for dagens ankomst inn på rom ${number(held.room)}, men systemet har ${held.guest ?? "en gjest"} der${held.departure ? ` til ${shortDate(held.departure)}` : ""}. Fettero ba resepsjonen sjekke rommet.`
-        : `Roboten leverte noe inn på rom ${number(held.room)} etter romsjekken. Fettero ba resepsjonen sjekke rommet.`,
+        ? `Roboten bar bagasje for dagens ankomst inn på rom ${number(held.room)}, men systemet har ${held.guest ?? "en gjest"} der${held.departure ? ` til ${shortDate(held.departure)}` : ""}. Lobby ba resepsjonen sjekke rommet.`
+        : `Roboten leverte noe inn på rom ${number(held.room)} etter romsjekken. Lobby ba resepsjonen sjekke rommet.`,
       by: "robot",
     });
   }

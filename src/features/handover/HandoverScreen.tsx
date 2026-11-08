@@ -45,7 +45,7 @@ const BY: Record<Highlight["by"], { word: string; tone: "accent" | "neutral" }> 
  * room check held back, the money, the safety items, the robot's night); *Åpent nå* in the wide column,
  * safety first, then the room check's catch and sale; what happened, folded, beside it; the robot's
  * judgement card; *Kvitter mottatt* last. The proof (the referee, the simulator) sits behind *Slik vet vi
- * det*. Prints as one A4 leave-behind with a Fettero masthead.
+ * det*. Prints as one A4 leave-behind with a Lobby masthead.
  *
  * Round 4 (product and design review): each top figure jumps to its row; the money step is the page's one
  * orange action (and *Kvitter mottatt* takes the orange once no room waits for it); the other links are
@@ -164,7 +164,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
         </Button>
       }
     >
-      {/* The printed page is the leave-behind a hotel keeps (round 3, design review): a Fettero masthead on top. */}
+      {/* The printed page is the leave-behind a hotel keeps (round 3, design review): a Lobby masthead on top. */}
       <header data-print-masthead className="hidden border-b border-line pb-2 print:order-first print:flex print:items-baseline print:justify-between print:gap-4">
         <p className="flex shrink-0 items-baseline gap-3">
           <span className="text-xl font-bold tracking-[-0.02em]">{APP_NAME}</span>
@@ -398,7 +398,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
 
       {/* No contact address exists yet, so none is printed (no e-mail, no invented domain). A real night names guests; test data names nobody real, so nothing to shred. */}
       <footer className="hidden border-t border-line pt-2 text-xs text-muted print:block">
-        {APP_NAME} · {TAGLINE} · Team Fettero, Oslo Sprint 2026
+        {APP_NAME} · {TAGLINE} · Team Lobby, Oslo Sprint 2026
         {" · "}
         {testData ? "Testdata: ingen ekte gjester." : "Inneholder personopplysninger. Makuleres etter vakten."}
       </footer>

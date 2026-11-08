@@ -46,7 +46,7 @@ primitives, API client) gets one clearly owned home.
 | Area | Paths | Owner | Backup |
 |---|---|---|---|
 | Track A: Night Shift agent | `agent/`, `tests/agent/`, `tests/fakes/`, `viewer/`, `requirements*.txt`, `pyproject.toml` | Hamad | ShirazIQ |
-| Track B: Fettero app | TBD (set in the design spec) | ShirazIQ | Hamad |
+| Track B: Lobby app | TBD (set in the design spec) | ShirazIQ | Hamad |
 | Shared contracts (the agent's log format the app reads, env vars) | `docs/ARCHITECTURE.md` § 4, `.env.example` | Hamad | ShirazIQ |
 | Repo tooling, CI, docs | `scripts/`, `.githooks/`, `.github/`, `.claude/`, `docs/` | Hamad | |
 
@@ -74,7 +74,7 @@ Every other route sits behind `src/proxy.ts`: logged out → 307 to `/login?next
 switcher), `receptionist`, `robot`, and `host` ("Vert", an Airbnb host: only `/vert` and below, plus the
 shared routes; `homeFor(role)` sends the host to `/vert` after login and from `/`, never to a 403 on the
 front page). `/api/auth/view` takes only the hotel's views (`ADMIN_VIEWS`); `host` there is a 400. Public: `/login`, `/api/auth/login`,
-`/api/auth/logout`, Next's assets, the favicon, and `/api/reception/tools/*` (ElevenLabs webhook, its own secret).
+`/api/auth/logout`, Next's assets, the brand files (`BRAND_FILES` in `src/features/auth/access.ts`: the favicon, the icons, the link preview and the Lobby logo under `/brand/`), and `/api/reception/tools/*` (ElevenLabs webhook, its own secret).
 
 ### 4.3 Shared types and events
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { safeNext } from "@/features/auth/access";
 import { authConfig } from "@/features/auth/config";
 import { LoginForm } from "@/features/auth/LoginForm";
@@ -15,9 +16,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <VantaBackdrop />
       <div className="relative z-10 w-full max-w-sm">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-[-0.03em]">{APP_NAME}</h1>
+          <h1>
+            {/* The full Lobby logo (mark, wordmark, its line), cream on alpha for this dark page; served before login. */}
+            <Image src="/brand/lobby-logo-full.png" alt={APP_NAME} width={186} height={140} priority />
+          </h1>
           {/* The one line (src/ui/brand.ts), then what it is: the same words as the metadata and the README. */}
-          <p className="mt-2 text-lg font-semibold">{TAGLINE}</p>
+          <p className="mt-6 text-lg font-semibold">{TAGLINE}</p>
           <p className="mt-1 text-base text-muted">{DESCRIPTION}</p>
         </header>
         <Card className="p-6">

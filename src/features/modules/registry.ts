@@ -2,7 +2,7 @@ import type { Role } from "@/features/auth/roles";
 import type { RegenName } from "@/ui/icons/regenPaths";
 
 /**
- * The hotel's modules, in one place. Fettero is one place to see and run the whole hotel; the robot is
+ * The hotel's modules, in one place. Lobby is one place to see and run the whole hotel; the robot is
  * one module among many. Everything that lists modules reads this file: the navigation (`src/ui/nav.ts`),
  * who may open what (`src/features/auth/roles.ts` builds its route table from `roles` here), the
  * widgets on Oversikt (`src/features/dashboard/widgets.tsx` maps `id` → component) and the "Nå" band.

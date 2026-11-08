@@ -1,10 +1,10 @@
-# HOLIO.md — Holio pains 3, 6 and 9 in Fettero, with the honest status
+# HOLIO.md — Holio pains 3, 6 and 9 in Lobby, with the honest status
 
 > For Holio (the people at the stand) and for us. Written Sun 8 Nov, updated
 > at about 03:10, at 05:50 (owner E's round-5 fixes: guides that name only real controls) and at 07:00
 > (owner E's round-6 fixes: the guide language is kept) from the code on `hamad/jury-loop`. The Øyne parts
 > were re-read at about 09:45 against the camera that ships (ShirazIQ's, as on `main`), which has no picker
-> between candidate products and no avvik. Fettero is a hotel product; this page says plainly which parts
+> between candidate products and no avvik. Lobby is a hotel product; this page says plainly which parts
 > of it work for a web-shop warehouse today, which parts are hotel stand-ins, and what we would build
 > first. The brief: `docs/CONTEXT.md` § 6 and *Hackathon - Holio og utfordringer fra lagerdriften.pdf*.
 
@@ -19,7 +19,7 @@ and 9 what it plugs into.
 
 ## The three pains, screen by screen
 
-| Pain | Where in Fettero | What works today | Honest status |
+| Pain | Where in Lobby | What works today | Honest status |
 |---|---|---|---|
 | **3. Recognise a product without a barcode** | **Robotens øyne** (`/oyne`, `src/features/eyes/`) | The phone's camera draws boxes on the device (MediaPipe EfficientDet-Lite0), and live recognition (on by default) sends the crop of each stable box that isn't a person through our server to Claude; a tap does the same for one box. Claude reads the text on the pack and picks the SKU from the catalogue, with what it read and a confidence label (*Sikker / Ganske sikker / Usikker, sjekk varen*). The card shows the SKU, *Vis vei* and *Legg i plukkliste* at any confidence (`src/features/eyes/ProductCard.tsx`), so on *Usikker* the worker checks the item before adding it; this build has no picker between the products it could be and no avvik for a wrong match. A `/ruter?sku=` link only shows the way to that shelf, with the name and the shelf, never the SKU, and never adds to the pick list (`src/features/routes/PicklistMode.tsx`). *Identifiser hele bildet* sends the whole frame when no box appears. | **Works with network and a key; not measured.** The catalogue is 12 test SKUs in the prompt (`src/features/catalog/products.ts`), which does not scale. The on-device detector knows COCO classes (bottle, cup …), with no class for a carton, polybag or envelope, so most warehouse goods need a tap. The confidence is the model's own label, not calibrated. No accuracy, speed or cost figure exists yet. There is no label check: confirming with the item's own label (typed, by camera or with the handheld's scanner) is `TODO(phase-3)`. |
 | **6. Shortest route / less walking** | **Ruter** (`/ruter`, `src/features/routes/`), tab *Plukkliste* | A TypeScript port of our robot's router (parity tests against the Python agent) finds the shortest round over several floors, by lift when a trolley is in use. The *Plukkliste* tab is always there and plans a pick round from start and back for the items Øyne or Stemme added; an empty list opens on an example restocking order of 5 SKUs. **The headline compares with a list sorted by shelf, which is what a WMS prints: 16 m saved, 10 % shorter (146 m against 162 m).** Against the order the list was written in, it is 70 m, 32 %, shown beside it as the second baseline (`RouteStats.tsx`). | **Works on a test map, and the saving is small.** The warehouse map is 4 shelves on two floors with a packing zone as start (*Testkart*, `TODO(phase-2)`); a four-shelf map can't prove much. The hotel cleaning round is the same router on the real night's hotel map, and there it is as short as room-number order. The big savings in a warehouse are slotting (fast movers closer to packing) and batching; neither is built, and nothing uses order history yet, which is the word in pain 6. |

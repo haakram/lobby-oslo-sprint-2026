@@ -4,12 +4,12 @@
 > `hamad/jury-loop` (app) and `hamad/final` (agent).** It describes the product as it stands, not a
 > wish list. Changes only by team agreement (AI_RULES R2); an AI that wants to add something not listed
 > here stops and asks. The team's open decisions were settled on Sun 8 Nov morning (after the fourth review round):
-> the wedge, its reason, the commitment and the stop rule (§ 8). The product trades as **Fettero** on this
-> branch (the team lead decides whether `main` follows); code identifiers keep the old `lobby` names.
+> the wedge, its reason, the commitment and the stop rule (§ 8). The product trades as **Lobby** (team
+> lead, Sun 8 Nov), the same word as the code identifiers' `lobby`.
 
 ## 1. One-line description
 
-**Fettero** helps **the hotel's 06:00 handover manager** **take over the night in a minute, get the
+**Lobby** helps **the hotel's 06:00 handover manager** **take over the night in a minute, get the
 rooms that are free to reception hours earlier and hand on what is still open** by **turning the night
 clerk's entries, one signal per room from the door lock, the booking system (read-only), the AI
 receptionist's calls and, where there is one, the night robot's run log into one signed handover page,
@@ -44,7 +44,7 @@ Secondary users the app serves (shown only in Q&A, not in the 2-minute demo):
 the night's events are spread over the robot, the phone, staff notes and the PMS. Rooms that are empty
 but still marked occupied ("sleepers": a guest due out yesterday whose check-out was never recorded)
 wait until housekeeping's round finds them, usually by late morning; a room due out today is not one,
-since the PMS already sells it. So what Fettero buys is hours, which are money on a night that sells
+since the PMS already sells it. So what Lobby buys is hours, which are money on a night that sells
 out and for an early check-in. A guest whose request failed is still waiting; safety events and faults
 surface late.
 
@@ -211,7 +211,7 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
   host keep their own menus; access is unchanged.
 - **The bell** (*Varsler*): only what needs a person, safety first: each unsigned wet floor (since when,
   owner) and the stranger at seven doors (in the handover's neutral words, *Resepsjon, straks*) as
-  *Haster*, computed by Fettero from the run log; red and amber appear only for what is urgent.
+  *Haster*, computed by Lobby from the run log; red and amber appear only for what is urgent.
 - **Ruter**: shortest cleaning round and the robot's walk per task across floors, by lift with a cart,
   using a TypeScript port of the agent's router with parity tests (`src/features/routes/hotelRouter.ts`).
   The headline compares metres only, against a named baseline the optimiser also respects, and says
@@ -242,7 +242,7 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 
 ## 6. Out of scope — cut, with the reason
 
-- **Writing to the PMS. Decided Sun 8 Nov (round 5): the pilot is read-only.** Fettero never changes
+- **Writing to the PMS. Decided Sun 8 Nov (round 5): the pilot is read-only.** Lobby never changes
   a booking and never sells a room: the step after the desk confirms is *Send til resepsjonen*, and
   reception makes the change in its own system; the row then waits for the PMS (*Venter på PMS-en*)
   and would turn green only when the booking system shows the room free (the connector that reads the
@@ -294,7 +294,7 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
   - The simulation's score pays for habits a hotel wouldn't want: declining a guest's "it never came"
     when there is no order (the guest still has no water), running the battery to 8.6 % before 06:00,
     and moving a wet-floor sign to a newer spill when the robot is out of signs (`sign_move`, still on in
-    the agent). Fettero turns those into decisions and open items for a person; a real deployment keeps a
+    the agent). Lobby turns those into decisions and open items for a person; a real deployment keeps a
     battery reserve and never takes a sign off a wet floor. What the hotel's rules cost in the sim,
     measured in the replay bed on 164 real nights (`hamad/hotelrules`): −125.8 points a night for all
     four, almost all of it (−105.2) from never moving a sign with only three in store; the knock costs
@@ -353,7 +353,7 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
   countries ≈ 359,000 rooms ≈ NOK 129 M (Eurostat); the next price lever is a robot connector per
   robot per month (`docs/DEMO.md` § 7).
 - **Proposed Sun 8 Nov after the fifth review round (team to confirm; `docs/DEMO.md` § 7):** the pilot
-  converts **on usage**, the handover signed in Fettero on 5 of 7 mornings in 3 of the 4 weeks plus the
+  converts **on usage**, the handover signed in Lobby on 5 of 7 mornings in 3 of the 4 weeks plus the
   general manager's yes, with rooms found before the housekeeping round reported beside it, not as the
   gate. Measuring it needs the sign-off as an append-only server event (hotel, role, date; no guest
   data), `TODO(phase-3)`, the first week's build task. Hotel 1 goes live on 16 November, before the
@@ -363,20 +363,17 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 - Have we any hotel person to quote? None so far. The phone round and hallway test (`docs/DEMO.md`
   § 8) are planned for Sunday morning, run by ShirazIQ while Hamad is at the Wybe final (team to
   confirm). The night desks are reachable before 06:45, the buyers 08:00–09:30 (§ 8.1).
-- Does `main` trade as Fettero too? (Team lead.) The public URL, lobby-sandy.vercel.app, serves `main`
-  under the old name and an older CSP; `hamad/jury-loop` isn't deployed (team lead's rule).
-- The name isn't cleared. A quick web check on Sun 8 Nov found FETTERO registered in the US for
-  jewellery (class 14, no conflict with software) and FETUERO registered in the US in class 9
-  (software), close enough to need a proper search: Patentstyret, EUIPO TMview and WIPO in classes 9,
-  42 and 43, and whether FERRERO's reputation reaches a sound-alike (`docs/PRIVACY.md` § 9).
-  `fettero.no` is free at Norid; `fettero.com` is taken (registered 2020). Until the search is done we
-  don't say "clear".
+- The public URL, lobby-sandy.vercel.app, serves `main` with an older CSP; `hamad/jury-loop` isn't
+  deployed (team lead's rule).
+- The name isn't cleared. A funded Zurich hotel-AI company also trades as Lobby, on the same PMS
+  channel (Apaleo); a proper search is still to do: Patentstyret, EUIPO TMview and WIPO in classes 9,
+  42 and 43 (`docs/PRIVACY.md` § 9). Until the search is done we don't say "clear".
 - Does Holio count three pains in one product for or against us? (CONTEXT § 6, still open; ask at the
   Holio stand before 14:00.)
 - Repo public, or jury access by invitation, before 14:00? (CONTEXT § 11.) The jury account's password
   goes in the `/lever` message, not the repo; the account is removed after the event.
 - Which run log is on stage after 13:05: the seed-16 night, or a final shift's log?
 
-Decided since Saturday: the product name on this branch (Fettero); a separate jury account; the demo
+Decided since Saturday: the product name (Lobby, team lead, Sun 8 Nov); a separate jury account; the demo
 night (the final agent's seed-16 night instead of Saturday's seed 5); Oversikt's red alert band is
 gone, replaced by the bell and the handover page.

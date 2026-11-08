@@ -42,7 +42,7 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(card).toHaveTextContent("8 av 9«Ferdig» på egen vurdering som holder mot robotens egen logg");
     expect(card).toHaveTextContent("5 romsjekker og 4 søl: roboten meldte ferdig ut fra det den selv så.");
     expect(card).toHaveTextContent(
-      "Rom 209: roboten satte inn bagasje kl. 01:29, så rommet tomt kl. 03:47 og meldte det tomt (R-049). Robotens blikk og dens egen oppgavelogg er uenige, så Fettero regner den ikke som holdt.",
+      "Rom 209: roboten satte inn bagasje kl. 01:29, så rommet tomt kl. 03:47 og meldte det tomt (R-049). Robotens blikk og dens egen oppgavelogg er uenige, så Lobby regner den ikke som holdt.",
     );
     // The simulator has no camera (round 6): the card never says "kameraet", and says what robotens blikk is behind Slik vet vi det.
     expect(card).not.toHaveTextContent(/kamera(et)? og/i);
@@ -262,6 +262,6 @@ describe("RobotJudgementCard on the hotel-rules night (round 6: a second real lo
     expect(card).toHaveTextContent("Rom 209: roboten satte inn bagasje kl. 01:29");
     // One plain line on what the rules cost (four rules to all six, to the nearest ten), the rest behind Slik vet vi det.
     expect(hotelRulesCostRange()).toEqual([120, 210]);
-    expect(card).toHaveTextContent("Hotellregler koster ca. 120–210 poeng per natt i simulatoren; Fettero viser hva roboten gjorde i stedet.");
+    expect(card).toHaveTextContent("Hotellregler koster ca. 120–210 poeng per natt i simulatoren; Lobby viser hva roboten gjorde i stedet.");
   });
 });

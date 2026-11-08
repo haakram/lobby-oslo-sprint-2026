@@ -73,7 +73,7 @@ someone has to start and watch the 10 shifts.
 controls a hotel robot **in a simulation**, through an API. It is a robotics-and-AI challenge, but
 the robot is simulated: the score comes from the server, not from the jury.
 
-**Our access (team Fettero):** endpoint **`https://nightshift.wybe.me/`**, header
+**Our access (team Lobby, registered at the event as “Fettero”):** endpoint **`https://nightshift.wybe.me/`**, header
 `Authorization: Bearer <key>`, key in `.env` as `WYBE_NIGHTSHIFT_KEY`. The protocol, found
 2026-11-07: `POST` a JSON body `{"cmd":"<command>","args":{…}}`; replies look like
 `{"ok":…,"clock":…,"result":…,"events":[…],"note":…}`. `{"cmd":"help"}` lists help, whoami,
@@ -255,7 +255,7 @@ Holio what they reward.
    ElevenLabs), built in parallel. Build with **subagent-driven development** as the standard for
    the whole repo, with as many subagents as help.
 2. The Wybe key lives in `.env` (`WYBE_NIGHTSHIFT_KEY`).
-3. Team name **Fettero**. Two members. Hamad builds the Night Shift agent (route finding, task
+3. Team name **Lobby** (registered at the event as “Fettero”). Two members. Hamad builds the Night Shift agent (route finding, task
    planning); ShirazIQ builds the UI, the ElevenLabs connection and the demo (team lead, 12:25).
 4. Private GitHub repo `haakram/oslo-sprint-26`.
 5. Holio: pains 3, 6 and 9, all three equally, at demo level.
@@ -268,7 +268,7 @@ Holio what they reward.
 | Hamad | haakram | Team lead, main coding | Track A: the Night Shift agent (routes, task planning) · tooling |
 | ShirazIQ | ShirazIQ | UI, voice, demo | Track B: the app (UI, camera, ElevenLabs) · Track C: the demo |
 
-- **Team name: Fettero.** Team photo due Sat 12:00.
+- **Team name: Lobby** (registered at the event as “Fettero”, which is the name on the Wybe leaderboard and on Discord). Team photo due Sat 12:00.
 - Where we talk: TBD
 - Where the shared secrets live: Hamad's `.env` / `.env.local`, sent privately with
   `scripts/secrets.sh` (OPERATIONS § 4). Never in a channel, the repo or a screenshot.

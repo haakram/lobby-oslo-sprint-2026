@@ -58,7 +58,7 @@ jury) can watch the robot work a shift live or as a replay.
 - **Final lock:** `mode: "final"` only when `FINAL_ARMED=1` **and** the Oslo clock is between
   Sun 8 Nov 2026 11:59 and 13:00. Everything else is practice.
 - **Rate:** a global limiter, default 5 requests/s across all shifts (`NIGHTSHIFT_MAX_RPS`).
-- **Client:** User-Agent `TeamFettero-agent/1.0` (Python's default UA is blocked by Cloudflare);
+- **Client:** User-Agent `TeamLobby-agent/1.0` (Python's default UA is blocked by Cloudflare);
   `X-Shift` on every in-shift call; 409 means the shift ended.
 - **Claude:** a small fast model for unknown request texts and surprises only; a file-backed spend
   ledger (`temp/spend.json`) stops before `ANTHROPIC_BUDGET_USD`; the Console limit (USD 30) is the

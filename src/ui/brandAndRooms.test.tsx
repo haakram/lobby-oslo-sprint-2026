@@ -7,8 +7,8 @@ import { AvvikMark, Figure, HandoverLink, RoomStatusTag, Stat } from "./index";
 import { AVVIK, ROOM_STATUS, roomPaint } from "./roomStatus";
 
 describe("the brand", () => {
-  it("trades as Fettero with one line, no dash", () => {
-    expect(APP_NAME).toBe("Fettero");
+  it("trades as Lobby with one line, no dash", () => {
+    expect(APP_NAME).toBe("Lobby");
     expect(TAGLINE).toBe("Natten, ærlig overlevert.");
     for (const line of [TAGLINE, DESCRIPTION]) expect(line).not.toMatch(/[—–]|Lobby/);
   });

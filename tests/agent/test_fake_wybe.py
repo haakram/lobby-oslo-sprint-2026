@@ -35,7 +35,7 @@ class Sim:
         self.http = httpx.Client(
             base_url="https://nightshift.test",
             transport=httpx.MockTransport(fake.handler),
-            headers={"Authorization": "Bearer test-key", "User-Agent": "TeamFettero-agent/1.0"},
+            headers={"Authorization": "Bearer test-key", "User-Agent": "TeamLobby-agent/1.0"},
         )
         self.shift: str | None = None
 

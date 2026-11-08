@@ -143,8 +143,8 @@ describe("receptionEnv", () => {
     expect(errorText()).toContain("RECEPTION_PUBLIC_URL");
     vi.stubEnv("RECEPTION_PUBLIC_URL", "not a url");
     expect(errorText()).toContain("RECEPTION_PUBLIC_URL");
-    vi.stubEnv("RECEPTION_PUBLIC_URL", "https://fettero.example/");
-    expect(receptionEnv().RECEPTION_PUBLIC_URL).toBe("https://fettero.example");
+    vi.stubEnv("RECEPTION_PUBLIC_URL", "https://lobby.example/");
+    expect(receptionEnv().RECEPTION_PUBLIC_URL).toBe("https://lobby.example");
   });
 
   it("requires a secret of at least 24 characters and never prints it", () => {

@@ -17,7 +17,7 @@ class Settings:
     budget_usd: float
     max_rps: float
     final_armed: bool
-    user_agent: str = "TeamFettero-agent/1.0"
+    user_agent: str = "TeamLobby-agent/1.0"
     runs_dir: Path = Path("temp/runs")
 
 

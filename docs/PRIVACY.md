@@ -1,8 +1,8 @@
-# PRIVACY.md — Personal data, processors and security in Fettero
+# PRIVACY.md — Personal data, processors and security in Lobby
 
 > For the jury's lawyer and security reviewer, and for us. Short and honest: what the hackathon build
 > does today, checked in the code on Sun 8 Nov at about 03:00 (`hamad/jury-loop`; the product trades as
-> Fettero there, while code identifiers keep the old `lobby` names), and what a real hotel deployment
+> Lobby, the same word as the code identifiers' `lobby`), and what a real hotel deployment
 > would still need. The transfer basis per processor (§ 3.1) was checked against primary sources (the
 > DPF list, each vendor's DPA) at about 04:00 the same morning. The pilot's own data sources (the
 > door-lock signal, the energy slot and the night clerk's entries, § 10) and the EEA status of the EU
@@ -210,7 +210,7 @@ and receptionist (ShirazIQ's, as on `main`) don't, so they are listed here for t
 
 ## 7. What a real deployment needs (GDPR and beyond)
 
-- **Roles:** the hotel is the **controller**; Fettero is a **processor** with a data processing
+- **Roles:** the hotel is the **controller**; Lobby is a **processor** with a data processing
   agreement (Art. 28): a one-page draft on the Commission's standard clauses is in
   [`docs/DPA.md`](./DPA.md). Sub-processors listed and agreed: Vercel for the pilot; Anthropic and
   ElevenLabs only if the hotel switches on the camera or the receptionist, which the pilot doesn't.
@@ -343,8 +343,8 @@ and receptionist (ShirazIQ's, as on `main`) don't, so they are listed here for t
   is: the hotel keeps a name-free safety extract for three years as standard, and **any line tied to a
   reported injury is held until that claim is closed**, because three years from the incident can
   run out before the deadline does. **Who keeps it:** the hotel, as controller. At the pilot's end
-  Fettero hands the extract to the hotel and deletes its own copy within the same 30 days as
-  everything else (`docs/DPA.md` point 6); Fettero itself keeps nothing for three years. In the pilot
+  Lobby hands the extract to the hotel and deletes its own copy within the same 30 days as
+  everything else (`docs/DPA.md` point 6); Lobby itself keeps nothing for three years. In the pilot
   build the extract is the signed print-out (an export is `TODO(phase-3)`). Until the pilot's server
   store exists (append-only, server time), the signed print-out is the real record: `localStorage` can
   be edited or wiped at the desk.
@@ -389,29 +389,20 @@ and receptionist (ShirazIQ's, as on `main`) don't, so they are listed here for t
 
 ## 9. The name (trademark): the search is still to do
 
-What we know is a quick check, not a clearance search:
+The product trades as **Lobby** (team lead, Sun 8 Nov). What we know is not a clearance search:
 
-- **FETTERO** is registered in the US for jewellery (reg. 5627248, class 14,
-  [markinton](https://markinton.com/trademark/fettero-87895760)); no conflict with software on its face.
-  **FETUERO** is registered in the US in class 9 (software, 2024): close enough to need the search below.
-- **Domains** (whois, Sun 8 Nov about 04:05): `fettero.no` has no match at Norid (a .no needs a
-  Norwegian organisation number, so it's not a today job); `fettero.com` was registered on 4 Jun 2020
-  through Alibaba Cloud and is taken.
-- **Ferrero.** Said aloud, Fettero is one sound from FERRERO, a mark with a reputation. Such a mark is
-  protected beyond its own goods: in Norway, varemerkeloven § 4 second paragraph protects a mark that
-  is *velkjent* against a similar sign for any goods or services if the use would take unfair advantage
-  of, or harm, its distinctiveness or reputation
-  ([Lovdata](https://lovdata.no/dokument/NL/lov/2010-03-26-8)); the EU trade mark regulation has the
-  same rule. Our reading: the risk is probably low for hotel operations software (another trade, no
-  confectionery link), but it's a recall risk on a noisy stage, and a trademark lawyer decides before
-  any money goes into the name.
+- **Another Lobby.** A funded Zurich hotel-AI company trades as Lobby (USD 2.2 M, Mar 2026) and sells
+  through Apaleo's Agent Hub, the channel we plan to use (`docs/DEMO.md` § 6.1). Same trade, same
+  channel: this is the name's main risk, and a trademark lawyer decides before any money goes into it.
+- The quick checks done on Sun 8 Nov at about 04:05 (US marks, domains, a sound-alike) were for an
+  earlier working name and don't apply to Lobby; they are in git history.
 
-**To do (team, before anyone says "the name is clear"):** search FETTERO and close variants (FETERO,
-FETTERRO, FETUERO, and FERRERO for the reputation question) in
+**To do (team, before anyone says "the name is clear"):** search LOBBY and close variants in
 [Patentstyret's search](https://search.patentstyret.no), [EUIPO TMview](https://www.tmdn.org/tmview/)
 and the [WIPO Global Brand Database](https://branddb.wipo.int), in classes 9, 42 and 43, plus the
-identical word in any class. Write the result and the date here and in `docs/DEMO.md` § 6.1. An
-automated TMview query was refused by the site's bot protection on Sun 8 Nov, so this is done by hand.
+identical word in any class, and check the domains. Write the result and the date here and in
+`docs/DEMO.md` § 6.1. An automated TMview query was refused by the site's bot protection on Sun 8 Nov,
+so this is done by hand.
 
 ## 10. The pilot's data sources: the door-lock signal, the energy slot and the night clerk
 
@@ -427,9 +418,9 @@ Datatilsynet, Arbeidstilsynet and Petroleumstilsynet with the social partners, 2
 *Adgangskontroll*, pp. 34–35 of the [PDF](https://www.arbeidstilsynet.no/contentassets/04ec2eb566d44942bd6693e9e3a0c99e/veileder-om-kontroll-og-overvaking-2019.pdf)).
 Our reading, not legal advice.
 
-### 10.1 What Fettero takes: one signal per room, no card id, no clock
+### 10.1 What Lobby takes: one signal per room, no card id, no clock
 
-| Source at the hotel | What it holds | What reaches Fettero | Never |
+| Source at the hotel | What it holds | What reaches Lobby | Never |
 |---|---|---|---|
 | The lock system's audit trail (ASSA ABLOY, Salto, dormakaba and others) | Every card at every door: guests', housekeepers', porters', master and emergency cards | Per guest room, one value **with no clock**: no **guest-card** entry at the door since 18:00, the start of the window | the card's id, the guest's name, the time of any entry, any staff, master or emergency card, any door that isn't a guest room |
 | The energy slot (the card switch in the room), where a room-control system reports it | Whether a card sits in the slot, sometimes which card | Folded into the same value: a guest card is in the slot (a yes, no clock), or none all window | whose card, since when |
@@ -499,7 +490,7 @@ The hotel's test, one line per point and purpose:
 | (b) the context, the relation between guest and hotel | The guest's card opens the guest's own room; that the hotel knows a room hasn't been entered since the departure date is within what a guest expects, and the hotel's privacy notice says it (below). | An occupant expects the hotel to know someone is in the room, and to register them; a guest checking in later expects not to be sold an occupied room. The privacy notice says it (below). |
 | (c) the nature of the data | No special categories, nothing on offences; one value per room, not a movement trail. | The same one value per room (a guest card in the slot, no clock, no card id). Who coded the card is never asked (§ 10.3). |
 | (d) the possible consequences for the guest | The worst case is a room offered while a guest still has a right to it. It can't be sold on the signal: a named receptionist confirms first, and the booking system decides. | For the occupant: being asked to register, or to pay for a night they used. For the next guest: protection from being walked into an occupied room. Nothing happens on the signal alone: the desk checks with the guest and the registration. |
-| (e) safeguards | Reduced on the hotel's side, no card ids or names, staff cards removed at the source, deleted after 24 hours, a processor bound by Art. 28 (`docs/DPA.md`). | The same, plus the contract line that Fettero is never used to find out who coded a card or to investigate an employee (`docs/DPA.md` point 5, § 10.3). |
+| (e) safeguards | Reduced on the hotel's side, no card ids or names, staff cards removed at the source, deleted after 24 hours, a processor bound by Art. 28 (`docs/DPA.md`). | The same, plus the contract line that Lobby is never used to find out who coded a card or to investigate an employee (`docs/DPA.md` point 5, § 10.3). |
 
 Our reading: 210 is the stronger of the two compatibility cases under (a) and (d), as long as it is
 run as occupant safety and not as a billing hunt (**to verify** with a lawyer before the pilot).
@@ -512,7 +503,7 @@ confirms before the pilot (**to verify**).
 Two sentences for the hotel's privacy notice: *«Vi bruker dørlåsens logg til å se om et rom står tomt
 etter avreise, slik at det kan selges igjen, og om et rom er i bruk uten registrert opphold, så ingen
 ny gjest selges inn i et bebodd rom og gjestelisten er riktig. Fra dørlåsen får vår leverandør
-Fettero bare ett ja/nei per rom, aldri kort-id, aldri klokkeslett; sammen med bookingen er det en
+Lobby bare ett ja/nei per rom, aldri kort-id, aldri klokkeslett; sammen med bookingen er det en
 opplysning om deg, og den slettes etter 24 timer.»* (It no longer says *aldri hvem*: next to the
 booking the signal is about the booked guest, and a notice must not tell a guest otherwise.)
 
@@ -521,26 +512,26 @@ booking the signal is about the booked guest, and a notice must not tell a guest
 - **The lock log is staff data too.** The regulators' guide: card passages *«er opplysninger om den
   enkelte ansatte som kortet er utstedt til»*; ordinary access control is *«vanligvis … et saklig og
   lite inngripende kontrolltiltak»*; its purpose must be written down; and *«I utgangspunktet kan ikke
-  opplysningene i adgangskontrollsystemet brukes til andre formål»* (p. 34). So Fettero never receives a
+  opplysningene i adgangskontrollsystemet brukes til andre formål»* (p. 34). So Lobby never receives a
   staff, master or emergency card event: they are removed at the source. Were a pilot to read them, it
   would be a control measure under [arbeidsmiljøloven](https://lovdata.no/dokument/NL/lov/2005-06-17-62/KAPITTEL_10)
   § 9-1 (it needs *«saklig grunn i virksomhetens forhold»* and must not be *«en uforholdsmessig
   belastning for arbeidstakeren»*), to be discussed with the employees' representatives *«så tidlig som
   mulig»* (§ 9-2) before rollout. That is weeks, not Monday; excluding staff cards at the source is
   what lets the pilot start.
-- **Room 210 points at the desk, and Fettero does not follow it (legal review).** A guest card in a
+- **Room 210 points at the desk, and Lobby does not follow it (legal review).** A guest card in a
   room with no booking was coded by someone, and the lock's encoder log can name who. The moment a
   manager uses the 210 row to find out who, the handover has become a control measure under § 9-1,
   and the guide's *«I utgangspunktet kan ikke opplysningene i adgangskontrollsystemet brukes til andre
-  formål»* applies. So the contract says it: **Fettero brukes aldri til å finne ut hvem som kodet et
+  formål»* applies. So the contract says it: **Lobby brukes aldri til å finne ut hvem som kodet et
   kort eller til å granske en ansatt** (`docs/DPA.md` point 5). A 210 is resolved with the guest and
-  the registration, not with the lock's staff log; Fettero never receives an encoder or staff event,
+  the registration, not with the lock's staff log; Lobby never receives an encoder or staff event,
   so it couldn't answer the question anyway. If a hotel wants the encoder log for an investigation,
   that is the hotel's own control measure, discussed under § 9-2 first, and outside the pilot.
 - **Response times are about a named person too.** *Kjersti Lund kvitterte kl. 23:53, etter 2 min*
   and *Varslet … · Siri Haugen · nå* are times tied to a name, kept 30 days; a manager could add them
   up into a per-person response time. The DPA's point 5 names response times explicitly as something
-  Fettero never aggregates per person, and the § 9-2 conversation with the employee representatives
+  Lobby never aggregates per person, and the § 9-2 conversation with the employee representatives
   covers the *Kvitter* even for the software-only pilot, because it is new compared with the paper
   *vaktbok*.
 - **The night clerk's entries** (*Nattevaktens logg*, `/natt`, `src/features/staffinput/`; the input
@@ -561,4 +552,4 @@ booking the signal is about the booked guest, and a notice must not tell a guest
   before reselling, not to score them. The record says what happened, both names once: *Bekreftet av
   Hanne Vold (resepsjon) · registrert av Siri Haugen*, because the receptionist does not log in herself
   in the pilot build; the manager types her name. In one line for the staff and their representatives:
-  **Fettero signerer for nattevakten, ikke på henne.**
+  **Lobby signerer for nattevakten, ikke på henne.**

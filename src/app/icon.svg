@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Fettero's F: Schibsted Grotesk 700's F (its stem and arms are plain rectangles), night steel and its ink. -->
+  <!-- Lobby's L: an L in Schibsted Grotesk 700's proportions (plain rectangles), night steel and its ink. -->
   <rect width="32" height="32" rx="6" fill="#121c24"/>
-  <path fill="#e8edf0" d="M10 6h14v4H14v4h8v4h-8v8h-4z"/>
+  <path fill="#e8edf0" d="M10 6h4v16h10v4H10z"/>
 </svg>

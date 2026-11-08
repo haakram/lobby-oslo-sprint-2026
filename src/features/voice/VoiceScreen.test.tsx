@@ -80,7 +80,7 @@ describe("VoiceScreen", () => {
 
   it("starts idle, with one way to start and an empty transcript", () => {
     renderScreen();
-    expect(screen.getByRole("button", { name: "Snakk med Fettero" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Snakk med Lobby" })).toBeEnabled();
     expect(screen.getByText("Ingen samtale ennå")).toBeInTheDocument();
     expect([...fake.tools.keys()].sort()).toEqual(["queue_robot_task", "show_guide", "show_product", "show_route"]);
   });
@@ -90,7 +90,7 @@ describe("VoiceScreen", () => {
     const fetchMock = vi.fn(async () => Response.json({ token: "short-lived" }));
     vi.stubGlobal("fetch", fetchMock);
     renderScreen();
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Snakk med Fettero" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Snakk med Lobby" })));
     expect(fetchMock).toHaveBeenCalledWith("/api/voice/token", { cache: "no-store" });
     expect(fake.startSession).toHaveBeenCalledWith({ conversationToken: "short-lived", connectionType: "webrtc" });
   });
@@ -100,7 +100,7 @@ describe("VoiceScreen", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     renderScreen();
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Snakk med Fettero" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Snakk med Lobby" })));
     expect(screen.getByRole("heading", { name: "Mikrofonen er blokkert" })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(fake.startSession).not.toHaveBeenCalled();
@@ -110,7 +110,7 @@ describe("VoiceScreen", () => {
     grantMic("granted");
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "x" }, { status: 503 })));
     renderScreen();
-    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Snakk med Fettero" })));
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Snakk med Lobby" })));
     expect(screen.getByRole("alert")).toHaveTextContent("Stemmen er ikke satt opp");
   });
 
@@ -199,7 +199,7 @@ describe("VoiceScreen", () => {
       </PicklistProvider>,
     );
     expect(screen.getByText("Stemmen er ikke slått på ennå")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Snakk med Fettero" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Snakk med Lobby" })).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Åpne Øyne" })).toHaveAttribute("href", "/oyne");
   });

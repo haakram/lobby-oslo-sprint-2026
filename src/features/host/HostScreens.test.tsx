@@ -124,7 +124,7 @@ describe("Gjestemeldinger", () => {
     const inbox = within(screen.getByRole("region", { name: /Innboksen/ }));
     const first = inbox.getAllByRole("listitem")[0];
     expect(first).toHaveTextContent("Sofia Marino");
-    expect(first).toHaveTextContent("Fettero foreslår å si ja");
+    expect(first).toHaveTextContent("Lobby foreslår å si ja");
     fireEvent.click(within(first).getByRole("button", { name: "Si ja til 13:00" }));
     expect(within(first).getByRole("status")).toHaveTextContent("Du svarte nå nettopp · sendt på italiensk");
     expect(bell()).toHaveAccessibleName("Varsler: 2 ting trenger deg");

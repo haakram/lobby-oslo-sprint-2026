@@ -101,7 +101,7 @@ One registry, `src/features/modules/registry.ts`, lists the hotel's modules. The
 | Rom og renhold | `/rom` | Hotellet | both | run log + test | The key rack (every room's status), today's round per cleaner, rooms out of order; *Lag renholdsrute* Above the rack: the robot's room checks against the booking system (rooms to sell today, guests without a booking; *Merk som ledig for salg*, *Lag oppgave for resepsjonen*), the key rack (every room's status), today's round per cleaner, rooms out of order; *Lag renholdsrute* |
 | Gjester og bookinger | `/gjester` | Hotellet | resepsjonist | test + reception | Arrivals, departures, in house tonight, the receptionist's bookings and callbacks, special cases |
 | Ruter | `/ruter` | Hotellet | both | run log | Shortest route between floors: cleaning round, pick list, the robot's own walk |
-| Overlevering 06:00 | `/overlevering` | Drift | resepsjonist | run log + reception + test | The night on one page for the morning manager: one factual line, four figures with the money first (*Kan selges etter bekreftelse · ca. kr*, held back, *Frigitt i dag*), what is open with safety first (each unsigned wet floor, the stranger; then the rest by due time, the sale in two steps inline), what happened, the night shift's note, *Kvitter mottatt* (*Kvittert av … · nå*, kept on this device until a server store exists); prints with a Fettero footer |
+| Overlevering 06:00 | `/overlevering` | Drift | resepsjonist | run log + reception + test | The night on one page for the morning manager, read act → evidence → sign (jury round 3): one factual line; four decision figures (*Holdt tilbake fra salg* when the room check caught one, the money *Kan selges etter bekreftelse · ca. kr* with *Slik regner vi*, *Sikkerhet, innen 06:30*, the robot's "Alle 73 «ferdig» bekreftet · 4 til en person" with the referee behind *Slik vet vi det*); *Åpent nå* in the wide column: safety first (the unsigned wet floors as one item with a line per corridor, the stranger), then the room check (the catch with *Fettero holdt rommet tilbake*, the sale in two steps inline, rooms with more than one arrival's bags), then the rest by due time; a row resting on the bookings carries *Testdata: bookingen er lagt inn av teamet* and the pilot's evidence line; what happened beside it from 1280 px (folded under the night shift's note below); the robot's judgement card; *Kvitter mottatt* last (*Kvittert av … · nå*, kept on this device until a server store exists). Prints one A4 leave-behind: a Fettero masthead, the figures, the open list with owners beside it, the note, a signature line, "Inneholder personopplysninger" |
 | Forespørsler | `/foresporsler` | Drift | both | run log + reception + test | Every guest request from phone, robot, staff and voice. What the robot handed back first and pinned (calls that arrive later can't push it down), then the phone's calls in their own group (its place held while they load), then the rest; `?filter=robot` opens on the robot's. A call the AI receptionist took that names a room is a task (*Telefon (AI)*, *Se samtalen*, one tap: *Send roboten* / *Gi til …*); a room the hotel doesn't have is *Ukjent rom*, for reception. Each refusal is a decision (*Gi det likevel*), with the referee's verdict. A tapped row stays put with its *Angre*; actions are stamped "Siri Haugen tok saken · nå", never a clock |
 | Vedlikehold | `/vedlikehold` | Drift | robotansvarlig | run log + test | Work orders by priority: the robot's findings and what staff reported; *Tildel*, *Marker løst* |
 | Lager og lin | `/lager` | Drift | robotansvarlig | test | Linen and amenities per store room against what the rooms need; *Lag påfyllingsliste* |
@@ -188,18 +188,20 @@ What needs a person moved into the bell.
 3. **Hotellet i tall** (`KpiStrip`, figures from `highlights.ts`): six figures at most on one rule,
    `Stat size="lg"`, `success` where the figure is good, neutral otherwise, never amber or red. In
    order, filtered by what the role may open: nye bookinger i dag, belegg i natt (%), oppgaver
-   fullført i natt ("71 av 81": the misses are part of the total, not a red count), timer spart av
-   roboten (an estimate per finished task, `MINUTES_PER_TASK`), rom klare til salg ("1 av 36": ready,
-   and free in the booking system or released today; the same figure Rom shows, from
-   `rooms/money.ts`, with the money line under it),
-   gjester fornøyd ("4,7 av 5"); the robot manager gets rom sjekket av roboten and varer over
-   minimum instead of the guest figures.
+   fullført i natt ("71 av 81": the misses are part of the total, not a red count; one line, "Alle 73
+   «ferdig» bekreftet · 4 til en person", the referee behind *Slik vet vi det*), rom klare til salg
+   ("1 av 36": ready, and free in the booking system or released today; the same figure Rom and
+   Gjester show, from `rooms/money.ts`, with the money line under it), rom sjekket av roboten; the
+   robot manager gets varer over minimum instead of the guest figures. No estimate and no test-data
+   rating (jury round 3: *Timer spart* and *Gjester fornøyd* were vanity figures on screen one).
 4. **Widgets**, one per module the role may open, in registry order, in a 1 / 2 / 3 column grid (Rom
    spans two). A widget is a `Card` with the module's name, the *Åpne* link, its good news first (a
    green check and the figure: "73 av 87 fullført", "5 løst i dag", "15 av 16 varer over minimum"),
    then a dense list of at most four rows, completed first (*Sist fullført*, *Sist løst*), and its
    `SourceNote`. Ready rooms are green tiles; a room the room check held back is a taken tile
-   ("Holdt tilbake"), never green; an avvik is a quiet mark. Rom's widget opens with the money line
+   ("Holdt tilbake"), never green, and so is one the booking system still holds until a person
+   released it ("Bekreft først"), so the legend's Klar is the Klare til salg beside it; an avvik is a
+   quiet mark. Rom's widget opens with the money line
    ("1 rom kan selges etter bekreftelse · ca. 1 500 kr · 1 holdt tilbake", *Se romsjekken*). The robot is one small
    widget (place, doing, battery, "68 av 78 oppgaver fullført", *Vis i 3D-kartet*), not the 3D hotel.
 
@@ -279,7 +281,10 @@ amber are for what needs a person, and that lives in the bell, on alerts that ar
 and the screens the jury sees first (Rom, Forespørsler, Natteskift) a figure is `success` when it is
 good and plain otherwise: no amber "Venter", no red "Feilet", no red avvik; the counts stay, only the
 alarm colour goes. The few exceptions are states, not news: a *Må vaskes* tile (the primary action's
-rooms), an error (`ErrorState`), and a status badge in a module's own list.
+rooms), an error (`ErrorState`), and a status badge in a module's own list. One rule for urgency on a
+list (jury round 3, the design juror): the most urgent item is never the quietest. On Overlevering's *Åpent
+nå* the *Sikkerhet* badge is `danger`, the bell's *Haster* red for the same items, and *Gjest venter*
+stays `warning` below it.
 
 **Room states** live in one map, `src/ui/roomStatus.ts` (word, token, icon), that Rom og renhold,
 Oversikt's widget, Ruter and the 3D hotel all read: Klar `success` (a `success-soft` tile on the

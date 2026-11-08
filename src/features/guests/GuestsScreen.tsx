@@ -9,6 +9,7 @@ import { type CallSummary, useReceptionCalls } from "@/features/dashboard/useRec
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
 import { SourceNote } from "@/features/modules/SourceNote";
 import { formatDate, formatDayClock } from "@/features/reception/format";
+import { pmsLastNight, revenueLastNight } from "@/features/rooms/pms";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, Skeleton, Stat } from "@/ui";
 import { nights, selectGuestDay, type Stay } from "./testData";
 
@@ -51,6 +52,8 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
   const special = list ? specialCases(list) : [];
   const roomStatus = useMemo(() => new Map((rooms ?? []).map((room) => [room.id, room.status])), [rooms]);
   const total = rooms?.length ?? ROOMS_IN_HOTEL;
+  // Last night's rooms sold, from the one booking system Oversikt and Overlevering read too.
+  const sold = useMemo(() => revenueLastNight(total, pmsLastNight(day.today)).roomsSold, [total, day.today]);
   const readyRooms = rooms ? rooms.filter((room) => room.status === "klar").length : null;
   const nightMissing = run.status === "error" || run.status === "empty";
   const ready = calls.kind !== "loading" && run.status !== "loading";
@@ -70,7 +73,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
       <FigureRow label="Dagen i tall">
         <Stat label="Ankomster i dag" value={day.arrivals.length} />
         <Stat label="Avreiser i dag" value={day.departures.length} />
-        <Stat label="Belegg i natt" value={day.roomsTonight} unit={`av ${total} rom`} />
+        <Stat label="Belegg i natt" value={sold} unit={`av ${total} rom`} />
         {calls.kind === "loading" ? (
           <div className="flex flex-col gap-1">
             <Skeleton className="h-8 w-16" />

@@ -37,17 +37,20 @@ type Seed = {
 };
 
 /**
- * Offsets in days from today: negative is past. Rooms are tonight's hotel (1xx–3xx): 31 of 36 rooms
- * are sold tonight; 107 is closed for maintenance and 210, 327, 332, 334 are free to sell.
+ * Offsets in days from today: negative is past. Rooms are the demo night's hotel (131–138, 201–214,
+ * 301–314, the seed-16 night in public/runs/demo.jsonl). These bookings are the booking system:
+ * last night 31 of 36 rooms were sold (rooms/pms.ts reads them from here); 137 is closed for
+ * maintenance and 132, 210, 312, 314 were free. 209 and 213 are booked, and the robot found them
+ * empty and tidy; 210 has no booking, and the robot met a guest there.
  */
 const SEEDS: Seed[] = [
   // In house
-  { name: "Ingrid Solbakken", room: "room-101", from: -2, to: 1 },
-  { name: "Tomasz Wierzbicki", room: "room-103", from: -1, to: 2, guests: 2 },
-  { name: "Familien Haugland", room: "room-104", from: -3, to: 1, guests: 4, notes: ["Barneseng"] },
-  { name: "Aisha Rahimi", room: "room-105", from: -1, to: 3 },
-  { name: "Gunnar Holm", room: "room-106", from: -2, to: 1 },
-  { name: "Emma Kristiansen", room: "room-108", from: -1, to: 2, guests: 2 },
+  { name: "Ingrid Solbakken", room: "room-131", from: -2, to: 1 },
+  { name: "Tomasz Wierzbicki", room: "room-133", from: -1, to: 2, guests: 2 },
+  { name: "Familien Haugland", room: "room-134", from: -3, to: 1, guests: 4, notes: ["Barneseng"] },
+  { name: "Aisha Rahimi", room: "room-135", from: -1, to: 3 },
+  { name: "Gunnar Holm", room: "room-136", from: -2, to: 1 },
+  { name: "Emma Kristiansen", room: "room-138", from: -1, to: 2, guests: 2 },
   { name: "Martin Skogen", room: "room-202", from: -2, to: 1 },
   { name: "Yuki Tanaka", room: "room-204", from: -2, to: 2 },
   { name: "Sara Lindgren", room: "room-205", from: -1, to: 2, guests: 2 },
@@ -57,29 +60,30 @@ const SEEDS: Seed[] = [
   { name: "Astrid Moe", room: "room-211", from: -2, to: 3, guests: 2 },
   { name: "Petter Aas", room: "room-212", from: -1, to: 1 },
   { name: "Ola Nygård", room: "room-213", from: -1, to: 2 },
-  { name: "Liv Austad", room: "room-321", from: -1, to: 3 },
-  { name: "Håkon Teigen", room: "room-322", from: -1, to: 2 },
-  { name: "Marte Eide", room: "room-323", from: -2, to: 1, guests: 2 },
-  { name: "Javier Ortega", room: "room-324", from: -1, to: 2 },
-  { name: "Ida Halvorsen", room: "room-326", from: -2, to: 1 },
-  { name: "Lars Engen", room: "room-328", from: -1, to: 2, guests: 2 },
-  { name: "Olav Rønning", room: "room-329", from: -5, to: 2, notes: ["Rullestol, trenger heis"] },
-  { name: "Mehmet Yilmaz", room: "room-330", from: -1, to: 1 },
-  { name: "Silje Mørk", room: "room-331", from: -1, to: 1 },
+  { name: "Liv Austad", room: "room-301", from: -1, to: 3 },
+  { name: "Håkon Teigen", room: "room-302", from: -1, to: 2 },
+  { name: "Marte Eide", room: "room-303", from: -2, to: 1, guests: 2 },
+  { name: "Javier Ortega", room: "room-304", from: -1, to: 2 },
+  { name: "Ida Halvorsen", room: "room-306", from: -2, to: 1 },
+  { name: "Lars Engen", room: "room-308", from: -1, to: 2, guests: 2 },
+  { name: "Olav Rønning", room: "room-309", from: -5, to: 2, notes: ["Rullestol, trenger heis"] },
+  { name: "Mehmet Yilmaz", room: "room-310", from: -1, to: 1 },
+  { name: "Silje Mørk", room: "room-311", from: -1, to: 1 },
+  { name: "Sander Haug", room: "room-307", from: -1, to: 2 },
   // Leaving today; housekeeping turns most of these rooms for today's arrivals
   { name: "Erlend Vik", room: "room-201", from: -4, to: 0 },
   { name: "Margit og Sverre Dahl", room: "room-203", from: -1, to: 0, guests: 2, notes: ["Sen utsjekk 14:00"] },
   { name: "Jonas Bjørnstad", room: "room-206", from: -1, to: 0 },
   { name: "Camille Rousseau", room: "room-214", from: -3, to: 0, guests: 2 },
-  { name: "Fatima El-Amin", room: "room-325", from: -2, to: 0, notes: ["Nøttefri frokost"] },
-  { name: "Daniel Okafor", room: "room-333", from: -2, to: 0, guests: 2 },
+  { name: "Fatima El-Amin", room: "room-305", from: -2, to: 0, notes: ["Nøttefri frokost"] },
+  { name: "Daniel Okafor", room: "room-313", from: -2, to: 0, guests: 2 },
   // Arriving today
-  { name: "Kari Nordvik", room: "room-102", from: 0, to: 2, guests: 2, notes: ["Har med hund"], source: "resepsjonist", booked: 0 },
+  { name: "Kari Nordvik", room: "room-132", from: 0, to: 2, guests: 2, notes: ["Har med hund"], source: "resepsjonist", booked: 0 },
   { name: "Anders Lie", room: "room-201", from: 0, to: 1 },
   { name: "Familien Strand", room: "room-206", from: 0, to: 3, guests: 3, notes: ["Barneseng"] },
   { name: "Elena Petrova", room: "room-214", from: 0, to: 2, notes: ["Sen ankomst, etter 23:00"], source: "resepsjonist", booked: 0 },
-  { name: "Bjørn Hestnes", room: "room-325", from: 0, to: 1, booked: 0 },
-  { name: "Priya Nair", room: "room-333", from: 0, to: 2, guests: 2, notes: ["Allergi: fjær"] },
+  { name: "Bjørn Hestnes", room: "room-305", from: 0, to: 1, booked: 0 },
+  { name: "Priya Nair", room: "room-313", from: 0, to: 2, guests: 2, notes: ["Allergi: fjær"] },
   { name: "Lukas Brandt", room: null, from: 0, to: 1, booked: 0 },
   // Booked ahead
   { name: "Maren Sæther", room: null, from: 1, to: 3, guests: 2, booked: 0 },

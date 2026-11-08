@@ -580,7 +580,7 @@ function EndRow({ end }: { end: EndOfShift }) {
   const battery = end.battery !== null ? `, ${Math.round(end.battery)} % batteri` : "";
   return (
     <Row icon={end.docked ? "plug" : "battery-low"} label="Ved skiftslutt" fault={!end.docked || end.keycard}>
-      {end.docked ? `På lader ved ${where}${battery}.` : `Står ved ${where}, ikke på lader${battery}.`}
+      {end.docked ? `På lader${battery}.` : `Står ved ${where}, ikke på lader${battery}.`}
       {end.keycard && <span className="mt-1 block">Har fortsatt hovednøkkelkortet. I et hotell leveres det tilbake før vakten slutter.</span>}
     </Row>
   );

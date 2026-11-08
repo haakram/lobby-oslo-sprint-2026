@@ -224,3 +224,19 @@ describe("joinNo", () => {
     expect(joinNo(["a", "b", "c"])).toBe("a, b og c");
   });
 });
+
+describe("RobotJudgementCard on the hotel-rules night (round 6: a second real log)", () => {
+  const RULES = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/hotel-rules-seed16.jsonl"), "utf8")).lines;
+
+  it("computes itself: every keycard entry knocked, no sign moved off a wet floor, and what is still wrong", () => {
+    render(<RobotJudgementCard lines={RULES} />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    expect(card).toHaveTextContent("0 av 14Innganger med nøkkelkort uten å banke på");
+    expect(card).toHaveTextContent("Roboten banket på før alle 14 innganger med nøkkelkort.");
+    expect(card).not.toHaveTextContent("mens gulvet der fortsatt var vått");
+    // Still wrong: on the charger, but the master keycard still in hand at 06:00; and 209, the same contradiction.
+    expect(card).toHaveTextContent("Ved skiftslutt");
+    expect(card).toHaveTextContent("På lader, 16 % batteri.Har fortsatt hovednøkkelkortet.");
+    expect(card).toHaveTextContent("Rom 209: roboten satte inn bagasje kl. 01:29");
+  });
+});

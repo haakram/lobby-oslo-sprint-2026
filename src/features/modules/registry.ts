@@ -28,6 +28,7 @@ export type ModuleId =
   | "rom"
   | "gjester"
   | "ruter"
+  | "overlevering"
   | "foresporsler"
   | "vedlikehold"
   | "lager"
@@ -75,6 +76,7 @@ export const MODULES: readonly HotelModule[] = [
   { id: "gjester", name: "Gjester og bookinger", short: "Gjester", hint: "Ankomster, avreiser, bookinger og hensyn", icon: "users", route: "/gjester", group: "hotellet", roles: ["receptionist"], pinned: true, widget: true, data: "mixed" },
   { id: "ruter", name: "Ruter", hint: "Korteste vei mellom etasjene", icon: "route", route: "/ruter", group: "hotellet", roles: BOTH, data: "run-log" },
   // Drift
+  { id: "overlevering", name: "Overlevering 06:00", short: "Overlevering", hint: "Natten oppsummert for morgenvakten, med kvittering", icon: "clipboard-check", route: "/overlevering", group: "drift", roles: ["receptionist"], data: "mixed" },
   { id: "foresporsler", name: "Forespørsler", hint: "Alt gjestene ber om, fra telefon, robot og personale", icon: "inbox", route: "/foresporsler", group: "drift", roles: BOTH, pinned: true, widget: true, data: "mixed" },
   { id: "vedlikehold", name: "Vedlikehold", hint: "Arbeidsordre: robotens funn og meldte feil", icon: "tool", route: "/vedlikehold", group: "drift", roles: ["robot"], pinned: true, widget: true, data: "mixed" },
   { id: "lager", name: "Lager og lin", short: "Lager", hint: "Lin og utstyr per lagerrom", icon: "archive", route: "/lager", group: "drift", roles: ["robot"], widget: true, data: "test" },

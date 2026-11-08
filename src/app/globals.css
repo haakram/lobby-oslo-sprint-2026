@@ -176,3 +176,16 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Printing a screen (Overlevering 06:00): the page itself on white paper, without the navigation. */
+@media print {
+  nav {
+    display: none !important;
+  }
+  #innhold {
+    padding-bottom: 0 !important;
+  }
+  body {
+    background: #ffffff;
+  }
+}

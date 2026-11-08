@@ -7,6 +7,7 @@ const MATRIX: Record<string, Record<Role, boolean>> = {
   "/": { admin: true, receptionist: true, robot: true, host: false },
   "/rom": { admin: true, receptionist: true, robot: true, host: false },
   "/gjester": { admin: true, receptionist: true, robot: false, host: false },
+  "/overlevering": { admin: true, receptionist: true, robot: false, host: false },
   "/foresporsler": { admin: true, receptionist: true, robot: true, host: false },
   "/vedlikehold": { admin: true, receptionist: false, robot: true, host: false },
   "/lager": { admin: true, receptionist: false, robot: true, host: false },

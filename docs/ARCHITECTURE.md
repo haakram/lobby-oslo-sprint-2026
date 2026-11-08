@@ -128,6 +128,22 @@ from the loop's last `status` before the task to the flow's verifying `status` a
 `place`/`say`. It **excludes the report's own +5**, which shows on the next `state` line. Sum
 `state.score`/the `end` line for totals, not `points`.
 
+**Read by the app (Lobby), additive, jury branch.** Rom og renhold compares the last `room_status` per
+room with the booking system's test snapshot (`src/features/rooms/pms.ts`, `TODO(phase-3)`):
+`klar` from `room_check` at or after 01:00 on a booked room is *Kan selges i dag*; `opptatt` or
+`ikke_forstyrr` on a room the system has as vacant is *Gjest uten booking* (`src/features/rooms/reconcile.ts`).
+The person at the door is read from the `note` (`"Ms Bakke opens the door of room-328."`).
+
+**The AI receptionist's records feed Forespørsler.** A `message` record (`record_message`, not topic
+`booking`) or a call-log note that names a room (`rom 214`, `room 214`) is an in-stay request: a row with
+source *Telefon (AI)*, a link to the call, and a one-tap *Send roboten* (things the robot can carry) or
+*Gi til …* (the person on shift) (`src/features/requests/phoneTasks.ts`). The receptionist's tools and
+prompt are unchanged.
+
+**Kept in the browser** (`localStorage`, `TODO(phase-3)`: a shared store): `lobby:room-check-marks`
+(per day, per room: released for sale or a task for reception), `lobby:phone-task-assignments` (who
+took a phone task), `lobby:handover-signoff` (per day: who signed *Kvitter mottatt* and when).
+
 ### 4.4 Environment variables
 
 Every variable in `.env.example`, with what reads it. Keys reach teammates only through `scripts/secrets.sh` (OPERATIONS § 4), never GitHub. Added (blank) to `.env.example` and here in the

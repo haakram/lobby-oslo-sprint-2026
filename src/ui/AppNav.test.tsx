@@ -48,7 +48,7 @@ describe("the navigation groups, from the module registry", () => {
   it("gives the receptionist the hotel, the desk's part of Drift and Resepsjon, not the robot", () => {
     const groups = groupsFor("receptionist");
     expect(groups.map((group) => group.label)).toEqual(["Hotellet", "Drift", "Resepsjon"]);
-    expect(groups.flatMap((group) => group.items.map((item) => item.href))).toEqual(["/", "/rom", "/gjester", "/ruter", "/foresporsler", "/ansatte", "/resepsjon"]);
+    expect(groups.flatMap((group) => group.items.map((item) => item.href))).toEqual(["/", "/rom", "/gjester", "/ruter", "/overlevering", "/foresporsler", "/ansatte", "/resepsjon"]);
   });
 
   it("gives the robot manager the hotel, maintenance and stores, and the robot, not the reception", () => {
@@ -69,7 +69,7 @@ describe("the navigation groups, from the module registry", () => {
     expect(barItemsFor("receptionist", 4).map((item) => item.href)).toEqual(["/", "/rom", "/gjester", "/foresporsler"]);
     expect(barItemsFor("robot", 4).map((item) => item.href)).toEqual(["/", "/rom", "/foresporsler", "/vedlikehold"]);
     // Fewer pinned screens than places: topped up in group order.
-    expect(barItemsFor("receptionist", 6).map((item) => item.href)).toEqual(["/", "/rom", "/gjester", "/foresporsler", "/ruter", "/ansatte"]);
+    expect(barItemsFor("receptionist", 6).map((item) => item.href)).toEqual(["/", "/rom", "/gjester", "/foresporsler", "/ruter", "/overlevering"]);
   });
 });
 
@@ -104,7 +104,7 @@ describe("AppNav on a desktop (the rail)", () => {
   it("shows a role only its screens", () => {
     render(as("receptionist", <AppNav />));
     const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href"));
-    expect(hrefs).toEqual(["/", "/", "/rom", "/gjester", "/ruter", "/foresporsler", "/ansatte", "/resepsjon"]);
+    expect(hrefs).toEqual(["/", "/", "/rom", "/gjester", "/ruter", "/overlevering", "/foresporsler", "/ansatte", "/resepsjon"]);
     expect(screen.queryByText("Roboten")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Vedlikehold" })).not.toBeInTheDocument();
   });

@@ -63,10 +63,11 @@ One registry, `src/features/modules/registry.ts`, lists the hotel's modules. The
 | Module | Route | Group | Who (besides admin) | Data | On the screen |
 |---|---|---|---|---|---|
 | Oversikt | `/` | Hotellet | both | mixed | The whole hotel: Nå band, eight figures, one widget per module |
-| Rom og renhold | `/rom` | Hotellet | both | run log + test | The key rack (every room's status), today's round per cleaner, rooms out of order; *Lag renholdsrute* |
+| Rom og renhold | `/rom` | Hotellet | both | run log + test | The robot's room checks against the booking system (rooms to sell today, guests without a booking; *Merk som ledig for salg*, *Lag oppgave for resepsjonen*), the key rack (every room's status), today's round per cleaner, rooms out of order; *Lag renholdsrute* |
 | Gjester og bookinger | `/gjester` | Hotellet | resepsjonist | test + reception | Arrivals, departures, in house tonight, the receptionist's bookings and callbacks, special cases |
 | Ruter | `/ruter` | Hotellet | both | run log | Shortest route between floors: cleaning round, pick list, the robot's own walk |
-| Forespørsler | `/foresporsler` | Drift | both | run log + reception + test | Every guest request from phone, robot, staff and voice; waiting first |
+| Overlevering 06:00 | `/overlevering` | Drift | resepsjonist | run log + reception + test | The night on one page for the morning manager: four good-news figures, what is open (owner, due time), what happened, the night shift's note, *Kvitter mottatt* (who and when, per day); prints |
+| Forespørsler | `/foresporsler` | Drift | both | run log + reception + test | Every guest request from phone, robot, staff and voice; waiting first. A call the AI receptionist took that names a room is a task (*Telefon (AI)*, *Se samtalen*, one tap: *Send roboten* / *Gi til …*) |
 | Vedlikehold | `/vedlikehold` | Drift | robotansvarlig | run log + test | Work orders by priority: the robot's findings and what staff reported; *Tildel*, *Marker løst* |
 | Lager og lin | `/lager` | Drift | robotansvarlig | test | Linen and amenities per store room against what the rooms need; *Lag påfyllingsliste* |
 | Ansatte og vakter | `/ansatte` | Drift | resepsjonist | test | Who is on which shift today, what they cover, who is off |
@@ -91,7 +92,7 @@ The rail and the Meny sheet show the modules in four labelled groups, in registr
 sees only the modules it may open, and a group with nothing left in it is dropped.
 
 - **Hotellet:** Oversikt · Rom og renhold · Gjester og bookinger · Ruter
-- **Drift:** Forespørsler · Vedlikehold · Lager og lin · Ansatte og vakter
+- **Drift:** Overlevering 06:00 · Forespørsler · Vedlikehold · Lager og lin · Ansatte og vakter
 - **Roboten:** 3D-kart · Natteskift · Robotens øyne · Snakk gjennom roboten
 - **Resepsjon:** Resepsjon
 - **Utleie** (the host only): Mine boliger · Gjestemeldinger · Bookinger og inntekt · Forsyninger og vedlikehold.

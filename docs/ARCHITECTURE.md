@@ -68,7 +68,9 @@ TBD — entities, fields, relations. A table per entity is enough.
 ### 4.3 Shared types and events
 
 **Run log v1 (Track A → Track B).** The Night Shift agent writes one JSON object per line to
-`temp/runs/<shift>.jsonl`, `"v": 1` on every line. Types: `start` (shift, mode, seed), `call` (cmd,
+`temp/runs/<shift>.jsonl`, `"v": 1` on every line. Types: `start` (shift, mode, seed; additive: `build`
+{commit, dirty} = the checkout's git commit and whether tracked files differed from it, `flags` {score_blind,
+experiments, price_switches, env (the NS_* variables)}), `call` (cmd,
 args, ok, clock, result, events, latency_ms, status), `decision` (kind: plan · task_start · task_done ·
 task_failed · brain · note · room_status · work_order · hypothesis · noise_look · person, data), `state`
 (clock, location, score, battery, hands, cart), `end` (score, requests_served, reason). The 3D viewer

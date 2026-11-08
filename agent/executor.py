@@ -190,6 +190,12 @@ class Declined(ActionFailed):
     with no order on record reported declined scores +5; the same as failed scores 0, and as done -20."""
 
 
+def experiment_names() -> list[str]:
+    """The score experiments a shift starts with: NS_EXPERIMENTS=a,b, else DEFAULT_EXPERIMENTS."""
+    names = [n.strip() for n in os.environ.get("NS_EXPERIMENTS", "").split(",") if n.strip()]
+    return names or list(DEFAULT_EXPERIMENTS)
+
+
 def night_seconds(clock: str) -> int:
     """Sim second of a night clock, after-midnight clocks counted past 24:00 (00:10 is after 23:50)."""
     s = clock_to_seconds(clock)
@@ -282,8 +288,7 @@ class Executor:
         # Score experiments (NS_EXPERIMENTS=a,b): a flow may claim "done" on a path the server has
         # not rewarded yet; the report's reply settles it. One unverified report ends the experiment
         # for the shift (a false done costs 35), a verified one keeps it on.
-        names = [n.strip() for n in os.environ.get("NS_EXPERIMENTS", "").split(",") if n.strip()]
-        self.experiments: dict[str, bool | None] = {n: None for n in names or DEFAULT_EXPERIMENTS}
+        self.experiments: dict[str, bool | None] = {n: None for n in experiment_names()}
         self._look_clock: dict[str, int] = {}  # place -> sim second of the last look there
         self._visited: set[str] = set()  # places the robot has stood in: navigate works only there
         self._exp_pending: str | None = None

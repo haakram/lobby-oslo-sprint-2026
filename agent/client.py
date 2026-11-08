@@ -2,10 +2,13 @@
 
 import json
 import math
+import os
+import subprocess
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +21,43 @@ BACKOFF = (0.5, 1, 2)
 RETRY_AFTER_MAX_S = 30.0  # a 429's Retry-After is honoured up to this
 RATE_BACKOFF_S = 1.0  # a 429 without Retry-After waits this, doubling per retry (1, 2, 4 s)
 STATE_FIELDS = ("clock", "location", "score", "battery", "hands", "cart")
+
+
+AGENT_DIR = Path(__file__).resolve().parent
+SECRET_WORDS = ("KEY", "TOKEN", "SECRET", "PASSWORD")  # an NS_* variable named like this is never logged
+
+
+@lru_cache(maxsize=1)
+def build_info() -> dict:
+    """The code that plays: the agent checkout's git commit and whether tracked files differ from it
+    (uncommitted changes ran, not the commit). Read once per process; None where git can't say."""
+
+    def git(*args: str) -> str | None:
+        try:
+            out = subprocess.run(["git", "-C", str(AGENT_DIR), *args], capture_output=True, text=True,
+                                 timeout=10, check=False)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return out.stdout.strip() if out.returncode == 0 else None
+
+    commit = git("rev-parse", "--short=12", "HEAD")
+    status = git("status", "--porcelain", "--untracked-files=no")
+    return {"commit": commit or None, "dirty": None if status is None else bool(status)}
+
+
+def run_flags() -> dict:
+    """The experiment flags in force when the shift starts: score-blind or not (NS_SCORE_BLIND=1), the
+    score experiments (NS_EXPERIMENTS or the default), the price switches on, every other NS_* variable."""
+    from agent import price
+    from agent.executor import experiment_names
+
+    return {
+        "score_blind": os.environ.get("NS_SCORE_BLIND") == "1",
+        "experiments": experiment_names(),
+        "price_switches": sorted(name for name, on in price.SWITCHES.items() if on),
+        "env": {k: v for k, v in sorted(os.environ.items())
+                if k.startswith("NS_") and not any(w in k.upper() for w in SECRET_WORDS)},
+    }
 
 
 def _retry_after(value: str | None) -> float | None:
@@ -178,7 +218,8 @@ class ShiftSession:
         self.cmd_counts: dict[str, int] = {}  # commands sent, by name (the bench counts dock calls)
         self.min_battery: float | None = None  # the lowest battery a reply showed; 0 once stranded
         self.final_score: Any = None  # the score on the server's shift_over reply (end, 06:00, stranded)
-        self._write({"type": "start", "shift": shift_id, "mode": mode, "seed": seed})
+        self._write({"type": "start", "shift": shift_id, "mode": mode, "seed": seed,
+                     "build": build_info(), "flags": run_flags()})
 
     def _write(self, entry: dict) -> None:
         line = json.dumps({"v": 1, "t": time.time(), **entry}, default=str)

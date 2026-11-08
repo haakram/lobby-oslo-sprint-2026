@@ -368,3 +368,31 @@ def test_start_shift_is_retried_after_a_connect_error(tmp_path):
     client = make_client(tmp_path, handler)
     assert client.start_shift("practice", seed=1).shift_id == "w2-abc"
     assert len(reqs) == 2
+
+
+def test_start_line_names_the_commit_dirty_flag_and_experiment_flags(tmp_path, monkeypatch):
+    # Every run log says which code played and with which flags: a night is then traceable to a commit
+    # (dirty: uncommitted changes ran, not the commit) and a blind night is told from a sighted one.
+    monkeypatch.delenv("NS_SCORE_BLIND", raising=False)
+    monkeypatch.delenv("NS_EXPERIMENTS", raising=False)
+    monkeypatch.setenv("NS_SECRET_TOKEN", "do-not-log")
+    client = make_client(tmp_path, recording_handler([]))
+    start = json.loads(client.start_shift("practice", seed=1).log_path.read_text().splitlines()[0])
+    assert start["type"] == "start" and start["seed"] == 1
+    assert isinstance(start["build"]["commit"], str) and len(start["build"]["commit"]) >= 7
+    assert isinstance(start["build"]["dirty"], bool)
+    flags = start["flags"]
+    assert flags["score_blind"] is False
+    assert flags["experiments"] == ["spill_done", "sign_move"]
+    assert "wet" in flags["price_switches"]
+    assert "NS_SECRET_TOKEN" not in flags["env"] and "do-not-log" not in json.dumps(start)
+
+
+def test_start_line_marks_a_score_blind_run(tmp_path, monkeypatch):
+    monkeypatch.setenv("NS_SCORE_BLIND", "1")
+    monkeypatch.setenv("NS_EXPERIMENTS", "spill_done")
+    client = make_client(tmp_path, recording_handler([]))
+    start = json.loads(client.start_shift("practice", seed=1).log_path.read_text().splitlines()[0])
+    assert start["flags"]["score_blind"] is True
+    assert start["flags"]["experiments"] == ["spill_done"]
+    assert start["flags"]["env"].items() >= {"NS_EXPERIMENTS": "spill_done", "NS_SCORE_BLIND": "1"}.items()

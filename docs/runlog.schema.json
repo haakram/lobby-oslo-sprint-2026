@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fettero.local/schemas/runlog-v1.json",
   "title": "Fettero run log v1: one JSON object per line",
-  "description": "What a robot sends Fettero so the 06:00 handover can be written from its night (docs/ARCHITECTURE.md § 4.3). Each line of a .jsonl file is one object, \"v\": 1 on every line; unknown line types and unknown fields are ignored, so a producer can add its own. The handover reads the semantic layer: tasks (start, done with its evidence, failed, declined, handed back), room status, hazards, security events, position and battery. `call` lines are a producer's raw commands (the Wybe Night Shift simulator writes them; another robot need not). Producers today: the Night Shift agent (agent/, every line type) and the Open-RMF adapter (src/features/nightshift/openRmf.ts: start, state, decision, end). A \"done\" counts as confirmed only with a second, independent signal: the referee's reply in the simulator, or two evidence signals (e.g. the lock trail and the robot's photo) from a real robot; one signal alone reads \"ikke bekreftet\".",
+  "description": "What a robot sends Fettero so the 06:00 handover can be written from its night (docs/ARCHITECTURE.md § 4.3). Each line of a .jsonl file is one object, \"v\": 1 on every line; unknown line types and unknown fields are ignored, so a producer can add its own. The handover reads the semantic layer: tasks (start, done with its evidence, failed, declined, handed back), room status, hazards, security events, position and battery. `call` lines are a producer's raw commands (the Wybe Night Shift simulator writes them; another robot need not). Producers today: the Night Shift agent (agent/, every line type) and the Open-RMF adapter (src/features/nightshift/openRmf.ts: start, state, decision, end). A \"done\" counts as confirmed only with two different signals, at least one from outside the robot (the evidence rule, src/features/nightshift/conduct.ts evidenceVerdict): the referee's reply in the simulator, or from a real robot e.g. the compartment sensor and the guest's PIN; two signals that both come from the robot read \"robotens egen observasjon\"; one signal alone reads \"ikke bekreftet\".",
   "oneOf": [
     { "$ref": "#/$defs/start" },
     { "$ref": "#/$defs/state" },
@@ -91,15 +91,19 @@
       }
     },
     "evidence": {
-      "description": "The independent signals behind a \"done\". Two different signals confirm it; one alone leaves it \"ikke bekreftet\".",
+      "description": "The signals behind a \"done\". Two different signals with at least one from outside the robot confirm it; two from the robot alone read \"robotens egen observasjon\"; one alone leaves it \"ikke bekreftet\".",
       "type": "array",
       "items": {
         "type": "object",
         "required": ["signal"],
         "properties": {
           "signal": {
-            "enum": ["referee", "lock", "photo", "guest_ack", "compartment", "sign_placed", "door_answered", "item_placed"],
-            "description": "referee: the simulator's verified reply. lock: the door-lock audit trail. photo: the robot's camera. guest_ack: the guest confirmed (app, tablet, voice). compartment: the robot's compartment sensor. sign_placed: a wet-floor sign stands at the place. door_answered / item_placed: what the robot itself observed."
+            "enum": ["referee", "lock", "photo", "guest_ack", "compartment", "sign_placed", "door_answered", "item_placed", "door_lock", "energy_slot", "staff_check", "pms"],
+            "description": "referee: the simulator's verified reply. lock / door_lock: the door-lock audit trail. energy_slot: the room's energy slot (one derived signal per room, never who). photo: the robot's camera. guest_ack: the guest confirmed (app, tablet, PIN, voice). compartment: the robot's compartment sensor. sign_placed: a wet-floor sign stands at the place. door_answered / item_placed: what the robot itself observed. staff_check: a person on the night shift checked it. pms: the booking system (read-only)."
+          },
+          "origin": {
+            "enum": ["robot", "building", "guest", "staff", "pms", "referee"],
+            "description": "Where the signal comes from (optional). Absent: read from the signal (photo, compartment, sign_placed, door_answered, item_placed: robot; lock, door_lock, energy_slot: building, except a lock opened with the robot's own credential, which is the robot's; guest_ack: guest; staff_check: staff; pms: pms; referee: referee)."
           },
           "at": { "$ref": "#/$defs/clock" },
           "detail": { "type": "string" }

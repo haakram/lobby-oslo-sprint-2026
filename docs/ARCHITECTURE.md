@@ -143,8 +143,13 @@ ignore fields they do not know. Schema for every line type: `docs/runlog.schema.
   the same flag.
 - `start.source`: who wrote the log. It is absent for the Night Shift agent and `"open-rmf"` for the adapter.
 - `task_done.evidence`: `[{"signal": "lock" | "photo" | "guest_ack" | "compartment" | "sign_placed" |
-  "referee" | "door_answered" | "item_placed", "at", "detail"}]`. Two different signals confirm a
-  "done". One signal alone reads "ikke bekreftet".
+  "referee" | "door_answered" | "item_placed" | "door_lock" | "energy_slot" | "staff_check" | "pms", "at",
+  "detail", "origin"?}]`. The evidence rule (jury round 5, `evidenceVerdict` in
+  `src/features/nightshift/conduct.ts`): a "done" or room fact is "bekreftet" only with two different
+  signals, at least one from outside the robot; two robot signals read "robotens egen observasjon"; one
+  signal alone reads "ikke bekreftet". Optional `origin`: `robot | building | guest | staff | pms |
+  referee`; when absent it is read from the signal (and a lock opened with the robot's own credential, per
+  its `detail`, is the robot's).
 - A non-Wybe source: `src/features/nightshift/openRmf.ts` turns an Open-RMF `task_state` + `fleet_state`
   sample (`src/features/nightshift/fixtures/open-rmf-night.json`, test data the team wrote) into v1 lines.
   Natteskift's *Kilde* switch shows it.

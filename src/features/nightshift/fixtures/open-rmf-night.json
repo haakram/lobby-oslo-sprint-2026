@@ -1,5 +1,5 @@
 {
-  "_doc": "A test sample, written by Team Fettero in the shape of Open-RMF's task_state and fleet_state messages (rmf_api_msgs), for a delivery robot on a hotel night. Not a real robot's log: it shows that a second producer's tasks render on the same handover through src/features/nightshift/openRmf.ts.",
+  "_doc": "A test sample, written by Team Fettero in the shape of Open-RMF's task_state and fleet_state messages (rmf_api_msgs), for a delivery robot on a hotel night. Not a real robot's log: it shows that a second producer's tasks render on the same handover through src/features/nightshift/openRmf.ts. The deliveries work the way deployed compartment robots do (jury round 5, the Wybe engineer): the robot waits at the door and calls the room, the guest opens the lid with a PIN, the lid closes on an empty compartment. One task (204) shows a robot that opened the door with its own credential and took its own photo: two signals, both the robot's, so it reads robotens egen observasjon.",
   "fleet": "hotel_delivery",
   "fleet_states": [
     { "name": "hotel_delivery", "robots": { "deliverybot_1": { "name": "deliverybot_1", "status": "idle", "battery": 0.96, "location": { "map": "L1", "x": 2.1, "y": 4.0, "yaw": 0.0 }, "unix_millis_time": 1794085800000 } } },
@@ -38,7 +38,10 @@
         "1": {
           "id": 1,
           "category": "Go to [place:room_311]",
-          "events": { "0": { "id": 0, "status": "completed", "name": "Compartment empty", "detail": "drawer opened at the door" } }
+          "events": {
+            "0": { "id": 0, "status": "completed", "name": "Recipient confirmed with PIN", "detail": "guest opened the lid at the door" },
+            "1": { "id": 1, "status": "completed", "name": "Compartment empty", "detail": "lid closed" }
+          }
         }
       },
       "completed": [1]
@@ -55,8 +58,8 @@
           "id": 1,
           "category": "Go to [place:room_212]",
           "events": {
-            "0": { "id": 0, "status": "completed", "name": "Door [door:room_212] opened", "detail": "lock audit: robot credential" },
-            "1": { "id": 1, "status": "completed", "name": "Recipient confirmed with PIN" }
+            "0": { "id": 0, "status": "completed", "name": "Recipient confirmed with PIN", "detail": "guest came to the door" },
+            "1": { "id": 1, "status": "completed", "name": "Compartment empty", "detail": "lid closed" }
           }
         }
       },

@@ -41,12 +41,20 @@ describe("fromOpenRmf: Open-RMF task and fleet states as run log v1", () => {
     const evidence = lines
       .filter((line) => line.type === "decision" && line.kind === "task_done")
       .map((line) => (line.type === "decision" ? (line.data?.evidence as { signal: string }[]).map((entry) => entry.signal) : []));
-    expect(evidence).toEqual([["lock", "photo"], ["compartment"], ["lock", "guest_ack"], ["photo"]]);
+    expect(evidence).toEqual([["lock", "photo"], ["guest_ack", "compartment"], ["guest_ack", "compartment"], ["photo"]]);
   });
 
-  it("confirms a done only with two different signals: 2 of 4, never by a referee it does not have", () => {
+  it("gives each signal its origin: a door opened with the robot's own credential is the robot's, the guest's PIN is the guest's", () => {
+    const first = lines.find((line) => line.type === "decision" && line.kind === "task_done");
+    expect(first?.type === "decision" && first.data?.evidence).toEqual([
+      { signal: "lock", at: "22:41:00", detail: "Door [door:room_204] opened (lock audit: robot credential)", origin: "robot" },
+      { signal: "photo", at: "22:41:00", detail: "Photo taken at dropoff (towel on the rack)", origin: "robot" },
+    ]);
+  });
+
+  it("confirms a done only with an outside signal: 2 of 4 (compartment + PIN), 1 the robot's own observation, 1 single signal; no referee", () => {
     const basis = doneBasis(lines);
-    expect(basis.evidence).toEqual({ reported: 4, confirmed: 2, signals: ["lock", "photo", "guest_ack"] });
+    expect(basis.evidence).toEqual({ reported: 4, confirmed: 2, robotOnly: 1, signals: ["guest_ack", "compartment"] });
     expect(basis.afterRise.reported + basis.own.reported).toBe(0);
   });
 
@@ -66,12 +74,14 @@ describe("fromOpenRmf: Open-RMF task and fleet states as run log v1", () => {
 });
 
 describe("the judgement card on the Open-RMF sample", () => {
-  it("names the source, judges done by two signals, lists what is unfinished, and shows no Wybe-only rows or ledger", () => {
+  it("names the source, judges done by the evidence rule, lists what is unfinished, and shows no Wybe-only rows or ledger", () => {
     render(<RobotJudgementCard lines={fromOpenRmf(SAMPLE)} />);
     const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
     expect(card).toHaveTextContent("Fra Open-RMF-eksempelet (testdata)");
-    expect(card).toHaveTextContent("2 av 4«Ferdig» med to signaler");
-    expect(card).toHaveTextContent("2 bekreftet av to uavhengige signaler (låslogg, foto og gjestens bekreftelse). 2 har ikke to signaler og står som «ikke bekreftet».");
+    expect(card).toHaveTextContent("2 av 4«Ferdig» bekreftet");
+    expect(card).toHaveTextContent(
+      "2 med et signal utenfra roboten (gjestens bekreftelse og skuffsensor). 1 er robotens egen observasjon: to signaler, begge fra roboten. 1 har bare ett signal og står som «ikke bekreftet».",
+    );
     expect(card).toHaveTextContent("3Oppgaver ikke fullført");
     expect(card).toHaveTextContent("delivery.pillow.0004 (rom 305): Door [door:room_305] did not open");
     expect(card).toHaveTextContent("Åpen ved slutten: delivery.tray.0007 (rom 203).");

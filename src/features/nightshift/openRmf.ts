@@ -1,3 +1,4 @@
+import { type SignalOrigin, signalOrigin } from "./conduct";
 import { type RunLine, runLine } from "./runlog";
 
 /**
@@ -14,6 +15,9 @@ import { type RunLine, runLine } from "./runlog";
  * - evidence, from the task's phase events (RMF does not standardise these names; this is the mapping):
  *   a door opened (the door adapter, the lock trail) → `lock`; a photo → `photo`; a compartment/drawer
  *   event → `compartment`; a recipient/guest confirmation or PIN → `guest_ack`. Only completed events count.
+ *   Each carries its `origin` (jury round 5, the evidence rule in conduct.ts): "bekreftet" needs one signal
+ *   from outside the robot, so the compartment and the guest's PIN confirm a delivery; a door the robot
+ *   opened with its own credential plus its own photo is "robotens egen observasjon".
  * - fleet_state robots: a `state` line per snapshot with the battery (0–1 → per cent); RMF has map
  *   coordinates, not place names, so `location` is null. `score` is 0: there is no referee.
  * Every line goes through the v1 parser, so a line the app could not read is dropped, never shown wrong.
@@ -29,7 +33,7 @@ const SIGNALS: [RegExp, EvidenceSignal][] = [
   [/\bdoor\b.*\bopened\b|\block\b/i, "lock"],
   [/\bphoto\b|\bcamera\b/i, "photo"],
   [/\bcompartment\b|\bdrawer\b/i, "compartment"],
-  [/\brecipient\b|\bguest\b.*\bconfirm|\bpin\b/i, "guest_ack"],
+  [/\brecipient\b|\bguest\b.*\b(?:confirm|opened)|\bpin\b/i, "guest_ack"],
 ];
 
 const OSLO = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Oslo", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
@@ -87,16 +91,22 @@ function itemOf(task: Rec): string | null {
   return null;
 }
 
-/** The evidence signals in a task's completed phase events, each once, in the order they happened. */
-export function rmfEvidence(task: Rec, at: string): { signal: EvidenceSignal; at: string; detail: string }[] {
-  const found: { signal: EvidenceSignal; at: string; detail: string }[] = [];
+/**
+ * The evidence signals in a task's completed phase events, each once, in the order they happened, each with
+ * its origin by the evidence rule (conduct.ts `signalOrigin`): a door opened with the robot's own credential
+ * is the robot's own action in the lock trail, so it counts as the robot's signal, not the building's.
+ */
+export function rmfEvidence(task: Rec, at: string): { signal: EvidenceSignal; at: string; detail: string; origin: SignalOrigin }[] {
+  const found: { signal: EvidenceSignal; at: string; detail: string; origin: SignalOrigin }[] = [];
   for (const phase of Object.values(rec(task.phases) ?? {})) {
     for (const event of Object.values(rec(rec(phase)?.events) ?? {})) {
       const e = rec(event);
       if (!e || str(e.status) !== "completed") continue;
       const name = str(e.name) ?? "";
       const signal = SIGNALS.find(([pattern]) => pattern.test(name))?.[1];
-      if (signal && !found.some((entry) => entry.signal === signal)) found.push({ signal, at, detail: name });
+      if (!signal || found.some((entry) => entry.signal === signal)) continue;
+      const detail = str(e.detail) ? `${name} (${str(e.detail)})` : name;
+      found.push({ signal, at, detail, origin: signalOrigin({ signal, detail }) });
     }
   }
   return found;

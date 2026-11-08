@@ -31,6 +31,9 @@ export type LedgerNight = {
   done_room_check_credited?: number | null;
   done_spill?: number | null;
   done_spill_credited?: number | null;
+  /** Score-blind nights: the agent's own checks, and how many said "not done" (scripts/ledger.py). */
+  blind_checks?: number | null;
+  blind_said_no?: number | null;
 };
 
 export const LEDGER_NIGHTS: readonly LedgerNight[] = data.nights as LedgerNight[];
@@ -40,6 +43,41 @@ export const LEDGER_META: { liveStarts: number | null; latestStart: string | nul
   liveStarts: typeof (data as { live_starts?: unknown }).live_starts === "number" ? (data as { live_starts: number }).live_starts : null,
   latestStart: typeof (data as { latest_start?: unknown }).latest_start === "string" ? (data as { latest_start: string }).latest_start : null,
 };
+
+/**
+ * The final branch's own-judgement "done" counted once per (seed, request), not once per replay of the same
+ * deterministic seed (jury round 5, the data juror), with a Wilson 95 % interval; null in an older file.
+ */
+export type DistinctClaims = { scope: string; nights: number; reports: number; claims: number; credited: number; ci95: [number, number]; missed: string[] };
+
+export const DISTINCT_OWN: DistinctClaims | null = (() => {
+  const value = (data as unknown as { distinct_own?: Partial<DistinctClaims> }).distinct_own;
+  return value && typeof value.claims === "number" && typeof value.credited === "number" && Array.isArray(value.ci95) ? (value as DistinctClaims) : null;
+})();
+
+/** The Wilson score interval (95 %) for `successes` of `n`: honest at small n and at 100 % (scripts/ledger.py `wilson`). */
+export function wilson(successes: number, n: number, z = 1.959964): [number, number] {
+  if (n === 0) return [0, 1];
+  const p = successes / n;
+  const denom = 1 + (z * z) / n;
+  const centre = (p + (z * z) / (2 * n)) / denom;
+  const half = (z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / denom;
+  return [Math.max(0, centre - half), Math.min(1, centre + half)];
+}
+
+/** "70–100 %", "92–99,7 %": whole per cent, a decimal where a whole number would round a miss up to 100 %. */
+export function intervalText([low, high]: readonly [number, number], successes: number, n: number): string {
+  const top = high * 100;
+  const upper = successes < n && Math.round(top) >= 100 ? (Math.round(top * 10) / 10).toLocaleString("nb-NO", { maximumFractionDigits: 1 }) : String(Math.round(top));
+  return `${Math.round(low * 100)}–${upper} %`;
+}
+
+/** The score-blind nights' own checks: how many there were and how many said "not done"; null when none were logged. */
+export function blindChecks(nights: readonly LedgerNight[] = LEDGER_NIGHTS): { checks: number; saidNo: number } | null {
+  const blind = nights.filter((night) => night.kind === "experiment" && typeof night.blind_checks === "number");
+  if (blind.length === 0) return null;
+  return { checks: blind.reduce((sum, night) => sum + (night.blind_checks ?? 0), 0), saidNo: blind.reduce((sum, night) => sum + (night.blind_said_no ?? 0), 0) };
+}
 
 export type Precision = {
   nights: number;

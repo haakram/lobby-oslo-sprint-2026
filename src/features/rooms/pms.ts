@@ -24,7 +24,7 @@ export const TEST_BOOKING_WORD = "testbooking";
  * legal and security review; PRD § 6: in a pilot the robot only checks rooms the system has as vacant), said as
  * the minimised signal it is (round 4, legal review: one derived signal per room, never who).
  */
-export const PILOT_EVIDENCE = "I en pilot: ett signal per rom fra dørlåsen (gjestekort brukt siden kl. 18), aldri hvem. Roboten går ikke inn i rom som er booket.";
+export const PILOT_EVIDENCE = "I en pilot: ett signal per rom fra dørlåsen (gjestekort brukt siden kl. 18), aldri kort-id, aldri klokkeslett. Roboten går ikke inn i rom som er booket.";
 
 export type PmsRoom = {
   room: string;

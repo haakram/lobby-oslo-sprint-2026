@@ -360,7 +360,7 @@ function CheckFirst({ flags, logged, onChoose, className }: { flags: readonly Do
             )}
           </>
         )}
-        <p className="mt-3 text-xs text-muted">Dørlåsen gir ett signal per rom, aldri hvem eller når. Testdata til låsen er koblet til.</p>
+        <p className="mt-3 text-xs text-muted">Dørlåsen gir ett signal per rom, aldri kort-id, aldri klokkeslett. Testdata til låsen er koblet til.</p>
       </Card>
     </section>
   );

@@ -61,7 +61,7 @@ export function SourceSwitch({
       </div>
       {value === "none" && (
         <p aria-live="polite" className="max-w-[72ch] text-xs text-muted">
-          Uten robot: bookingsystemet, dørlåsen (ett signal per rom, aldri hvem){sources ? ` og ${clerkCount(sources)}` : " og nattevaktens logg"}. Bookingene og dørlåsen er
+          Uten robot: bookingsystemet, dørlåsen (ett signal per rom, aldri kort-id, aldri klokkeslett){sources ? ` og ${clerkCount(sources)}` : " og nattevaktens logg"}. Bookingene og dørlåsen er
           testdata.
         </p>
       )}

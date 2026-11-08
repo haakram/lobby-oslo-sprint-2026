@@ -21,7 +21,7 @@ describe("SourceSwitch (Med robot | Uten robot)", () => {
     const sources = { staffEntries: 4, samples: 4, clerk: "Kjersti Lund", doorLockRooms: 36, doorLockFlags: 2 };
     const { rerender } = render(<SourceSwitch value="none" onChange={() => {}} sources={sources} />);
     expect(screen.getByText(/^Uten robot:/)).toHaveTextContent(
-      "Uten robot: bookingsystemet, dørlåsen (ett signal per rom, aldri hvem) og 4 registreringer fra nattevakten (eksempler). Bookingene og dørlåsen er testdata.",
+      "Uten robot: bookingsystemet, dørlåsen (ett signal per rom, aldri kort-id, aldri klokkeslett) og 4 registreringer fra nattevakten (eksempler). Bookingene og dørlåsen er testdata.",
     );
     rerender(<SourceSwitch value="none" onChange={() => {}} sources={{ ...sources, staffEntries: 5, samples: 4 }} />);
     expect(screen.getByText(/^Uten robot:/)).toHaveTextContent("5 registreringer fra nattevakten (4 av dem eksempler)");

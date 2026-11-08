@@ -425,10 +425,8 @@ On screen the signal reads *rom 213: ingen kort i energibryteren siden kl. 18:00
 guest's time) or *kort i energibryteren* (a yes): **ett signal per rom, aldri kort-id, aldri
 klokkeslett.** We no longer say *aldri hvem* (legal review): next to the booking, *no guest card in 213
 since 18:00* is information about the guest booked there, Ola Nygård, so it is personal data
-(Art. 4(1)) even with no card id and no clock. (Three screens still carry the old phrase, *aldri hvem
-eller når* on `/natt`, `src/features/staffinput/NightClerkScreen.tsx`, *aldri hvem* in the line under
-the switch, `src/features/nightsource/SourceSwitch.tsx`, and on Rom, `PILOT_EVIDENCE` in
-`src/features/rooms/pms.ts`: to change, not done.) In the
+(Art. 4(1)) even with no card id and no clock. (The screens say the same: `/natt`, the line under the
+Med robot / Uten robot switch and the pilot line on Rom all read *aldri kort-id, aldri klokkeslett*.) In the
 demo it is a team-written sample in the run-log format, one `room_signal` line per room (`no_card` with
 only the window, or `card_in` with no clock, source `door_lock`; `src/features/doorlock/feed.ts`,
 labelled *Testdata: dørlåsens signal er skrevet av teamet*). A time a feed sends on `card_in` anyway is

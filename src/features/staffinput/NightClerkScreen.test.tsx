@@ -48,7 +48,7 @@ describe("Nattevaktens logg", () => {
     expect((await check.findByText(/sjekket: tomt og ryddig/, undefined, { timeout: 5000 })).closest("li")).toHaveTextContent("213 sjekket: tomt og ryddig (ingen kort i energibryteren siden kl. 18:00)");
     expect(check.getByText(/sjekket: ikke tomt/).closest("li")).toHaveTextContent("210 sjekket: ikke tomt (kort i energibryteren)");
     expect(check.queryByRole("button")).not.toBeInTheDocument();
-    expect(check.getByText(/ett signal per rom, aldri hvem eller når/)).toBeInTheDocument();
+    expect(check.getByText(/ett signal per rom, aldri kort-id, aldri klokkeslett/)).toBeInTheDocument();
   });
 
   it("offers a flagged room nobody has checked, against the booking system, and opens it in one tap", async () => {

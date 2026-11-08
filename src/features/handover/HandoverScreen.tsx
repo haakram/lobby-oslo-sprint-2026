@@ -12,6 +12,7 @@ import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
 import { RobotJudgementCard } from "@/features/nightshift/RobotJudgementCard";
 import { SourceSwitch } from "@/features/nightsource/SourceSwitch";
+import { clerkNoteOf } from "@/features/nightsource/compose";
 import { useNightSource } from "@/features/nightsource/useNightSource";
 import { useWithoutRobot } from "@/features/nightsource/useWithoutRobot";
 import { SourceNote } from "@/features/modules/SourceNote";
@@ -19,6 +20,7 @@ import { osloToday } from "@/features/reception/dates";
 import { type DemoCall, demoCalls } from "@/features/reception/demoCalls";
 import { formatClock } from "@/features/reception/format";
 import { useStoredRecords } from "@/features/reception/useStoredRecords";
+import { useStaffLines } from "@/features/staffinput/useStaffLines";
 import { PHONE_ASSIGNMENTS, phoneTasks } from "@/features/requests/phoneTasks";
 import { hotelRoomsOf, selectRequests } from "@/features/requests/select";
 import { hoursEarlier, moneyMethod, releasedLine, tonightLine } from "@/features/rooms/money";
@@ -70,7 +72,10 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   const lines = ready ? run.lines : null;
   // The same room check, marks and money as Rom and Oversikt: a release here moves them too.
   const { reconciliation, marks, revenue, pms } = useRoomCheck(lines, rooms, today);
-  const safety = useMemo(() => (lines ? nightSafety(lines) : null), [lines]);
+  // The night clerk's own log (owner B's /natt): who was told about a hazard, and her note for the page.
+  const staff = useStaffLines(today);
+  const clerkNote = useMemo(() => clerkNoteOf(staff), [staff]);
+  const safety = useMemo(() => (lines ? nightSafety(lines, staff) : null), [lines, staff]);
   const robotState = useMemo(() => (lines ? robotAtHandover(lines) : null), [lines]);
   const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
   // What each "done" rested on, the same reading as Oversikt's line (owner C): one number per fact.
@@ -97,10 +102,11 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       pms,
       safety,
       robot: robotState,
+      ...(clerkNote ? { note: clerkNote } : {}),
       resolved: (id) => statusOf(id) === "lost",
       canOpen,
     });
-  }, [night, rooms, reconciliation, safety, requests, robotState, statusOf, phone, marks, revenue, today, pms, canOpen]);
+  }, [night, rooms, reconciliation, safety, requests, robotState, clerkNote, statusOf, phone, marks, revenue, today, pms, canOpen]);
   // Owner B's switch (jury round 5: "hotel number one needs no robot", shown): the same page from the
   // booking system, the door lock's one signal per room and the night clerk's own entries.
   const [source, setSource] = useNightSource();
@@ -231,7 +237,9 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
           <RegenIcon name="info-circle" size={18} className="mt-0.5 shrink-0 print:hidden" />
           <span>
             Demo: {nightSourceLine(run.lines)}.
-            {PMS_IS_TEST_DATA && bookingRows ? ` ${TEST_BOOKING_LABEL}, merket «${TEST_BOOKING_WORD}».` : ""} {PILOT_EVIDENCE}
+            {PMS_IS_TEST_DATA && bookingRows ? ` ${TEST_BOOKING_LABEL}, merket «${TEST_BOOKING_WORD}».` : ""}{" "}
+            {/* The pilot's evidence line is for the screen; the sheet keeps to what it shows, so it stays one page. */}
+            <span className="print:hidden">{PILOT_EVIDENCE}</span>
           </span>
         </p>
       )}
@@ -499,7 +507,7 @@ function OpenRow({ item, marks, today, figures }: { item: OpenItem; marks: Reado
     // link lands here: the row is marked while it is the target (a sunken plane that bleeds past the text).
     <li
       id={itemAnchor(item.id)}
-      className="flex scroll-mt-24 flex-col gap-1.5 rounded-sm py-2.5 transition-colors duration-300 ease-standard target:bg-sunken target:shadow-[-12px_0_0_0_var(--color-sunken),12px_0_0_0_var(--color-sunken)] print:grid print:break-inside-avoid print:grid-cols-[minmax(0,1fr)_11rem] print:gap-x-4 print:py-1"
+      className="flex scroll-mt-24 flex-col gap-1.5 rounded-sm py-2.5 transition-colors duration-300 ease-standard target:bg-sunken target:shadow-[-12px_0_0_0_var(--color-sunken),12px_0_0_0_var(--color-sunken)] print:grid print:break-inside-avoid print:grid-cols-[minmax(0,1fr)_15rem] print:gap-x-4 print:py-1"
     >
       <div className="flex min-w-0 flex-col gap-1.5">
         {/* The text claims 16rem before the badge sits beside it: on a phone the badge wraps under the text instead of squeezing it into a narrow column (209's row at 390 px). */}
@@ -532,8 +540,8 @@ function OpenRow({ item, marks, today, figures }: { item: OpenItem; marks: Reado
         )}
         {/* Who was told in the night: a known hazard is acted on at once (jury round 4, the law juror). */}
         {item.escalation && (
-          <p className="flex items-start gap-1.5 text-sm font-semibold">
-            <RegenIcon name="bell" size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
+          <p className="flex items-start gap-1.5 text-sm font-semibold print:text-xs">
+            <RegenIcon name="bell" size={16} strokeWidth={2} className="mt-0.5 shrink-0 print:hidden" />
             {item.escalation}
           </p>
         )}
@@ -559,7 +567,8 @@ function OpenRow({ item, marks, today, figures }: { item: OpenItem; marks: Reado
           </div>
         )}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm print:items-start">
+      {/* On paper the owner and the deadline in small type, so each sits on one line beside its row and the page fits one sheet. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm print:items-start print:text-xs">
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 print:gap-x-1 print:gap-y-0">
           <Monogram name={item.who ?? item.owner} size={24} className="print:hidden" />
           {/* A role the hotel has, and who is on in it (jury round 4, the design juror: not one name for everything). */}

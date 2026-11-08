@@ -81,22 +81,34 @@ function staffEntry(data: Record<string, unknown>, clock: string | null): Notifi
   return { at: str(data.at) ?? str(data.clock) ?? clock, by: str(data.by) ?? str(data.name) ?? str(data.author) };
 }
 
-export function nightSafety(lines: readonly RunLine[]): NightSafety {
+/**
+ * `staff` is the night clerk's own log (owner B's /natt, `source: "staff"` lines): read only for who was
+ * told, never counted as one more of the robot's floors or refusals. Staff lines inside `lines` are read
+ * the same way.
+ */
+export function nightSafety(lines: readonly RunLine[], staff: readonly RunLine[] = []): NightSafety {
   const wet: { id: string; place: string; at: string | null; index: number }[] = [];
   const signs: Sign[] = [];
   const slips = new Map<string, string | null>();
   const staffHazards = new Map<string, Notified>();
   let staffSecurity: Notified | null = null;
   let clock: string | null = null;
+  // A clerk's wet floor at a place says the night staff knew; her "unknown person" says the same of the stranger.
+  const readStaff = (line: RunLine, at: string | null) => {
+    if (line.type !== "decision" || !fromStaff(line)) return;
+    const data = (line.data ?? {}) as Record<string, unknown>;
+    const place = str(data.place);
+    if (line.kind === "hazard" && place && !staffHazards.has(place)) staffHazards.set(place, staffEntry(data, at));
+    if (line.kind === "security_event" && data.event === "unknown_person" && !staffSecurity) staffSecurity = staffEntry(data, at);
+  };
+  for (const line of staff) readStaff(line, null);
 
   lines.forEach((line, index) => {
     if ((line.type === "call" || line.type === "state") && line.clock) clock = line.clock;
     if (line.type !== "decision") return;
     const data = (line.data ?? {}) as Record<string, unknown>;
     if (fromStaff(line)) {
-      const place = str(data.place);
-      if (line.kind === "hazard" && place && !staffHazards.has(place)) staffHazards.set(place, staffEntry(data, clock));
-      if (line.kind === "security_event" && !staffSecurity) staffSecurity = staffEntry(data, clock);
+      readStaff(line, clock);
       return;
     }
     if (line.kind === "work_order" && data.type === "sol") {

@@ -92,7 +92,6 @@ describe("Overlevering 06:00, composed from the night", () => {
     });
     const sale = open.find((item) => item.id === "sellable");
     expect(sale).toMatchObject({ pending: true, sell: ["room-311"], owner: DESK_OWNER, due: "09:00" });
-    expect(sale?.done).toBeUndefined();
     expect(sale?.text).toMatch(/^Rom 311 er sendt til resepsjonen for utsjekk i PMS-en: ca\. [\d\s\u00a0]+ kr hvis natten blir utsolgt \(31 av 36 booket i kveld\)\.$/);
     // Still open: reception has the check-out to do in the PMS.
     expect(openCount(open)).toBe(open.length);
@@ -168,6 +167,22 @@ describe("Overlevering on the demo night: safety first, the catch, the sleeper",
     expect(figures.money.held.map((row) => row.room)).toEqual(["room-209"]);
     expect(figures.money.caught).toEqual(["room-209"]);
     expect(figures.tonight).toEqual({ booked: 31, rooms: 36 });
+  });
+
+  it("reads the night clerk's own log for who was told, never as one more robot floor or refusal", () => {
+    const clerk: RunLine[] = [
+      { v: 1, type: "decision", kind: "hazard", data: { place: "corridor-1c", hazard: "wet", source: "staff", by: "Kjersti Lund", at: "05:55:00" } },
+      { v: 1, type: "decision", kind: "hazard", data: { place: "lobby", hazard: "wet", source: "staff", by: "Kjersti Lund", at: "02:15:00" } },
+      { v: 1, type: "decision", kind: "security_event", data: { place: "corridor-2c", event: "unknown_person", source: "staff", by: "Kjersti Lund", at: "01:30:00" } },
+    ];
+    const safety = nightSafety(demo(), clerk);
+    expect(safety.wetFloors.map((floor) => floor.place).sort()).toEqual(["corridor-1c", "corridor-2b", "corridor-3d"]);
+    expect(safety.wetFloors.find((floor) => floor.place === "corridor-1c")?.notified).toEqual({ at: "05:55:00", by: "Kjersti Lund" });
+    expect(safety.stranger).toMatchObject({ notified: { at: "01:30:00", by: "Kjersti Lund" } });
+    expect(safety.stranger?.refusals).toHaveLength(7);
+    const { open } = handover({}, demo(), { safety });
+    expect(open.find((item) => item.id === "stranger")).toMatchObject({ escalation: undefined });
+    expect(open.find((item) => item.id === "stranger")?.text).toMatch(/ Nattevakten meldte det kl\. 01:30 \(Kjersti Lund\)\.$/);
   });
 
   it("says who was told when the night staff wrote a hazard down (a staff entry for the place), and which floors nobody was told about", () => {

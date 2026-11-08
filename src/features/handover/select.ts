@@ -70,11 +70,6 @@ export type OpenItem = {
    * PMS-en", never "done": the pilot reads the PMS, it never writes it). Still open: reception has it.
    */
   pending?: boolean;
-  /**
-   * @deprecated Never set since round 5 (a sent room is `pending`, never done): kept so owner B's
-   * nightsource/compose.ts still compiles until it reads `pending`.
-   */
-  done?: boolean;
   /** One line per place under the item (the wet floors, grouped into one item with one owner), or the consequence under a lead. */
   lines?: string[];
   /** Fettero held the room back from sale (the room check's catch), said with a badge. */
@@ -92,7 +87,7 @@ export type Handover = {
   note: NightNote;
 };
 
-/** TODO(phase-3): the night receptionist writes this in Fettero; test text until then. */
+/** The fallback when the night clerk wrote no note in Nattevaktens logg (owner B's /natt, `clerkNoteOf`): test text. */
 export const NIGHT_NOTE: NightNote = {
   author: "Kjersti Lund",
   role: "Nattevakt",

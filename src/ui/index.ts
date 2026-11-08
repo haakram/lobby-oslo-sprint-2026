@@ -19,6 +19,7 @@ export { AvvikMark, RoomStatusTag } from "./RoomStatusTag";
 export { AVVIK, ROOM_STATUS, type RoomStatusKey, roomPaint } from "./roomStatus";
 export { Sheet } from "./Sheet";
 export { Skeleton } from "./Skeleton";
+export { actionStamp, relativeTime, stampNow, useNowMs } from "./stamp";
 export { Stat } from "./Stat";
 export { UserPlate } from "./UserPlate";
 export { VantaBackdrop } from "./VantaBackdrop";

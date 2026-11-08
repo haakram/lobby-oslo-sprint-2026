@@ -146,6 +146,7 @@ That's how everyone, and every AI, stays on the same page.
 | `docs/PLAN.md` | Phased roadmap, tasks, owners |
 | `docs/OPERATIONS.md` | Setup, the gate, env, CI, deploy, demo day, troubleshooting |
 | `docs/DEMO.md` | Demo script, pitch, submission checklist |
+| `docs/HOLIO.md` | Holio pains 3, 6 and 9: screens and honest status |
 | `docs/sessions/` | One handoff note per work session |
 | `docs/superpowers/` | Specs and plans from brainstorming sessions |
 | `docs/research/` · `docs/checks/` | Research notes · reviews, audits, test reports |

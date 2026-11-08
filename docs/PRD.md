@@ -207,5 +207,5 @@ Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kje
 - Which run log is on stage after 13:05: the seed-16 night, or a final shift's log?
 
 Decided since Saturday: the product name on this branch (Fettero); a separate jury account; the demo
-night (the final agent's seed-16 night instead of Saturday's seed 5); the red alert band (*Nå*) and
-the eight figures are gone from Oversikt, replaced by the bell and the handover page.
+night (the final agent's seed-16 night instead of Saturday's seed 5); Oversikt's red alert band is
+gone, replaced by the bell and the handover page.

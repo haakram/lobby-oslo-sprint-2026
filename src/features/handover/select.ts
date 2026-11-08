@@ -8,7 +8,7 @@ import type { PhoneTask } from "@/features/requests/phoneTasks";
 import type { RequestView } from "@/features/requests/select";
 import { HANDOVER_AT, hoursEarlier, type RoomMoney, roomMoney, shortDate, tonightLine } from "@/features/rooms/money";
 import { bookedTonight, type PmsRoom, pmsLastNight, type RoomRevenue, sellableValue } from "@/features/rooms/pms";
-import type { Contradiction, Held, Reconciliation, RoomCheckMark } from "@/features/rooms/reconcile";
+import { type Contradiction, type Held, OWN_CONFLICT, type Reconciliation, type RoomCheckMark } from "@/features/rooms/reconcile";
 import { osloToday } from "@/features/reception/dates";
 import { HOTEL } from "@/features/reception/hotel";
 import { byRole, cleanersToday } from "@/features/staff/testData";
@@ -97,6 +97,14 @@ export type OpenItem = {
   caught?: boolean;
   /** Rests on the booking system, whose bookings are test data (while they are): the row carries the small word "testbooking". */
   booking?: boolean;
+  /**
+   * The hazards a safety row covers, and whether a person knew of each in the night (round 7: *Varsle*
+   * is kept per hazard, `wet:lobby`, so it carries across *Med robot* / *Uten robot*, where the grouped
+   * wet floors and the night clerk's lobby floor are different rows).
+   */
+  hazards?: { key: string; notified: boolean }[];
+  /** The heading the row sits under with its neighbours (round 7: "Bookingsystemet og dørlåsen er uenige · 2 rom"). */
+  group?: string;
 };
 
 export type NightNote = { author: string; role: string; text: string };
@@ -130,6 +138,11 @@ function joinNb(items: readonly string[]): string {
 export const MAX_HIGHLIGHTS = 7;
 
 export { SAFETY_DUE, STRANGER_CHECK, STRANGER_OWNER, WET_FLOOR_OWNER } from "./safety";
+
+/** One hazard, the same on every page that shows it: "wet:lobby" · "door:corridor-3c" · "stranger" (the robot's refusals). */
+export function hazardKey(kind: "wet" | "door" | "person" | "stranger", place = ""): string {
+  return kind === "stranger" ? "stranger" : `${kind}:${place}`;
+}
 
 /** The desk: reception's tasks are the role's, whoever is on (the day receptionist often reads this page herself). */
 export const DESK_OWNER = "Resepsjon";
@@ -232,13 +245,13 @@ export function robotStateText(robot: RobotAtHandover): string {
 }
 
 /**
- * "Rom 209: bagasje levert i et rom roboten senere meldte tomt." Said as what the log shows (round 6,
- * domain review: "dobbelt tildelt?" read the simulator's habit of stacking bag requests on one room as
- * a booking signal); the two clocks are the row's points.
+ * "Rom 209: robotens minne og øyne er uenige." Said as what the log shows (round 6, domain
+ * review: "dobbelt tildelt?" read the simulator's habit of stacking bag requests on one room as a booking
+ * signal; round 7: not "holdt tilbake fra salg", a guest is booked there); the two clocks are the row's points.
  */
 export function contradictionText(row: Contradiction): string {
-  const what = row.arrival ? "Bagasje" : itemLabel(row.item).replace(/^./, (first) => first.toUpperCase());
-  return `Rom ${number(row.room)}: ${what.charAt(0).toLowerCase()}${what.slice(1)} levert i et rom roboten senere meldte tomt.`;
+  // What to do is the row's badge ("Sjekk rommet"), not a second sentence.
+  return `Rom ${number(row.room)}: ${OWN_CONFLICT.charAt(0).toLowerCase()}${OWN_CONFLICT.slice(1)}.`;
 }
 
 /** The two points of the robot's own contradiction: what went in, then "meldt tomt". */
@@ -347,15 +360,15 @@ export function composeHandover({
   if (contradiction?.checkedAt) {
     ranked.push({
       at: hhmm(contradiction.checkedAt),
-      text: `Roboten meldte rom ${number(contradiction.room)} tomt og ryddig, men egen logg sier at den satte inn ${contradiction.arrival ? "bagasje" : itemLabel(contradiction.item)} der kl. ${hhmm(contradiction.placedAt)}. Fettero holdt rommet tilbake fra salg.`,
+      text: `Roboten meldte rom ${number(contradiction.room)} tomt og ryddig, men egen logg sier at den satte inn ${contradiction.arrival ? "bagasje" : itemLabel(contradiction.item)} der kl. ${hhmm(contradiction.placedAt)}. ${OWN_CONFLICT}: Fettero ba resepsjonen sjekke rommet.`,
       by: "robot",
     });
   } else if (held?.deliveredAt) {
     ranked.push({
       at: hhmm(held.deliveredAt),
       text: held.arrival
-        ? `Roboten bar bagasje for dagens ankomst inn på rom ${number(held.room)}, men systemet har ${held.guest ?? "en gjest"} der${held.departure ? ` til ${shortDate(held.departure)}` : ""}. Fettero holdt rommet tilbake fra salg.`
-        : `Roboten leverte noe inn på rom ${number(held.room)} etter romsjekken. Fettero holdt rommet tilbake fra salg.`,
+        ? `Roboten bar bagasje for dagens ankomst inn på rom ${number(held.room)}, men systemet har ${held.guest ?? "en gjest"} der${held.departure ? ` til ${shortDate(held.departure)}` : ""}. Fettero ba resepsjonen sjekke rommet.`
+        : `Roboten leverte noe inn på rom ${number(held.room)} etter romsjekken. Fettero ba resepsjonen sjekke rommet.`,
       by: "robot",
     });
   }
@@ -402,6 +415,7 @@ export function composeHandover({
       safety: true,
       count: wetFloors.length,
       untold: wetFloors.filter((floor) => !floor.notified).length,
+      hazards: wetFloors.map((floor) => ({ key: hazardKey("wet", floor.place), notified: Boolean(floor.notified) })),
     });
   }
   if (safety.stranger) {
@@ -417,6 +431,7 @@ export function composeHandover({
       urgent: false,
       safety: true,
       untold: safety.stranger.notified ? 0 : 1,
+      hazards: [{ key: hazardKey("stranger"), notified: Boolean(safety.stranger.notified) }],
     });
   }
   // The night clerk's own doors and persons: the same rows the robot-free page shows (same ids).
@@ -431,6 +446,7 @@ export function composeHandover({
       urgent: false,
       safety: true,
       untold: 0,
+      hazards: [{ key: hazardKey(entry.hazard, entry.place), notified: true }],
     });
   }
 
@@ -613,14 +629,65 @@ export function openCount(open: readonly OpenItem[]): number {
   return open.reduce((sum, item) => sum + (item.count ?? 1), 0);
 }
 
+/** *Åpent nå*'s two numbers: every sak, and the safety saker (straks) among them. */
+export type HandoverSummary = { total: number; straks: number };
+
+/**
+ * "Overlevering 06:00: 5 straks av 13 åpne": the one "needs you" line (round 7, design review: the bell
+ * badge, *Åpent nå* and the safety figure read as three counts). The bell's badge is the straks, its sheet
+ * and Oversikt's greeting say this line, the page heads *Åpent nå* with the same two numbers.
+ */
+export function handoverLine({ total, straks }: HandoverSummary): string {
+  return `Overlevering 06:00: ${straks} straks av ${total} ${total === 1 ? "åpen" : "åpne"}`;
+}
+
 /** The saker that can hurt a guest: the safety figure's number. */
 export function safetyCount(open: readonly OpenItem[]): number {
   return openCount(open.filter((item) => item.safety));
 }
 
-/** Safety saker nobody was told about, in the night or on this page (`told`: the rows a *Varsle* tap recorded). */
-export function untoldCount(open: readonly OpenItem[], told: (id: string) => boolean): number {
-  return open.filter((item) => item.safety && !told(item.id)).reduce((sum, item) => sum + (item.untold ?? 0), 0);
+/**
+ * Safety saker nobody was told about, in the night or on this page (`told`: the hazards a *Varsle* tap
+ * recorded, round 7: per hazard, so a tap under *Med robot* counts under *Uten robot* too).
+ */
+export function untoldCount(open: readonly OpenItem[], told: (key: string) => boolean): number {
+  return open
+    .filter((item) => item.safety)
+    .reduce((sum, item) => sum + (item.hazards ? item.hazards.filter((hazard) => !hazard.notified && !told(hazard.key)).length : told(item.id) ? 0 : (item.untold ?? 0)), 0);
+}
+
+/** The keys a row's *Varsle* records: its hazards, or the row itself when it names none. */
+export function hazardsOf(item: Pick<OpenItem, "id" | "hazards">): string[] {
+  return item.hazards?.map((hazard) => hazard.key) ?? [item.id];
+}
+
+/** "Bookingsystemet og dørlåsen er uenige · 2 rom": the pitch line, on the page as a heading (round 7). */
+export function lockGroupHeading(rooms: number): string {
+  return `Bookingsystemet og dørlåsen er uenige · ${rooms} rom`;
+}
+
+/** The rooms a row is about: the room its chips are for, the rooms it sells, or the room a lock flag names. */
+function rowRooms(item: OpenItem): string[] {
+  const flagged = /^(?:lock|early|guest)-(room-[\w-]+)$/.exec(item.id)?.[1];
+  return [...new Set([item.evidenceRoom, ...(item.sell ?? []), flagged].filter((room): room is string => Boolean(room)))];
+}
+
+/**
+ * *Åpent nå* in one order on both nights (round 7, design review): the safety rows first, then every
+ * other row by its deadline, with the rows about rooms where the booking system and the door lock
+ * disagree (`disagree`, doorlock/feed.ts `doorLockFlags`) together under one heading, where the earliest
+ * of them falls. Pure; the robot-free composer's room checks are no longer pinned above the 07:00 calls.
+ */
+export function groupLockDisagreements(open: readonly OpenItem[], disagree: ReadonlySet<string>): OpenItem[] {
+  const safety = open.filter((item) => item.safety);
+  const rest = open.filter((item) => !item.safety).sort((a, b) => a.due.localeCompare(b.due));
+  const inGroup = rest.filter((item) => rowRooms(item).some((room) => disagree.has(room)));
+  if (inGroup.length === 0) return [...safety, ...rest];
+  const rooms = new Set(inGroup.flatMap((item) => rowRooms(item).filter((room) => disagree.has(room))));
+  const heading = lockGroupHeading(rooms.size);
+  const before = rest.indexOf(inGroup[0]);
+  const others = rest.filter((item) => !inGroup.includes(item));
+  return [...safety, ...others.slice(0, before), ...inGroup.map((item) => ({ ...item, group: heading })), ...others.slice(before)];
 }
 
 /** The caretaker on the day shift, whom the wet floors' *Varsle* tells. */
@@ -681,4 +748,6 @@ export type Signoff = {
   open?: number;
   /** Safety saker nobody had been told about when it was signed (round 6: the receipt says what was not done). */
   untold?: number;
+  /** A withdrawal line (*Angre kvitteringen*, round 7: appended, never deleted): `name` is who took it back. */
+  withdrawn?: boolean;
 };

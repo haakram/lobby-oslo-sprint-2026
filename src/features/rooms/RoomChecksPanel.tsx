@@ -14,8 +14,8 @@ import { Badge, Button, Card, RegenIcon, Skeleton } from "@/ui";
 import { actionStamp, stampNow, useNowMs } from "@/ui/stamp";
 import { BookingEvidence, TestBookingWord } from "./BookingEvidence";
 import { bookedTonight } from "./pms";
-import { moneyHeadline, moneyMethod, releasedLine, shortDate } from "./money";
-import { type Contradiction, type Crowded, type GuestFound, type Held, markRoom, type RoomCheckMark, type Sellable } from "./reconcile";
+import { moneyLines, moneyMethod, releasedLine, shortDate } from "./money";
+import { type Contradiction, type Crowded, type GuestFound, type Held, markRoom, OWN_CONFLICT_TODO, ownConflictLine, type RoomCheckMark, type Sellable } from "./reconcile";
 import { SellSteps } from "./SellSteps";
 import { useRoomCheck } from "./useRoomCheck";
 
@@ -29,8 +29,8 @@ function clocks(times: readonly (string | null)[]): string {
 
 /**
  * Rom og renhold's panel for the robot's room checks against the booking system: the rooms the system
- * holds tonight that can be sold after reception confirms (two steps, never one tap), the rooms Fettero
- * held back because the robot delivered into them tonight (a double allocation caught), the rooms where
+ * holds tonight that can be sold after reception confirms (two steps, never one tap), the rooms a person
+ * must check because the robot's memory and its eyes disagree (round 7: never "dobbelt tildelt?"), the rooms where
  * the robot met a guest the system doesn't have, and, from the robot's log alone, rooms that got bags
  * for more than one arrival. The panel says once that the bookings are test data, and where a pilot gets
  * the evidence without the robot opening a booked room; each row resting on them carries "testbooking".
@@ -65,7 +65,8 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
   const held = (result?.held.length ?? 0) + ownOnly.length;
   const tonight = { booked: bookedTonight(today), rooms: rooms?.length || 36 };
   const crowded = result?.crowded.length ?? 0;
-  const headline = money ? moneyHeadline(money) : null;
+  // The one money story (round 7): the same lines as Overlevering and Oversikt, 210's certain cost first.
+  const story = money ? moneyLines(money) : [];
 
 
   return (
@@ -99,14 +100,18 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
           </p>
         ) : (
           <div ref={list} className="mt-4 flex flex-col gap-5">
-            {headline && (
+            {story.length > 0 && (
               <div className="flex items-start gap-2">
                 {/* Never green here: a room sent to reception waits for the booking system (round 4, product review). */}
                 <RegenIcon name="key" size={22} className="mt-0.5 shrink-0 text-muted" />
                 <div className="flex flex-col gap-0.5">
-                  <p aria-live="polite" className="text-lg font-semibold tracking-[-0.01em]">
-                    {headline}
-                  </p>
+                  <ul aria-live="polite" className="flex flex-col gap-0.5">
+                    {story.map((line, index) => (
+                      <li key={line} className={index === 0 ? "text-lg font-semibold tracking-[-0.01em]" : "text-base font-semibold"}>
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
                   {(sellable > 0 || money.released.length > 0) && (
                     <p className="text-sm text-muted">
                       {releasedLine(money)}. {moneyMethod(money, tonight)}
@@ -131,7 +136,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
               {held > 0 && (
                 <div className="min-w-0">
                   <h3 className="flex items-baseline gap-2 text-sm font-semibold">
-                    Holdt tilbake <span className="font-normal text-muted tabular-nums">{held}</span>
+                    Må sjekkes <span className="font-normal text-muted tabular-nums">{held}</span>
                   </h3>
                   <ul className="mt-1 divide-y divide-line">
                     {result.held.map((row) => (
@@ -210,17 +215,20 @@ export function contradictionLine(row: Contradiction): string {
   return `Meldt tomt og ryddig kl. ${hhmm(row.checkedAt)}, men roboten satte inn ${row.arrival ? "bagasje" : "noe"} her kl. ${hhmm(row.placedAt)}.`;
 }
 
-/** Rom's held row: "Bagasje for 3 ankomster levert, sist 05:16, men bookingen har gjest til 9.11. Dobbelt tildelt?" */
+/**
+ * Rom's held row, as Overlevering says it (round 7, design and domain review: never "dobbelt tildelt?",
+ * the simulator stacks bag requests on one room): "Robotens minne og øyne er uenige: bagasje levert
+ * 01:29, meldt tomt 03:47. Sjekk rommet."
+ */
 export function heldRowLine(row: Held): string {
-  const until = row.departure ? ` til ${shortDate(row.departure)}` : "";
-  if (row.arrival && row.arrivals > 1) return `Bagasje for ${row.arrivals} ankomster levert, sist ${hhmm(row.deliveredAt)}, men bookingen har gjest${until}. Dobbelt tildelt?`;
   return heldLine(row);
 }
 
-/** "Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til 9.11. Dobbelt tildelt?" (3D-kart's room card reads it too). */
+/** The same words on 3D-kart's room card: the robot's own contradiction, else what it delivered after its check. Reception decides. */
 export function heldLine(row: Held): string {
+  if (row.contradiction) return ownConflictLine(row.contradiction);
   const until = row.departure ? ` til ${shortDate(row.departure)}` : "";
-  if (row.arrival) return `Bagasje levert ${hhmm(row.deliveredAt)} for dagens ankomst, men bookingen har gjest${until}. Dobbelt tildelt?`;
+  if (row.arrival) return `Bagasje levert ${hhmm(row.deliveredAt)} etter romsjekken, og bookingen har gjest${until}. Resepsjonen avgjør.`;
   return `Roboten leverte noe inn på rommet kl. ${hhmm(row.deliveredAt)}, etter sjekken: rommet er i bruk.`;
 }
 
@@ -269,14 +277,14 @@ function OwnContradictionRow({ row }: { row: Contradiction }) {
     <RowFrame
       room={row.room}
       action={
-        <Badge tone="success">
-          <RegenIcon name="shield-check" size={14} className="mr-1 inline-block align-[-0.15em]" />
-          Fettero holdt rommet tilbake
+        <Badge>
+          <RegenIcon name="eye" size={14} className="mr-1 inline-block align-[-0.15em]" />
+          {OWN_CONFLICT_TODO}
         </Badge>
       }
     >
-      <p className="font-semibold">{contradictionLine(row)}</p>
-      <p className="text-muted">Kameraet og robotens egen logg er uenige: se på rommet før det selges.</p>
+      <p className="font-semibold">{ownConflictLine(row)}</p>
+      <p className="text-muted">{contradictionLine(row)}</p>
     </RowFrame>
   );
 }
@@ -308,9 +316,9 @@ function HeldRow({ row, today, guestsLink }: { row: Held; today: string; guestsL
       room={row.room}
       action={
         <>
-          <Badge tone="success">
-            <RegenIcon name="shield-check" size={14} className="mr-1 inline-block align-[-0.15em]" />
-            Fettero holdt rommet tilbake
+          <Badge>
+            <RegenIcon name="eye" size={14} className="mr-1 inline-block align-[-0.15em]" />
+            {OWN_CONFLICT_TODO}
           </Badge>
           {guestsLink && (
             <Link href="/gjester" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
@@ -320,12 +328,11 @@ function HeldRow({ row, today, guestsLink }: { row: Held; today: string; guestsL
         </>
       }
     >
-      {/* The robot's own contradiction leads, no booking needed; the double allocation is its consequence. */}
-      {row.contradiction && <p className="font-semibold">{contradictionLine(row.contradiction)}</p>}
-      <p className={row.contradiction ? "text-muted" : "font-semibold"}>{heldRowLine(row)}</p>
+      {/* The robot's own contradiction leads, no booking needed (round 7: its memory and its eyes disagree, a person looks). */}
+      <p className="font-semibold">{heldRowLine(row)}</p>
       <p className="text-muted">
         {bookingLine(row, today)}. Roboten fant rommet tomt og ryddig <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>
-        {earlier.length > 0 ? `, og bar inn bagasje også kl. ${clocks(earlier)}` : ""}. Flytt én av dem før innsjekk kl. 15:00.
+        {earlier.length > 0 ? `, og bar inn bagasje også kl. ${clocks(earlier)}` : ""}. Resepsjonen avgjør før innsjekk kl. 15:00.
       </p>
       <TestBookingWord />
     </RowFrame>

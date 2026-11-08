@@ -21,16 +21,16 @@ import { CLERK_SAMPLE_IS_ON } from "@/features/staffinput/entries";
 import { readStaffLog, staffRooms } from "@/features/staffinput/read";
 import { hoursEarlier, moneyMethod, releasedLine, tonightLine, unbilledMethod } from "@/features/rooms/money";
 import { PMS_IS_TEST_DATA, TEST_BOOKING_WORD } from "@/features/rooms/pms";
-import type { Contradiction, RoomCheckMark } from "@/features/rooms/reconcile";
+import { type Contradiction, OWN_CONFLICT, OWN_CONFLICT_TODO, type RoomCheckMark } from "@/features/rooms/reconcile";
 import { SellSteps } from "@/features/rooms/SellSteps";
 import { HOTEL_NAME } from "@/ui/AppNav";
 import { APP_NAME, TAGLINE } from "@/ui/brand";
 import { actionStamp, relativeTime, stampNow, useNowMs } from "@/ui/stamp";
 import { Badge, Button, Card, cx, EmptyState, ErrorState, Figure as Digits, Monogram, RegenIcon, Skeleton, Stat } from "@/ui";
 import { type RobotLook, type RoomSources, roomSources, type SourceChip } from "./evidence";
-import { contradictionPoints, type Figures, type Highlight, itemAnchor, nightSourceLine, notifyTarget, type OpenItem, openCount, safetyCount, untoldCount } from "./select";
-import { sign, SIGNOFFS } from "./signoff";
-import { SAFETY_TOLD, type Told, tell } from "./told";
+import { contradictionPoints, type Figures, hazardsOf, type Highlight, itemAnchor, nightSourceLine, notifyTarget, type OpenItem, openCount, safetyCount, untoldCount } from "./select";
+import { sign, SIGNOFFS, signoffOf, withdrawalOf } from "./signoff";
+import { SAFETY_TOLD, type Told, type ToldState, tell, toldStates, untell } from "./told";
 import { useHandover } from "./useHandover";
 
 const BY: Record<Highlight["by"], { word: string; tone: "accent" | "neutral" }> = {
@@ -58,7 +58,10 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   // The page and the bell read one composition (useHandover): the same Åpent nå, the same safety saker.
   const { run, night, lines, staff, reconciliation, marks, source, setSource, noRobot, withoutRobot, handover } = useHandover({ nightState, statusOf, today, demo });
   const { user } = useSession();
-  const signoff = SIGNOFFS.use()[today] ?? null;
+  // Append-only (round 7): the day's last line is the receipt in force, or a withdrawal shown as one.
+  const signoffLog = SIGNOFFS.use()[today];
+  const signoff = signoffOf(signoffLog);
+  const withdrawal = withdrawalOf(signoffLog);
   const now = useNowMs();
   const ready = run.status === "ready";
   const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
@@ -67,7 +70,9 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   // The sources a room row draws as chips: the door lock's one signal, the night clerk's look (and the robot's, on its night).
   const doorSignals = useMemo(() => doorLockSignals(doorLockLines()), []);
   const clerkRooms = useMemo(() => staffRooms(readStaffLog(staff)), [staff]);
-  const told = SAFETY_TOLD.use()[today];
+  // Kept per hazard, append-only (round 7): a Varsle under Med robot reads as told under Uten robot too.
+  const toldLog = SAFETY_TOLD.use()[today];
+  const toldState = useMemo(() => toldStates(toldLog), [toldLog]);
   const [wholeNight, setWholeNight] = useState(false);
   const shownCheck = noRobot ? (withoutRobot?.reconciliation ?? null) : reconciliation;
   const sourcesOf = useCallback(
@@ -79,11 +84,15 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
     },
     [noRobot, reconciliation, doorSignals, clerkRooms],
   );
-  const isTold = useCallback((id: string) => Boolean(told?.[id]), [told]);
+  const isTold = useCallback((key: string) => Boolean(toldState.get(key)?.told), [toldState]);
   const untold = handover ? untoldCount(handover.open, isTold) : 0;
   const onTell = useCallback(
-    (id: string, to: string | null) => tell(today, id, to ? { to, by: user?.name ?? null, stamp: stampNow() } : null),
-    [today, user],
+    (item: OpenItem, to: string | null) => {
+      const keys = hazardsOf(item);
+      if (to) tell(today, keys.filter((key) => !isTold(key)), { to, by: user?.name ?? null, stamp: stampNow() });
+      else untell(today, keys, user?.name ?? null, stampNow());
+    },
+    [today, user, isTold],
   );
 
   const signButton = useRef<HTMLDivElement>(null);
@@ -95,18 +104,9 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   }, [signoff]);
   const setSigned = (value: boolean) => {
     refocus.current = true;
-    sign(
-      today,
-      value
-        ? {
-            name: user?.name ?? "Morgenvakten",
-            at: formatClock(new Date().toISOString()),
-            stamp: stampNow(),
-            open: handover ? openCount(handover.open) : undefined,
-            untold,
-          }
-        : null,
-    );
+    const who = { name: user?.name ?? "Morgenvakten", at: formatClock(new Date().toISOString()), stamp: stampNow() };
+    // Angre appends a withdrawal line, never deletes the receipt (round 7, legal review).
+    sign(today, value ? { ...who, open: handover ? openCount(handover.open) : undefined, untold } : { ...who, withdrawn: true });
   };
 
   if (run.status === "error" || run.status === "empty") {
@@ -191,7 +191,8 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
         <p data-demo-band className="-mt-2 flex items-start gap-2 rounded-md bg-sunken px-3 py-2 text-sm text-muted lg:-mt-4 print:mt-0 print:bg-transparent print:p-0 print:text-xs">
           <RegenIcon name="info-circle" size={18} className="mt-0.5 shrink-0 print:hidden" />
           <span>
-            Demo: {nightSourceLine(run.lines)}.{PMS_IS_TEST_DATA ? ` Bookinger og dørlås er testdata, merket «${TEST_BOOKING_WORD}».` : ""}{" "}
+            Demo: {nightSourceLine(run.lines)}.{PMS_IS_TEST_DATA ? ` Bookinger og dørlås er testdata, merket «${TEST_BOOKING_WORD}».` : ""}
+            {CLERK_SAMPLE_IS_ON ? " Nattevaktens registreringer er eksempler, merket «Eksempel»." : ""}{" "}
             <span className="print:hidden">Det du gjør her, lagres på denne enheten.</span>
           </span>
         </p>
@@ -247,9 +248,24 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
               </p>
             ) : (
               <ul className="mt-2 divide-y divide-line">
-                {open.map((item) => (
-                  <OpenRow key={item.id} item={item} marks={marks} today={today} sourcesOf={sourcesOf} told={told?.[item.id]} onTell={onTell} now={now} />
-                ))}
+                {groupRuns(open).map((run) =>
+                  run.group ? (
+                    // The pitch line on the page (round 7): the rooms the booking system and the door lock disagree about, together.
+                    <li key={`group-${run.items[0].id}`} className="py-2.5">
+                      <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+                        <RegenIcon name="lock" size={16} strokeWidth={2} className="shrink-0 text-muted" />
+                        {run.group}
+                      </h3>
+                      <ul className="mt-1 divide-y divide-line border-l-2 border-line-strong pl-3">
+                        {run.items.map((item) => (
+                          <OpenRow key={item.id} item={item} marks={marks} today={today} sourcesOf={sourcesOf} told={toldOf(item, toldState)} onTell={onTell} now={now} />
+                        ))}
+                      </ul>
+                    </li>
+                  ) : (
+                    <OpenRow key={run.items[0].id} item={run.items[0]} marks={marks} today={today} sourcesOf={sourcesOf} told={toldOf(run.items[0], toldState)} onTell={onTell} now={now} />
+                  ),
+                )}
               </ul>
             )}
             {/* Without a robot the band is not shown: the switch's line names the sources, this says where it is kept. */}
@@ -350,6 +366,10 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
                         {untold === 1 ? "1 sikkerhetssak er ikke varslet til noen." : `${untold} sikkerhetssaker er ikke varslet til noen.`} Du kan kvittere likevel.
                       </p>
                     )}
+                    {/* The withdrawn receipt stays in the record, said once (round 7, legal review: appended, never deleted). */}
+                    {withdrawal && (
+                      <p className="text-sm text-muted print:hidden">Kvittering trukket tilbake av {actionStamp(withdrawal.name, withdrawal.stamp, now)}.</p>
+                    )}
                     {/* TODO(phase-3): the sign-off goes to the server with the user's id, so the night shift sees it was read. */}
                     <p className="text-xs text-muted print:hidden">Du kvitterer som {user?.name ?? "morgenvakten"}, på denne enheten.</p>
                     <p className="hidden text-sm print:block">Mottatt av: ______________________ kl. ________</p>
@@ -384,6 +404,35 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       </footer>
     </ModulePage>
   );
+}
+
+/** *Åpent nå* in runs: a row alone, or the rows that share a heading (round 7: the rooms where booking and lock disagree). */
+function groupRuns(open: readonly OpenItem[]): { group: string | null; items: OpenItem[] }[] {
+  const runs: { group: string | null; items: OpenItem[] }[] = [];
+  for (const item of open) {
+    const last = runs.at(-1);
+    if (item.group && last?.group === item.group) last.items.push(item);
+    else runs.push({ group: item.group ?? null, items: [item] });
+  }
+  return runs;
+}
+
+/** A row's *Varsle* state, read from its hazards: told once every hazard is; how many of them are; the last correction. */
+type RowTold = { told: Told | null; some: number; of: number; undone: ToldState["undone"] };
+
+function toldOf(item: OpenItem, states: ReadonlyMap<string, ToldState>): RowTold | undefined {
+  if (!item.safety) return undefined;
+  const keys = hazardsOf(item);
+  const told = keys.map((key) => states.get(key)?.told ?? null);
+  const some = told.filter(Boolean).length;
+  const latest = told.filter((entry): entry is Told => entry !== null).sort((a, b) => b.stamp.localeCompare(a.stamp))[0] ?? null;
+  const undone = keys.map((key) => states.get(key)?.undone ?? null).find(Boolean) ?? null;
+  return { told: some === keys.length ? latest : null, some, of: keys.length, undone };
+}
+
+/** "Rom 213: funnet ledig 5 timer tidligere · ca. 1 500 kr hvis utsolgt": the room found free, its kroner conditional. */
+function saleStory(rooms: readonly string[], hours: number, value: number): string {
+  return `Rom ${rooms.join(", ")}: funnet ledig ${hours} ${hours === 1 ? "time" : "timer"} tidligere · ca. ${formatKroner(value)} kr hvis utsolgt`;
 }
 
 /** Behind *Slik vet vi det*: who confirmed every "done", the refusals, the night staff's and the AI's share. */
@@ -479,8 +528,8 @@ type RowProps = {
   marks: Readonly<Record<string, RoomCheckMark>>;
   today: string;
   sourcesOf: (room: string) => RoomSources | null;
-  told: Told | undefined;
-  onTell: (id: string, to: string | null) => void;
+  told: RowTold | undefined;
+  onTell: (item: OpenItem, to: string | null) => void;
   now: number;
 };
 
@@ -506,10 +555,10 @@ function OpenRow({ item, marks, today, sourcesOf, told, onTell, now }: RowProps)
           ) : item.urgent ? (
             <Badge tone="warning">Gjest venter</Badge>
           ) : item.caught ? (
-            // Neutral ink with the shield: the room is not fine, it is held (round 5, design review).
+            // Neutral ink with the eye: a person looks before anyone sells or moves it (round 7: never "holdt tilbake", a guest is booked there).
             <Badge>
-              <RegenIcon name="shield-check" size={14} className="mr-1 inline-block align-[-0.15em]" />
-              Holdt tilbake
+              <RegenIcon name="eye" size={14} className="mr-1 inline-block align-[-0.15em]" />
+              {OWN_CONFLICT_TODO}
             </Badge>
           ) : null}
         </div>
@@ -530,7 +579,7 @@ function OpenRow({ item, marks, today, sourcesOf, told, onTell, now }: RowProps)
               const sources = sourcesOf(room);
               return (
                 <div key={room} className="flex flex-col gap-2">
-                  {item.sell && item.sell.length > 1 && <span className="self-start rounded-sm bg-sunken px-2 py-1 font-mono text-sm font-medium tabular-nums">{room.replace(/^room-/, "")}</span>}
+                  {item.sell && item.sell.length > 1 && <span className="self-start rounded-sm bg-sunken px-2 py-1 text-sm font-medium">Rom <span className="font-mono tabular-nums">{room.replace(/^room-/, "")}</span></span>}
                   {sources && <Sources sources={sources} />}
                   <SellSteps room={room} mark={marks[room]} today={today} primary className="min-w-0 print:hidden" />
                 </div>
@@ -641,8 +690,9 @@ function Sources({ sources }: { sources: RoomSources }) {
  * *Varsle Trond Eikeland* / *Varsle resepsjonen* on a safety row: records who was told, by whom and
  * when, on this device (handover/told.ts), with *Angre*. TODO(phase-3): the message goes out from here.
  */
-function NotifyRow({ item, told, onTell, now }: { item: OpenItem; told: Told | undefined; onTell: (id: string, to: string | null) => void; now: number }) {
+function NotifyRow({ item, told: state, onTell, now }: { item: OpenItem; told: RowTold | undefined; onTell: (item: OpenItem, to: string | null) => void; now: number }) {
   const to = notifyTarget(item);
+  const told = state?.told ?? null;
   const box = useRef<HTMLDivElement>(null);
   // The state a tap asked for: focus moves only once the row shows it (a render can come in between).
   const moved = useRef<"told" | "untold" | null>(null);
@@ -655,7 +705,7 @@ function NotifyRow({ item, told, onTell, now }: { item: OpenItem; told: Told | u
   }, [shown]);
   const act = (next: string | null) => {
     moved.current = next ? "told" : "untold";
-    onTell(item.id, next);
+    onTell(item, next);
   };
   if (told) {
     return (
@@ -671,12 +721,21 @@ function NotifyRow({ item, told, onTell, now }: { item: OpenItem; told: Told | u
       </div>
     );
   }
+  const undone = state?.undone ?? null;
   return (
     <div ref={box} aria-live="polite" className="flex flex-wrap items-center gap-x-3 gap-y-1 print:hidden">
       <Button variant="secondary" size="sm" onClick={() => act(to)}>
         <RegenIcon name="bell" size={18} />
         Varsle {to}
       </Button>
+      {/* Some of the row's hazards were told on the other night's page (a floor that is its own row there). */}
+      {state && state.some > 0 && <span className="text-sm text-muted">{`${state.some} av ${state.of} varslet`}</span>}
+      {/* Angre appends a correction (round 7): the Varsle it took back stays readable, struck through. */}
+      {undone && state?.some === 0 && (
+        <span className="text-sm text-muted">
+          <s>Varslet {undone.told.to}</s> · angret av {actionStamp(undone.by, undone.stamp, now)}
+        </span>
+      )}
     </div>
   );
 }
@@ -691,10 +750,25 @@ function HeldFigure({ figures, contradicted, to }: { figures: Figures; contradic
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <FigureLink to={to ? itemAnchor(to) : null}>
-        {/* The room, not a count (round 6, design review): "209" is the demo's first word. */}
-        <Stat size="lg" label="Holdt tilbake fra salg" value={rooms.length <= 2 ? rooms.join(" · ") : rooms.length} unit={rooms.length > 2 ? "rom" : undefined} />
+        {/* A room, never a count (round 7, design review: a bare "209" read as "209 held back"): "Rom" set before the number. */}
+        <Stat
+          size="lg"
+          label={own ? OWN_CONFLICT : OWN_CONFLICT_TODO}
+          value={
+            rooms.length <= 2 ? (
+              <>
+                <span className="mr-1.5 font-sans text-lg font-semibold">Rom</span>
+                <Digits value={rooms.join(" · ")} />
+              </>
+            ) : (
+              rooms.length
+            )
+          }
+          unit={rooms.length > 2 ? "rom" : undefined}
+        />
       </FigureLink>
       {own ? <Points points={contradictionPoints(own)} stacked /> : <p className="text-sm">{`Rom ${rooms.join(", ")}${doubled ? ": bagasje levert etter romsjekken" : ": i bruk etter romsjekken"}`}</p>}
+      {own && <p className="text-sm font-semibold">{OWN_CONFLICT_TODO} før innsjekk</p>}
     </div>
   );
 }
@@ -719,7 +793,8 @@ function MoneyFigure({ figures, to, sale }: { figures: Figures | undefined; to: 
   const released = money.released.length;
   const hours = hoursEarlier();
   const saleRooms = (toSell > 0 ? money.toSell : money.released).map((row) => row.room.replace(/^room-/, ""));
-  const saleLine = toSell > 0 ? `Rom ${saleRooms.join(", ")}: funnet ledig ${hours} ${hours === 1 ? "time" : "timer"} tidligere` : `Rom ${saleRooms.join(", ")}: sendt til resepsjonen · venter på PMS-en`;
+  // One money story on every screen (round 7): the certain cost leads, the room found free says its kroner are conditional.
+  const saleLine = toSell > 0 ? saleStory(saleRooms, hours, money.toSellValue) : `Rom ${saleRooms.join(", ")}: sendt til resepsjonen · venter på PMS-en`;
   if (unbilled.rooms.length === 0) return <SaleFigure figures={figures} to={sale} />;
   const rooms = unbilled.rooms.map((room) => room.replace(/^room-/, ""));
   return (
@@ -737,7 +812,8 @@ function MoneyFigure({ figures, to, sale }: { figures: Figures | undefined; to: 
           unit="kr"
         />
       </FigureLink>
-      <p className="text-xs text-muted">En natt ingen fakturerer · kan selges igjen i dag</p>
+      {/* The risk, not an opportunity (round 7, legal review): the booking system has the room free. */}
+      <p className="text-xs text-muted">En natt ingen fakturerer · PMS-en kan selge rommet til en ny gjest i dag</p>
       {(toSell > 0 || released > 0) && (
         <a
           href={sale ? `#${itemAnchor(sale)}` : undefined}

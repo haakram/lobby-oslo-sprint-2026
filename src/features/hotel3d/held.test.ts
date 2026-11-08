@@ -60,7 +60,7 @@ describe("the 3D-kart shows 213 as a sleeper (review round 4), never a green Kla
     expect(check.dueOut.map((row) => row.room)).not.toContain("room-213");
   });
 
-  it("at the end of the night 213 reads Bekreft først, taken, with its row; 209 stays Holdt tilbake", () => {
+  it("at the end of the night 213 reads Bekreft først, taken, with its row; 209 stays Sjekk rommet", () => {
     const raw = snapshotAt(timeline, timeline.duration);
     expect(raw.rooms["room-213"].status).toBe("klar");
     const shown = withHeldRooms(raw, held, toConfirm)!;

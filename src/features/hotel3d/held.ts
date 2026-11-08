@@ -4,8 +4,8 @@ import type { Held, Sellable } from "@/features/rooms/reconcile";
 /**
  * The 3D-kart says what the room check says (src/features/rooms/reconcile.ts, the same result Rom,
  * Oversikt's rack and Overlevering read through `useRoomCheck`): a room the robot found empty and tidy
- * but carried an arriving guest's bags into (209 on the demo night, booked to tomorrow: a double
- * allocation) is taken, "Holdt tilbake", never a green "Klar" (review round 3).
+ * but carried an arriving guest's bags into (209 on the demo night, booked to tomorrow: the robot's memory
+ * and its eyes disagree) is taken, "Sjekk rommet", never a green "Klar" (review round 3; round 7 wording).
  *
  * The map is a replay, so a room is held from the moment of its first holding delivery: before the bags
  * go in, the night had not shown it yet. The row a room carries lists only the deliveries made so far.
@@ -19,7 +19,8 @@ import type { Held, Sellable } from "@/features/rooms/reconcile";
 /** A room on the map, with the room check's hold (or its sleeper row, still to confirm) when it has one. */
 export type MapRoomView = RoomView & { held?: Held; toConfirm?: Sellable; pending?: Sellable };
 
-export const HELD_WORD = "Holdt tilbake";
+/** The robot's memory and its eyes disagree (209): a person looks (round 7: never "holdt tilbake", a guest is booked there). */
+export const HELD_WORD = "Sjekk rommet";
 /** The rack's word for a room the system still holds that the robot found empty: confirm, then sell. */
 export const CONFIRM_WORD = "Bekreft først";
 /** Sent to reception, the booking system not yet confirming it (round 5, owner A): neutral, never a green Klar. */
@@ -81,12 +82,12 @@ export function pendingOf(view: RoomView | undefined): Sellable | null {
   return (view as MapRoomView | undefined)?.pending ?? null;
 }
 
-/** The room check's own word for the room ("Holdt tilbake", "Bekreft først", "Venter på PMS-en"), or null when it has none. */
+/** The room check's own word for the room ("Sjekk rommet", "Bekreft først", "Venter på PMS-en"), or null when it has none. */
 export function checkWord(view: RoomView | undefined): string | null {
   return heldOf(view) ? HELD_WORD : toConfirmOf(view) ? CONFIRM_WORD : pendingOf(view) ? PENDING_WORD : null;
 }
 
-/** The room's state in words, as the rack says it: "Holdt tilbake", "Bekreft først", else its status. */
+/** The room's state in words, as the rack says it: "Sjekk rommet", "Bekreft først", else its status. */
 export function roomWord(view: RoomView | undefined): string {
   return checkWord(view) ?? ROOM_STATUS_LABEL[view?.status ?? "ukjent"];
 }

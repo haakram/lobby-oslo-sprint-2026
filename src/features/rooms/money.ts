@@ -2,7 +2,7 @@ import { formatKroner } from "@/features/dashboard/format";
 import type { RoomView } from "@/features/dashboard/selectors";
 import { HOTEL } from "@/features/reception/hotel";
 import { type PmsRoom, type RoomRevenue, sellableValue } from "./pms";
-import type { Held, Reconciliation, RoomCheckMark, Sellable } from "./reconcile";
+import { type Held, OWN_CONFLICT_TODO, type Reconciliation, type RoomCheckMark, type Sellable } from "./reconcile";
 
 /**
  * The room check's money, read the same way on Oversikt, Rom and Overlevering (round 2: three
@@ -59,6 +59,9 @@ export type RoomMoney = {
   held: Held[];
   /** Never offered: held, or the room check contradicts the robot's own log. Room ids, by room number. */
   caught: string[];
+  /** In use with no booking (a guest found in a room the system has free): a night nobody bills, the certain cost (round 7: it leads the money on every screen). */
+  unbilled: string[];
+  unbilledValue: number;
   toSellValue: number;
   releasedValue: number;
   /** Last night's average rate, NOK, the estimate's base. */
@@ -89,8 +92,11 @@ export function roomMoney({
   const caughtRooms = new Set(caught);
   // A sent room is not ready until the booking system has it free: the pilot never writes the PMS.
   const readyToSell = rooms ? rooms.filter((room) => room.status === "klar" && !room.closed && !caughtRooms.has(room.id) && !pms.has(room.id)).length : null;
+  const unbilled = reconciliation.guestFound.map((row) => row.room);
   return {
     toSell,
+    unbilled,
+    unbilledValue: sellableValue(unbilled.length, revenue),
     confirmed: toSell.filter((row) => marks[row.room]?.action === "confirmed").map((row) => row.room),
     released,
     held: reconciliation.held,
@@ -104,19 +110,35 @@ export function roomMoney({
 }
 
 const kr = (value: number) => `ca. ${formatKroner(value)} kr`;
-const heldPart = (money: RoomMoney) => (money.caught.length > 0 ? ` · ${money.caught.length} holdt tilbake` : "");
+/** "Rom 213" · "Rom 210 og 211": rooms said as rooms, never a bare number. */
+const roomWords = (ids: readonly string[]) => {
+  const numbers = ids.map((id) => id.replace(/^room-/, ""));
+  return `Rom ${numbers.length <= 1 ? numbers.join("") : `${numbers.slice(0, -1).join(", ")} og ${numbers.at(-1)}`}`;
+};
 
 /**
- * The one money line: "1 rom kan selges etter bekreftelse · ca. 1 500 kr hvis utsolgt · 1 holdt
- * tilbake", then "1 rom sendt til resepsjonen · venter på PMS-en" once every room is sent (never
- * "solgt" or "frigitt": the booking system has not said so). Null when the room check found nothing
- * to sell or hold.
+ * The one money story, the same on Overlevering, Oversikt and Rom (round 7, design review: "ca. 1 500 kr"
+ * meant 210 on one screen and 213 on another), one line per room kind, each naming its rooms:
+ * 1. the certain cost first: "Rom 210 i bruk uten booking · ca. 1 500 kr";
+ * 2. the room found free, its kroner conditional: "Rom 213 funnet ledig 5 timer tidligere · ca. 1 500 kr
+ *    hvis utsolgt", then "Rom 213 sendt til resepsjonen · venter på PMS-en" once sent (never "solgt": the
+ *    booking system has not said so);
+ * 3. the robot's own contradiction: "Rom 209: sjekk rommet" (never "holdt tilbake": a guest is booked there).
  */
+export function moneyLines(money: RoomMoney): string[] {
+  const hours = hoursEarlier();
+  const lines: string[] = [];
+  if (money.unbilled.length > 0) lines.push(`${roomWords(money.unbilled)} i bruk uten booking · ${kr(money.unbilledValue)}`);
+  if (money.toSell.length > 0) lines.push(`${roomWords(money.toSell.map((row) => row.room))} funnet ledig ${hours} ${hours === 1 ? "time" : "timer"} tidligere · ${kr(money.toSellValue)} hvis utsolgt`);
+  if (money.released.length > 0) lines.push(`${roomWords(money.released.map((row) => row.room))} sendt til resepsjonen · venter på PMS-en`);
+  if (money.caught.length > 0) lines.push(`${roomWords(money.caught)}: ${OWN_CONFLICT_TODO.toLowerCase()}`);
+  return lines;
+}
+
+/** The money story in one string (a screen reader's line, a test): its lines as sentences. Null when there is nothing to say. */
 export function moneyHeadline(money: RoomMoney): string | null {
-  if (money.toSell.length > 0) return `${money.toSell.length} rom kan selges etter bekreftelse · ${kr(money.toSellValue)} hvis utsolgt${heldPart(money)}`;
-  if (money.released.length > 0) return `${money.released.length} rom sendt til resepsjonen · venter på PMS-en${heldPart(money)}`;
-  if (money.caught.length > 0) return `Ingen rom å selge i dag · ${money.caught.length} holdt tilbake`;
-  return null;
+  const lines = moneyLines(money);
+  return lines.length > 0 ? lines.join(". ") : null;
 }
 
 /** "Sendt til resepsjonen i dag: 1 rom · venter på PMS-en": the running count step 2 moves (the pilot's number). */

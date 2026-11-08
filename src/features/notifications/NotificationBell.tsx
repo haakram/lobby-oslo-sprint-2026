@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { canAccess } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { useHotelData } from "@/features/dashboard/useHotelData";
+import { handoverLine, type HandoverSummary } from "@/features/handover/select";
 import { openSummary, useHandover } from "@/features/handover/useHandover";
 import { moduleById } from "@/features/modules/registry";
 import { osloToday } from "@/features/reception/dates";
@@ -13,22 +14,22 @@ import { Badge, Button, buttonClasses, cx, EmptyState, RegenIcon, Sheet, Skeleto
 import { type Alert, MAX_ALERTS, selectAlerts } from "./alerts";
 import { isNew, useSeen } from "./useSeen";
 
-/** "Varsler, 3 nye": the bell's name says the count, the badge only shows it. */
-export function bellLabel(fresh: number, loading: boolean): string {
+/**
+ * "Varsler, 3 nye": the bell's name says the count, the badge only shows it. For a role that may open
+ * Overlevering the badge is the page's straks (round 7, design review: 10 on the bell, 13 in *Åpent nå*
+ * and 5 on the safety figure read as three counts), and the name says the page's line.
+ */
+export function bellLabel(fresh: number, loading: boolean, handover: HandoverSummary | null = null): string {
   if (loading) return "Varsler, henter";
+  if (handover) return `Varsler, ${handoverLine(handover).replace(/^Overlevering 06:00: /, "")}`;
   if (fresh === 0) return "Varsler, ingen nye";
   return `Varsler, ${fresh} ${fresh === 1 ? "ny" : "nye"}`;
 }
 
 const noop = () => () => {};
 
-/** What *Åpent nå* on Overlevering holds: every sak, and the safety saker (straks) among them. */
-export type HandoverSummary = { total: number; straks: number };
-
-/** "Overlevering 06:00: 5 straks av 13 åpne": the bell's safety alerts are those straks, the rest is on the page. */
-export function handoverLine({ total, straks }: HandoverSummary): string {
-  return `Overlevering 06:00: ${straks} straks av ${total} ${total === 1 ? "åpen" : "åpne"}`;
-}
+// The one "needs you" line lives with the page that owns the numbers (handover/select.ts).
+export { handoverLine, type HandoverSummary };
 
 /**
  * The bell in the navigation, on every page and for every role: what needs a person, from every
@@ -41,8 +42,19 @@ export function NotificationBell({ viewerUrl }: { viewerUrl?: string }) {
   const { data, nightState, statusOf } = useHotelData(viewerUrl);
   const { safety, handover } = useHandover({ nightState, statusOf, today: osloToday() });
   const alerts = useMemo(() => selectAlerts({ ...data, safety: safety ?? data.safety }), [data, safety]);
-  const summary = useMemo(() => (handover && canAccess(data.role, "/overlevering") ? openSummary(handover.open) : null), [handover, data.role]);
-  return <NotificationBellView alerts={alerts} loading={data.loading} nightFailed={data.nightStatus === "error"} user={user?.u ?? null} handover={summary} />;
+  const mayOpen = canAccess(data.role, "/overlevering");
+  const summary = useMemo(() => (handover && mayOpen ? openSummary(handover.open) : null), [handover, mayOpen]);
+  // Until the page's numbers are in, a role that may open it gets no badge (never a count that then changes meaning).
+  return (
+    <NotificationBellView
+      alerts={alerts}
+      loading={data.loading}
+      nightFailed={data.nightStatus === "error"}
+      user={user?.u ?? null}
+      handover={summary}
+      handoverPending={mayOpen && !summary && data.nightStatus !== "error"}
+    />
+  );
 }
 
 /**
@@ -57,6 +69,7 @@ export function NotificationBellView({
   nightFailed = false,
   user,
   handover = null,
+  handoverPending = false,
 }: {
   alerts: readonly Alert[];
   loading: boolean;
@@ -64,6 +77,8 @@ export function NotificationBellView({
   user: string | null;
   /** Overlevering's *Åpent nå* (useHandover), for a role that may open it; null otherwise. */
   handover?: HandoverSummary | null;
+  /** The role may open Overlevering and its numbers are not in yet: no badge until they are. */
+  handoverPending?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [said, setSaid] = useState("");
@@ -81,6 +96,8 @@ export function NotificationBellView({
   const freshAll = alerts.filter((alert) => isNew(alert, seen));
   const freshCount = freshAll.length;
   const waiting = loading && alerts.length === 0;
+  // One count (round 7): the badge is Overlevering's straks when the role may open it, else what is new here.
+  const badge = handover ? handover.straks : handoverPending ? 0 : freshCount;
 
   // After Marker som sett the button is gone: put the focus on the next new alert, or on the one
   // just marked (now under Sett), never on <body>.
@@ -202,7 +219,7 @@ export function NotificationBellView({
     <>
       <button
         type="button"
-        aria-label={bellLabel(freshCount, waiting)}
+        aria-label={bellLabel(freshCount, waiting, handover)}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => {
@@ -213,16 +230,16 @@ export function NotificationBellView({
           "relative flex size-11 shrink-0 items-center justify-center rounded-md text-muted",
           "transition-[background-color,color,transform] duration-[120ms] ease-standard hover:bg-sunken hover:text-text active:scale-[0.97]",
           "focus-visible:outline-offset-[-2px]",
-          freshCount > 0 && "text-text",
+          badge > 0 && "text-text",
         )}
       >
         <RegenIcon name="bell" size={22} />
-        {freshCount > 0 && (
+        {badge > 0 && (
           <span
             aria-hidden="true"
             className="absolute top-1 right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-text px-1 font-mono text-xs leading-none font-medium text-bg tabular-nums animate-fade"
           >
-            {freshCount}
+            {badge}
           </span>
         )}
       </button>

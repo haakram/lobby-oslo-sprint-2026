@@ -35,8 +35,9 @@ beforeEach(() => localStorage.clear());
 describe("RoomChecksPanel (Rom: the robot's room checks against the booking system)", () => {
   it("leads with the money and shows each room with what the system says and what the robot found", () => {
     render(asDesk(<RoomChecksPanel lines={TEST_NIGHT} today={TODAY} />));
-    // The money, first, and honest: a person confirms before it is sold, and it is gross revenue.
-    expect(screen.getByText(`1 rom kan selges etter bekreftelse · ca. ${ONE_ROOM} kr hvis utsolgt`)).toBeInTheDocument();
+    // The money, first, and honest (round 7: one story on every screen): the certain cost leads, the room found free is conditional.
+    expect(screen.getByText(`Rom 210 i bruk uten booking · ca. ${ONE_ROOM} kr`)).toBeInTheDocument();
+    expect(screen.getByText(`Rom 311 funnet ledig 5 timer tidligere · ca. ${ONE_ROOM} kr hvis utsolgt`)).toBeInTheDocument();
     expect(
       screen.getByText(
         `Sendt til resepsjonen i dag: ingen ennå. Brutto romsinntekt: 1 × snittprisen i natt, ${plain(formatKroner(REVENUE.adr))} kr (testdata). Systemet holder rommet til resepsjonen registrerer at gjesten har reist. Uten romsjekken finner renholdet det etter utsjekk kl. 11:00; med den kan det selges fra kl. 06:00, 5 timer tidligere. Det er ekstra inntekt bare hvis natten blir utsolgt: 31 av 36 booket i kveld (testdata). Til sammenligning solgte hotellene i Oslo 72 % av rommene i 2025, til snittpris 1 631 kr (SSB, tabell 14169).`,
@@ -75,7 +76,7 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
     expect(within(sell).getByText("Bekreftet av Hanne Vold (resepsjon) · folio, bagasje, kort")).toBeInTheDocument();
     expect(within(sell).getByText("Registrert av Ana Pereira · nå")).toBeInTheDocument();
     // Confirmed is not sold: the headline still offers the room.
-    expect(screen.getByText(`1 rom kan selges etter bekreftelse · ca. ${ONE_ROOM} kr hvis utsolgt`)).toBeInTheDocument();
+    expect(screen.getByText(`Rom 311 funnet ledig 5 timer tidligere · ca. ${ONE_ROOM} kr hvis utsolgt`)).toBeInTheDocument();
     const send = within(sell).getByRole("button", { name: "Send til resepsjonen: rom 311" });
     expect(send).toHaveFocus();
     const stored = JSON.parse(localStorage.getItem("lobby:room-check-marks") ?? "{}")[TODAY]["room-311"];
@@ -87,7 +88,9 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
     expect(within(sell).getByText("Venter på PMS-en")).toBeInTheDocument();
     expect(within(sell).queryByText("Ledig for salg")).not.toBeInTheDocument();
     expect(within(sell).getByText(/PMS-koblingen er ikke bygget ennå\.$/)).toBeInTheDocument();
-    expect(screen.getByText("1 rom sendt til resepsjonen · venter på PMS-en")).toBeInTheDocument();
+    expect(screen.getByText("Rom 311 sendt til resepsjonen · venter på PMS-en")).toBeInTheDocument();
+    // Both people on the record (round 7, legal review): who confirmed at reception, and who typed it here.
+    expect(within(sell).getByText(/^Bekreftet av Hanne Vold \(resepsjon\) · registrert av Ana Pereira · folio, bagasje, kort\./)).toBeInTheDocument();
     expect(screen.getByText(/^Sendt til resepsjonen i dag: 1 rom · venter på PMS-en\./)).toBeInTheDocument();
     expect(within(sell).getByRole("button", { name: "Angre: rom 311" })).toHaveFocus();
     unmount();
@@ -106,11 +109,12 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
   it("holds back a room the robot carried an arriving guest's bags into, as the catch it is, never for sale", () => {
     const bags: RunLine = { v: 1, type: "call", cmd: "place", args: { item: "luggage-311", where: "room-311" }, ok: true, clock: "05:16:33" };
     render(asDesk(<RoomChecksPanel lines={[...TEST_NIGHT.slice(0, -1), bags, ...TEST_NIGHT.slice(-1)]} today={TODAY} />));
-    expect(screen.getByText("Ingen rom å selge i dag · 1 holdt tilbake")).toBeInTheDocument();
+    expect(screen.getByText("Rom 311: sjekk rommet")).toBeInTheDocument();
     const held = rowOf("311");
-    expect(within(held).getByText("Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til 9.11. Dobbelt tildelt?")).toBeInTheDocument();
-    // What the join did, not the robot (round 3, domain review): Fettero held the room back.
-    expect(within(held).getByText("Fettero holdt rommet tilbake")).toBeInTheDocument();
+    expect(within(held).getByText("Bagasje levert 05:16 etter romsjekken, og bookingen har gjest til 9.11. Resepsjonen avgjør.")).toBeInTheDocument();
+    // A person looks (round 7: never "dobbelt tildelt?" nor "holdt tilbake"; a guest is booked there).
+    expect(within(held).getByText("Sjekk rommet")).toBeInTheDocument();
+    expect(within(held).queryByText(/Dobbelt tildelt|holdt rommet tilbake/)).not.toBeInTheDocument();
     expect(within(held).queryByText("Roboten stoppet salget")).not.toBeInTheDocument();
     expect(within(held).queryByRole("button")).not.toBeInTheDocument();
     expect(within(held).getByRole("link", { name: "Åpne Gjester" })).toHaveAttribute("href", "/gjester");
@@ -120,9 +124,9 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
     const demo = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
     render(asDesk(<RoomChecksPanel lines={demo} today={TODAY} />));
     expect(within(rowOf("213")).getByText("Systemet: opptatt i natt (Ola Nygård), skulle reist 7.11. Utsjekk ikke registrert.")).toBeInTheDocument();
-    // 209 leads with the robot's own contradiction; the double allocation is its consequence.
-    expect(within(rowOf("209")).getByText("Meldt tomt og ryddig kl. 03:47, men roboten satte inn bagasje her kl. 01:29.")).toBeInTheDocument();
-    expect(within(rowOf("209")).getByText("Bagasje for 3 ankomster levert, sist 05:16, men bookingen har gjest til 9.11. Dobbelt tildelt?")).toBeInTheDocument();
+    // 209 in Overlevering's words (round 7): its memory and its eyes disagree, a person checks the room.
+    expect(within(rowOf("209")).getByText("Robotens minne og øyne er uenige: bagasje levert 01:29, meldt tomt 03:47. Sjekk rommet.")).toBeInTheDocument();
+    expect(within(rowOf("209")).queryByText(/Dobbelt tildelt/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Flere ankomster i samme rom 2" })).toBeInTheDocument();
     const crowded = rowOf("212");
     expect(within(crowded).getByText("Bagasje for 3 ankomster i natt (00:31, 01:58 og 04:43).")).toBeInTheDocument();

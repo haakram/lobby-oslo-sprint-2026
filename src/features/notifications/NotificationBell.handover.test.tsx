@@ -54,6 +54,10 @@ describe("the bell agrees with Overlevering's Åpent nå", () => {
     const straks = Number(within(open).getByText(/^\d+ straks · \d+ med frist i dag$/).textContent?.split(" ")[0]);
     expect([total, straks]).toEqual([13, 5]);
 
+    // One count (round 7, design review): the badge is the page's straks, and the bell's name says the page's line.
+    const bell = screen.getByRole("button", { name: /^Varsler/ });
+    await waitFor(() => expect(bell).toHaveAccessibleName(`Varsler, ${straks} straks av ${total} åpne`));
+    expect(bell).toHaveTextContent(String(straks));
     const sheet = await openBell();
     const line = sheet.getByText(`Overlevering 06:00: ${straks} straks av ${total} åpne`);
     expect(within(line.parentElement!).getByRole("link", { name: "Åpne Overlevering" })).toHaveAttribute("href", "/overlevering");

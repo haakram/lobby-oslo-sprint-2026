@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { formatKroner } from "@/features/dashboard/format";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import { selectGuestDay, stays, stayStatus } from "@/features/guests/testData";
-import { hoursEarlier, moneyHeadline, moneyMethod, releasedLine, roomMoney, shortDate } from "./money";
+import { hoursEarlier, moneyHeadline, moneyLines, moneyMethod, releasedLine, roomMoney, shortDate } from "./money";
 import { bookedTonight, pmsLastNight, revenueLastNight, sellableValue } from "./pms";
 import { reconcileNight, type RoomCheckMark } from "./reconcile";
 
@@ -23,7 +23,10 @@ const money = (marks: Record<string, RoomCheckMark> = {}) => roomMoney({ reconci
 describe("the room check's money: one reading for Oversikt, Rom and Overlevering", () => {
   it("on the demo night: 213 can be sold after confirmation (worth its kroner only if tonight sells out), 209 is held, and only 314 is ready to sell now", () => {
     const night = money();
-    expect(moneyHeadline(night)).toBe(`1 rom kan selges etter bekreftelse · ca. ${ONE} kr hvis utsolgt · 1 holdt tilbake`);
+    // One money story on every screen (round 7): 210's certain cost first, 213's kroner said as conditional, 209 checked by a person.
+    expect(moneyLines(night)).toEqual([`Rom 210 i bruk uten booking · ca. ${ONE} kr`, `Rom 213 funnet ledig 5 timer tidligere · ca. ${ONE} kr hvis utsolgt`, "Rom 209: sjekk rommet"]);
+    expect(moneyHeadline(night)).toBe(`Rom 210 i bruk uten booking · ca. ${ONE} kr. Rom 213 funnet ledig 5 timer tidligere · ca. ${ONE} kr hvis utsolgt. Rom 209: sjekk rommet`);
+    expect(moneyHeadline(night)).not.toMatch(/holdt tilbake|dobbelt/i);
     expect(releasedLine(night)).toBe("Sendt til resepsjonen i dag: ingen ennå");
     expect(night.readyToSell).toBe(1);
     expect(night.roomsTotal).toBe(5);
@@ -34,12 +37,12 @@ describe("the room check's money: one reading for Oversikt, Rom and Overlevering
   it("a confirmation alone sells nothing; sent to reception the room waits for the booking system: never sold, never Klar before the PMS says so", () => {
     const confirmed = money({ "room-213": { action: "confirmed", ...stamp, receptionist: "Hanne Vold", checks: ["folio", "bagasje", "kort"] } });
     expect(confirmed.confirmed).toEqual(["room-213"]);
-    expect(moneyHeadline(confirmed)).toBe(`1 rom kan selges etter bekreftelse · ca. ${ONE} kr hvis utsolgt · 1 holdt tilbake`);
+    expect(moneyLines(confirmed)[1]).toBe(`Rom 213 funnet ledig 5 timer tidligere · ca. ${ONE} kr hvis utsolgt`);
     expect(confirmed.readyToSell).toBe(1);
 
     const sent = money({ "room-213": { action: "released", ...stamp, confirmed: { ...stamp, receptionist: "Hanne Vold", checks: ["folio", "bagasje", "kort"] } } });
     expect(sent.released.map((row) => row.room)).toEqual(["room-213"]);
-    expect(moneyHeadline(sent)).toBe("1 rom sendt til resepsjonen · venter på PMS-en · 1 holdt tilbake");
+    expect(moneyLines(sent)).toEqual([`Rom 210 i bruk uten booking · ca. ${ONE} kr`, "Rom 213 sendt til resepsjonen · venter på PMS-en", "Rom 209: sjekk rommet"]);
     expect(moneyHeadline(sent)).not.toMatch(/frigitt|solgt/);
     expect(releasedLine(sent)).toBe("Sendt til resepsjonen i dag: 1 rom · venter på PMS-en");
     // The booking system still holds 213: not ready to sell until it shows the room free.
@@ -51,7 +54,7 @@ describe("the room check's money: one reading for Oversikt, Rom and Overlevering
     const contradicted = roomMoney({ reconciliation: { ...reconciliation, contradicted: [...reconciliation.contradicted, own] }, marks: {}, revenue, rooms, pms });
     expect(contradicted.readyToSell).toBe(0);
     expect(contradicted.caught).toEqual(["room-209", "room-314"]);
-    expect(moneyHeadline(contradicted)).toMatch(/· 2 holdt tilbake$/);
+    expect(moneyLines(contradicted).at(-1)).toBe("Rom 209 og 314: sjekk rommet");
   });
 
   it("a held room never counts as ready to sell, and a closed room neither", () => {
@@ -81,8 +84,8 @@ describe("the room check's money: one reading for Oversikt, Rom and Overlevering
   });
 
   it("says nothing when there is nothing to sell or hold, and writes dates the way a desk does", () => {
-    expect(moneyHeadline(roomMoney({ reconciliation: { ...reconciliation, sellable: [], held: [], contradicted: [] }, marks: {}, revenue, rooms, pms }))).toBeNull();
-    expect(moneyHeadline(roomMoney({ reconciliation: { ...reconciliation, sellable: [] }, marks: {}, revenue, rooms, pms }))).toBe("Ingen rom å selge i dag · 1 holdt tilbake");
+    expect(moneyHeadline(roomMoney({ reconciliation: { ...reconciliation, sellable: [], held: [], contradicted: [], guestFound: [] }, marks: {}, revenue, rooms, pms }))).toBeNull();
+    expect(moneyLines(roomMoney({ reconciliation: { ...reconciliation, sellable: [], guestFound: [] }, marks: {}, revenue, rooms, pms }))).toEqual(["Rom 209: sjekk rommet"]);
     expect(shortDate("2026-11-09")).toBe("9.11");
     expect(shortDate(null)).toBe("");
   });

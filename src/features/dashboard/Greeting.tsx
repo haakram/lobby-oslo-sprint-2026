@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { canAccess } from "@/features/auth/roles";
 import { openWetFloors } from "@/features/handover/safety";
+import { handoverLine, type HandoverSummary } from "@/features/handover/select";
 import { buttonClasses, RegenIcon, Skeleton } from "@/ui";
 import type { DashboardData } from "./data";
 import { daySummary, greeting, nightFacts, nightTotals, nightVerdict, shiftHour } from "./highlights";
@@ -14,7 +15,7 @@ import { cleaningHref, DAY_ROUND } from "./selectors";
  * action: *Se overleveringen 06:00*, the product's front door (round 2, product review), with the cleaning
  * route beside it as a secondary action.
  */
-export function Greeting({ data }: { data: DashboardData }) {
+export function Greeting({ data, summary = null }: { data: DashboardData; summary?: HandoverSummary | null }) {
   const totals = nightTotals(data);
   const verdict = nightVerdict(data, totals);
   const rooms = canAccess(data.role, "/rom") ? data.rooms : null;
@@ -66,7 +67,12 @@ export function Greeting({ data }: { data: DashboardData }) {
               {facts.done}
             </span>
             {facts.basis && <span> ({facts.basis})</span>}
-            {facts.attention && <span className="font-semibold text-text"> · {facts.attention}.</span>}
+            {/* What needs a person in the page's own two numbers (round 7: the bell, Åpent nå and Oversikt say one count). */}
+            {summary && summary.total > 0 ? (
+              <span className="font-semibold text-text"> · {handoverLine(summary)}.</span>
+            ) : (
+              facts.attention && <span className="font-semibold text-text"> · {facts.attention}.</span>
+            )}
             {rest && ` ${rest}`}
           </p>
         ) : (

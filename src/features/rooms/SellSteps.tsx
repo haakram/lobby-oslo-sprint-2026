@@ -23,11 +23,16 @@ export function checksShort(checks: readonly string[] | undefined): string {
     .join(", ");
 }
 
-/** "Bekreftet av Hanne Vold (resepsjon) · folio, bagasje, kort": step 1's evidence in one line. */
-export function confirmationLine(confirmation: Pick<Confirmation, "receptionist" | "checks"> | undefined): string | null {
+/**
+ * "Bekreftet av Hanne Vold (resepsjon) · registrert av Siri Haugen · folio, bagasje, kort": step 1's
+ * evidence in one line. Both people (round 7, legal review): the receptionist who confirmed never logs in
+ * here, so the record says who typed her name (`by`, when given).
+ */
+export function confirmationLine(confirmation: (Pick<Confirmation, "receptionist" | "checks"> & { by?: string | null }) | undefined): string | null {
   if (!confirmation?.receptionist) return null;
   const checks = checksShort(confirmation.checks);
-  return `Bekreftet av ${confirmation.receptionist} (resepsjon)${checks ? ` · ${checks}` : ""}`;
+  const recorded = confirmation.by ? ` · registrert av ${confirmation.by}` : "";
+  return `Bekreftet av ${confirmation.receptionist} (resepsjon)${recorded}${checks ? ` · ${checks}` : ""}`;
 }
 
 /**
@@ -123,7 +128,8 @@ export function SellSteps({
   if (step === "confirmed" && mark) {
     return (
       <div ref={box} aria-live="polite" className={cx("flex flex-wrap items-center gap-2", className)}>
-        <Badge>{confirmationLine(mark) ?? "Bekreftet med resepsjonen"}</Badge>
+        {/* Who typed it stands beside the badge, with when: "Registrert av Siri Haugen · nå". */}
+        <Badge>{confirmationLine({ receptionist: mark.receptionist, checks: mark.checks }) ?? "Bekreftet med resepsjonen"}</Badge>
         <span className="text-sm text-muted">Registrert av {actionStamp(mark.by, mark.stamp, now)}</span>
         <span className="flex basis-full flex-wrap items-center gap-2">
           <Button

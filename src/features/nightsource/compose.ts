@@ -2,7 +2,7 @@ import { formatKroner, hhmm } from "@/features/dashboard/format";
 import { foldNight, type RoomView } from "@/features/dashboard/selectors";
 import { type DoorSignal, doorLockFlags, doorLockSignals, doorSignalText } from "@/features/doorlock/feed";
 import { SAFETY_DUE, STRANGER_OWNER, WET_FLOOR_OWNER } from "@/features/handover/safety";
-import { composeHandover, DESK_OWNER, type Handover, type Highlight, MAX_HIGHLIGHTS, type NightNote, type OpenItem } from "@/features/handover/select";
+import { composeHandover, DESK_OWNER, type Handover, hazardKey, type Highlight, MAX_HIGHLIGHTS, type NightNote, type OpenItem } from "@/features/handover/select";
 import { EVIDENCE_WORDS, type EvidenceSignal, type EvidenceVerdict, evidenceVerdict } from "@/features/nightshift/conduct";
 import type { RunLine } from "@/features/nightshift/runlog";
 import type { PhoneTask } from "@/features/requests/phoneTasks";
@@ -124,7 +124,8 @@ const ROBOT_SENTENCE = /\s*Roboten fant\b.*$/s;
 function hazardItem(hazard: StaffHazard, canOpen: (route: string) => boolean): OpenItem {
   const told = `meldt av ${byWhen(hazard)}`;
   const note = hazard.note ? ` ${hazard.note.replace(/[.!]?$/, ".")}` : "";
-  const link = { href: canOpen("/natt") ? "/natt" : null, linkLabel: "Åpne nattevaktens logg" };
+  // Her own entry: a person knew in the night; the morning's *Varsle* is kept per hazard, the same key as on the robot night (round 7).
+  const link = { href: canOpen("/natt") ? "/natt" : null, linkLabel: "Åpne nattevaktens logg", hazards: [{ key: hazardKey(hazard.hazard, hazard.place), notified: true }] };
   if (hazard.hazard === "wet") {
     // "skilt satt ut 02:16" or "uten skilt siden 02:15": the clerk's answer to "Skilt satt ut?" (round 6, legal review).
     const sign = signPhrase(hazard);

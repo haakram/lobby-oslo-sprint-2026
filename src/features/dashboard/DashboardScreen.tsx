@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { canAccess } from "@/features/auth/roles";
+import { openSummary, useHandover } from "@/features/handover/useHandover";
 import { MODULES, PILOT_MODULES } from "@/features/modules/registry";
+import { osloToday } from "@/features/reception/dates";
 import { Button, Card, cx, ErrorState } from "@/ui";
 import { nightLabel } from "./format";
 import { Greeting } from "./Greeting";
@@ -19,7 +21,10 @@ import { WIDE, WIDGETS } from "./widgets";
  * navigation, not on this page.
  */
 export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
-  const { data, run, night, robot } = useHotelData(viewerUrl);
+  const { data, run, night, robot, nightState, statusOf } = useHotelData(viewerUrl);
+  // The same "5 straks av 13 åpne" as the bell and Overlevering's Åpent nå (round 7: one selector, openSummary).
+  const { handover } = useHandover({ nightState, statusOf, today: osloToday() });
+  const summary = useMemo(() => (handover && canAccess(data.role, "/overlevering") ? openSummary(handover.open) : null), [handover, data.role]);
   // The pilot accounts (admin) see the pilot's widgets only, the same cut as the rail (round 5, product and marketing reviews):
   // no Lager, Ansatte, Vedlikehold, Gjester, Resepsjon or 3D widget for a manager whose pilot is four screens.
   const widgets = MODULES.filter((module) => module.widget && canAccess(data.role, module.route) && (data.role !== "admin" || PILOT_MODULES.includes(module.id)));
@@ -37,7 +42,7 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
       </p>
 
       <div ref={scope} className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:gap-8 lg:px-10 lg:py-8">
-        <Greeting data={data} />
+        <Greeting data={data} summary={summary} />
 
         {run.status === "error" && (
           <Card className="sm:p-6">

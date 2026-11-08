@@ -96,23 +96,25 @@ describe("HotelScreen", () => {
 });
 
 describe("HotelScreen on the demo night: the map says what the room check says", () => {
-  it("shows 209 (an arriving guest's bags in a room booked to tomorrow) as Holdt tilbake, never a green Klar, on the map, in the list and on its card", async () => {
+  it("shows 209 (an arriving guest's bags in a room booked to tomorrow) as Sjekk rommet, never a green Klar, on the map, in the list and on its card", async () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       if (String(input).endsWith("/runs/demo.jsonl")) return new Response(DEMO);
       throw new TypeError("Failed to fetch");
     });
     const select = await renderReady();
-    expect(within(select).getAllByRole("option").find((option) => option.getAttribute("value") === "room-209")).toHaveTextContent("Rom 209 · Holdt tilbake");
-    const tile = screen.getByRole("button", { name: "Rom 209: Holdt tilbake" });
+    expect(within(select).getAllByRole("option").find((option) => option.getAttribute("value") === "room-209")).toHaveTextContent("Rom 209 · Sjekk rommet");
+    const tile = screen.getByRole("button", { name: "Rom 209: Sjekk rommet" });
     expect(tile.querySelector("rect")?.getAttribute("fill")).not.toBe("var(--success)");
     // 213, the sleeper to sell after reception confirms, is not a green Klar either (its own test below).
     expect(screen.queryByRole("button", { name: "Rom 213: Klar" })).not.toBeInTheDocument();
 
     fireEvent.change(select, { target: { value: "room-209" } });
     const card = within(screen.getByRole("complementary", { name: "Status nå" }));
-    expect(card.getByText("Holdt tilbake")).toBeInTheDocument();
+    expect(card.getByText("Sjekk rommet")).toBeInTheDocument();
     expect(card.queryByText("Klar")).not.toBeInTheDocument();
-    expect(card.getByText(/^Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til .+\. Dobbelt tildelt\?$/)).toBeInTheDocument();
+    // Overlevering's words (round 7): never "dobbelt tildelt?", never "holdt tilbake" (a guest is booked there).
+    expect(card.getByText("Robotens minne og øyne er uenige: bagasje levert 01:29, meldt tomt 03:47. Sjekk rommet.")).toBeInTheDocument();
+    expect(card.queryByText(/Dobbelt tildelt|Holdt tilbake/)).not.toBeInTheDocument();
   });
 
   it("shows 213 (due out 7.11, check-out never recorded, found empty) as Bekreft først, never a green Klar, with the room check's words on its card", async () => {

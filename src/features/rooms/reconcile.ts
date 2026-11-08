@@ -1,3 +1,4 @@
+import { hhmm } from "@/features/dashboard/format";
 import { type SelfContradiction, selfContradictions } from "@/features/nightshift/conduct";
 import type { RunLine } from "@/features/nightshift/runlog";
 import { createLocalStore, recordOf } from "@/features/modules/localStore";
@@ -142,6 +143,23 @@ export type Contradiction = {
   /** It was an arriving guest's bags. */
   arrival: boolean;
 };
+
+/**
+ * The robot's memory (its task log) against its eyes (its room check), in the words every screen uses
+ * for 209 (round 7, design and domain review): never "dobbelt tildelt?" (the simulator stacks bag
+ * requests on one room) and never "holdt tilbake fra salg" (a guest is booked there).
+ */
+export const OWN_CONFLICT = "Robotens minne og øyne er uenige";
+/** What a person does about it: look. */
+export const OWN_CONFLICT_TODO = "Sjekk rommet";
+
+/** "Robotens minne og øyne er uenige: bagasje levert 01:29, meldt tomt 03:47. Sjekk rommet." */
+export function ownConflictLine(row: Pick<Contradiction, "placedAt" | "checkedAt" | "arrival">): string {
+  const what = row.arrival ? "bagasje" : "noe";
+  const placed = row.placedAt ? ` ${hhmm(row.placedAt)}` : "";
+  const checked = row.checkedAt ? ` ${hhmm(row.checkedAt)}` : "";
+  return `${OWN_CONFLICT}: ${what} levert${placed}, meldt tomt${checked}. ${OWN_CONFLICT_TODO}.`;
+}
 
 export type Held = Sellable & {
   /** When the robot last put something in the room, HH:MM:SS. */

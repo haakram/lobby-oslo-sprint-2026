@@ -43,6 +43,9 @@ describe("NotificationBellView", () => {
     const line = sheet.getByText("Overlevering 06:00: 5 straks av 13 åpne");
     expect(within(line.parentElement!).getByRole("link", { name: "Åpne Overlevering" })).toHaveAttribute("href", "/overlevering");
     expect(handoverLine({ total: 1, straks: 0 })).toBe("Overlevering 06:00: 0 straks av 1 åpen");
+    // One count (round 7): the badge is the page's straks, not what is new here.
+    expect(screen.getByRole("button", { name: "Varsler, 5 straks av 13 åpne" })).toHaveTextContent("5");
+    expect(bellLabel(3, false, { total: 13, straks: 5 })).toBe("Varsler, 5 straks av 13 åpne");
   });
 
   it("lists what needs a person, Haster said in words, each with its one way in", () => {

@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import { canAccess, useSession } from "@/features/auth";
 import type { OrderStatus } from "@/features/dashboard/selectors";
 import type { NightState } from "@/features/dashboard/useNight";
+import { doorLockFlags, doorLockLines, doorLockSignals } from "@/features/doorlock/feed";
 import { eyesOpenItem, useEyesLines } from "@/features/eyes/deviations";
 import { clerkNoteOf } from "@/features/nightsource/compose";
 import { useNightSource } from "@/features/nightsource/useNightSource";
@@ -16,7 +17,7 @@ import { useRoomCheck } from "@/features/rooms/useRoomCheck";
 import { useStaffLines } from "@/features/staffinput/useStaffLines";
 import { robotAtHandover } from "./robotState";
 import { nightSafety } from "./safety";
-import { composeHandover, type OpenItem, openCount, safetyCount, withExtraItems } from "./select";
+import { composeHandover, groupLockDisagreements, type OpenItem, openCount, safetyCount, withExtraItems } from "./select";
 
 /**
  * Overlevering 06:00 composed once, for the page and for the bell (the bell's *Haster* safety alerts and
@@ -87,14 +88,16 @@ export function useHandover({
   const composed = noRobot ? (withoutRobot?.handover ?? null) : robotHandover;
   // Øyne's "Ingen av disse": an avvik with an owner, on whichever night the page shows (eyes/deviations.ts).
   const eyesLines = useEyesLines(today);
+  // The rooms the booking system and the door lock disagree about (round 7: the pitch line as a heading in Åpent nå, on both nights).
+  const disagree = useMemo(() => new Set(doorLockFlags(doorLockSignals(doorLockLines()), pms).map((flag) => flag.room)), [pms]);
   const handover = useMemo(() => {
-    if (!composed || eyesLines.length === 0) return composed;
+    if (!composed) return composed;
     const eyes = eyesLines.map((line): OpenItem => {
       const item = eyesOpenItem(line);
       return { ...item, urgent: false, href: canOpen(item.href) ? item.href : null };
     });
-    return { ...composed, open: withExtraItems(composed.open, eyes) };
-  }, [composed, eyesLines, canOpen]);
+    return { ...composed, open: groupLockDisagreements(eyes.length > 0 ? withExtraItems(composed.open, eyes) : composed.open, disagree) };
+  }, [composed, eyesLines, canOpen, disagree]);
 
   return {
     run,

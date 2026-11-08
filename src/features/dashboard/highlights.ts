@@ -1,5 +1,5 @@
 import { canAccess } from "@/features/auth/roles";
-import { moneyHeadline } from "@/features/rooms/money";
+import { hoursEarlier, moneyHeadline } from "@/features/rooms/money";
 import { occupancy, revenueLastNight } from "@/features/rooms/pms";
 import { type DoneBasis, ownAgainstLog, type SelfContradiction } from "@/features/nightshift/conduct";
 import { type DeclineSplit, declineSplitPlain } from "@/features/nightshift/declines";
@@ -349,8 +349,8 @@ export const PILOT_ROUTES: ReadonlySet<string> = new Set(["/", ...PILOT_MODULES.
 
 /**
  * The "Klare til salg" figure's line, naming the rooms so its "1" and the room check's "1" can't be read as
- * one room (round 5, marketing and design reviews): "Klar nå: rom 314 · etter bekreftelse: rom 213, ca. 1 500 kr hvis
- * utsolgt · holdt tilbake: rom 209". Null when the rack's ready rooms don't add up to the figure (then the
+ * one room (round 5, marketing and design reviews): "Klar nå: rom 314 · rom 213 funnet ledig 5 timer tidligere, ca.
+ * 1 500 kr hvis utsolgt · sjekk rom 209" (round 7: Overlevering's words for each room). Null when the rack's ready rooms don't add up to the figure (then the
  * plain money line).
  */
 export function readyDetail(data: Pick<DashboardData, "money" | "rooms">): string | null {
@@ -361,9 +361,10 @@ export function readyDetail(data: Pick<DashboardData, "money" | "rooms">): strin
   const names = (ids: readonly string[]) => (ids.length === 0 ? "" : `rom ${ids.map((id) => id.replace(/^room-/, "")).join(", ")}`);
   const parts: string[] = [];
   if (readyRooms.length > 0 && readyRooms.length <= 4) parts.push(`Klar nå: ${names(readyRooms.map((room) => room.id))}`);
-  if (money.toSell.length > 0) parts.push(`etter bekreftelse: ${names(money.toSell.map((row) => row.room))}, ca. ${formatKroner(money.toSellValue)} kr hvis utsolgt`);
+  const hours = hoursEarlier();
+  if (money.toSell.length > 0) parts.push(`${names(money.toSell.map((row) => row.room))} funnet ledig ${hours} ${hours === 1 ? "time" : "timer"} tidligere, ca. ${formatKroner(money.toSellValue)} kr hvis utsolgt`);
   if (money.released.length > 0) parts.push(`sendt til resepsjonen: ${names(money.released.map((row) => row.room))}, venter på PMS-en`);
-  if (money.caught.length > 0) parts.push(`holdt tilbake: ${names(money.caught)}`);
+  if (money.caught.length > 0) parts.push(`sjekk ${names(money.caught)}`);
   if (parts.length === 0) return null;
   return parts.map((part, index) => (index === 0 ? part.charAt(0).toUpperCase() + part.slice(1) : part)).join(" · ");
 }

@@ -183,7 +183,7 @@ describe("selectHighlights (the figures)", () => {
       ({ ...selectRooms(NIGHT)[0], id, number: id.slice(5), status, closed: false, ...extra });
     const money = { ...MONEY, readyToSell: 1, toSell: [{ ...MONEY.toSell[0], room: "room-213" }], released: [], caught: ["room-209"], toSellValue: 1500 } as typeof MONEY;
     const rooms = [room("room-314", "klar"), room("room-213", "opptatt", { toConfirm: true }), room("room-209", "opptatt", { held: true }), room("room-101", "opptatt")];
-    expect(readyDetail({ money, rooms })?.replace(/\s/g, " ")).toBe("Klar nå: rom 314 · etter bekreftelse: rom 213, ca. 1 500 kr hvis utsolgt · holdt tilbake: rom 209");
+    expect(readyDetail({ money, rooms })?.replace(/\s/g, " ")).toBe("Klar nå: rom 314 · rom 213 funnet ledig 5 timer tidligere, ca. 1 500 kr hvis utsolgt · sjekk rom 209");
     // When the rack and the figure disagree, the plain money line instead of a wrong name.
     expect(readyDetail({ money: { ...money, readyToSell: 2 }, rooms })).toBeNull();
   });

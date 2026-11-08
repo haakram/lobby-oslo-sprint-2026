@@ -61,8 +61,10 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     // The money leads with the certain cost: a room in use with no booking; the room found free is said as time, with its own link.
     const figures = screen.getByRole("region", { name: "Natten i tall" });
     expect(within(figures).getByText("Rom 210 i bruk uten booking")).toBeInTheDocument();
-    expect(within(figures).getByText("En natt ingen fakturerer · kan selges igjen i dag")).toBeInTheDocument();
-    expect(within(figures).getByRole("link", { name: /^Rom 311: funnet ledig 5 timer tidligere/ })).toHaveAttribute("href", "#sak-sellable");
+    // The risk, not an opportunity (round 7, legal review).
+    expect(within(figures).getByText("En natt ingen fakturerer · PMS-en kan selge rommet til en ny gjest i dag")).toBeInTheDocument();
+    // One money story (round 7): the room found free names its own kroner, conditional.
+    expect(within(figures).getByRole("link", { name: /^Rom 311: funnet ledig 5 timer tidligere · ca\. [\d\s\u00a0]+ kr hvis utsolgt/ })).toHaveAttribute("href", "#sak-sellable");
     expect(within(figures).queryByText(/ellers usolgt/)).not.toBeInTheDocument();
     // Safety: the night clerk's sample lobby floor is added to the robot night's (none of its own here).
     expect(within(figures).getByText("Sikkerhet, straks")).toBeInTheDocument();
@@ -108,8 +110,10 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     const stored = JSON.parse(
       localStorage.getItem("lobby:handover-signoff") ?? "{}",
     );
-    expect(stored[TODAY]).toMatchObject({ name: "Ana Pereira" });
-    expect(stored[TODAY].stamp).toMatch(/^\d{4}-\d\d-\d\dT/);
+    // Append-only (round 7, legal review): the day's receipts are a log.
+    expect(stored[TODAY]).toHaveLength(1);
+    expect(stored[TODAY][0]).toMatchObject({ name: "Ana Pereira" });
+    expect(stored[TODAY][0].stamp).toMatch(/^\d{4}-\d\d-\d\dT/);
     unmount();
 
     show();
@@ -120,9 +124,13 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(
       screen.getByRole("button", { name: "Kvitter mottatt" }),
     ).toHaveFocus();
-    expect(
-      JSON.parse(localStorage.getItem("lobby:handover-signoff") ?? "{}"),
-    ).toEqual({});
+    // Angre appends a withdrawal, never deletes the receipt, and the page says so.
+    const log = JSON.parse(localStorage.getItem("lobby:handover-signoff") ?? "{}")[TODAY];
+    expect(log).toHaveLength(2);
+    expect(log[0]).toMatchObject({ name: "Ana Pereira" });
+    expect(log[1]).toMatchObject({ name: "Ana Pereira", withdrawn: true });
+    expect(screen.getByText("Kvittering trukket tilbake av Ana Pereira · nå.")).toBeInTheDocument();
+    expect(screen.getByText("Ikke kvittert ennå")).toBeInTheDocument();
   });
 
   it("sells the room in the open list in two steps that leave evidence, then waits for the booking system: never done, the kroner shown on the row", async () => {
@@ -180,22 +188,31 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(within(open).getByText("4 t 43 min uten at noen ble varslet")).toBeInTheDocument();
     // The robot itself at 06:00: off its charger with the master keycard, before the night shift leaves.
     expect(within(open).getByText(/^Roboten står ved heis, 1\. etasje med hovednøkkelkortet, ikke på lader, 20 % batteri\./)).toBeInTheDocument();
-    // The catch in neutral ink, drawn as two points; the test data said once in a quiet band, a small word on each booking row.
-    expect(within(open).getByText("Holdt tilbake")).toBeInTheDocument();
-    expect(within(open).getByText("Rom 209: bagasje levert i et rom roboten senere meldte tomt.")).toBeInTheDocument();
-    expect(within(open).queryByText(/dobbelt tildelt/)).not.toBeInTheDocument();
+    // 209 in neutral ink, drawn as two points (round 7: its memory and its eyes disagree, a person checks; a guest is booked there);
+    // the test data said once in a quiet band, a small word on each booking row.
+    expect(within(open).getByText("Sjekk rommet")).toBeInTheDocument();
+    expect(within(open).getByText("Rom 209: robotens minne og øyne er uenige.")).toBeInTheDocument();
+    expect(within(open).queryByText(/dobbelt tildelt|holdt tilbake/i)).not.toBeInTheDocument();
+    // The pitch line as a heading (round 7): 210 and 213, where the booking system and the door lock disagree, together.
+    const group = within(open).getByRole("heading", { name: "Bookingsystemet og dørlåsen er uenige · 2 rom" }).closest("li")!;
+    expect(within(group).getAllByRole("listitem").map((row) => row.id).filter(Boolean)).toEqual(["sak-guest-room-210", "sak-sellable"]);
     expect(within(open).queryByText(/^Testdata:/)).not.toBeInTheDocument();
     expect(within(open).getAllByText("· testbooking")).toHaveLength(2);
     // The evidence as chips: 213 rests on the door lock, the night clerk and the robot.
     const sale = document.getElementById("sak-sellable")!;
-    expect(within(sale).getByRole("list", { name: "Kilder" })).toHaveTextContent(/Dørlåsen· ingen kort siden kl\. 18.*Nattevakt· tomt 04:24.*Roboten· tomt 04:24/);
+    expect(within(sale).getByRole("list", { name: "Kilder" })).toHaveTextContent(/Dørlåsen· ingen kort siden kl\. 18.*Nattevakt· tomt 04:24 · eksempel.*Roboten· tomt 04:24/);
     expect(within(sale).getByText("Bekreftet av tre kilder")).toBeInTheDocument();
     const band = document.querySelector("[data-demo-band]");
-    expect(band).toHaveTextContent("Demo: én ekte natt fra robotens simulator. Bookinger og dørlås er testdata, merket «testbooking». Det du gjør her, lagres på denne enheten.");
+    expect(band).toHaveTextContent(
+      "Demo: én ekte natt fra robotens simulator. Bookinger og dørlås er testdata, merket «testbooking». Nattevaktens registreringer er eksempler, merket «Eksempel». Det du gjør her, lagres på denne enheten.",
+    );
     // The catch leads the figures: the room itself, and the robot's own two clocks at 16 px in ink.
     const figures = screen.getByRole("region", { name: "Natten i tall" });
-    expect(within(figures).getByText("Holdt tilbake fra salg")).toBeInTheDocument();
-    expect(within(figures).getByText("209")).toBeInTheDocument();
+    // A room, never a count (round 7): "Rom 209", labelled with what disagrees, and what a person does.
+    expect(within(figures).getByText("Robotens minne og øyne er uenige")).toBeInTheDocument();
+    expect(within(figures).queryByText(/Holdt tilbake/)).not.toBeInTheDocument();
+    expect(within(figures).getByText("Rom").parentElement).toHaveTextContent(/^Rom\s*209$/);
+    expect(within(figures).getByText("Sjekk rommet før innsjekk")).toBeInTheDocument();
     const points = within(figures).getByRole("list", { name: "Fra robotens egen logg" });
     expect(points).toHaveTextContent(/01:29\s*bagasje inn\s*03:47\s*meldt tomt/);
     expect(points.className).toMatch(/text-base/);
@@ -231,15 +248,21 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(within(open).getByRole("button", { name: "Angre: varslet Trond Eikeland" })).toHaveFocus();
     expect(within(sign).getByText(/^1 sikkerhetssak er ikke varslet til noen\./)).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Natten i tall" })).getByText("4 våte gulv · 1 ukjent person · 1 ikke varslet")).toBeInTheDocument();
+    // Kept per hazard (round 7): one line per wet floor the row covers, the night clerk's lobby floor among them.
     const stored = JSON.parse(localStorage.getItem("lobby:handover-varslet") ?? "{}");
-    expect(stored[TODAY]["wet-floors"]).toMatchObject({ to: "Trond Eikeland", by: "Ana Pereira" });
+    expect(stored[TODAY]).toHaveLength(4);
+    expect(stored[TODAY].find((line: { hazard: string }) => line.hazard === "wet:lobby")).toMatchObject({ to: "Trond Eikeland", by: "Ana Pereira" });
     // The receipt says what was not done.
     fireEvent.click(within(sign).getByRole("button", { name: "Kvitter mottatt" }));
     expect(within(sign).getByText(/, med 13 åpne saker, 1 sikkerhetssak ikke varslet\. Kvitteringen er lagret på denne enheten\.$/)).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem("lobby:handover-signoff") ?? "{}")[TODAY]).toMatchObject({ open: 13, untold: 1 });
-    // Angre takes the record back.
+    expect(JSON.parse(localStorage.getItem("lobby:handover-signoff") ?? "{}")[TODAY][0]).toMatchObject({ open: 13, untold: 1 });
+    // Angre appends a correction (round 7): the Varsle stays in the log, struck through on the row.
     fireEvent.click(within(open).getByRole("button", { name: "Angre: varslet Trond Eikeland" }));
     expect(within(open).getByRole("button", { name: "Varsle Trond Eikeland" })).toHaveFocus();
+    const log = JSON.parse(localStorage.getItem("lobby:handover-varslet") ?? "{}")[TODAY];
+    expect(log).toHaveLength(8);
+    expect(log.filter((line: { undo?: boolean }) => line.undo)).toHaveLength(4);
+    expect(within(open).getByText(/· angret av Ana Pereira · nå$/)).toBeInTheDocument();
   });
 
   it("lists Øyne's «Ingen av disse» as an open item with an owner and a deadline", async () => {
@@ -281,6 +304,24 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(within(sale).queryByText("Roboten")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Med robot" }));
     expect(document.getElementById("vurderinger-overlevering")).not.toBeNull();
+  });
+
+  it("carries a Varsle across Med robot / Uten robot: it is kept per hazard, so the clerk's lobby floor reads as told on both (round 7)", async () => {
+    const demo = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+    serve(() => new Response(demo, { status: 200 }));
+    show();
+    let open = await screen.findByRole("region", { name: /^Åpent nå/ });
+    // Med robot: the grouped wet floors' Varsle covers all four, the lobby among them.
+    fireEvent.click(within(open).getAllByRole("button", { name: "Varsle Trond Eikeland" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Uten robot" }));
+    open = screen.getByRole("region", { name: /^Åpent nå/ });
+    const lobby = within(open).getByText(/^Vått gulv i lobbyen/).closest("li")!;
+    expect(within(lobby).getByText("Varslet Trond Eikeland")).toBeInTheDocument();
+    expect(within(lobby).queryByRole("button", { name: "Varsle Trond Eikeland" })).not.toBeInTheDocument();
+    // Without a robot, the rooms where lock and booking disagree stand together too, then everything by deadline.
+    expect(within(open).getByRole("heading", { name: "Bookingsystemet og dørlåsen er uenige · 2 rom" })).toBeInTheDocument();
+    const dues = [...open.querySelectorAll("li[id^='sak-'] .font-mono")].map((due) => due.textContent ?? "");
+    expect(dues).toEqual([...dues].sort());
   });
 
   it("says when there is no night yet, and when the night failed to load, with Prøv igjen", async () => {

@@ -305,6 +305,8 @@ export type RoomView = HotelRoom & {
 };
 
 /** The rack's word for a room sent to reception that the booking system has not confirmed yet. */
+/** The rack's word for a room whose room check the robot's own log contradicts (209): a person looks (round 7: never "holdt tilbake"). */
+export const HELD_WORD = "Sjekk rommet";
 export const PENDING_WORD = "Venter på PMS-en";
 
 /** The rooms with today's closed ones marked, so the rack says "Ute av drift" where the bell says "stengt". */

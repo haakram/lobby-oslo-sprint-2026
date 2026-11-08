@@ -5,7 +5,7 @@ import type { WorkOrderView } from "@/features/maintenance/select";
 import { type ModuleId, moduleById } from "@/features/modules/registry";
 import { SourceNote } from "@/features/modules/SourceNote";
 import { type RequestView, requestTotals, SOURCE_WORD } from "@/features/requests/select";
-import { moneyHeadline } from "@/features/rooms/money";
+import { moneyLines } from "@/features/rooms/money";
 import { SHIFTS } from "@/features/staff/testData";
 import type { RunStatus } from "@/features/nightshift/useRun";
 import { Badge, Card, cx, Monogram, RegenIcon, Skeleton } from "@/ui";
@@ -14,7 +14,7 @@ import { percent } from "./format";
 import { placeLabel, type RoomStatus, STATUS_LOOK } from "./labels";
 import type { DashboardData } from "./data";
 import { ReceptionPanelView } from "./ReceptionPanel";
-import { countRooms, floorsOfRooms, PENDING_WORD } from "./selectors";
+import { countRooms, floorsOfRooms, HELD_WORD, PENDING_WORD } from "./selectors";
 import { batteryLow, robotDoing } from "./TopBar";
 
 /**
@@ -129,20 +129,27 @@ function RoomsWidget({ data, className }: WidgetProps) {
   const rooms = data.rooms;
   const counts = rooms ? countRooms(rooms) : null;
   const floorsDown = rooms ? [...floorsOfRooms(rooms)].reverse() : [];
-  const money = data.money ? moneyHeadline(data.money) : null;
+  // The one money story (round 7): 210's certain cost first, 213's kroner said as conditional, each line naming its room.
+  const money = data.money ? moneyLines(data.money) : [];
   return (
     <Frame module="rom" className={className}>
       {!rooms || !counts ? (
         <NightMissing status={data.nightStatus} />
       ) : (
         <>
-          {money && (
+          {money.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 rounded-md bg-sunken px-3 py-1">
-              <p aria-live="polite" className="flex items-start gap-1.5 text-base font-semibold">
+              <div aria-live="polite" className="flex items-start gap-1.5 py-1 text-base font-semibold">
                 {/* Sent to reception is pending, not done: neutral until the booking system confirms it (round 5, owner A). */}
                 <RegenIcon name="key" size={18} strokeWidth={2} className="mt-0.5 shrink-0 text-muted" />
-                <span>{money}</span>
-              </p>
+                <ul className="flex flex-col gap-0.5">
+                  {money.map((line, index) => (
+                    <li key={line} className={index > 0 ? "text-sm font-medium" : undefined}>
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
               <Link href="/rom" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
                 Se romsjekken
               </Link>
@@ -177,7 +184,7 @@ function RoomsWidget({ data, className }: WidgetProps) {
                       const look = STATUS_LOOK[room.status];
                       const avvik = room.openOrders > 0;
                       // Closed today: the bell's "Rom 137 er stengt i dag" and the tile say the same.
-                      const word = room.closed ? "Ute av drift" : room.held ? "Holdt tilbake" : room.toConfirm ? "Bekreft først" : room.pending ? PENDING_WORD : look.word;
+                      const word = room.closed ? "Ute av drift" : room.held ? HELD_WORD : room.toConfirm ? "Bekreft først" : room.pending ? PENDING_WORD : look.word;
                       return (
                         <li key={room.id}>
                           <Link

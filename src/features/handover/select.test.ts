@@ -19,6 +19,9 @@ import { nightSafety } from "./safety";
 import {
   composeHandover,
   DESK_OWNER,
+  groupLockDisagreements,
+  hazardsOf,
+  lockGroupHeading,
   nightSourceLine,
   notifyTarget,
   type OpenItem,
@@ -159,7 +162,10 @@ describe("Overlevering on the demo night: safety first, the catch, the sleeper",
     expect(openCount(open)).toBe(open.length + 2);
     // The sign-off warns while a hazard nobody was told about has no Varsle on this page either.
     expect(untoldCount(open, () => false)).toBe(4);
-    expect(untoldCount(open, (id) => id === "wet-floors")).toBe(1);
+    // Kept per hazard (round 7): a Varsle on the wet floors' row records each floor it covers.
+    expect(untoldCount(open, (key) => hazardsOf(open[0]).includes(key))).toBe(1);
+    expect(hazardsOf(open[0]).every((key) => key.startsWith("wet:"))).toBe(true);
+    expect(hazardsOf(open[1])).toEqual(["stranger"]);
     // Varsle names the person on in the role, or the desk.
     expect(notifyTarget(open[0])).toBe("Trond Eikeland");
     expect(notifyTarget(open[1])).toBe("resepsjonen");
@@ -181,9 +187,10 @@ describe("Overlevering on the demo night: safety first, the catch, the sleeper",
     const robot = open.find((item) => item.id === "robot-state");
     expect(robot).toMatchObject({ who: "Kjersti Lund", dueWord: "før", href: "/hotell" });
     expect(robot?.text).toBe("Roboten står ved heis, 1. etasje med hovednøkkelkortet, ikke på lader, 20 % batteri. Hent kortet og sett den på lader.");
-    // 209: what the log shows, drawn on two points, and reception decides (never "dobbelt tildelt?", round 6, domain review).
+    // 209: the robot's memory against its eyes, drawn on two points, and reception decides (never "dobbelt
+    // tildelt?", round 6; never "holdt tilbake fra salg", round 7: a guest is booked there).
     expect(open.find((item) => item.id === "held-room-209")).toMatchObject({
-      text: "Rom 209: bagasje levert i et rom roboten senere meldte tomt.",
+      text: "Rom 209: robotens minne og øyne er uenige.",
       points: [
         { at: "01:29", label: "bagasje inn" },
         { at: "03:47", label: "meldt tomt" },
@@ -192,7 +199,7 @@ describe("Overlevering on the demo night: safety first, the catch, the sleeper",
       caught: true,
       booking: true,
     });
-    expect(open.map((item) => `${item.text} ${item.lines?.join(" ") ?? ""}`).join(" ")).not.toMatch(/dobbelt tildelt/);
+    expect(open.map((item) => `${item.text} ${item.lines?.join(" ") ?? ""}`).join(" ")).not.toMatch(/dobbelt tildelt|holdt tilbake/i);
     expect(open.find((item) => item.id === "sellable")?.text).toMatch(
       /^Rom 213 kan selges fra kl\. 06:00, 5 timer før renholdet ellers finner det etter utsjekk kl\. 11:00: ca\. [\d\s\u00a0]+ kr hvis natten blir utsolgt \(31 av 36 booket i kveld\)\. Ola Nygård skulle reist 7\.11, men utsjekken ble aldri registrert, så systemet holder rommet i natt\. Roboten fant det tomt og ryddig kl\. 04:24\.$/,
     );
@@ -263,6 +270,43 @@ describe("Overlevering on the demo night: safety first, the catch, the sleeper",
       if (item.id.startsWith("staff-") && item.text.startsWith("Vått gulv")) expect(wetLines).toContain("Lobbyen · meldt 02:15 av Kjersti Lund · skilt satt ut 02:16");
       else expect(ids, item.id).toContain(item.id);
     }
+  });
+
+  it("keys a Varsle by hazard, so the clerk's lobby floor is the same hazard on both nights (round 7)", () => {
+    const night = foldNight(demo());
+    const rooms = selectRooms(night, new Set(), hotelForRun(demo()));
+    const phone = phoneTasks([], demoCalls(TODAY));
+    const requests = selectRequests({ night, calls: null, statusOf: () => "ny", phone, manual: [] });
+    const without = composeWithoutRobot({ staff: CLERK_SAMPLE, doorLock: doorLockLines(), rooms, marks: {}, requests, phone, today: TODAY });
+    const withRobot = handover({}, demo(), { safety: nightSafety(demo(), CLERK_SAMPLE) }).open;
+    const lobby = without.handover.open.find((item) => item.safety && item.text.startsWith("Vått gulv"));
+    expect(lobby && hazardsOf(lobby)).toEqual(["wet:lobby"]);
+    const wet = withRobot.find((item) => item.id === "wet-floors");
+    expect(wet && hazardsOf(wet)).toContain("wet:lobby");
+    // A Varsle under Med robot (every floor on the row) reads as told under Uten robot.
+    const told = new Set(wet ? hazardsOf(wet) : []);
+    expect(untoldCount(without.handover.open, (key) => told.has(key))).toBe(0);
+    expect(untoldCount(withRobot, (key) => told.has(key))).toBe(1);
+  });
+
+  it("groups the rooms where the booking system and the door lock disagree under one heading, then everything by deadline (round 7)", () => {
+    const row = (id: string, due: string, extra: Partial<OpenItem> = {}): OpenItem => ({ id, text: id, owner: DESK_OWNER, due, href: null, linkLabel: "", urgent: false, ...extra });
+    const open = [
+      row("wet-floors", SAFETY_DUE, { safety: true }),
+      row("sellable", "09:00", { sell: ["room-213"] }),
+      row("lock-room-132", "09:00"),
+      row("phone", "07:00"),
+      row("guest-room-210", "08:00", { evidenceRoom: "room-210" }),
+      row("held-room-209", "12:00"),
+      row("robot-state", "06:15"),
+    ];
+    const grouped = groupLockDisagreements(open, new Set(["room-210", "room-213"]));
+    expect(grouped.map((item) => item.id)).toEqual(["wet-floors", "robot-state", "phone", "guest-room-210", "sellable", "lock-room-132", "held-room-209"]);
+    expect(grouped.filter((item) => item.group).map((item) => item.id)).toEqual(["guest-room-210", "sellable"]);
+    expect(grouped.find((item) => item.id === "sellable")?.group).toBe("Bookingsystemet og dørlåsen er uenige · 2 rom");
+    expect(lockGroupHeading(1)).toBe("Bookingsystemet og dørlåsen er uenige · 1 rom");
+    // Nothing the lock flags: no heading, still by deadline.
+    expect(groupLockDisagreements(open, new Set()).some((item) => item.group)).toBe(false);
   });
 
   it("leaves the robot out when it ends the night docked with no key, and when there was no robot", () => {

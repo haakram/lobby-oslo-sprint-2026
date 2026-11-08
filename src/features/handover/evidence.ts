@@ -40,8 +40,9 @@ function doorChip(signal: DoorSignal): SourceChip {
 
 const STAFF_SAW: Record<StaffRoom["status"], string> = { klar: "tomt", opptatt: "ikke tomt", ma_vaskes: "trenger vask" };
 
+/** Her look; a sample-night entry says so on the chip (round 7, data review: two of "tre kilder" were team-written). */
 function staffChip(entry: StaffRoom): SourceChip {
-  return { source: "staff", label: "Nattevakt", detail: `${STAFF_SAW[entry.status]}${at(entry.at)}` };
+  return { source: "staff", label: "Nattevakt", detail: `${STAFF_SAW[entry.status]}${at(entry.at)}${entry.sample ? " · eksempel" : ""}` };
 }
 
 /** The robot's own look: empty and tidy (a room to sell), or a guest found (a knock answered, a do-not-disturb sign). */

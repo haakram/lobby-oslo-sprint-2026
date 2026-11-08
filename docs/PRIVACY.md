@@ -43,8 +43,11 @@ outside the EEA. Nothing identifies people: there is no face recognition anywher
 No analytics, no ad trackers, no third-party fonts at runtime (`next/font` self-hosts them), no CDN
 for the camera model (served from our own origin, `src/features/eyes/useDetector.ts`). MediaPipe's
 library has telemetry to Google built in (`odml.pa.googleapis.com`, found by the jury's lawyer in
-round 1); the Content-Security-Policy's `connect-src` allows only our own origin, the local 3D viewer
-and ElevenLabs, so the browser blocks that call (`next.config.ts`).
+round 1). The app answers that one host on the phone before any request exists, so it never leaves the
+device (`src/features/eyes/noTelemetry.ts`), and the Content-Security-Policy's `connect-src` (only our
+own origin, the local 3D viewer and ElevenLabs) is the backstop (`next.config.ts`). **On this build
+only:** the public URL (lobby-sandy.vercel.app) serves `main`, whose older header has no `connect-src`
+(curl, Sun 02:50), so there the browser would let that call out.
 
 ## 4. What is stored where
 
@@ -52,7 +55,7 @@ and ElevenLabs, so the browser blocks that call (`next.config.ts`).
 |---|---|---|
 | **Session cookie** `lobby_session` | Username, role, view, expiry; HMAC-SHA256 signed, nothing secret inside (`src/features/auth/session.ts`) | 12 hours |
 | **Run logs** (JSONL) | Every API call the agent made in the simulation, its decisions, the sim's fictional guests | Agent laptop `temp/runs/` (gitignored), kept for the event. One recorded night is committed (`public/runs/demo.jsonl`, seed 16) and served only behind login (`src/features/auth/roles.ts`, `SHARED_ROUTES`) |
-| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`) | Until staff clear them or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store) |
+| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room releases and the handover sign-off with the user's name (the screen says *lagret på denne enheten*) | Until staff clear them or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store) |
 | **ElevenLabs** | Receptionist conversations: transcript and post-call fields, **no audio** | 30 days, set in the agent config on `main` (`privacy: { recordVoice: false, retentionDays: 30 }`, `src/features/reception/agentConfig.ts`). **Not verified** that the live agent carries it: check the agent's settings in ElevenLabs |
 | **ElevenLabs** | Stemme (staff voice) conversations | No retention setting in `src/features/voice/agentConfig.ts`: the account default applies. Set it before any pilot |
 | **Our server** | Nothing. No database, no file writes. Logs carry only error types or HTTP status, never bodies (`src/app/api/identify/route.ts`, `src/app/api/voice/token/route.ts`, `src/app/api/reception/tools/[tool]/route.ts`: "Arguments are never logged") | — |
@@ -194,7 +197,7 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
 | **Per-user rate limits on the paid routes**, counted before any Claude or ElevenLabs call, 429 + `Retry-After`: `/api/identify` 40 a minute and 400 an hour, `/api/scene` 12 and 360, `/api/voice/token` and `/api/reception/token` 10 and 60 (per server instance) | `src/app/api/_lib/paidRouteLimit.ts` |
 | **A separate jury account** with its own password (admin view), so the team's password is never printed; deleted after the event | `scripts/lobby-hash.mjs` |
 | **CSRF**: every auth POST refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site`; no open redirect after login | `src/features/auth/handlers.ts` (`isSameOrigin`), `src/features/auth/access.ts` (`safeNext`) |
-| **Security headers**: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'` and a `connect-src` limited to our origin, the local viewer and ElevenLabs, `Permissions-Policy` (camera and microphone for this origin only); HSTS added by Vercel | `next.config.ts` |
+| **Security headers**: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options: DENY`, `Permissions-Policy` (camera and microphone for this origin only), and a CSP that starts from `default-src 'self'`: `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:` (no `eval` in production), styles, images and fonts from our origin, `connect-src` limited to our origin, the local viewer and ElevenLabs, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`; HSTS added by Vercel. Checked on :3300 Sun 03:05. Production (`main`) still serves the older, shorter header until it is redeployed | `next.config.ts` |
 | **Keys stay on the server**: `server-only` env module; the browser gets only short-lived WebRTC tokens | `src/lib/env.ts`, `src/app/api/*/token/route.ts` |
 | **Spend caps**: app Claude meter (`APP_CLAUDE_BUDGET_USD`, default USD 5); agent USD 30 file-backed ledger that fails closed; ElevenLabs agents capped at 200 calls a day, 3 at once | `src/lib/spend.ts`, `agent/brain.py`, both `agentConfig.ts` |
 | **Input limits**: JPEG/PNG data URL only, 1.5 MB; JSON bodies parsed with zod and size-capped (2 KB auth, 8 KB webhook) | `src/features/eyes/imageBody.ts`, `src/features/auth/handlers.ts`, `src/features/reception/webhook.ts` |
@@ -216,5 +219,7 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   per-route limit; they fail closed today because no secret is set. Add a limit before a pilot sets it.
 - Stemme's agent config has no `privacy` block (`src/features/voice/agentConfig.ts`), so the account's
   default retention applies.
+- `script-src` allows `'unsafe-inline'`, because Next.js streams each page's data as small inline
+  scripts; a per-request nonce minted in `src/proxy.ts` is the stricter way (`TODO(phase-3)`).
 - The call log's cut-off (`RECEPTION_CALLS_SINCE`) is an env var: a deployment that doesn't set it
   shows every call the agent has. The demo laptop sets it; Vercel doesn't yet.

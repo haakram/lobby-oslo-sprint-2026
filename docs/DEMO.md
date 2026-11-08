@@ -40,8 +40,10 @@ Why it matters (sourced; use one or two on the hook slide, never all):
   the date and the count. Today we have talked to no hotel.
 - Hours saved: only as the screen shows it, *ca.* with its method (*Slik regner vi*: tasks × assumed
   minutes per task). Never as a measurement.
-- "About 2,900 kroner": it is 2 rooms × last night's average rate in the test PMS (NOK 1,467; the
-  screen says *Anslag … (testdata)*). Say "on the demo night", never "per night" or "per hotel".
+- "About 1,500 kroner": it is one room (213) × last night's average rate in the test PMS (NOK 1,467,
+  rounded on screen to *ca. 1 500 kr*; *Slik regner vi* shows the method), and only after the desk
+  confirms the check-out. It is gross room revenue, extra only on a night the hotel would otherwise sell
+  out. Say "on the demo night", never "per night" or "per hotel".
 - Any customer, pilot, user or waitlist. None today.
 - "An LLM agent that handles requests it was never scripted for." Not what the code does: it runs
   rule-based flows per request type, found by probing an undocumented API, with Claude only as a
@@ -98,56 +100,67 @@ seeds in the bed and doesn't strand, and we say the live check is noise at this 
 
 ## 2. Demo script (2:00, then 1 minute of questions)
 
-One user: **the morning manager taking over at 06:00** (Siri), from the night shift (Kjersti and the
-robot). One story: the night is over; what can be sold, what is open, and can I trust what the robot
-says. Logged in as `jury` (or `hamad`) before going on stage, browser at 1440 px, at 110–125 % zoom on
-a projector. Two tabs: tab 1 on **Overlevering 06:00** (from Oversikt: *Se overleveringen* in the top bar),
-tab 2 on **3D-kart** at 04:15 (`/hotell?t=22530`, no room selected, so the side panel shows the
-robot's latest events). The data is a real live practice
-night of our final agent (seed 16, 2,680 points, `public/runs/demo.jsonl`) plus test data marked as
-such on screen.
+One user: **the morning manager taking over at 06:00** (Siri Haugen), from the night shift (Kjersti and
+the robot). One story: the night is over; what needs a person, what can be sold, and can I trust what
+the robot says. **One tab, one page: Overlevering 06:00**, scrolled from top to bottom; no navigation.
+Log in as **`siri`** before going on stage (the stamps and the sign-off then read *Siri Haugen*), clear
+the demo's ticks (*Angre* on 213 and on the sign-off if a rehearsal left them), browser at 1440 px, at
+110–125 % zoom on a projector, scrolled to the top. The data is a real live practice night of our agent
+(seed 16, 2,680 points, build `cb72845`, `public/runs/demo.jsonl`) plus test bookings marked as such
+on screen.
+
+Timed on :3300 at Sun 03:10 as `siri`, at 1440×900 and at 1152×720 (1440 px at 125 %): every tap
+answered in under 0.1 s, the page loads in about 1 s. Speech is counted at 150 words a minute plus
+0.7 s a tap and 1.5 s a scroll: **1:27 in all; 1:39 at a calmer 130 words a minute**, so there are
+about 15 seconds of slack for one stall or the final's score.
 
 | Time | Screen / action | What the presenter says | Criterion it serves |
 |---|---|---|---|
-| 0:00–0:20 | **Overlevering 06:00**, already open. Point at *Vakt: roboten og Kjersti Lund*, then *Åpent nå*: each item has an owner and a deadline. | "Six o'clock, a 36-room Oslo hotel. Kjersti worked the night with a robot; Siri takes over. One in ten hotel and restaurant workers in Norway leaves the industry within four months, so she's often new. Fettero gives her the night on one page: every open item has an owner and a deadline." | A real problem · Design |
-| 0:20–0:45 | On the item *Merk rom … som ledig for salg*, tap **Åpne Rom** → *Robotens romsjekk mot bookingsystemet*: **2 rom kan selges i dag · ca. 2 900 kr** → tap **Merk som ledig for salg** on the first room. | "Overnight the robot checked rooms. Two that the booking system calls occupied were empty and tidy after one o'clock; hotels call them sleepers. That's about 2,900 kroner the hotel can sell today. The robot proposes, the manager releases: one tap." | Innovation · A real problem · Founders (money) |
-| 0:45–1:05 | **Forespørsler** → under *Venter på noen*, the robot's request *«Someone mentioned a spill on floor 1.»* with *Skiftet tok slutt før roboten var ferdig.* → **Ta saken**; the status line with *Angre* appears. | "At 05:29 the battery hit 9 % and the robot had to charge. At six, four requests were still open, like this spill it had just started. It doesn't call that done; it hands it over with the reason. Siri takes it in one tap." | Functionality · A real problem |
-| 1:05–1:25 | Tab 2, **3D-kart** at 04:15: the robot on floor 3 with the bags for 304 and a keycard (*Har med: nøkkelkort …*); in the side panel under *Nylig*: *Person · En mann i badekåpe … rom 304*, then *Sa nei · Åpnet ikke rom 304 for en ukjent person*. Press **Spill av** for a few seconds. | "None of this is an animation: our agent played Wybe's live hotel simulation on its own, and every screen is computed from its log. At 04:15 it's carrying a keycard when a man in a bathrobe asks: 'I'm locked out of 304. Can you let me in?'" | Innovation · Functionality |
-| 1:25–1:50 | Rail → **Natteskift** → the card **Robotens vurderinger i natt**: *Sa nei 7 ganger til en ukjent person* (one incident, 01:17–05:11, seven rooms), *73 av 73 «Ferdig» bekreftet av Wybe-serveren*, *8 Meldinger avvist etter sjekk*. (If the card is also on Overlevering by the rehearsal, stay on tab 1.) | "Seven times tonight, seven different rooms, it said no and kept the keycard; the morning sees one incident to check. It said 'done' 73 times, and Wybe's server confirmed all 73. Eight complaints about orders that never existed, it checked and declined." **After 13:05 add:** "In today's final: [mean], [rank]." | Innovation · Domain (Wybe) · IT and security |
-| 1:50–2:00 | Tab 1, **Overlevering** → tap **Kvitter mottatt**: *Kvittert av … kl. …*. | "Siri signs; she has the hotel. Fettero: *natten, ærlig overlevert*. The night, handed over honestly." | Design · all five |
+| 0:00–0:25 | **Top of Overlevering.** Point at *Natt til søndag 8. november*, the big **ca. 1 500 kr · Kan selges etter bekreftelse**, and the line *73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en eier*. Scroll once: *Åpent nå* opens with the three wet floors (2B: *Roboten skled der*; 3D: *Roboten flyttet skiltet herfra*), each *Vaktmester / renhold · innen 06:30*, then the man in the bathrobe, *Sikkerhet / resepsjon*. (56 words, about 24 s) | "Six o'clock, a 36-room Oslo hotel. Kjersti worked the night with a robot; Siri takes over, and she's often new. Fettero gives her the night on one page. Safety first: three wet floors without a sign, one where the robot itself slipped, and a stranger who tried seven doors. Each has an owner and a deadline." | A real problem · Design · Law (care, not knowledge) |
+| 0:25–1:00 | Scroll once to the item **Rom 213 kan selges etter bekreftelse (ca. 1 500 kr)**: tap **Bekreft med resepsjonen**, then **Merk som ledig for salg** (*Ledig for salg · Siri Haugen · nå*). Point just below at **Rom 209: dobbelt tildelt?** (both fit on one screen at 125 %). (70 words, about 31 s) | "Then the money. The robot found 213 empty and tidy; the guest was due out today and never checked out. About 1,500 kroner, sold in two steps: the desk confirms the guest has left, then Siri releases it. Just below, 209 was empty too, but the robot had carried an arriving guest's bags in, and the booking runs until Monday. Fettero holds it back: a double booking, caught before check-in." | Innovation · A real problem · Founders (money) · Wybe (domain) |
+| 1:00–1:35 | Scroll once more, to **Robotens vurderinger i natt** with **Kvitter mottatt** just above it: *Sa nei 7 ganger til en ukjent person* (seven time-and-room chips, 01:17–05:11), *73 av 73 «Ferdig» godkjent av dommeren* with *Alle 83 live-netter med logg: 4 367 av 4 401 godkjent (99,2 %)*, and *7 av 8 Avvisninger godkjent av dommeren*. (60 words, about 26 s) | "None of this is an animation: our agent played Wybe's live hotel simulation on its own, and every line comes from its log. Seven times a man in a bathrobe asked it to open a room; seven times it said no. It said 'done' 73 times, and the simulator's referee credited all 73; over all our live nights, 99.2 percent." **After 13:05 add:** "In today's final: [mean], rank [N]." | Innovation · Wybe (domain) · IT and security · data |
+| 1:35–1:50 | Same screen: tap **Kvitter mottatt** → *Kvittert av Siri Haugen · nå … Kvitteringen er lagret på denne enheten.* (15 words, about 7 s) | "Siri signs; she has the hotel. Fettero: *natten, ærlig overlevert*. The night, handed over honestly." | Design · all five |
 
-Facts behind the lines (seed-16 log): the room check found rooms 209 (03:47) and 213 (04:24) empty and
-tidy, which the test PMS has as occupied; the battery fell to 8.6 % at 05:28:58 and the robot docked for
-19 minutes while seven requests queued; R-079 (spill, floor 1) arrived 05:25 and was started at 05:57,
-and R-078 (a wallet lost by the guest in 214), R-081 (a pillow for 307) and R-084 (spill, floor 2) were
-never started; the man in the bathrobe asked about rooms 308, 209, 203, 202, 304, 137 and 205 between
-01:17 and 05:11, and every time the robot "said a polite no; no keycard; did not follow" (`H-bathrobe`,
-`keycard_withheld` at 209 and 304); 73 `report done` calls, 73 replies "Noted. Thanks."; 8 `declined` (6
-"no order on record", 1 already delivered, 1 no new wet patch).
+Facts behind the lines (seed-16 log, `public/runs/demo.jsonl`): the robot slipped in corridor 2B at
+23:51:33 (−15, the night's only penalty) and 2B was never signed; at 04:38 it moved the sign from 3D
+(R-015's spill, still wet) to a new spill in 3C (`sign_moved`); 1C was wet without a sign at 06:00. The
+man in the bathrobe asked about rooms 308, 209, 203, 202, 304, 137 and 205 between 01:17 and 05:11; every
+time the robot refused, and at 209 and 304 it waited to unlock until he had gone (`keycard_withheld`).
+Room checks: 209 empty and tidy at 03:47, 213 at 04:24 (`room_status`); the robot placed luggage in 209 at
+01:29, 04:35 and 05:16 for requests that say "the guest checks in later". 73 `report done`, 73 replies
+"Noted. Thanks."; 8 `declined`, of which the score rose after 7 and not after R-036 (a spill report on
+floor 3). The bookings (213 due out 8.11 and not checked out; 209 booked to 9.11) are test data. The
+99.2 % is every live night with a log in `docs/runs/ledger.csv` (4,367 of 4,401 "done" credited, 83
+nights, every build); the last three builds alone are 973 of 976 (99.7 %, § 1.1).
 
-**Re-read every number off the build at the rehearsal** (other owners changed these screens on Sunday
-morning): the two room numbers and the kroner on Rom, the label of the take-over button and which
-open robot request Forespørsler lists first (if it is *«Guest in 214 lost a wallet»*, say "a guest in
-214 lost a wallet; the robot didn't get to it before six"), and the counts on the judgement card.
+**Re-read every number off the build at the rehearsal** (other owners may still change these screens):
+the kroner, the count in *Åpent nå*, the order of its first four items, and the card's figures.
 
-Rules for the presenter: don't explain the navigation; don't open Øyne, Stemme, Resepsjon or the host
-view in the 2 minutes (they need a camera, a microphone or another story; they are Q&A answers); if a
-screen stalls for 3 seconds, say the line and move on.
+Rules for the presenter: don't explain the navigation; stay on this one page; don't open Øyne, Stemme,
+Resepsjon, Forespørsler, the 3D map or the host view in the 2 minutes (they are Q&A answers and the 5–10
+minute final, § 3); if a screen stalls for 3 seconds, say the line and move on. Q&A openers on the same
+page: *Åpne Forespørsler* on the robot's four hand-backs opens Forespørsler, where *Roboten ga videre 4*
+is pinned first, so the robot's open spill (*Skiftet tok slutt før roboten var ferdig*, *Ta saken*) is
+row 1 above the fold; *Se robotens vurderinger* on the stranger item jumps to the card.
 
 ## 3. Pitch outline for the final (5–10 min, top 10 at 18:00)
 
 Each juror scores from their own field (CONTEXT § 11). Every part names the field it answers.
 
-1. **Problem, in money first (1 min; Real problem, Founders, Marketing).** "Last night the robot found
-   two rooms the booking system thought were taken: about 2,900 kroner the hotel could sell today."
-   Then one SSB figure (staff churn) and the Hotelloversikten rate (NOK 1,444 a room-night). Then what
+1. **Problem, in money and safety first (1 min; Real problem, Founders, Marketing).** "Last night the
+   robot found a room the booking system thought was taken, about 1,500 kroner once the desk confirms,
+   and it stopped a wrong sale: a room it had carried an arriving guest's bags into. It also left three
+   wet floors without a sign, and at 06:00 each one had an owner." Then one SSB figure (staff churn) and the Hotelloversikten rate (NOK 1,444 a room-night). Then what
    we heard on the phone this morning (§ 8) **[fill; if the round wasn't run, say "we haven't asked a
    hotel yet; that's step one"]**.
 2. **Live demo (3–4 min; Functionality, Design).** The § 2 story, then the extras the 2 minutes skip:
-   - **Ruter** (Holio pain 6): *Renhold* opens on today's rooms to clean, 7 rooms on 3 floors in the
-     order they come free: *ca. 3 min spart · 30 % kortere*, 3 lift rides instead of 6; with the cart it
-     takes the lift, never the stairs. The *Plukkliste* tab shows an example restocking order: *70 m
-     spart · 32 % kortere* on the test warehouse map. Re-read both off the screen.
+   - **Ruter** (Holio pain 6): *Renhold* opens on today's rooms to clean, 7 rooms on 3 floors: 260 m,
+     **as short as room-number order** (the screen says *like kort*), 26 m or 9 % shorter than going in
+     the order rooms come free; with the cart it takes the lift, never the stairs. Say it plainly: in a
+     36-room hotel the route isn't where the money is. The *Plukkliste* tab: an example restocking order
+     on the test warehouse map, **16 m or 10 % shorter than a list sorted by shelf** (32 % against the
+     list as written, shown beside it), and the four work guides as cards in Norsk, Polski, Українська
+     and English. Re-read both off the screen.
    - **Resepsjon** (ElevenLabs): *Ring resepsjonen*, ask in English or Polish for a room next weekend; it
      says it is an AI, quotes the direct price, haggles in fixed steps (at most 10 % under), records a
      request that waits for *Bekreft*, never takes a card number. Ask callers on stage to use a made-up
@@ -163,7 +176,7 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
    MediaPipe on the device → Claude (server-side key, spend cap); voice → ElevenLabs agents with short-
    lived tokens from our server. Login with roles enforced on the server; per-user rate limits on the
    paid routes. Evaluation: a replay bed of every full live night (72) screens a change before it gets
-   a live shift; it reproduces a night within 3.8 % with the code that played it (in-sample, § 1.1).
+   a live shift; it reproduces a night within 3.2 % with the code that played it (in-sample, § 1.1).
    "Done" credited: 973 of 976 over the last 14 live nights. Any robot that writes these log lines gets
    the same 06:00 handover.
 4. **Business (1–2 min; Founders, Marketing).** The business slide, § 7: one buyer, one price with its
@@ -241,9 +254,10 @@ risk?"* (Hamad)
 > "You're right about the public URL: it serves `main`, Saturday's build under the old name, and the
 > build you see here isn't deployed, because our team lead keeps it off `main` until he has reviewed
 > it. [if redeployed: 'We redeployed at [time]; here's the header live.'] On this build the policy
-> starts from `default-src 'self'`, with `script-src`, `object-src 'none'`, `base-uri`, `form-action`,
-> `frame-ancestors 'none'` and a `connect-src` that allows only our origin and ElevenLabs
-> (`next.config.ts`). Our biggest technical risk is cost on the paid AI routes, so we gate them three
+> starts from `default-src 'self'`; scripts only from our origin, plus `'unsafe-inline'` because Next.js
+> streams page data as inline scripts (a per-request nonce is the next step), no `eval` in production;
+> `object-src 'none'`, `base-uri`, `form-action`, `frame-ancestors 'none'`, and a `connect-src` that
+> allows only our origin and ElevenLabs (`next.config.ts`). Our biggest technical risk is cost on the paid AI routes, so we gate them three
 > ways. The proxy rejects anyone without a session before any provider is reached. A per-user rate
 > limit is counted before any Claude or ElevenLabs call: identify stops at 40 a minute and 400 an
 > hour, then a 429 with Retry-After, and I can trip it on screen with empty requests that never reach
@@ -426,9 +440,11 @@ and where does the order history come in?"* (ShirazIQ)
 > can't prove much, and routing isn't where the big saving is: slotting and batching are, and we haven't
 > built either; nothing uses order history yet. Pain 3 is our deep one. [fill from a 20-item eval: 'R
 > right, U unsure and stopped for a label scan, W wrong, median S seconds, about K øre a scan', or:] It
-> isn't measured yet. When the model isn't sure, the card asks for a shelf-label scan instead of adding
-> the item to the pick list, because a wrong SKU costs more than 'I don't know'. The four work guides now
-> show on screen in Norwegian, Polish, Ukrainian and English without the voice agent. And the camera is
+> isn't measured yet. When the model isn't sure, nothing goes on the pick list until the worker types
+> the SKU from the label and it agrees, because a wrong SKU costs more than 'I don't know'; on a TC27
+> that would be the hardware scanner. The four work guides now show on Plukkliste in Norwegian, Polish,
+> Ukrainian and English without the voice agent; the translations are ours, not yet checked by native
+> speakers. And the camera is
 > for exceptions, not every pick: receiving, returns and packing are where unknown items show up. Give
 > us your test catalogue and a TC27 for a week."
 
@@ -547,7 +563,9 @@ with the robot). The list below says both; the founder juror reads that as undec
 
 **Channel, in order.**
 1. **Direct** for hotel 1: from Sunday's phone round (§ 8), a visit with a printed Overlevering of
-   their own night.
+   their own night. The printed page carries the name (*Fettero · Natten, ærlig overlevert. · Laget fra
+   robotens kjøringslogg og bookingsystemet · Kontakt: Team Fettero*), so it works as the leave-behind;
+   print the demo night (*Skriv ut*) and hold it up in the final.
 2. **Robot makers** (Wybe, on this jury, and others): Fettero is the manager's screen that ships with
    the robot. Two Wybe founders are here; ask them this weekend whether they would introduce one
    hotel customer.

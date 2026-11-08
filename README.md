@@ -17,19 +17,22 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
    **https://lobby-sandy.vercel.app**, serves `main`: the older build, still under the old name
    *Lobby*, with an older security header (no `connect-src`; checked with curl Sun 02:50).
 2. Log in as **`jury`**: the jury's own account (admin view). Its password is in our `/lever`
-   submission, not in this repo, and the account is deleted after the event. (On the deployed URL it
-   works once the team has set the new `LOBBY_USERS` there.)
-3. Click three things:
-   1. **Overlevering 06:00** (from Oversikt: *Se overleveringen* in the top bar): the night on one
-      page, every open item with an owner and a deadline, *Godkjent av Wybe-serveren: 73 av 73*, and
-      *Kvitter mottatt*.
-   2. **Åpne Rom → *Robotens romsjekk mot bookingsystemet*:** the robot found two rooms empty that the
-      booking system has as occupied, *2 rom kan selges i dag · ca. 2 900 kr*; *Merk som ledig for
-      salg* is one tap.
-   3. **Forespørsler → the robot's open request → *Ta saken*:** what the robot didn't finish, it hands
-      over with the reason; a person takes it in one tap. Then **Natteskift → *Robotens vurderinger i
-      natt*** (it refused seven times to let a stranger into a room) and **3D-kart → *Spill av*:** the
-      robot's real night.
+   submission, not in this repo, and the account is deleted after the event.
+3. Click **Se overleveringen 06:00** on Oversikt, then scroll the one page from top to bottom:
+   1. **The top:** the money first (*ca. 1 500 kr · Kan selges etter bekreftelse*), and one factual
+      line: *73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en eier*.
+   2. ***Åpent nå*, safety first:** three wet floors without a sign and a stranger who asked the robot
+      to open seven doors, each with an owner and *innen 06:30*.
+   3. **The room check:** 213 was empty and tidy and its guest never checked out: *Bekreft med
+      resepsjonen*, then *Merk som ledig for salg* (two steps, never one tap). 209 is held back: the
+      robot carried an arriving guest's bags in while the booking still has a guest there, a double
+      allocation caught.
+   4. ***Robotens vurderinger i natt*:** it refused the stranger seven times; 73 of 73 "done" credited
+      by the simulator's referee; 7 of 8 declines credited, and the one that wasn't is named. Then
+      ***Kvitter mottatt***.
+
+   Then, if you like: **Forespørsler** (what the robot handed back is pinned first, with the reason)
+   and **3D-kart → *Spill av*** (the robot's real night, replayed from its log).
 
 Also worth a look: **Robotens øyne** on a phone (camera boxes; tap a product and Claude names it
 without a barcode), **Resepsjon** (allow the microphone, then *Ring resepsjonen*: the ElevenLabs AI
@@ -42,8 +45,9 @@ test data, and every list says so.
 - **Where:** the final agent is on the `hamad/final` branch ([`agent/`](./agent/) in Python, tests in
   [`tests/agent/`](./tests/agent/); `agent/` on this branch is older until `hamad/final` is merged to
   `main`). It plays Wybe's simulated hotel robot through Wybe's API and is scored only by Wybe's server.
-  It plans on exact simulation time, reports "done" only after the server's score rises, and refuses
-  unsafe moves in code. The work is done by rule-based flows per request type, found by probing an
+  It plans on exact simulation time, reports "done" for a delivery only after the server's score rises
+  (room checks and spills are credited on the report itself, and it may try a "done" once to learn an
+  unproven rule), and refuses unsafe moves in code. The work is done by rule-based flows per request type, found by probing an
   undocumented API; Claude is only a guarded fallback (about USD 0.001 spent all weekend).
 - **Every live night of the last three builds, pinned to the commit** (Wybe practice shifts, Sun 8 Nov;
   Wybe's final ranks the mean of ten unseen nights with the worst dropped):

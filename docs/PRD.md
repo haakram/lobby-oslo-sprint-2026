@@ -75,22 +75,20 @@ all 73. Full table and the replay bed's limits: `docs/DEMO.md` § 1.1.
 
 ## 4. The demo story
 
-Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kjersti and the robot):
+Same as `docs/DEMO.md` § 2 (2:00, one user, one story, one page: Siri takes over from Kjersti and the
+robot, on Overlevering 06:00, scrolled from top to bottom):
 
-1. **Overlevering 06:00** (0:00–0:20): the night on one page; what's open, each item with an owner and
-   a deadline.
-2. **Rom → Robotens romsjekk mot bookingsystemet** (0:20–0:45): *2 rom kan selges i dag · ca. 2 900
-   kr* (2 × the test PMS's average rate); *Merk som ledig for salg*. The robot proposes, the manager
-   releases.
-3. **Forespørsler → Ta saken** (0:45–1:05): a request the robot genuinely didn't finish (its battery
-   hit 9 % at 05:29; four requests were open at 06:00, each with its reason) is taken over by a person,
-   with *Angre*.
-4. **3D-kart at 04:15** (1:05–1:25): the robot's real night replayed from its run log; a man in a
-   bathrobe asks it to open room 304.
-5. **Robotens vurderinger i natt** on Natteskift (1:25–1:50): seven refusals to let a stranger into a
-   room, grouped as one incident; 73 of 73 "done" confirmed by Wybe's server; eight false claims
-   declined.
-6. **Kvitter mottatt** (1:50–2:00): the morning manager signs.
+1. **The top and *Åpent nå*** (0:00–0:25): the money first (*ca. 1 500 kr · Kan selges etter
+   bekreftelse*), one factual line (*73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en
+   eier*), then safety first: three unsigned wet floors and the stranger, each with an owner and *innen
+   06:30*.
+2. **The room check** (0:25–1:00): 213 is a sleeper (due out today, never checked out, empty and tidy
+   at 04:24); *Bekreft med resepsjonen*, then *Merk som ledig for salg*. 209 is held back: the robot
+   carried an arriving guest's bags in while the booking runs to 9.11, a double allocation caught.
+3. **Robotens vurderinger i natt** (1:00–1:35): seven refusals to let a stranger into a room, one
+   incident; 73 of 73 "done" credited by the simulator's referee, 99.2 % over every live night; 7 of 8
+   declines credited, the eighth named.
+4. **Kvitter mottatt** (1:35–1:50): *Kvittert av Siri Haugen*, saved on this device.
 
 ## 5. Scope (as built)
 
@@ -98,35 +96,46 @@ Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kje
 
 - **Login with roles** (admin, resepsjonist, robotansvarlig, host), enforced on the server
   (`src/proxy.ts`, `src/features/auth/`), plus a separate `jury` account for the event.
-- **Overlevering 06:00**: what happened, *Åpent nå* with an owner and a deadline per item, rooms ready
-  to sell with their value, *Godkjent av Wybe-serveren*, the night receptionist's note and *Kvitter
-  mottatt* (`src/features/handover/`).
+- **Overlevering 06:00**: the money first (rooms to sell after confirmation, held back, *Frigitt i
+  dag*), one factual line, what happened, *Åpent nå* with an owner and a deadline per item and safety
+  first (unsigned wet floors and the stranger, from the run log), the two-step release inline, the
+  robot's judgement card, the night receptionist's note and *Kvitter mottatt* (*Kvittert av …*, saved
+  on this device) with a branded print footer (`src/features/handover/`).
 - **Rom og renhold** with **Robotens romsjekk mot bookingsystemet**: the robot's room checks
-  reconciled with the (test) PMS; a room must be empty after 01:00 before it is suggested for sale
-  (`src/features/rooms/`).
+  reconciled with the (test) PMS; a room must be empty after 01:00 before it is suggested for sale, a
+  later delivery into it holds it back, and selling takes two steps (*Bekreft med resepsjonen*, then
+  *Merk som ledig for salg*) (`src/features/rooms/`).
 - **Forespørsler**: everything guests asked for, from the robot, the AI receptionist (a call becomes a
-  task), staff and voice; *Ta over* / *Ta saken* and *Angre*; the robot's outcomes split by reason
-  (done, not finished, correctly declined, cancelled by the manager) (`src/features/requests/`).
+  task), staff and voice. What the robot handed back is pinned first; phone calls are their own group
+  below, and a call for a room the hotel doesn't have shows *Ukjent rom* for reception, never a room
+  task. *Ta saken* and *Angre*, stamped with who and how long ago (*Siri Haugen tok saken · nå*). Each
+  of the robot's declines is a decision for a person (*Gi det likevel?*), with whether the referee
+  credited it (`src/features/requests/`).
 - **One selector for the night**: every screen reads task totals and occupancy from the same run log
   and the same test data, so the numbers agree across screens.
 - **3D-kart** (three.js replay of the night) and **Natteskift** (the night step by step, outcomes with
-  reasons, *Godkjent av Wybe-serveren*, and the card *Robotens vurderinger i natt*: refusals of a
-  stranger grouped as one incident, confirmed "done", claims declined after a check, wet-floor signs,
-  Do-Not-Disturb doors) (`src/features/hotel3d/`, `src/features/nightshift/`).
+  reasons, *Godkjent av dommeren* (the Wybe Night Shift simulator's referee), and the card *Robotens
+  vurderinger i natt*: refusals of a stranger grouped as one incident, credited "done" with the
+  cross-night precision from `docs/runs/ledger.csv`, declines split by whether the referee credited
+  them, wet-floor signs, Do-Not-Disturb doors) (`src/features/hotel3d/`, `src/features/nightshift/`).
 - **The run log** of a real live practice night of the final agent (`public/runs/demo.jsonl`, seed 16).
 - **The Night Shift agent** (`agent/` on `hamad/final`): plays Wybe's simulation on its own, scored by
   Wybe's server.
 
 ### Should (makes the demo clearly better) — built
 
-- **Oversikt**: a greeting, the night in one sentence, six figures with a source line (from the robot's
-  log, test data or an estimate) and the link *Se overleveringen*; one widget per module
+- **Oversikt**: a greeting by the shift clock of the night shown, one factual line instead of a verdict
+  (*73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en eier*), *Se overleveringen 06:00*
+  as the one primary action, six figures with a source line (from the robot's log, test data or an
+  estimate; *Rom klare til salg* from the same selector as Rom and Overlevering); one widget per module
   (`src/features/dashboard/`). *Timer spart* is shown as *ca.* with *Slik regner vi*.
-- **The bell** (*Varsler*): only what needs a person, safety first (an unsigned wet floor on top); red
-  and amber appear only here.
+- **The bell** (*Varsler*): only what needs a person, safety first: each unsigned wet floor (since when,
+  owner, *innen 06:30*) and the stranger at seven doors as *Haster*, computed by Fettero from the run
+  log; red and amber appear only here.
 - **Ruter**: shortest cleaning round and the robot's walk per task across floors, by lift with a cart,
-  using a TypeScript port of the agent's router with parity tests (`src/features/routes/hotelRouter.ts`);
-  a seeded unsorted list shows the metres saved against the list order.
+  using a TypeScript port of the agent's router with parity tests (`src/features/routes/hotelRouter.ts`).
+  The headline compares metres only, against a named baseline the optimiser also respects, and says
+  *like kort* when it is (today's cleaning round is as short as room-number order).
 - **Vedlikehold**: work orders by priority, the robot's findings and staff reports; *Tildel*, *Marker
   løst* (statuses kept in the browser).
 - **Gjester og bookinger**, **Lager og lin**, **Ansatte og vakter**: on test data, marked on screen.
@@ -144,7 +153,10 @@ Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kje
 - **Utleie** (`/vert`): the host's own app (flats, turnovers, guest messages translated, bookings,
   supplies), test data only.
 - **Live mode (*Direkte*)**: follows a running shift through the agent's local viewer; local only.
-- **Plukkliste** in Ruter: a seeded order on a 4-shelf test warehouse map (`TODO(phase-2)`).
+- **Plukkliste** in Ruter: a seeded order on a 4-shelf test warehouse map (`TODO(phase-2)`), compared
+  with a list sorted by shelf (16 m, 10 %) and with the list as written (32 %); the four work guides as
+  cards in Norsk, Polski, Українська and English; an unsure camera match waits for the SKU from the
+  label before it goes on the list.
 - **Send roboten** from Forespørsler: puts the task in the robot's queue in this browser only, and says
   so (*sendes når roboten er koblet til*, `TODO(phase-3)`); nothing reaches a robot yet.
 

@@ -17,6 +17,10 @@ export const startLine = z.object({
   shift: z.string().regex(SHIFT_ID),
   mode: z.string(),
   seed: z.number().int().nullable().optional(),
+  /** Who wrote the log: absent for the Night Shift agent, "open-rmf" for that adapter (docs/runlog.schema.json). */
+  source: z.string().optional(),
+  /** Newer agents: the flags in force at the start; `score_blind: true` means the agent never read the score. */
+  flags: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const callLine = z.object({

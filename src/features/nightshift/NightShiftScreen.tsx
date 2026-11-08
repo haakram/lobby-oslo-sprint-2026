@@ -11,6 +11,8 @@ import { type HotelReplay, itemName, placeName, type ReplaySource, roomNumber, s
 import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, PageHeader, RegenIcon, Skeleton, Stat } from "@/ui";
 import { forManagers } from "./eventFilter";
 import { HANDED_BACK, type NightOutcomes, type OutcomeRow, outcomeRows, outcomesAt, reasonGroups, RIGHTLY_NOT_DONE } from "./outcomes";
+import rmfSample from "./fixtures/open-rmf-night.json";
+import { fromOpenRmf, type RmfSample } from "./openRmf";
 import { RobotJudgementCard } from "./RobotJudgementCard";
 import { viewerBase } from "./useRun";
 
@@ -31,6 +33,9 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   const snapshot = replay.snapshot;
   const [room, setRoom] = useState<string | null>(null);
   const [technical, setTechnical] = useState(false);
+  // The judgement card's log: this night, or a second producer's sample through the Open-RMF adapter (the Wybe engineer).
+  const [cardSource, setCardSource] = useState<CardSource>("wybe");
+  const rmfLines = useMemo(() => fromOpenRmf(rmfSample as RmfSample), []);
   const roomCard = useRef<HTMLDivElement>(null);
   const scrollToRoom = useRef(false);
   // The room's card opens right under the map it was chosen on, and comes into view.
@@ -120,7 +125,14 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
             {verdicts && <StatRow replay={replay} verdicts={verdicts} />}
 
             {replay.timeline && (
-              <RobotJudgementCard lines={replay.timeline.lines} until={snapshot.t} asOf={snapshot.finished ? null : snapshot.clock} />
+              <div className="flex flex-col gap-3">
+                <CardSourceToggle value={cardSource} onChange={setCardSource} />
+                {cardSource === "rmf" ? (
+                  <RobotJudgementCard lines={rmfLines} id="vurderinger-rmf" />
+                ) : (
+                  <RobotJudgementCard lines={replay.timeline.lines} until={snapshot.t} asOf={snapshot.finished ? null : snapshot.clock} />
+                )}
+              </div>
             )}
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8">
@@ -287,6 +299,38 @@ function Tabs({ source, onChange }: { source: ReplaySource; onChange: (source: R
           {label}
         </button>
       ))}
+    </div>
+  );
+}
+
+type CardSource = "wybe" | "rmf";
+
+/** Which robot log the judgement card reads: the night on screen, or the Open-RMF sample (test data). */
+function CardSourceToggle({ value, onChange }: { value: CardSource; onChange: (source: CardSource) => void }) {
+  const options: Array<{ id: CardSource; label: string }> = [
+    { id: "wybe", label: "Wybe-natten" },
+    { id: "rmf", label: "Open-RMF (eksempel)" },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <span className="text-sm text-muted">Robotlogg</span>
+      <div role="group" aria-label="Robotlogg for vurderingene" className="inline-flex gap-0.5 rounded-sm bg-sunken p-0.5">
+        {options.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={value === id}
+            onClick={() => onChange(id)}
+            className={cx(
+              "min-h-10 rounded-sm px-4 text-sm font-semibold transition-colors duration-[120ms] ease-standard pointer-coarse:min-h-11",
+              value === id ? "bg-surface text-text" : "text-muted hover:text-text",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {value === "rmf" && <span className="text-sm text-muted">Samme kort, en annen robots oppgavelogg: testdata skrevet av teamet.</span>}
     </div>
   );
 }

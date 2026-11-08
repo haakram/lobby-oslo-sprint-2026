@@ -25,6 +25,12 @@ export type DoneBasis = Tally & {
   own: Tally & { roomChecks: Tally; spills: Tally; other: Tally };
   /** No `task_start` line for the request in the log (very early logs): basis not known. */
   unknown: Tally;
+  /**
+   * A producer with no referee (docs/runlog.schema.json, e.g. the Open-RMF adapter): a `task_done` with an
+   * `evidence` list and no report call. Confirmed only with two different signals; `signals` names the
+   * signals behind the confirmed ones.
+   */
+  evidence: Tally & { signals: string[] };
 };
 
 export type MasterKeyEntry = { room: string; clock: string | null; knocked: boolean };
@@ -70,7 +76,8 @@ function add(into: Tally, confirmed: boolean): void {
  * What each "done" rested on. A `report … done` counts as after the rise when any score the robot saw
  * between the request's last `task_start` and the report was higher than the score before it (the
  * agent's flows read that rise before they report: `_deliver`, `message`); otherwise it is the robot's
- * own judgement, split by the task's kind. Confirmed: the server answered "Noted. Thanks.".
+ * own judgement, split by the task's kind. Confirmed: the server answered "Noted. Thanks.". A score-blind run
+ * (`flags.score_blind` on the start line) counts every "done" as its own judgement.
  */
 export function doneBasis(lines: readonly RunLine[], until?: number): DoneBasis {
   const basis: DoneBasis = {
@@ -78,19 +85,31 @@ export function doneBasis(lines: readonly RunLine[], until?: number): DoneBasis 
     afterRise: tally(),
     own: { ...tally(), roomChecks: tally(), spills: tally(), other: tally() },
     unknown: tally(),
+    evidence: { ...tally(), signals: [] },
   };
   const open = new Map<string, { kind: string | null; rose: boolean }>();
+  const reportedDone = new Set<string>();
+  // A score-blind run (the start line's flags) never read the score: every "done" is its own judgement.
+  const start = lines.find((line) => line.type === "start");
+  const blind = start?.type === "start" && start.flags?.score_blind === true;
   let last: number | null = null;
   for (const line of linesUntil(lines, until)) {
     const score = scoreOf(line);
     if (score !== null) {
-      if (last !== null && score > last) for (const task of open.values()) task.rose = true;
+      if (last !== null && score > last && !blind) for (const task of open.values()) task.rose = true;
       last = score;
     }
     if (line.type === "decision") {
       const request = str(line.data?.request);
       if (!request) continue;
       if (line.kind === "task_start") open.set(request, { kind: str(line.data?.kind), rose: false });
+      const evidence = line.data?.evidence;
+      if (line.kind === "task_done" && Array.isArray(evidence) && !reportedDone.has(request)) {
+        const signals = [...new Set(evidence.map((entry) => str(rec(entry)?.signal)).filter((signal): signal is string => !!signal))];
+        add(basis, signals.length >= 2);
+        add(basis.evidence, signals.length >= 2);
+        if (signals.length >= 2) for (const signal of signals) if (!basis.evidence.signals.includes(signal)) basis.evidence.signals.push(signal);
+      }
       if (line.kind === "task_done" || line.kind === "task_failed") open.delete(request);
       continue;
     }
@@ -100,6 +119,7 @@ export function doneBasis(lines: readonly RunLine[], until?: number): DoneBasis 
     const reply = typeof line.result === "string" ? line.result : JSON.stringify(line.result ?? "");
     const confirmed = reply.toLowerCase().includes("thanks");
     add(basis, confirmed);
+    reportedDone.add(str(args.request) ?? "");
     const task = open.get(str(args.request) ?? "");
     if (!task) add(basis.unknown, confirmed);
     else if (task.rose) add(basis.afterRise, confirmed);
@@ -234,4 +254,31 @@ export function signsMovedOffWet(lines: readonly RunLine[], until?: number): Sig
     }
   }
   return moves;
+}
+
+export type UnfinishedTask = { request: string; status: string; note: string | null; room: string | null };
+
+/**
+ * The tasks that did not end "done": failed or cancelled (`task_failed`, any status but declined) and the
+ * ones still open when the log ends (a `task_start` with no end line). For producers without the Wybe
+ * request flow (the Open-RMF adapter), where these are the handover's open items.
+ */
+export function unfinishedTasks(lines: readonly RunLine[], until?: number): { ended: UnfinishedTask[]; open: UnfinishedTask[] } {
+  const started = new Map<string, string | null>();
+  const ended: UnfinishedTask[] = [];
+  const closed = new Set<string>();
+  for (const line of linesUntil(lines, until)) {
+    if (line.type !== "decision") continue;
+    const request = str(line.data?.request);
+    if (!request) continue;
+    if (line.kind === "task_start") started.set(request, str(line.data?.room));
+    if (line.kind === "task_done") closed.add(request);
+    if (line.kind === "task_failed") {
+      closed.add(request);
+      const status = str(line.data?.status) ?? "failed";
+      if (status !== "declined") ended.push({ request, status, note: str(line.data?.note), room: started.get(request) ?? null });
+    }
+  }
+  const open = [...started].filter(([request]) => !closed.has(request)).map(([request, room]) => ({ request, status: "open", note: null, room }));
+  return { ended, open };
 }

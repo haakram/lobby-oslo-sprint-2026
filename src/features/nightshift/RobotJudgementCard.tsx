@@ -13,6 +13,8 @@ import {
   type SlipCrossing,
   signsMovedOffWet,
   slipCrossings,
+  type UnfinishedTask,
+  unfinishedTasks,
 } from "./conduct";
 import { type DeclineSplit, declineSplit, declineSplitPlain } from "./declines";
 import { type RobotJudgement, robotJudgement } from "./judgement";
@@ -53,10 +55,17 @@ export function RobotJudgementCard({
   const declines = useMemo(() => declineSplit(lines, until), [lines, until]);
   const basis = useMemo(() => doneBasis(lines, until), [lines, until]);
   const conduct = useMemo(
-    () => ({ keys: masterKeyEntries(lines, until), slips: slipCrossings(lines, until), signMoves: signsMovedOffWet(lines, until) }),
+    () => ({
+      keys: masterKeyEntries(lines, until),
+      slips: slipCrossings(lines, until),
+      signMoves: signsMovedOffWet(lines, until),
+      unfinished: unfinishedTasks(lines, until),
+    }),
     [lines, until],
   );
-  const crossNight = useMemo(() => crossNightPrecision(shiftOf(lines)), [lines]);
+  const source = useMemo(() => sourceOf(lines), [lines]);
+  // The ledger counts the Wybe simulator's live nights; another producer's log has no place in it.
+  const crossNight = useMemo(() => (source ? undefined : crossNightPrecision(shiftOf(lines))), [lines, source]);
   return (
     <RobotJudgementView
       judgement={judgement}
@@ -64,6 +73,7 @@ export function RobotJudgementCard({
       basis={basis}
       conduct={conduct}
       crossNight={crossNight}
+      source={source}
       asOf={asOf}
       id={id}
       className={className}
@@ -71,8 +81,19 @@ export function RobotJudgementCard({
   );
 }
 
-/** The honest lines from the run log (conduct.ts): master-key entries, slips, moved signs. */
-export type Conduct = { keys: MasterKeyEntries; slips: SlipCrossing[]; signMoves: SignMove[] };
+/** The `start` line's `source` ("open-rmf"); null for the Night Shift agent's own logs, which carry none. */
+export function sourceOf(lines: readonly RunLine[]): string | null {
+  const start = lines.find((line) => line.type === "start");
+  return start?.type === "start" && start.source && start.source !== "wybe-nightshift" ? start.source : null;
+}
+
+/** The honest lines from the run log (conduct.ts): master-key entries, slips, moved signs, unfinished tasks. */
+export type Conduct = {
+  keys: MasterKeyEntries;
+  slips: SlipCrossing[];
+  signMoves: SignMove[];
+  unfinished?: { ended: UnfinishedTask[]; open: UnfinishedTask[] };
+};
 
 export function RobotJudgementView({
   judgement,
@@ -80,6 +101,7 @@ export function RobotJudgementView({
   basis,
   conduct,
   crossNight,
+  source = null,
   asOf,
   id = "vurderinger",
   className,
@@ -93,11 +115,14 @@ export function RobotJudgementView({
   conduct?: Conduct;
   /** The same "done" figure over every live night in the ledger, behind "Slik vet vi det"; left out when not given. */
   crossNight?: CrossNight;
+  /** Another producer than the Night Shift agent ("open-rmf"): no referee, no ledger, only what it sends. */
+  source?: string | null;
   asOf?: string | null;
   id?: string;
   className?: string;
 }) {
   const { strangers, done, declined, wetFloors, doNotDisturb } = judgement;
+  const sourceName = source === "open-rmf" ? "Open-RMF-eksempelet (testdata)" : source;
   const headingId = `${id}-heading`;
   const slips = conduct?.slips ?? [];
   const wetMoves = (conduct?.signMoves ?? []).filter((move) => move.stillWet);
@@ -107,7 +132,9 @@ export function RobotJudgementView({
         <h2 id={headingId} className="text-lg font-semibold tracking-[-0.01em]">
           Robotens vurderinger i natt
         </h2>
-        <p className="text-sm text-muted">{asOf ? `Fra robotens logg, fram til ${asOf.slice(0, 5)}` : "Fra robotens logg"}</p>
+        <p className="text-sm text-muted">
+          {sourceName ? `Fra ${sourceName}` : asOf ? `Fra robotens logg, fram til ${asOf.slice(0, 5)}` : "Fra robotens logg"}
+        </p>
       </div>
 
       {strangers.refusals.length > 0 && <StrangerIncident strangers={strangers} />}
@@ -121,40 +148,45 @@ export function RobotJudgementView({
             {declined.total === 0 ? "Ingen meldinger måtte avvises." : `${declineText(declined)}.`}
           </Row>
         )}
-        <Row icon="flag" figure={String(wetFloors.signed.length)} label="Skilt for vått gulv satt ut">
-          {wetFloors.signed.length > 0 ? `${places(wetFloors.signed)}.` : wetFloors.found.length > 0 ? "Ingen skilt satt ut." : "Ingen våte gulv funnet."}
-          {wetFloors.unsignedAtEnd.length > 0 && (
-            <span className="mt-1 block">Vått uten skilt ved slutten: {places(wetFloors.unsignedAtEnd).toLowerCase()}.</span>
-          )}
-          {slips.map((slip, index) => (
-            <span key={`slip-${index}`} className="mt-1 block">
-              {slipText(slip)}
-            </span>
-          ))}
-          {wetMoves.map((move, index) => (
-            <span key={`move-${index}`} className="mt-1 block">
-              Flyttet skiltet fra {place(move.from).toLowerCase()}
-              {move.clock ? ` kl. ${move.clock.slice(0, 5)}` : ""}
-              {move.to ? ` til ${place(move.to).toLowerCase()}` : ""} mens gulvet der fortsatt var vått.
-            </span>
-          ))}
-        </Row>
-        {conduct && <MasterKeyRow keys={conduct.keys} />}
-        <Row
-          icon="moon"
-          figure={doNotDisturb.rooms.length > 0 ? String(doNotDisturb.entered.length) : undefined}
-          good={doNotDisturb.rooms.length > 0 && doNotDisturb.entered.length === 0}
-          label={doNotDisturb.rooms.length > 0 ? "Rom med Ikke forstyrr gått inn i" : "Ikke forstyrr"}
-        >
-          {doNotDisturb.rooms.length === 0
-            ? "Ingen dører hadde Ikke forstyrr-skilt i natt."
-            : doNotDisturb.entered.length === 0
-              ? `${joinNo(doNotDisturb.rooms.map(place))} hadde skiltet. Roboten gikk ikke inn.`
-              : `Roboten gikk inn i ${joinNo(doNotDisturb.entered.map(place))} etter at skiltet var sett.`}
-        </Row>
+        {source && conduct?.unfinished && <UnfinishedRow unfinished={conduct.unfinished} />}
+        {!source && (
+          <>
+            <Row icon="flag" figure={String(wetFloors.signed.length)} label="Skilt for vått gulv satt ut">
+              {wetFloors.signed.length > 0 ? `${places(wetFloors.signed)}.` : wetFloors.found.length > 0 ? "Ingen skilt satt ut." : "Ingen våte gulv funnet."}
+              {wetFloors.unsignedAtEnd.length > 0 && (
+                <span className="mt-1 block">Vått uten skilt ved slutten: {places(wetFloors.unsignedAtEnd).toLowerCase()}.</span>
+              )}
+              {slips.map((slip, index) => (
+                <span key={`slip-${index}`} className="mt-1 block">
+                  {slipText(slip)}
+                </span>
+              ))}
+              {wetMoves.map((move, index) => (
+                <span key={`move-${index}`} className="mt-1 block">
+                  Flyttet skiltet fra {place(move.from).toLowerCase()}
+                  {move.clock ? ` kl. ${move.clock.slice(0, 5)}` : ""}
+                  {move.to ? ` til ${place(move.to).toLowerCase()}` : ""} mens gulvet der fortsatt var vått.
+                </span>
+              ))}
+            </Row>
+            {conduct && <MasterKeyRow keys={conduct.keys} />}
+            <Row
+              icon="moon"
+              figure={doNotDisturb.rooms.length > 0 ? String(doNotDisturb.entered.length) : undefined}
+              good={doNotDisturb.rooms.length > 0 && doNotDisturb.entered.length === 0}
+              label={doNotDisturb.rooms.length > 0 ? "Rom med Ikke forstyrr gått inn i" : "Ikke forstyrr"}
+            >
+              {doNotDisturb.rooms.length === 0
+                ? "Ingen dører hadde Ikke forstyrr-skilt i natt."
+                : doNotDisturb.entered.length === 0
+                  ? `${joinNo(doNotDisturb.rooms.map(place))} hadde skiltet. Roboten gikk ikke inn.`
+                  : `Roboten gikk inn i ${joinNo(doNotDisturb.entered.map(place))} etter at skiltet var sett.`}
+            </Row>
+          </>
+        )}
       </ul>
 
-      <HowWeKnow crossNight={crossNight} />
+      <HowWeKnow crossNight={crossNight} source={source} />
     </section>
   );
 }
@@ -162,7 +194,7 @@ export function RobotJudgementView({
 /** A plain count with no split (a caller without the log's basis): every "done" of unknown basis. */
 function unsplit(done: RobotJudgement["done"]): DoneBasis {
   const zero = { reported: 0, confirmed: 0 };
-  return { ...done, afterRise: zero, own: { ...zero, roomChecks: zero, spills: zero, other: zero }, unknown: done };
+  return { ...done, afterRise: zero, own: { ...zero, roomChecks: zero, spills: zero, other: zero }, unknown: done, evidence: { ...zero, signals: [] } };
 }
 
 /** "5 romsjekker og 4 søl". */
@@ -195,6 +227,26 @@ function DoneRow({ basis }: { basis: DoneBasis }) {
     );
   }
   const missed = reported - confirmed;
+  if (basis.evidence.reported > 0 && own.reported === 0 && afterRise.reported === 0) {
+    const ev = basis.evidence;
+    const short = ev.reported - ev.confirmed;
+    return (
+      <Row
+        icon="circle-check"
+        figure={
+          <>
+            {ev.confirmed} <span className="font-sans text-base font-normal">av</span> {ev.reported}
+          </>
+        }
+        good={short === 0}
+        label="«Ferdig» med to signaler"
+      >
+        {ev.confirmed > 0 && `${ev.confirmed} bekreftet av to uavhengige signaler (${joinNo(ev.signals.map(signalName))}). `}
+        {short > 0 && `${short} har ikke to signaler og står som «ikke bekreftet».`}
+        {realHotel}
+      </Row>
+    );
+  }
   const total = (
     <>
       {confirmed} <span className="font-sans text-base font-normal">av</span> {reported}
@@ -285,7 +337,55 @@ function shortStamp(iso: string): string {
  * "Slik vet vi det": the referee, the rule behind "egen vurdering", the same figures over every live night
  * and the demo build's, and where they come from (commit hash, repo paths). Off the main read (the design juror).
  */
-function HowWeKnow({ crossNight }: { crossNight?: CrossNight }) {
+const SIGNAL_NAMES: Record<string, string> = {
+  lock: "låslogg",
+  photo: "foto",
+  compartment: "skuffsensor",
+  guest_ack: "gjestens bekreftelse",
+  referee: "dommeren",
+  sign_placed: "skilt satt ut",
+  door_answered: "gjesten åpnet",
+  item_placed: "plassert i rommet",
+};
+
+function signalName(signal: string): string {
+  return SIGNAL_NAMES[signal] ?? signal;
+}
+
+/** The unfinished tasks of a producer without the Wybe request flow: failed or cancelled, and still open. */
+function UnfinishedRow({ unfinished }: { unfinished: { ended: UnfinishedTask[]; open: UnfinishedTask[] } }) {
+  const { ended, open } = unfinished;
+  const total = ended.length + open.length;
+  const describe = (task: UnfinishedTask) => `${task.request}${task.room ? ` (${place(task.room).toLowerCase()})` : ""}${task.note ? `: ${task.note}` : ""}`;
+  return (
+    <Row icon="clipboard" figure={String(total)} label={total === 1 ? "Oppgave ikke fullført" : "Oppgaver ikke fullført"}>
+      {total === 0 ? "Alle oppgaver ble fullført." : ended.length > 0 ? `${ended.map(describe).join(" · ")}.` : null}
+      {open.length > 0 && <span className="mt-1 block">Åpen ved slutten: {joinNo(open.map(describe))}.</span>}
+    </Row>
+  );
+}
+
+function HowWeKnow({ crossNight, source = null }: { crossNight?: CrossNight; source?: string | null }) {
+  if (source) {
+    return (
+      <details className="group mt-5 border-t border-line pt-1 text-sm text-muted">
+        <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-accent-text hover:underline pointer-fine:min-h-8">
+          Slik vet vi det
+        </summary>
+        <div className="flex max-w-[72ch] flex-col gap-1.5 pb-1">
+          <p>
+            Kilde: et testeksempel i Open-RMF-format (oppgavestatus og flåtestatus), skrevet av teamet, lest gjennom{" "}
+            <span className="font-mono text-xs">src/features/nightshift/openRmf.ts</span> inn i samme loggformat som Wybe-natten (
+            <span className="font-mono text-xs">docs/runlog.schema.json</span>).
+          </p>
+          <p>
+            Her finnes ingen dommer. «Ferdig» teller som bekreftet bare med to ulike signaler fra oppgavens hendelser: dør åpnet (låsloggen), foto,
+            skuffsensor eller gjestens PIN. Med ett signal står den som «ikke bekreftet».
+          </p>
+        </div>
+      </details>
+    );
+  }
   const all = crossNight?.all;
   const build = crossNight?.build;
   const allOwn = crossNight?.allOwn;

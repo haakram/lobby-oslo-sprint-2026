@@ -125,3 +125,16 @@ describe("slipCrossings", () => {
     expect(slipCrossings(lines)).toEqual([{ place: "corridor-2b", clock: "23:00:00", crossingsAfter: 2, signedAfter: true }]);
   });
 });
+
+describe("doneBasis on a score-blind run", () => {
+  it("counts every done as the robot's own judgement, whatever the log recorded of the score", () => {
+    const lines: RunLine[] = [
+      { v: 1, type: "start", shift: "w2-0123456789abcdef", mode: "practice", seed: 16, flags: { score_blind: true } },
+      state("23:00:00", 100),
+      decision("task_start", { request: "R-1", kind: "amenity" }),
+      state("23:01:00", 130),
+      report("R-1"),
+    ];
+    expect(doneBasis(lines)).toMatchObject({ afterRise: { reported: 0 }, own: { reported: 1, confirmed: 1, other: { reported: 1 } } });
+  });
+});

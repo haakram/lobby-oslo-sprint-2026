@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fettero.local/schemas/runlog-v1.json",
+  "title": "Fettero run log v1: one JSON object per line",
+  "description": "What a robot sends Fettero so the 06:00 handover can be written from its night (docs/ARCHITECTURE.md § 4.3). Each line of a .jsonl file is one object, \"v\": 1 on every line; unknown line types and unknown fields are ignored, so a producer can add its own. The handover reads the semantic layer: tasks (start, done with its evidence, failed, declined, handed back), room status, hazards, security events, position and battery. `call` lines are a producer's raw commands (the Wybe Night Shift simulator writes them; another robot need not). Producers today: the Night Shift agent (agent/, every line type) and the Open-RMF adapter (src/features/nightshift/openRmf.ts: start, state, decision, end). A \"done\" counts as confirmed only with a second, independent signal: the referee's reply in the simulator, or two evidence signals (e.g. the lock trail and the robot's photo) from a real robot; one signal alone reads \"ikke bekreftet\".",
+  "oneOf": [
+    { "$ref": "#/$defs/start" },
+    { "$ref": "#/$defs/state" },
+    { "$ref": "#/$defs/decision" },
+    { "$ref": "#/$defs/call" },
+    { "$ref": "#/$defs/end" }
+  ],
+  "$defs": {
+    "v": { "const": 1 },
+    "clock": {
+      "description": "Hotel time of the night, HH:MM:SS (the night runs 22:00 to 06:00).",
+      "type": ["string", "null"],
+      "pattern": "^\\d{2}:\\d{2}:\\d{2}$"
+    },
+    "start": {
+      "type": "object",
+      "required": ["v", "type", "shift", "mode"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "start" },
+        "t": { "type": "number", "description": "Unix seconds." },
+        "shift": { "type": "string", "pattern": "^w2-[0-9a-f]{8,64}$", "description": "The night's id (a hex id; a non-Wybe adapter derives one)." },
+        "mode": { "type": "string", "description": "practice | final | live | sample, or the producer's own word." },
+        "seed": { "type": ["integer", "null"] },
+        "source": { "type": "string", "description": "Who wrote the log: \"wybe-nightshift\", \"open-rmf\", …" }
+      }
+    },
+    "state": {
+      "description": "Position and battery. `score` is the simulator's points; a source with no score writes 0.",
+      "type": "object",
+      "required": ["v", "type", "score"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "state" },
+        "t": { "type": "number" },
+        "clock": { "$ref": "#/$defs/clock" },
+        "location": { "type": ["string", "null"], "description": "A place id on the hotel map (room-213, corridor-2b, elevator-1, …)." },
+        "score": { "type": "number" },
+        "battery": { "type": "number", "minimum": 0, "maximum": 100, "description": "Per cent." },
+        "hands": { "type": "array" },
+        "cart": { "type": ["array", "null"] }
+      }
+    },
+    "end": {
+      "type": "object",
+      "required": ["v", "type", "score"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "end" },
+        "score": { "type": "number" },
+        "requests_served": { "type": "number" },
+        "reason": { "type": "string" }
+      }
+    },
+    "call": {
+      "description": "A raw command and the robot's reply (Wybe simulator only; optional for other producers).",
+      "type": "object",
+      "required": ["v", "type", "cmd", "ok"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "call" },
+        "cmd": { "type": "string" },
+        "args": {},
+        "ok": { "type": "boolean" },
+        "clock": { "$ref": "#/$defs/clock" },
+        "result": {},
+        "events": { "type": "array" }
+      }
+    },
+    "evidence": {
+      "description": "The independent signals behind a \"done\". Two different signals confirm it; one alone leaves it \"ikke bekreftet\".",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["signal"],
+        "properties": {
+          "signal": {
+            "enum": ["referee", "lock", "photo", "guest_ack", "compartment", "sign_placed", "door_answered", "item_placed"],
+            "description": "referee: the simulator's verified reply. lock: the door-lock audit trail. photo: the robot's camera. guest_ack: the guest confirmed (app, tablet, voice). compartment: the robot's compartment sensor. sign_placed: a wet-floor sign stands at the place. door_answered / item_placed: what the robot itself observed."
+          },
+          "at": { "$ref": "#/$defs/clock" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["v", "type", "kind"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "decision" },
+        "t": { "type": "number" },
+        "kind": { "type": "string" },
+        "data": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "task_start" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["request", "kind"],
+                "properties": {
+                  "request": { "type": "string", "description": "The task's id (R-001, an RMF booking id, …)." },
+                  "kind": { "type": "string", "description": "amenity | bags | tray | message | room_check | spill | noise | lost_item | delivery | clean | patrol | …" },
+                  "room": { "type": ["string", "null"] },
+                  "item": { "type": ["string", "null"] }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "task_done" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["request", "status"],
+                "properties": {
+                  "request": { "type": "string" },
+                  "status": { "const": "done" },
+                  "note": { "type": "string" },
+                  "points": { "type": "number" },
+                  "evidence": { "$ref": "#/$defs/evidence" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "task_failed" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["request", "status"],
+                "properties": {
+                  "request": { "type": "string" },
+                  "status": { "enum": ["failed", "declined", "skipped", "handed_back"], "description": "handed_back: given to a person (the night clerk) to finish." },
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "room_status" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["room", "status"],
+                "properties": {
+                  "room": { "type": "string" },
+                  "status": { "enum": ["klar", "opptatt", "ikke_forstyrr", "ma_vaskes"] },
+                  "source": { "type": "string", "description": "room_check | knock | door_sign | lock | energy_slot" },
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "hazard" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["place", "hazard"],
+                "properties": {
+                  "place": { "type": "string" },
+                  "hazard": { "enum": ["wet", "obstacle", "other"] },
+                  "since": { "$ref": "#/$defs/clock" },
+                  "signed": { "type": "boolean", "description": "A warning sign stands there." }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "security_event" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["place", "event"],
+                "properties": {
+                  "place": { "type": "string" },
+                  "event": { "type": "string", "description": "entry_refused | tailgating_blocked | door_forced | unknown_person | …" },
+                  "room": { "type": ["string", "null"] },
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

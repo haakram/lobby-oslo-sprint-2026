@@ -15,8 +15,8 @@ export type LedgerNight = {
   started: string;
   seed: number | null;
   commit: string;
-  /** build, or board-test: a seed-specific board experiment, never counted as a build. */
-  kind?: "build" | "board-test";
+  /** build; board-test: a seed-specific board experiment; experiment: a score-blind run. Only builds count as a build. */
+  kind?: "build" | "board-test" | "experiment";
   complete: boolean;
   score: number | null;
   done_reports: number | null;
@@ -99,7 +99,7 @@ export type CrossNight = {
 /** The whole ledger, and the build that played `shift`. */
 export function crossNightPrecision(shift: string | null, nights: readonly LedgerNight[] = LEDGER_NIGHTS): CrossNight {
   const all = precision(nights);
-  const builds = nights.filter((night) => night.kind !== "board-test");
+  const builds = nights.filter((night) => night.kind === undefined || night.kind === "build");
   const commit = shift ? builds.find((night) => night.shift === shift)?.commit : undefined;
   const sameNights = commit ? builds.filter((night) => night.commit === commit) : [];
   const same = commit ? precision(sameNights) : null;

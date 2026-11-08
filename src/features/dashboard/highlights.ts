@@ -161,7 +161,7 @@ export function nightVerdict(data: Pick<DashboardData, "nightStatus" | "robot">,
 export type NightFacts = {
   /** What is done, said in green: "73 oppgaver bekreftet" ("73 oppgaver ferdig" when the basis is known). */
   done: string;
-  /** What the done rested on, said plainly after it (round 5, the Wybe juror): "64 bekreftet av simulatoren, 9 på robotens egen vurdering". */
+  /** What the done rested on, said plainly after it (round 5, the Wybe juror): "64 bekreftet av simulatoren, 9 på robotens egen vurdering: 8 holder mot egen logg". */
   basis?: string;
   /** What can hurt a guest and needs a person, said plainly: "3 våte gulv og 1 ukjent person trenger en eier". */
   attention: string | null;
@@ -194,10 +194,10 @@ export function nightFacts({
   return facts;
 }
 
-/** "64 bekreftet av simulatoren, 9 på robotens egen vurdering (8 holder mot egen logg)". */
+/** "64 bekreftet av simulatoren, 9 på robotens egen vurdering: 8 holder mot egen logg". */
 export function basisLine(basis: DoneBasis, contradictions: readonly SelfContradiction[] = []): string {
   const held = ownAgainstLog(basis, contradictions);
-  const own = `${basis.own.confirmed} på robotens egen vurdering${held.contradicted.length > 0 ? ` (${held.holds} holder mot egen logg)` : ""}`;
+  const own = `${basis.own.confirmed} på robotens egen vurdering${held.contradicted.length > 0 ? `: ${held.holds} holder mot egen logg` : ""}`;
   return basis.afterRise.confirmed > 0 ? `${basis.afterRise.confirmed} bekreftet av simulatoren, ${own}` : own;
 }
 

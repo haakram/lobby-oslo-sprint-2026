@@ -114,7 +114,7 @@ describe("the night in facts, by its own clock", () => {
     const facts = nightFacts({ confirmed: 73, wetFloors: 3, stranger: true, basis: doneBasis(demo), contradictions: selfContradictions(demo) });
     expect(facts).toEqual({
       done: "73 oppgaver ferdig",
-      basis: "64 bekreftet av simulatoren, 9 på robotens egen vurdering (8 holder mot egen logg)",
+      basis: "64 bekreftet av simulatoren, 9 på robotens egen vurdering: 8 holder mot egen logg",
       attention: "3 våte gulv og 1 ukjent person trenger en eier",
     });
   });

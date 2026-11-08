@@ -465,7 +465,7 @@ function contradictionText(entry: SelfContradiction): string {
   const what = first && LUGGAGE_ITEM.test(first.item) ? "bagasje" : "noe";
   return `Rom ${entry.room}: roboten satte inn ${what}${first?.clock ? ` kl. ${first.clock.slice(0, 5)}` : ""}, så rommet tomt${
     entry.clock ? ` kl. ${entry.clock.slice(0, 5)}` : ""
-  } og meldte det tomt (${entry.request}). Kameraet og robotens egen oppgavelogg er uenige, så Fettero regner ikke den som holdt.`;
+  } og meldte det tomt (${entry.request}). Kameraet og robotens egen oppgavelogg er uenige, så Fettero regner den ikke som holdt.`;
 }
 
 /** "Skled i korridor 2b kl. 23:51 og krysset det samme våte gulvet 27 ganger til uten å sette skilt der." */

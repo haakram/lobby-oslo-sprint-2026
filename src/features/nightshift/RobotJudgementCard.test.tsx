@@ -30,7 +30,7 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(card).toHaveTextContent("8 av 9«Ferdig» på egen vurdering som holder mot robotens egen logg");
     expect(card).toHaveTextContent("5 romsjekker og 4 søl: roboten meldte ferdig ut fra det den selv så.");
     expect(card).toHaveTextContent(
-      "Rom 209: roboten satte inn bagasje kl. 01:29, så rommet tomt kl. 03:47 og meldte det tomt (R-049). Kameraet og robotens egen oppgavelogg er uenige, så Fettero regner ikke den som holdt.",
+      "Rom 209: roboten satte inn bagasje kl. 01:29, så rommet tomt kl. 03:47 og meldte det tomt (R-049). Kameraet og robotens egen oppgavelogg er uenige, så Fettero regner den ikke som holdt.",
     );
     expect(card).toHaveTextContent("De andre 64 ble meldt etter at arbeidet var bekreftet utenfra (73 av 73 i alt).");
     expect(card).toHaveTextContent("I et ekte hotell er «ferdig» bekreftet først når minst ett signal kommer utenfra roboten: låsloggen, gjesten, personalet eller PMS-en.");

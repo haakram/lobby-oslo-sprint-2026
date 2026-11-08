@@ -97,19 +97,24 @@ all 9 credited by the referee (95 % interval 70–100 %); but one of them, 209 r
 Same as `docs/DEMO.md` § 2 (2:00, one user, one story, one page: Siri takes over from Kjersti and the
 robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 
-1. **The top** (0:00–0:20): 209 held back because the robot's own log contradicts its report (bags in at
-   01:29, "empty" at 03:47), and four safety items, each with an owner, *straks*.
-2. ***Uten robot*** (0:20–0:29): hotel number one has no robot; the same page from the booking system,
-   one signal per room from the door lock (never who) and the night clerk's entries.
-3. **The money, without a robot** (0:29–0:58): the money figure lands on 213: due out yesterday, the
-   check-out never recorded; the lock shows no guest card since 18:00 and Kjersti saw it empty at 04:24, two
-   sources and no robot; found five hours before housekeeping, about 1,500 kroner if the night sells
-   out. Reception confirms (who, folio, bags, key card), the room goes to reception, and the row waits
-   for the booking system: the button never says sold.
-4. **The robot's card** (0:58–1:25): back to *Med robot*, the robot figure lands on the card (*8 av 9*
-   against its own log, *7* refusals of a stranger, *10 av 15* entries without a knock) beside the night
-   clerk's *«Rolig natt.»*; the referee and the cross-night figures sit behind *Slik vet vi det*.
-5. **Kvitter mottatt** (1:25–1:35), last on the page: *Kvittert av Siri Haugen*, saved on this device.
+1. **The top** (0:00–0:16): 209 held back because the robot's own log contradicts its report, drawn as
+   two points (*01:29 bagasje inn · 03:47 meldt tomt*).
+2. **Act first** (0:16–0:28): the safety figure lands on the wet floor the robot slipped on at 23:51,
+   *6 t 9 min uten at noen ble varslet*; *Varsle Trond Eikeland* records who was told and when.
+3. ***Uten robot*** (0:28–0:40): hotel number one has no robot; the same page from the booking system,
+   one signal per room from the door lock (never who, never when) and the night clerk's entries.
+4. **Where the lock and the booking system disagree** (0:40–0:57): 210 in use with no booking (a night
+   nobody bills, about 1,500 kroner) and 213 booked but empty (five hours before housekeeping), each
+   with its sources as chips, *Bekreftet av to kilder*, no robot.
+5. **The money step** (0:57–1:14): reception's name typed (the field starts empty), folio, bags, key
+   card, *Bekreft med resepsjonen*, *Send til resepsjonen*; the row waits for the booking system
+   (*Venter på PMS-en*): the button never says sold.
+6. **The robot's card** (1:14–1:37): back to *Med robot*, the robot figure lands on the card (*8 av 9*
+   against its own log and *10 av 15* entries without a knock in amber as *Robotens feil*, *7* refusals
+   of a stranger in ink) beside the night clerk's *«Rolig natt.»*; the referee, both cross-night figures
+   and the fault test sit behind *Slik vet vi det*.
+7. **Kvitter mottatt** (1:37–1:47), last on the page: it says the one safety item still told to nobody,
+   then *Kvittert av Siri Haugen*, saved on this device.
 
 ## 5. Scope (as built)
 

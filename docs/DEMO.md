@@ -3,8 +3,9 @@
 > What the jury sees. Owners: ShirazIQ (script, deck, presenting; the phone round and the hallway test
 > go to ShirazIQ because Hamad is at the Wybe final, team to confirm at 09:00), Hamad (agent numbers, Q&A on tech, security and privacy; at the Wybe final
 > 12:00–13:00). Rewritten Sun 8 Nov morning against the screens on `hamad/jury-loop` (app, running on
-> :3300) and the final agent on `hamad/final`; round 4 (about 04:00–06:00): the real sleeper, the
-> recomposed Overlevering, the decided wedge, SSB's room rates. Every claim below is checked against the
+> :3300) and the final agent on `hamad/final`; updated again about 07:05 after the sixth round of our
+> own reviews (209 drawn, 210 leading the money, the wait per hazard and *Varsle*, the 209 rule over
+> every night, the catch rate, the second forecast, the pitch line, the conversion on usage). Every claim below is checked against the
 > code, a run log or a cited source; anything not yet true is marked **[fill]** or **[if]**. Keep § 2
 > in sync with `docs/PRD.md` § 4. Rehearse against a timer, twice, on a laptop that isn't the builder's.
 > The product trades as **Fettero** on this branch (the team lead decides whether `main` follows);

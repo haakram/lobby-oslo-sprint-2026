@@ -2,25 +2,20 @@
 
 import { ConversationProvider } from "@elevenlabs/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type { VoicePhase, VoiceProblem } from "@/features/voice/useFetteroVoice";
+import { useMemo } from "react";
+import type { VoiceProblem } from "@/features/voice/useFetteroVoice";
 import { Transcript } from "@/features/voice/Transcript";
-import { VoiceOrb } from "@/features/voice/VoiceOrb";
-import { Button, Card, cx, EmptyState, ErrorState, fadeRise, MicIcon } from "@/ui";
+import { Button, Card, EmptyState, ErrorState, fadeRise, MicIcon } from "@/ui";
 import { CallLogPanel } from "./CallLogPanel";
+import { HOTEL, RECEPTIONIST_NAME } from "./hotel";
+import { PhoneCall } from "./PhoneCall";
 import { RecordCard } from "./RecordCard";
-import type { ReceptionRecord } from "./records";
+import type { BookingRecord, ReceptionRecord } from "./records";
 import { useReceptionVoice } from "./useReceptionVoice";
 import { useStaffMarks, type StaffMark } from "./useStaffMarks";
 import { useStoredRecords } from "./useStoredRecords";
 
-const STATUS: Record<VoicePhase, string> = {
-  idle: "Trykk og snakk som en gjest.",
-  connecting: "Kobler til resepsjonen …",
-  listening: "Lytter",
-  speaking: "Resepsjonisten snakker",
-};
-
-/** /resepsjon: call the AI receptionist as a guest; staff settle what it took down. */
+/** /resepsjon: a guest's phone calls the hotel (left); the hotel sees what Maria took down (right). */
 export function ReceptionScreen() {
   return (
     <ConversationProvider>
@@ -32,60 +27,60 @@ export function ReceptionScreen() {
 function ReceptionSession() {
   // Everything taken down, newest first, kept across reloads until staff settle it. Ticks live in useStaffMarks.
   const { records, add } = useStoredRecords();
-  const voice = useReceptionVoice(add);
   const { marks, mark } = useStaffMarks();
-  const busy = voice.phase === "connecting";
+  // Bookings Maria confirmed and staff did not cancel hold their room, so it is not sold twice.
+  const held = useMemo(
+    () =>
+      records.filter(
+        (r): r is BookingRecord => r.kind === "booking" && r.confirmed === true && marks[r.id] !== "avvist",
+      ),
+    [records, marks],
+  );
+  const voice = useReceptionVoice(add, held);
+  const micProblem = voice.problem?.kind === "mic-denied" || voice.problem?.kind === "no-mic";
 
   return (
     <main data-surface="light" className="flex-1 bg-bg px-4 pt-6 pb-12 text-text sm:px-6 lg:px-10 lg:pt-10">
       <header>
         <h1 className="text-2xl font-bold tracking-[-0.02em] sm:text-3xl sm:tracking-[-0.03em]">Resepsjon</h1>
-        <p className="mt-2 max-w-[56ch] text-base text-muted">
-          AI-resepsjonisten tar telefonen døgnet rundt, på gjestens språk. Bookinger og beskjeder venter her
-          til du bekrefter dem.
+        <p className="mt-2 max-w-[60ch] text-base text-muted">
+          Ring {HOTEL.name} som en gjest. {RECEPTIONIST_NAME}, hotellets virtuelle assistent, svarer døgnet rundt på
+          gjestens språk. Til venstre gjestens telefon, til høyre det resepsjonen ser.
         </p>
       </header>
 
       <div className="mt-8 grid max-w-6xl gap-8 lg:mt-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-10">
-        <div className="flex min-w-0 flex-col gap-6">
-          <section aria-label="Samtalekontroll" className="flex flex-col items-center gap-6 lg:pt-4">
-            {voice.problem?.kind === "mic-denied" || voice.problem?.kind === "no-mic" ? (
+        <section aria-label="Gjestens telefon" className="flex min-w-0 flex-col items-center gap-6">
+          <h2 className="text-sm font-semibold tracking-[0.08em] text-muted uppercase">Gjesten ringer</h2>
+          <PhoneCall
+            phase={voice.phase}
+            connected={voice.connected}
+            turns={voice.turns}
+            onCall={() => void voice.start()}
+            onHangUp={voice.stop}
+          />
+          {voice.problem &&
+            (micProblem ? (
               <MicrophoneProblem problem={voice.problem} onRetry={voice.start} />
             ) : (
-              <>
-                <VoiceOrb
-                  phase={voice.phase}
-                  getInputVolume={voice.getInputVolume}
-                  getOutputVolume={voice.getOutputVolume}
-                />
-                <p aria-live="polite" className="min-h-7 text-center text-lg font-medium text-text">
-                  {STATUS[voice.phase]}
-                </p>
-                {voice.connected ? (
-                  <Button variant="secondary" size="lg" className="w-full max-w-xs" onClick={voice.stop}>
-                    Legg på
-                  </Button>
-                ) : (
-                  <Button size="lg" className="w-full max-w-xs" loading={busy} onClick={() => void voice.start()}>
-                    Ring resepsjonen
-                  </Button>
-                )}
-                {voice.problem && <ServiceProblem problem={voice.problem} onRetry={voice.start} />}
-              </>
-            )}
-          </section>
-          <Card>
-            <Transcript
-              turns={voice.turns}
-              language={voice.language}
-              agentLabel="Resepsjonist"
-              emptyText="Trykk Ring resepsjonen og snakk som en gjest. Samtalen vises her."
-            />
-          </Card>
-        </div>
+              <ServiceProblem problem={voice.problem} onRetry={voice.start} />
+            ))}
+        </section>
 
-        {/* On a phone, what waits for a tap comes before the call controls once there is something. */}
-        <div className={cx("flex min-w-0 flex-col gap-10", records.length > 0 && "max-lg:order-first")}>
+        <div className="flex min-w-0 flex-col gap-10">
+          <section aria-labelledby="live-heading" className="flex flex-col gap-4">
+            <h2 id="live-heading" className="text-lg font-bold tracking-[-0.01em]">
+              Samtalen nå
+            </h2>
+            <Card>
+              <Transcript
+                turns={voice.turns}
+                language={voice.language}
+                agentLabel={RECEPTIONIST_NAME}
+                emptyText={`Trykk på den grønne knappen på telefonen og snakk som en gjest. Det du og ${RECEPTIONIST_NAME} sier, vises her.`}
+              />
+            </Card>
+          </section>
           <section aria-labelledby="records-heading" className="flex flex-col gap-4">
             <h2 id="records-heading" className="text-lg font-bold tracking-[-0.01em]">
               Bookinger og beskjeder

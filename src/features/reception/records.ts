@@ -3,7 +3,11 @@ import type { Perk, RoomTypeId } from "./hotel";
 export const MESSAGE_TOPICS = ["booking", "question", "complaint", "lost_item", "other"] as const;
 export type MessageTopic = (typeof MESSAGE_TOPICS)[number];
 
-/** A booking request waiting for staff (Venter). Nothing is booked until staff call back. */
+/**
+ * A booking the receptionist took. She confirms it in the call when the room is free (checked by code,
+ * never from what the caller says); staff can still cancel it. Older stored bookings without
+ * `confirmed` are requests waiting for staff (Venter).
+ */
 export type BookingRecord = {
   kind: "booking";
   id: string;
@@ -23,6 +27,8 @@ export type BookingRecord = {
   pricePerNight: number;
   /** Agreed total for the stay, breakfast included. */
   directTotal: number;
+  /** True when the receptionist confirmed it because the room was free. */
+  confirmed: boolean;
 };
 
 /** A message for staff to call back about (Ring tilbake). */

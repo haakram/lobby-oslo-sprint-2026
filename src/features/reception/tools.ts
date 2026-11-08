@@ -27,7 +27,8 @@ import { normalizePhone, scrubText } from "./scrub";
 /**
  * The receptionist's five tools. The same pure handlers run as browser client tools and behind
  * the webhook route. Arguments come from speech: untrusted, so every tool parses them first.
- * Nothing here books anything: the two record tools only leave a request for staff.
+ * record_booking_request confirms a booking only when code finds the room free for the whole stay;
+ * the price comes from the discount step, never from the caller. Payment is taken at arrival.
  */
 export type ReceptionToolName =
   | "get_room_price"
@@ -112,7 +113,6 @@ const REPLY = {
     "Feil: telefonnummeret må ha 8 til 15 sifre (bare sifre, mellomrom, +, - og parenteser). Spør gjesten på nytt. Ingenting er registrert.",
   noMessage: "Feil: beskjeden er tom. Ingenting er registrert.",
   full: `Feil: registeret for denne samtalen er fullt (høyst ${MAX_RECORDS_PER_CALL}). Ingenting mer er registrert; be gjesten ringe resepsjonen igjen senere.`,
-  notConfirmed: "Rommet er ikke bekreftet ennå: personalet ringer tilbake for å bekrefte.",
   badStep: `Feil: oppgi room og step som et helt tall fra 1 til ${LAST_DISCOUNT_STEP}. Gå ett trinn om gangen.`,
   badDiscount: `Feil: discount_step må være et helt tall fra 0 til ${LAST_DISCOUNT_STEP}, og perk (${PERK_IDS.join(" eller ")}) gjelder bare fra trinn 1. Ingenting er registrert.`,
 } as const;
@@ -262,12 +262,13 @@ export function createReceptionTools(
         perk,
         pricePerNight,
         directTotal: total,
+        confirmed: true,
       });
       if (outcome === "full") return REPLY.full;
       if (outcome === "duplicate") {
-        return `Denne forespørselen er allerede registrert. ${REPLY.notConfirmed}`;
+        return "Denne bookingen er allerede bekreftet i denne samtalen. Ikke book den på nytt.";
       }
-      return `Forespørselen er registrert og venter på personalet: ${offer.room.name} fra ${result.arrival} til ${result.departure}, ${result.guests} ${result.guests === 1 ? "gjest" : "gjester"}, ${total} kr direkte med frokost (${pricePerNight} kr per natt)${perk ? `, med ${PERKS[perk].toLowerCase()}` : ""}. Rommet er ikke bekreftet ennå: personalet ringer tilbake på nummeret som slutter på ${phoneEnding(phone)} for å bekrefte.`;
+      return `Bookingen er bekreftet: ${offer.room.name} fra ${result.arrival} til ${result.departure}, ${result.guests} ${result.guests === 1 ? "gjest" : "gjester"}, ${total} kr direkte med frokost (${pricePerNight} kr per natt)${perk ? `, med ${PERKS[perk].toLowerCase()}` : ""}. Rommet holdes på gjestens navn. Betaling skjer ved ankomst i resepsjonen. Ved spørsmål ringer hotellet nummeret som slutter på ${phoneEnding(phone)}.`;
     },
 
     async record_message(params) {

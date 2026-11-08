@@ -52,6 +52,7 @@ const BOOKING: BookingRecord = {
   perk: null,
   pricePerNight: 1521,
   directTotal: 3042,
+  confirmed: false,
 };
 
 const MESSAGE: MessageRecord = {
@@ -112,25 +113,26 @@ describe("ReceptionScreen", () => {
     vi.unstubAllGlobals();
   });
 
-  it("labels the agent's turns Resepsjonist, not Fettero", () => {
+  it("labels the agent's turns Maria, not Fettero", () => {
     fake.turns = [
       { id: "t1", role: "agent", text: "Hei, velkommen.", language: null },
       { id: "t2", role: "user", text: "Hei.", language: null },
     ];
     stubCalls(ok({ calls: [] }));
     render(<ReceptionScreen />);
-    expect(screen.getByText("Resepsjonist")).toBeInTheDocument();
+    expect(screen.getAllByText("Maria").length).toBeGreaterThan(0);
     expect(screen.queryByText("Fettero")).not.toBeInTheDocument();
   });
 
-  it("starts with one way to call the receptionist and no requests yet", async () => {
+  it("starts with a phone that calls Lobby and no requests yet", async () => {
     stubCalls(ok({ calls: [] }));
     render(<ReceptionScreen />);
     expect(screen.getByRole("heading", { level: 1, name: "Resepsjon" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ring resepsjonen" })).toBeEnabled();
-    expect(screen.getByText("Trykk og snakk som en gjest.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Lobby" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ring Lobby" })).toBeEnabled();
+    expect(screen.getByText("Trykk på den grønne knappen for å ringe")).toBeInTheDocument();
     expect(screen.getByText("Ingen forespørsler ennå")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Ring resepsjonen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ring Lobby" }));
     expect(fake.start).toHaveBeenCalledTimes(1);
     await screen.findByText("Ingen samtaler ennå");
   });
@@ -315,7 +317,7 @@ describe("ReceptionScreen", () => {
       await screen.findByText("Ingen samtaler ennå");
       fake.connected = true;
       view.rerender(<ReceptionScreen />);
-      expect(screen.getByRole("button", { name: "Legg på" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Legg på samtalen med Lobby" })).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledTimes(1);
       fake.connected = false;
       view.rerender(<ReceptionScreen />);

@@ -57,8 +57,11 @@ export const ROOM_TYPES: readonly RoomType[] = [
   },
 ];
 
+/** The AI receptionist's name: she says it, and that she is a virtual (AI) assistant. */
+export const RECEPTIONIST_NAME = "Maria";
+
 export const HOTEL = {
-  name: "Hotell Nattskift",
+  name: "Lobby",
   city: "Oslo",
   address: "Nattergalveien 12, 0150 Oslo",
   checkIn: "15:00",
@@ -75,12 +78,12 @@ export const HOTEL = {
     "Førerhunder og andre assistansehunder er alltid velkomne, uten tillegg.",
   ],
   privacy: {
-    controller: "Hotell Nattskift AS",
-    email: "personvern@nattskift.example",
+    controller: "Lobby Hotell AS",
+    email: "personvern@lobby.example",
     retentionDays: 30,
   },
 } as const satisfies {
-  name: "Hotell Nattskift";
+  name: "Lobby";
   city: "Oslo";
   address: string;
   checkIn: "15:00";

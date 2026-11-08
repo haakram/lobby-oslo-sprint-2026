@@ -277,7 +277,7 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
    seeds: the 04:08 forecast gave 2,035 (80 % 1,898–2,186), and the rehearsal's best 9 of 10 came in at
    2,176, inside it. A second forecast from the rehearsal alone, also committed before the final: 2,170
    (80 % 2,055–2,301); after 13:05 the final goes next to both. The page itself has no language model in it: every line is a projection of logs, so it can't make
-   anything up. The run-log contract is a file, `docs/runlog.schema.json`, with an Open-RMF adapter beside the Wybe one: Natteskift's *Robotlogg* switch shows the same judgement card on an Open-RMF sample night (our own example, labelled), shaped like the compartment robots hotels actually run: the guest's PIN plus an empty compartment is *bekreftet*; the robot's own credential plus its own photo only *robotens egen observasjon*. "Confirmed" needs a signal from outside the robot.
+   anything up. The run-log contract is a file, `docs/runlog.schema.json`, with an Open-RMF adapter beside the Wybe one: Natteskift's *Robotlogg* switch drives the whole page, not just the card: the demo night; a second real log, the hotel-rules night on seed 16 (2,584 points: a knock before all 14 keycard entries and no sign moved off a wet floor, but it still slipped in 2B at 23:51, and the card's *Ved skiftslutt* shows the master keycard still in hand); and an Open-RMF sample night (our own example, labelled) with its own figures and no score, shaped like the compartment robots hotels actually run: the guest's PIN plus an empty compartment is *bekreftet*; the robot's own credential plus its own photo only *robotens egen observasjon*. "Confirmed" needs a signal from outside the robot.
 4. **Business (1–2 min; Founders, Marketing).** The business slide, § 7: one buyer, one price with its
    arithmetic, today's tools, the channel, Monday's next step, the first 100 users.
 5. **Team (20 s; Team efficiency, Founders).** Hamad (agent, app, tooling) and ShirazIQ (UI, voice,
@@ -511,7 +511,7 @@ Follow-up, *"Which build plays at noon, and which would you put in a real hotel?
 > against 2,591, and knocked before 59 of 59 keycard entries, against 26 of 61 for the final build on
 > the same seeds; in our replay bed, 164 nights, almost all of the cost is never moving a sign off a wet
 > floor with three in store. The knock isn't politeness, it's a sensor: a voice behind the door stops
-> the entry. And what it still gets wrong: at the last status of each of those four nights the robot wasn't docked, and on two it still held the master keycard. 'Home by 05:45 with the keycard back' isn't a rule yet; our page lists the robot's 06:00 state as an item with an owner."
+> the entry. And what it still gets wrong: on two of those four nights it ended the shift at a lift, not on the charger, and on two it still held the master keycard at 06:00. On seed 16, the hotel-rules night on Natteskift, the card says so itself: on the charger, keycard in hand. 'Home by 05:45 with the keycard back' isn't a rule yet; our page lists the robot's 06:00 state as an item with an owner."
 
 Don't say "we switched off the sign move": `sign_move` is still in `DEFAULT_EXPERIMENTS` on
 `hamad/final`. Sim-to-real gaps to name before they're asked: in a pilot the robot doesn't open booked

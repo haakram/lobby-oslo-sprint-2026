@@ -22,8 +22,9 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
    2. **Åpne Rom → *Robotens romsjekk mot bookingsystemet*:** the robot found two rooms empty that the
       booking system has as occupied, *2 rom kan selges i dag · ca. 2 900 kr*; *Merk som ledig for
       salg* is one tap.
-   3. **Forespørsler → the robot's open request → *Ta over*:** what the robot didn't finish, it hands
-      over; a person takes it in one tap. Then **3D-kart → *Spill av*:** the robot's real night.
+   3. **Forespørsler → the robot's open request → *Ta saken*:** what the robot didn't finish, it hands
+      over with the reason; a person takes it in one tap. Then **3D-kart → *Spill av*:** the robot's
+      real night.
 
 Also worth a look: **Robotens øyne** on a phone (camera boxes; tap a product and Claude names it
 without a barcode), **Resepsjon** (allow the microphone, then *Ring resepsjonen*: the ElevenLabs AI

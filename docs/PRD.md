@@ -78,8 +78,9 @@ Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kje
 2. **Rom → Robotens romsjekk mot bookingsystemet** (0:20–0:45): *2 rom kan selges i dag · ca. 2 900
    kr* (2 × the test PMS's average rate); *Merk som ledig for salg*. The robot proposes, the manager
    releases.
-3. **Forespørsler → Ta over** (0:45–1:05): a request the robot genuinely didn't finish (its battery hit
-   9 % at 05:29; four requests were open at 06:00) is taken over by a person, with *Angre*.
+3. **Forespørsler → Ta saken** (0:45–1:05): a request the robot genuinely didn't finish (its battery
+   hit 9 % at 05:29; four requests were open at 06:00, each with its reason) is taken over by a person,
+   with *Angre*.
 4. **3D-kart at 04:15** (1:05–1:25): the robot's real night replayed from its run log; a man in a
    bathrobe asks it to open room 304.
 5. **Robotens vurderinger i natt** on Overlevering (1:25–1:50): seven refusals to let a stranger into a

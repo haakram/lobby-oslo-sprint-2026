@@ -3,9 +3,9 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Role } from "@/features/auth/roles";
 import { SessionProvider } from "@/features/auth/SessionProvider";
-import { MODULE_GROUPS, MODULES, moduleById, PILOT_MODULES } from "@/features/modules/registry";
+import { MODULE_GROUPS, MODULES } from "@/features/modules/registry";
 import { AppNav } from "./AppNav";
-import { barItemsFor, groupsFor, NAV_GROUPS, OUTSIDE_HINT } from "./nav";
+import { barItemsFor, groupsFor, NAV_GROUPS } from "./nav";
 
 const path = vi.hoisted(() => ({ current: "/" }));
 vi.mock("next/navigation", () => ({ usePathname: () => path.current }));
@@ -16,11 +16,8 @@ function as(role: Role, children: ReactNode) {
   return <SessionProvider session={session}>{children}</SessionProvider>;
 }
 
-/** The user plate's button (the admin's rail also has the *Utenfor piloten* disclosure). */
+/** The user plate's button (the name on it). */
 const plateOf = (name: string | RegExp = /Hamad|Test|Ingrid/) => screen.getByRole("button", { name });
-
-/** The admin's pilot screens, in the pilot's order (Overlevering 06:00, Nattevaktens logg, Rom og renhold, Forespørsler, Natteskift). */
-const PILOT_NAMES = PILOT_MODULES.map((id) => moduleById(id).name);
 
 /** jsdom has no media queries, so AppNav reads as desktop; this says "a phone". */
 function onAPhone() {
@@ -71,37 +68,41 @@ describe("the navigation groups, from the module registry", () => {
   });
 
   it("keeps the host's group off the admin's hotel rail, except on the host's own screens", () => {
-    expect(groupsFor("admin").map((group) => group.id)).toEqual(["start", "pilot", "outside"]);
-    expect(groupsFor("admin", { pathname: "/vert/drift" }).map((group) => group.id)).toEqual(["start", "pilot", "utleie", "outside"]);
+    expect(groupsFor("admin").map((group) => group.label)).toEqual(["Hotellet", "Drift", "Roboten", "Resepsjon"]);
+    expect(groupsFor("admin", { pathname: "/vert/drift" }).map((group) => group.label)).toEqual(["Hotellet", "Drift", "Roboten", "Resepsjon", "Utleie"]);
     expect(groupsFor("admin", { pathname: "/vertskap" }).map((group) => group.id)).not.toContain("utleie");
   });
 
-  it("cuts the admin's menu to the pilot: Oversikt, then the pilot screens, every other screen under one folded group", () => {
-    // Review round 3 (product review): 13 modules in the sidebar for a four-screen pilot. siri, jury and admin are all admins.
-    const [start, pilot, outside] = groupsFor("admin", { services: [] });
-    expect(start).toMatchObject({ label: "", items: [expect.objectContaining({ href: "/", label: "Oversikt" })] });
-    expect(pilot.label).toBe("Piloten");
-    // Review round 5: the night clerk's log that feeds the handover sits right after it.
-    expect(pilot.items.map((item) => item.href)).toEqual(["/overlevering", "/natt", "/rom", "/foresporsler", "/natteskift"]);
-    expect(outside).toMatchObject({ label: "Utenfor piloten", collapsible: true });
-    expect(outside.items.map((item) => item.href)).toEqual(["/gjester", "/ruter", "/vedlikehold", "/lager", "/ansatte", "/hotell", "/oyne", "/resepsjon"]);
-    // Nothing is dropped: every hotel screen is still in the menu, once.
+  it("gives the admin the hotel's full grouped menu, the same grouping as the other roles", () => {
+    // Round 5 adds the night clerk's log (Nattevaktens logg) to Drift.
+    const groups = groupsFor("admin", { services: [] });
+    expect(groups.map((group) => group.label)).toEqual(["Hotellet", "Drift", "Roboten", "Resepsjon"]);
+    expect(groups.flatMap((group) => group.items.map((item) => item.href))).toEqual([
+      "/",
+      "/rom",
+      "/gjester",
+      "/ruter",
+      "/overlevering",
+      "/natt",
+      "/foresporsler",
+      "/vedlikehold",
+      "/lager",
+      "/ansatte",
+      "/hotell",
+      "/natteskift",
+      "/oyne",
+      "/resepsjon",
+    ]);
+    // Nothing is dropped: every hotel screen is in the menu, once (Stemme once the server has the voice agent).
     const hotel = MODULES.filter((module) => module.group !== "utleie" && module.id !== "stemme").map((module) => module.route);
-    expect([start, pilot, outside].flatMap((group) => group.items.map((item) => item.href)).sort()).toEqual([...hotel].sort());
-    // The voice screen joins the folded group once the server has the agent.
-    expect(groupsFor("admin", { services: ["voice-agent"] })[2].items.map((item) => item.href)).toContain("/stemme");
-  });
-
-  it("leaves the other roles' menus as they were: no pilot cut for the desk, the robot manager or the host", () => {
-    for (const role of ["receptionist", "robot", "host"] as const) {
-      expect(groupsFor(role).map((group) => group.id)).not.toContain("pilot");
-      expect(groupsFor(role).some((group) => group.collapsible)).toBe(false);
-    }
+    expect(groups.flatMap((group) => group.items.map((item) => item.href)).sort()).toEqual([...hotel].sort());
+    // The voice screen joins once the server has the agent.
+    expect(groupsFor("admin", { services: ["voice-agent"] }).flatMap((group) => group.items.map((item) => item.href))).toContain("/stemme");
   });
 
   it("leaves out a screen whose service the server lacks; unknown services show everything", () => {
     const count = (role: Role, services?: readonly "voice-agent"[]) => groupsFor(role, { services }).flatMap((group) => group.items).length;
-    // The demo menus before → after (review round 1): admin 18 → 13, robot manager 10 → 9, the desk 8, the host 4;
+    // The demo menus (jury round 1): admin 18 → the hotel's 14, robot manager 10 → 9, the desk 8, the host 4;
     // round 5 adds the night clerk's log for the admin and the desk.
     expect({ admin: count("admin", []), robot: count("robot", []), receptionist: count("receptionist", []), host: count("host", []) }).toEqual({
       admin: 14,
@@ -115,11 +116,11 @@ describe("the navigation groups, from the module registry", () => {
   });
 
   it("fills the phone bar with the role's pinned screens first, then the rest in order", () => {
-    // The admin's own bar leads with the 06:00 handover (review round 3).
+    // The admin's own bar leads with the 06:00 handover (jury round 3).
     expect(barItemsFor("admin", 4).map((item) => item.href)).toEqual(["/", "/overlevering", "/rom", "/foresporsler"]);
     expect(barItemsFor("admin", 4).map((item) => item.short)).toEqual(["Oversikt", "Overlevering", "Rom", "Forespørsler"]);
-    // Topped up from the rest in menu order when there is room for more: the pilot's next screen first.
-    expect(barItemsFor("admin", 5).map((item) => item.href)).toEqual(["/", "/overlevering", "/rom", "/foresporsler", "/natt"]);
+    // Topped up from the rest in menu order when there is room for more.
+    expect(barItemsFor("admin", 5).map((item) => item.href)).toEqual(["/", "/overlevering", "/rom", "/foresporsler", "/gjester"]);
     expect(barItemsFor("receptionist", 4).map((item) => item.href)).toEqual(["/", "/rom", "/gjester", "/foresporsler"]);
     expect(barItemsFor("robot", 4).map((item) => item.href)).toEqual(["/", "/rom", "/foresporsler", "/vedlikehold"]);
     // Fewer pinned screens than places: topped up in group order.
@@ -128,45 +129,24 @@ describe("the navigation groups, from the module registry", () => {
 });
 
 describe("AppNav on a desktop (the rail)", () => {
-  it("shows the admin the pilot: Oversikt and the pilot screens, the rest folded under Utenfor piloten", () => {
+  it("lists the admin's screens under Hotellet, Drift, Roboten and Resepsjon, in registry order: the hotel only", () => {
     render(as("admin", <AppNav services={[]} />));
     const labels = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(labels).toEqual([expect.stringContaining("Fettero"), "Oversikt", ...PILOT_NAMES]);
-    expect(PILOT_NAMES).toEqual(["Overlevering 06:00", "Nattevaktens logg", "Rom og renhold", "Forespørsler", "Natteskift"]);
-    expect(screen.getByText("Piloten")).toBeInTheDocument();
-    for (const group of ["Hotellet", "Drift", "Roboten", "Utleie"]) expect(screen.queryByText(group)).not.toBeInTheDocument();
-    // Folded: its label and how many screens it holds, nothing of what is inside.
-    const outside = screen.getByRole("button", { name: "Utenfor piloten, 8 skjermer" });
-    expect(outside).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("link", { name: "Lager og lin" })).not.toBeInTheDocument();
-    expect(screen.queryByText(OUTSIDE_HINT)).not.toBeVisible();
-
-    // One tap opens it: reachable, in registry order, with one honest line on what they are.
-    fireEvent.click(outside);
-    expect(outside).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText(OUTSIDE_HINT)).toBeVisible();
-    const after = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(after.slice(7)).toEqual(["Gjester og bookinger", "Ruter", "Vedlikehold", "Lager og lin", "Ansatte og vakter", "3D-kart", "Robotens øyne", "Resepsjon"]);
+    // The hotel's screens (Stemme is out without the voice agent), each once, in registry order under its group.
+    const hotel = MODULES.filter((module) => module.group !== "utleie" && module.id !== "stemme").map((module) => module.name);
+    expect(labels).toEqual([expect.stringContaining("Fettero"), ...hotel]);
+    // The demo rail: 14 hotel screens, not 18 (the host's app is one tap away on the user plate).
+    expect(hotel).toHaveLength(14);
+    expect(screen.queryByText("Utleie")).not.toBeInTheDocument();
+    for (const group of ["Hotellet", "Drift", "Roboten", "Resepsjon"]) expect(screen.getAllByText(group).length).toBeGreaterThan(0);
+    // The full grouped menu, not a Piloten / Utenfor piloten cut.
+    expect(screen.queryByText("Piloten")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Utenfor piloten/ })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "3D-kart" })).toHaveAttribute("href", "/hotell");
     expect(screen.getByRole("link", { name: "Lager og lin" })).toHaveAttribute("href", "/lager");
-    fireEvent.click(outside);
-    expect(screen.queryByRole("link", { name: "Lager og lin" })).not.toBeInTheDocument();
   });
 
-  it("opens Utenfor piloten by itself while one of its screens is on, so the current screen is never hidden", () => {
-    path.current = "/gjester";
-    const { unmount } = render(as("admin", <AppNav services={[]} />));
-    expect(screen.getByRole("button", { name: /^Utenfor piloten/ })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("link", { name: "Gjester og bookinger" })).toHaveAttribute("aria-current", "page");
-    unmount();
-    // A pilot screen keeps it folded.
-    path.current = "/natteskift";
-    render(as("admin", <AppNav services={[]} />));
-    expect(screen.getByRole("button", { name: /^Utenfor piloten/ })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByRole("link", { name: "Natteskift" })).toHaveAttribute("aria-current", "page");
-  });
-
-  it("keeps the desk's rail when an admin views as Resepsjonist (the cut is the admin's own menu)", () => {
+  it("gives the admin the same grouped rail when viewing as Resepsjonist, scoped to the desk's screens", () => {
     const session = { user: { u: "siri", name: "Siri Haugen", role: "admin" as const }, view: "receptionist" as const, effectiveRole: "receptionist" as const, exp: 0 };
     render(
       <SessionProvider session={session}>
@@ -393,7 +373,7 @@ describe("AppNav on a phone (the bar and Meny)", () => {
     expect(bar.getByRole("button", { name: "Meny" })).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("gives the admin's Meny the pilot first and Utenfor piloten folded, with each screen's line once opened", () => {
+  it("gives the admin's Meny the full grouped menu, every screen with its line, no pilot cut", () => {
     onAPhone();
     path.current = "/overlevering";
     render(as("admin", <AppNav services={[]} />));
@@ -401,19 +381,13 @@ describe("AppNav on a phone (the bar and Meny)", () => {
     expect(bar.getAllByRole("link").map((link) => link.textContent)).toEqual(["Oversikt", "Overlevering", "Rom", "Forespørsler"]);
     fireEvent.click(bar.getByRole("button", { name: "Meny" }));
     const sheet = within(screen.getByRole("dialog", { name: "Meny" }));
-    expect(sheet.getByText("Piloten")).toBeInTheDocument();
-    expect(sheet.getAllByRole("link").map((link) => link.textContent)).toEqual([
-      "OversiktHele hotellet nå",
-      "Overlevering 06:00Natten oppsummert for morgenvakten, med kvittering",
-      "Nattevaktens loggRom, farer og notater fra nattevakten til overleveringen",
-      "Rom og renholdRomstatus, renholdere og dagens runde",
-      "ForespørslerAlt gjestene ber om, fra telefon, robot og personale",
-      "NatteskiftRobotens natt, steg for steg",
-    ]);
-    const outside = sheet.getByRole("button", { name: "Utenfor piloten, 8 skjermer" });
-    expect(outside).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(outside);
+    // The hotel's groups, not a Piloten / Utenfor piloten cut ("Resepsjon" is also a screen name, so allow both).
+    for (const group of ["Hotellet", "Drift", "Roboten", "Resepsjon"]) expect(sheet.getAllByText(group).length).toBeGreaterThan(0);
+    expect(sheet.queryByText("Piloten")).not.toBeInTheDocument();
+    expect(sheet.queryByRole("button", { name: /^Utenfor piloten/ })).not.toBeInTheDocument();
+    // Every hotel screen is listed at once (Stemme is out without the voice agent), each with its line.
     expect(sheet.getByRole("link", { name: /^Lager og lin/ })).toHaveTextContent("Lin og utstyr per lagerrom");
+    expect(sheet.getByRole("link", { name: /^Overlevering 06:00/ })).toHaveAttribute("aria-current", "page");
     expect(sheet.getAllByRole("link")).toHaveLength(14);
   });
 });

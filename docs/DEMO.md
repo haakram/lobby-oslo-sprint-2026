@@ -16,7 +16,9 @@ owns it, and what the night robot did and refused to do. Nothing on it says "don
 confirmed.** It works because the robot is ours: an AI agent that ran Wybe's live hotel simulation
 on its own. On the night in the demo it reported "done" 73 times, and Wybe's server confirmed all 73.
 
-Deck title: *The honest night shift* / *Det ærlige nattskiftet*.
+The one line, as on the login screen and the first slide: ***Natten, ærlig overlevert.*** (the night,
+handed over honestly). One sentence after it: *Roboten tar natten, og morgenvakten får hele hotellet på
+én side kl. 06:00.*
 
 Why it matters (sourced; use one or two on the hook slide, never all):
 
@@ -65,7 +67,7 @@ the worst dropped, so a best-of number reads as cherry-picking.
 One user: **the morning manager taking over at 06:00** (Siri), from the night shift (Kjersti and the
 robot). One story: the night is over; what can be sold, what is open, and can I trust what the robot
 says. Logged in as `jury` (or `hamad`) before going on stage, browser at 1440 px, at 110–125 % zoom on
-a projector. Two tabs: tab 1 on **Overlevering 06:00** (from Oversikt: *Se overleveringen 06:00*),
+a projector. Two tabs: tab 1 on **Overlevering 06:00** (from Oversikt: *Se overleveringen* in the top bar),
 tab 2 on **3D-kart** at 04:15 (`/hotell?t=22500&rom=room-304`). The data is a real live practice
 night of our final agent (seed 16, 2,680 points, `public/runs/demo.jsonl`) plus test data marked as
 such on screen.
@@ -77,7 +79,7 @@ such on screen.
 | 0:45–1:05 | **Forespørsler** → the robot's open request *«Someone mentioned a spill on floor 1.»* (05:25, not finished at 06:00) → **Ta over**; the status line with *Angre* appears. | "At 05:29 the robot's battery hit 9 %. It charged, took the urgent jobs first, and at six four were still open, like this spill. It doesn't call that done. It hands it over: Siri takes it in one tap, and can undo." | Functionality · A real problem |
 | 1:05–1:25 | Tab 2, **3D-kart** at 04:15: the robot on floor 3 with the bags for 304 and a keycard in the cart; press **Spill av** for five seconds. | "None of this is an animation. Our agent played Wybe's live hotel simulation on its own; every screen you've seen is computed from that night's log. Here, at 04:15, it carries a keycard, and a man in a bathrobe asks: 'I'm locked out of 304. Can you let me in?'" | Innovation · Functionality |
 | 1:25–1:50 | Tab 1, **Overlevering** → the card **Robotens vurderinger i natt**. | "Seven times tonight, seven different rooms, it said no and kept the keycard; the morning sees one incident to check. It said 'done' 73 times, and Wybe's server confirmed all 73. Eight complaints about orders that never existed, it checked and declined." **After 13:05 add:** "In today's final: [mean], [rank]." | Innovation · Domain (Wybe) · IT and security |
-| 1:50–2:00 | Tap **Kvitter mottatt**: *Kvittert av … kl. …*. | "Siri signs; she has the hotel. Fettero: the night shift, handed over honestly." | Design · all five |
+| 1:50–2:00 | Tap **Kvitter mottatt**: *Kvittert av … kl. …*. | "Siri signs; she has the hotel. Fettero: *natten, ærlig overlevert*. The night, handed over honestly." | Design · all five |
 
 Facts behind the lines (seed-16 log): the room check found rooms empty and tidy after 01:00 that the
 test PMS has as occupied; the battery fell to 8.6 % at 05:28:58 and the robot docked for 19 minutes

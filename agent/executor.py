@@ -105,6 +105,17 @@ END_MARGIN = 2.0  # was DOCK_MARGIN (5): at 05:47 with 14.4 % that sent the robo
 # target ran 15-25 min after 05:00 with 6-14 requests waiting and ended the night with 13-22 % unused
 # (replay seeds 9, 16, 23).
 END_STOP = True
+# In-flow battery guard (live seed 23, 05:51, stranded -200: a lost-item hunt started at exactly 15.0 % ran 9 scans,
+# 05:35-05:47, past the server's "Battery below 5%" at 05:43; the battery was only checked between tasks). Before
+# each step of a running flow (each outermost walk, each hunt scan) the task stops, goes back to the queue
+# unreported and the robot charges when the server said "Battery below 5%", when the battery is under the dock
+# reserve from here, or under it + FLOW_MARGIN and it does not last the night. A task starts only when the
+# battery covers its estimated drain (planner estimate x DRAIN_PER_MIN) + the dock reserve from where it ends,
+# unless the battery lasts the night; else a forced block first.
+FLOW_MARGIN = 3.0
+BATTERY_EVENT = re.compile(r"battery\s+below\s+(\d+(?:\.\d+)?)\s*%", re.IGNORECASE)  # [obs] "Battery below 5%."
+BATTERY_ALARM_LEVEL = 5.0  # the server's "Battery below 5%. The robot is slowing down.": always a charge
+LOW_REQUEUES_MAX = 2  # a task put back this often for the battery is reported failed the next time
 CHARGE_ROUNDS = 20  # docks per charge: a forced block chains short docks, each woken by a message
 # A forced charge is a block: dock, read the inbox when a message wakes it (0 s), dock again, up to
 # this target. Live seed 16 ran ~20 forced cycles after 03:21, each a walk to the dock that the next
@@ -162,6 +173,11 @@ class TaskSkipped(Exception):
     """The manager skipped the running request mid-task ("Skip R-NNN, ... checked out"): it was already
     reported cancelled, so the task stops where it is, with no report of its own. Not an ActionFailed:
     the flows' own handlers (a scan place out of reach, a top-up) must not swallow it."""
+
+
+class LowBattery(Exception):
+    """The in-flow battery guard stopped the running task before its next step: it goes back to the queue,
+    unreported, and the robot charges. Not an ActionFailed: the flows' own handlers must not swallow it."""
 
 
 class OutOfStock(ActionFailed):
@@ -257,6 +273,9 @@ class Executor:
         self._refused_run = 0  # how many times in a row that same move was refused
         self._moves = 0
         self._in_go = 0
+        self._charging = 0  # > 0 inside a charge block: the in-flow guard stays quiet (its walk is to the dock)
+        self._battery_alarm = False  # the server said "Battery below 5%" since the last dock
+        self._low_requeues: dict[str, int] = {}  # request -> times the battery guard put it back
         self.cart_needed = False  # a tray or bags flow: never drop the cart to reach the stairs
         self.calls = 0  # commands sent; a look is "fresh" while nothing was sent after it
         self._look_call: dict[str, int] = {}
@@ -315,10 +334,28 @@ class Executor:
                 self.inbox_waiting = True
             elif ev.get("type") == "dock":
                 self.state.docked = False
+            elif ev.get("type") == "battery":
+                self._battery_event(str(ev.get("text", "")))
             elif ev.get("type") == "person":
                 at = reply.result.get("at") if isinstance(reply.result, dict) else None
                 self._person(str(ev.get("text", "")), at if isinstance(at, str) else None)
         return reply
+
+    def _battery_event(self, text: str) -> None:
+        """"Battery below 15%." / "Battery below 5%. The robot is slowing down." [obs]: the battery is at most
+        that level now; below BATTERY_ALARM_LEVEL the in-flow guard charges at the next step, whatever the clock."""
+        m = BATTERY_EVENT.search(text)
+        if m is None:
+            return
+        level = float(m[1])
+        battery = self._battery()
+        if battery is None or battery > level:
+            self.state.battery = level
+            self._note_battery(level)
+        if level <= BATTERY_ALARM_LEVEL:
+            self._battery_alarm = True
+        self.log("battery_event", level=level, battery=self._battery(), at=self.state.location,
+                 running=self.current.request if self.current is not None else None)
 
     def log(self, decision: str, /, **data) -> None:
         self.session.log_decision(decision, data)
@@ -836,6 +873,8 @@ class Executor:
         A move refused as closed off (cleaning) closes that edge for BLOCK_S and plans again from
         here (live seed 3: 125 retries of one closed move stranded the robot).
         Interruptible walks (the way back to the dock) may stop short once a message is waiting."""
+        if self._in_go == 0:
+            self.battery_guard()  # a step of a running flow: enough battery for it?
         self._top_up_before_up(dst)
         looked = False
         self._in_go += 1
@@ -1516,6 +1555,90 @@ class Executor:
         then is lost work). A battery under the dock reserve is charged anyway (_charge)."""
         return battery >= self._needed_to_six()
 
+    def battery_guard(self) -> None:
+        """Before each step of a running flow (each outermost walk, each hunt scan): LowBattery when the server
+        said "Battery below 5%" since the last dock, when the battery is under the dock reserve from here, or
+        under it + FLOW_MARGIN and it does not last the night. The battery is asked (a status, 0 s) only when
+        the pessimistic floor since the last stated battery (LOOP_DRAIN_PER_MIN) is that low. Quiet between
+        tasks and inside a charge (its walk is the one to the dock)."""
+        if self.current is None or self._charging:
+            return
+        dock = self.hotel.special.get("dock", "charging-dock")
+        reserve = self._dock_reserve(dock)
+        alarm = self._battery_alarm
+        if not alarm:
+            floor = self._battery_floor()
+            if floor is not None and floor >= reserve + FLOW_MARGIN:
+                return
+            self.refresh()
+        battery = self._battery()
+        if battery is None:
+            return
+        low = battery < reserve or (battery < reserve + FLOW_MARGIN and not self._lasts_the_night(battery))
+        if not (alarm or low):
+            return
+        self._battery_alarm = False
+        self.log("battery_abort", request=self.current.request, battery=battery, at=self.state.location,
+                 reserve=round(reserve, 1), alarm=alarm)
+        raise LowBattery(f"battery {battery:.1f}% at {self.state.location} (dock reserve {reserve:.1f}%"
+                         + (", the server's low-battery warning" if alarm else "") + ")")
+
+    def charge_for(self, task: Task) -> bool:
+        """A task starts only when the battery covers its estimated drain (the planner's seconds x
+        DRAIN_PER_MIN) plus the dock reserve from where it ends (its room, else here), unless the battery
+        lasts the night: otherwise a forced block first, up to that need + FLOW_MARGIN. True when it charged.
+        Called by flows.handle inside the task (a skip read during the charge declines it)."""
+        from agent.planner import UNREACHABLE_S, Params, estimate_seconds
+
+        battery = self._battery()
+        if battery is None or self._lasts_the_night(battery):
+            return False
+        try:
+            secs = estimate_seconds(task, self.state, self.hotel, self.params or Params(),
+                                    movable_signs=self.movable_signs())
+        except Exception:  # noqa: BLE001 - an estimate must never block a task
+            return False
+        if secs >= UNREACHABLE_S:
+            return False
+        dock = self.hotel.special.get("dock", "charging-dock")
+        end = task.room if task.room in self.hotel.nodes else self.state.location
+        try:
+            back = route_seconds(self.hotel, end, dock) if end != dock else 0.0
+        except NoRoute:
+            back = 0.0
+        drain = secs / 60 * DRAIN_PER_MIN
+        need = drain + back / 60 * DRAIN_PER_MIN + DOCK_MARGIN
+        if battery >= need:
+            return False
+        target = max(self._block_target(), min(need + FLOW_MARGIN, 100.0))
+        self.log("battery_low", battery=battery, at=self.state.location, dock=dock, reserve=round(need, 1),
+                 forced=True, target=round(target, 1), task=task.request, drain=round(drain, 1))
+        self._charge_block(target, forced=True)
+        self._decline_if_skipped()
+        return True
+
+    def _requeue_for_battery(self, task: Task, reason: str) -> Outcome:
+        """After LowBattery: the task back at the head of the queue (unreported; the planner picks again
+        after the charge), then a forced block. A task put back LOW_REQUEUES_MAX times is reported failed."""
+        n = self._low_requeues[task.request] = self._low_requeues.get(task.request, 0) + 1
+        if n > LOW_REQUEUES_MAX:
+            return self._finish(task, "failed", f"stopped twice for a low battery: {reason}", self.state.score)
+        if all(t.request != task.request for t in self.queue):
+            self.queue.insert(0, task)
+        self.log("task_requeued", request=task.request, reason=reason[:200], battery=self._battery())
+        dock = self.hotel.special.get("dock", "charging-dock")
+        reserve = self._dock_reserve(dock)
+        target = max(self._block_target(), min(reserve + FLOW_MARGIN, 100.0))
+        self.log("battery_low", battery=self._battery(), at=self.state.location, dock=dock,
+                 reserve=round(reserve, 1), forced=True, target=round(target, 1), task=task.request)
+        try:
+            self._charge_block(target, forced=True)
+        except ShiftEnded:
+            raise
+        except Exception as exc:  # noqa: BLE001 - the task is queued again; the loop goes on
+            self.log("charge_failed", error=type(exc).__name__, reason=str(exc)[:200])
+        return Outcome(task.request, "skipped", 0, f"put back for a charge: {reason}")
+
     def _decline_if_skipped(self) -> None:
         """A charge inside a running task's flow read the inbox: when the manager skipped that very
         request meanwhile (the ledger says so), the flow ends declined instead of doing 0-point work."""
@@ -1567,7 +1690,10 @@ class Executor:
             return False
         # The end-of-night guard skips only a charge forced by BATTERY_CRITICAL: never one under the
         # dock reserve (that robot could not get back to the dock).
-        forced = battery < max(BATTERY_CRITICAL, reserve) and (battery < reserve or not self._lasts_the_night(battery))
+        # At BATTERY_CRITICAL itself too (live seed 23: exactly 15.0 % at 05:32:57 with 27 min left deferred the
+        # charge, a hunt started and stranded).
+        low_now = battery <= BATTERY_CRITICAL or battery < reserve
+        forced = low_now and (battery < reserve or not self._lasts_the_night(battery))
         if not forced and self._work_waiting():
             self.log("charge_deferred", battery=battery, queued=len(self.queue), inbox=self.inbox_waiting,
                      running=self.current.request if self.current is not None else None)
@@ -1589,6 +1715,13 @@ class Executor:
         walk and no task in between; after FORCED_BLOCK_MAX_S no new dock starts once the battery
         is back to BATTERY_LOW. Not forced: a wake-up (or a message on the way) ends the charge,
         the request goes first. One `charge_block` decision line per block."""
+        self._charging += 1
+        try:
+            self._charge_rounds(target, forced=forced)
+        finally:
+            self._charging -= 1
+
+    def _charge_rounds(self, target: float, *, forced: bool) -> None:
         start_battery, start_s = self._battery(), self._now_s()
         woken = 0
         for _ in range(CHARGE_ROUNDS):
@@ -1739,6 +1872,8 @@ class Executor:
         robot knows, so the loop's next refresh needs no status call. No battery in the reply,
         or an event other than inbox/dock: nothing is assumed (the next refresh asks the server)."""
         self.state.docked = reply.ok
+        if reply.ok:
+            self._battery_alarm = False  # charged since the server's "Battery below 5%"
         m = DOCK_BATTERY.search(str(reply.result)) if reply.ok else None
         if m is None:
             return
@@ -1790,10 +1925,13 @@ class Executor:
         # A follow-up may run its waiting original inside; while set, work is waiting (no charge
         # but a forced one starts during the flow) and a mid-task skip can stop it.
         outer, self.current = self.current, task
+        low: str | None = None
         try:
             note, after = flows.handle(self, task)
         except (ShiftEnded, WybeError):
             raise
+        except LowBattery as exc:  # the in-flow guard: back to the queue, then a charge (after the finally)
+            low = str(exc)
         except TaskSkipped as exc:  # reported cancelled by the inbox read: no second report
             self.ledger.set_status(task.request, "skipped")  # logged like Task 22's unreported rise
             self.log("task_failed", request=task.request, status="skipped", points=0,
@@ -1811,6 +1949,8 @@ class Executor:
             return self._finish(task, "failed", f"internal error ({type(exc).__name__})", start)
         finally:
             self.current = outer  # the report and after() are past the point of a skip
+        if low is not None:
+            return self._requeue_for_battery(task, low)
         outcome = self._finish(task, "done", note, start)
         if after:  # the report is in: a hiccup here must not lose the outcome (or redo the task)
             try:

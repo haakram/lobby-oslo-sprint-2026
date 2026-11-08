@@ -30,15 +30,19 @@ const STATUS: Record<VoicePhase, string> = {
 };
 
 /** /stemme: talk to Fettero in any language; it answers out loud and shows what it means. */
-export function VoiceScreen() {
+/**
+ * `ready`: the server has the Fettero agent (ELEVENLABS_AGENT_ID and the key). Without it the screen says
+ * so calmly up front, instead of offering a button that can only end in "ikke satt opp".
+ */
+export function VoiceScreen({ ready = true }: { ready?: boolean }) {
   return (
     <ConversationProvider>
-      <VoiceSession />
+      <VoiceSession ready={ready} />
     </ConversationProvider>
   );
 }
 
-function VoiceSession() {
+function VoiceSession({ ready }: { ready: boolean }) {
   const picklist = usePicklist();
   const addToPicklist = picklist.add;
   const [shown, setShown] = useState<Shown | null>(null);
@@ -75,7 +79,7 @@ function VoiceSession() {
     pending.current = null;
     setShown({ kind: "task", text });
     setProposed(null);
-    tellAgent("The worker tapped Bekreft: the proposed robot task is confirmed and waiting for the robot.");
+    tellAgent("The worker tapped Bekreft: the proposed robot task is confirmed. In this demo it is not sent to the robot yet.");
   }, [tellAgent]);
 
   const cancelTask = useCallback(() => {
@@ -89,9 +93,12 @@ function VoiceSession() {
   return (
     <main className="flex-1 bg-bg px-4 pt-6 pb-12 sm:px-6 lg:px-10 lg:pt-10">
       <header>
-        <h1 className="font-display text-2xl font-medium tracking-[-0.01em] sm:text-3xl">Snakk gjennom roboten</h1>
+        <h1 className="text-2xl font-bold tracking-[-0.02em] sm:text-3xl sm:tracking-[-0.03em]">Snakk gjennom roboten</h1>
+        {/* What works now (agentConfig.ts: the worker's language, eleven of them, answered out loud) and the
+            pitched next step. TODO(phase-3): guest translation, a "Gjest" turn and a bokmål line per foreign turn. */}
         <p className="mt-2 max-w-[56ch] text-base text-muted">
-          Si det på ditt språk; roboten sier det høyt til gjesten på deres, og tar imot svaret.
+          Snakk på ditt språk, så svarer roboten høyt på det samme, på elleve språk. I dag om varer, ruter og
+          oppgaver; neste steg er å tolke mellom deg og gjesten.
         </p>
       </header>
 
@@ -106,26 +113,47 @@ function VoiceSession() {
                 getInputVolume={voice.getInputVolume}
                 getOutputVolume={voice.getOutputVolume}
               />
-              <p aria-live="polite" className="min-h-7 text-center text-lg font-medium text-text">
-                {STATUS[voice.phase]}
-              </p>
-              {voice.connected ? (
-                <Button variant="secondary" size="lg" className="w-full max-w-xs" onClick={voice.stop}>
-                  Avslutt
-                </Button>
+              {!ready && !voice.connected ? (
+                <div className="flex max-w-sm flex-col items-center gap-2 text-center">
+                  <p className="text-lg font-medium text-text">Stemmen er ikke slått på ennå</p>
+                  <p className="text-base text-muted">
+                    Fettero-agenten er ikke lagt inn på denne serveren. Øyne og Ruter virker som vanlig.
+                  </p>
+                  <div className="pt-3">
+                    <Link href="/oyne" className={buttonClasses("secondary", "lg")}>
+                      Åpne Øyne
+                    </Link>
+                  </div>
+                </div>
               ) : (
-                <Button size="lg" className="w-full max-w-xs" loading={busy} onClick={() => void voice.start()}>
-                  Snakk med Fettero
-                </Button>
+                <>
+                  <p aria-live="polite" className="min-h-7 text-center text-lg font-medium text-text">
+                    {STATUS[voice.phase]}
+                  </p>
+                  {voice.connected ? (
+                    <Button variant="secondary" size="lg" className="w-full max-w-xs" onClick={voice.stop}>
+                      Avslutt
+                    </Button>
+                  ) : (
+                    <Button size="lg" className="w-full max-w-xs" loading={busy} onClick={() => void voice.start()}>
+                      Snakk med Fettero
+                    </Button>
+                  )}
+                  {voice.problem && <ServiceProblem problem={voice.problem} onRetry={voice.start} />}
+                </>
               )}
-              {voice.problem && <ServiceProblem problem={voice.problem} onRetry={voice.start} />}
             </>
           )}
         </section>
 
         <div className="flex min-w-0 flex-col gap-4">
           <Card>
-            <Transcript turns={voice.turns} language={voice.language} />
+            <Transcript
+              turns={voice.turns}
+              language={voice.language}
+              // Without the agent there is no Snakk med Fettero to point at.
+              emptyText={ready ? undefined : "Samtalen med Fettero vises her når stemmen er slått på."}
+            />
           </Card>
           <ShownPanel shown={shown} inPicklist={picklist.skus} onAdd={addToPicklist} />
         </div>
@@ -230,7 +258,7 @@ function ProductView({ product, added, onAdd }: { product: Product; added: boole
   return (
     <section aria-labelledby={id} className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 id={id} className="text-2xl font-bold tracking-[-0.02em]">
+        <h2 id={id} className="text-lg font-bold tracking-[-0.01em]">
           {product.name}
         </h2>
         {added && <Badge tone="success">I plukklisten</Badge>}
@@ -286,7 +314,7 @@ function RouteView({ skus }: { skus: string[] }) {
     <section aria-labelledby="shown-route" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="shown-route" className="text-2xl font-bold tracking-[-0.02em]">
+          <h2 id="shown-route" className="text-lg font-bold tracking-[-0.01em]">
             {stops.length === 1 ? "1 stopp" : `${stops.length} stopp`}
           </h2>
           {metres !== null && (
@@ -332,7 +360,7 @@ function GuideView({ step }: { step: GuideStep }) {
   const guide = GUIDES[step];
   return (
     <section aria-labelledby="shown-guide" className="flex flex-col gap-4">
-      <h2 id="shown-guide" className="text-2xl font-bold tracking-[-0.02em]">
+      <h2 id="shown-guide" className="text-lg font-bold tracking-[-0.01em]">
         {guide.title}
       </h2>
       <ol className="flex flex-col gap-3">
@@ -353,13 +381,13 @@ function TaskView({ text }: { text: string }) {
   return (
     <section aria-labelledby="shown-task" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 id="shown-task" className="text-2xl font-bold tracking-[-0.02em]">
+        <h2 id="shown-task" className="text-lg font-bold tracking-[-0.01em]">
           Oppgave til roboten
         </h2>
         <Badge tone="success">Bekreftet</Badge>
       </div>
       <p className="text-lg break-words">{text}</p>
-      <p className="text-base text-muted">Du bekreftet oppgaven. Den venter på roboten.</p>
+      <p className="text-base text-muted">Du bekreftet oppgaven. Den er ikke sendt til roboten ennå (demo).</p>
     </section>
   );
 }

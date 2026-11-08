@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
-import { AppNav, Button, drawLine, EmptyState, fadeRise, Sheet, sheetIn } from "./index";
+import { MODULES } from "@/features/modules/registry";
+import { AppNav, Badge, Button, Card, drawLine, EmptyState, ErrorState, fadeRise, Sheet, sheetIn, Stat } from "./index";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/resepsjon" }));
 
@@ -18,20 +19,65 @@ describe("Button", () => {
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("aria-busy", "true");
   });
+
+  it("is a plain button by default, never a submit by accident", () => {
+    render(<Button>Lag renholdsrute</Button>);
+    expect(screen.getByRole("button")).toHaveAttribute("type", "button");
+  });
 });
 
-describe("EmptyState", () => {
-  it("renders its title, body and action", () => {
-    render(
-      <EmptyState
-        title="Plukklisten er tom"
-        body="Legg til varer fra Øyne."
-        action={<Button>Åpne Øyne</Button>}
-      />,
+describe("Card, Stat and Badge", () => {
+  it("draws a panel on the surface, or sunken on a surface", () => {
+    const { rerender } = render(<Card data-testid="card">Innhold</Card>);
+    expect(screen.getByTestId("card").className).toContain("bg-surface");
+    rerender(
+      <Card tone="sunken" data-testid="card">
+        Innhold
+      </Card>,
     );
+    expect(screen.getByTestId("card").className).toContain("bg-sunken");
+  });
+
+  it("sets a figure in the mono face with its unit and label, toned by whether it is good or bad", () => {
+    render(<Stat label="Klare til salg" value={9} unit="av 36" tone="warning" />);
+    const value = screen.getByText("9");
+    expect(value.parentElement?.className).toContain("font-mono");
+    expect(value.parentElement?.className).toContain("text-warning");
+    expect(screen.getByText("av 36")).toBeInTheDocument();
+    expect(screen.getByText("Klare til salg")).toBeInTheDocument();
+  });
+
+  it("says a bad figure is bad by shape and in words, not only in colour", () => {
+    const { container, rerender } = render(<Stat label="Klare til salg" value={6} tone="warning" />);
+    expect(screen.getByText("Obs:")).toHaveClass("sr-only");
+    expect(container.querySelector("svg")).not.toBeNull();
+    rerender(<Stat label="Åpne arbeidsordre" value={28} tone="danger" />);
+    expect(screen.getByText("Kritisk:")).toHaveClass("sr-only");
+    rerender(<Stat label="På vakt nå" value={5} />);
+    expect(container.querySelector("svg")).toBeNull();
+  });
+
+  it("always says the state in words, not only in colour", () => {
+    render(<Badge tone="danger">Feilet</Badge>);
+    const badge = screen.getByText("Feilet");
+    expect(badge.className).toContain("text-danger");
+  });
+});
+
+describe("EmptyState and ErrorState", () => {
+  it("renders what is missing, how to fill it and the action", () => {
+    render(<EmptyState title="Plukklisten er tom" body="Legg til varer fra Øyne." action={<Button>Åpne Øyne</Button>} />);
     expect(screen.getByRole("heading", { name: "Plukklisten er tom" })).toBeInTheDocument();
     expect(screen.getByText("Legg til varer fra Øyne.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Åpne Øyne" })).toBeInTheDocument();
+  });
+
+  it("announces an error with what happened, what to do next and the action", () => {
+    render(<ErrorState title="Fikk ikke lastet natten" body="Sjekk nettet og prøv igjen." action={<Button variant="secondary">Prøv igjen</Button>} />);
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Fikk ikke lastet natten");
+    expect(alert).toHaveTextContent("Sjekk nettet og prøv igjen.");
+    expect(screen.getByRole("button", { name: "Prøv igjen" })).toBeInTheDocument();
   });
 });
 
@@ -60,7 +106,7 @@ function SheetHarness() {
       {/* A new inline onClose on every render, as real callers write it. */}
       <Sheet open={open} onClose={() => setOpen(false)} title="Bekreft oppgave">
         <input aria-label="Notat" value={note} onChange={(event) => setNote(event.target.value)} />
-        <button onClick={() => setOpen(false)}>Lukk</button>
+        <button onClick={() => setOpen(false)}>Ferdig</button>
       </Sheet>
     </>
   );
@@ -73,7 +119,9 @@ describe("Sheet", () => {
     opener.focus();
     fireEvent.click(opener);
 
-    expect(screen.getByRole("dialog", { name: "Bekreft oppgave" })).toHaveFocus();
+    // Focus lands on the sheet's own close button, inside the dialog.
+    const dialog = screen.getByRole("dialog", { name: "Bekreft oppgave" });
+    expect(within(dialog).getByRole("button", { name: "Lukk" })).toHaveFocus();
     expect(document.body.style.overflow).toBe("hidden");
 
     const input = screen.getByRole("textbox", { name: "Notat" });
@@ -82,7 +130,7 @@ describe("Sheet", () => {
     expect(input).toHaveValue("Rom 214");
     expect(input).toHaveFocus();
 
-    fireEvent.click(screen.getByRole("button", { name: "Lukk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ferdig" }));
     expect(opener).toHaveFocus();
     expect(document.body.style.overflow).toBe("");
   });
@@ -93,10 +141,50 @@ describe("Sheet", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(document.body.style.overflow).toBe("");
   });
+
+  it("closes from its own close button, so a phone without Escape always has a way out", async () => {
+    render(<SheetHarness />);
+    const opener = screen.getByRole("button", { name: "Åpne" });
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Lukk" }));
+    expect(opener).toHaveFocus();
+    expect(document.body.style.overflow).toBe("");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("keeps Tab inside the dialog: past the last stop back to the first, and Shift+Tab the other way", () => {
+    render(<SheetHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "Åpne" }));
+    const dialog = within(screen.getByRole("dialog"));
+    const close = dialog.getByRole("button", { name: "Lukk" });
+    const done = dialog.getByRole("button", { name: "Ferdig" });
+
+    done.focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(close).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(done).toHaveFocus();
+
+    // Focus that slipped out (a click on the page behind) is pulled back in on the next Tab.
+    screen.getByRole("button", { name: "Åpne" }).focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(close).toHaveFocus();
+  });
+
+  it("can paint itself on the dark surface (the phone's Meny)", () => {
+    render(
+      <Sheet open onClose={() => {}} title="Meny" surface="dark">
+        <button type="button">Oversikt</button>
+      </Sheet>,
+    );
+    expect(screen.getByRole("dialog", { name: "Meny" })).toHaveAttribute("data-surface", "dark");
+  });
 });
 
 describe("AppNav", () => {
-  it("has a Resepsjon link in its own group, marked active on /resepsjon", () => {
+  it("has a Resepsjon link in its own group, marked active on /resepsjon, after every other hotel module", () => {
     const admin = { user: { u: "hamad", name: "Hamad", role: "admin" as const }, view: "admin" as const, effectiveRole: "admin" as const, exp: 0 };
     render(
       <SessionProvider session={admin}>
@@ -107,6 +195,8 @@ describe("AppNav", () => {
     expect(link).toHaveAttribute("href", "/resepsjon");
     expect(link).toHaveAttribute("aria-current", "page");
     const labels = screen.getAllByRole("link").map((a) => a.textContent);
-    expect(labels.slice(1)).toEqual(["Oversikt", "3D-kart", "Ruter", "Natteskift", "Robotens øyne", "Snakk gjennom roboten", "Resepsjon"]);
+    expect(labels.slice(1)).toEqual(MODULES.map((module) => module.name));
+    // Resepsjon closes the hotel's groups; only the host's Utleie group (admins see it too) comes after.
+    expect(labels.slice(labels.indexOf("Resepsjon") + 1)).toEqual(MODULES.filter((module) => module.group === "utleie").map((module) => module.name));
   });
 });

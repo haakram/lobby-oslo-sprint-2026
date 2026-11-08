@@ -1,50 +1,47 @@
-import { Skeleton, Stat } from "@/ui";
-import type { Kpis } from "./selectors";
+import { cx, Skeleton, Stat } from "@/ui";
+import type { DashboardData } from "./data";
+import { type Highlight, selectHighlights } from "./highlights";
 
-/** Below this share of rooms ready at handover, the figure is a warning. */
-const READY_WARNING = 0.25;
+/** One rule however many figures the role sees (Tailwind needs the class names written out). */
+const WIDE_COLUMNS: Record<number, string> = {
+  2: "xl:grid-cols-2",
+  3: "xl:grid-cols-3",
+  4: "xl:grid-cols-4",
+  5: "xl:grid-cols-5",
+  6: "xl:grid-cols-6",
+};
 
 /**
- * The night's line of figures, read first at 06:00: four numbers along one rule, each toned by
- * whether it is good or bad (UX audit, Oversikt 5). No score: that is the robot's contest, not the
- * hotel's night.
+ * The hotel's good news in figures, read right after the greeting: bookings, occupancy, the night's
+ * tasks done out of all, hours the robot saved, rooms ready to sell, the guests' rating (or, for
+ * the robot manager, rooms checked and stock). Green where the figure is good, neutral otherwise;
+ * nothing here is red or amber (what needs a person is in the bell). A role sees only figures of
+ * screens it may open. Bookings, occupancy, rating and stock are test data until the integrations
+ * land; the rest comes from the night.
  */
-export function KpiStrip({ kpis }: { kpis: Kpis | null }) {
-  const labels = ["Klare til salg", "Må vaskes", "Åpne avvik", "Oppgaver i natt"];
+export function KpiStrip({ data }: { data: DashboardData }) {
+  const figures = selectHighlights(data);
   return (
-    <section aria-label="Natten i tall" data-enter>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-6 border-y border-line py-5 sm:grid-cols-4 lg:gap-x-10">
-        {kpis ? (
-          <>
-            <Stat
-              label={labels[0]}
-              value={kpis.roomsReady}
-              unit={`av ${kpis.roomsTotal}`}
-              tone={kpis.roomsReady / Math.max(1, kpis.roomsTotal) < READY_WARNING ? "warning" : "success"}
-            />
-            <Stat label={labels[1]} value={kpis.roomsDirty} tone={kpis.roomsDirty > 0 ? "warning" : "default"} />
-            <Stat
-              label={labels[2]}
-              value={kpis.ordersOpen}
-              unit={kpis.guestsWaiting > 0 ? `${kpis.guestsWaiting} med gjest` : undefined}
-              tone={kpis.ordersOpen > 0 ? "danger" : "default"}
-            />
-            <Stat
-              label={labels[3]}
-              value={kpis.tasksDone}
-              unit={`fullført · ${kpis.tasksFailed} feilet${kpis.tasksOpen > 0 ? ` · ${kpis.tasksOpen} ikke ferdig` : ""}`}
-              tone={kpis.tasksFailed > 0 ? "danger" : "success"}
-            />
-          </>
-        ) : (
-          labels.map((label) => (
-            <div key={label} className="flex flex-col gap-1">
-              <Skeleton className="h-8 w-20" />
-              <span className="text-xs text-muted">{label}</span>
-            </div>
-          ))
-        )}
+    <section aria-label="Hotellet i tall" data-enter>
+      <div className={cx("grid grid-cols-2 gap-x-6 gap-y-6 border-y border-line py-6 sm:grid-cols-3 lg:gap-x-8", WIDE_COLUMNS[figures.length])}>
+        {figures.map((figure) => (
+          <Figure key={figure.id} figure={figure} loading={data.loading} />
+        ))}
       </div>
     </section>
   );
+}
+
+/** A figure from the night: a skeleton while it loads, a dash when the night isn't there. */
+function Figure({ figure, loading }: { figure: Highlight; loading: boolean }) {
+  if (figure.value !== null) return <Stat size="lg" label={figure.label} value={figure.value} unit={figure.unit} tone={figure.tone} />;
+  if (figure.fromNight && loading) {
+    return (
+      <div className="flex flex-col gap-1">
+        <Skeleton className="h-10 w-20" />
+        <span className="text-sm text-muted">{figure.label}</span>
+      </div>
+    );
+  }
+  return <Stat size="lg" label={figure.label} value="–" />;
 }

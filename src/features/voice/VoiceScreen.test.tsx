@@ -191,4 +191,16 @@ describe("VoiceScreen", () => {
     expect(screen.getByText("Gdzie mam odłożyć mydło?")).toBeInTheDocument();
     expect(screen.getByText("Polsk")).toBeInTheDocument();
   });
+
+  it("says calmly that the voice is not on yet when the server has no agent, with no button that can only fail", () => {
+    render(
+      <PicklistProvider>
+        <VoiceScreen ready={false} />
+      </PicklistProvider>,
+    );
+    expect(screen.getByText("Stemmen er ikke slått på ennå")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Snakk med Fettero" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Åpne Øyne" })).toHaveAttribute("href", "/oyne");
+  });
 });

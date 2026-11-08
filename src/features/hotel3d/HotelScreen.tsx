@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { probeViewer, type ReplaySource, resolveViewerUrl, useHotelReplay } from "@/features/replay";
 import { Badge, Button, cx, EmptyState, ErrorState, RegenIcon, Skeleton, Stat } from "@/ui";
 import { Hotel3D, StatusLegend } from "./Hotel3D";
 import { PlaybackControls } from "./PlaybackControls";
 import { forManagers } from "@/features/nightshift/eventFilter";
 import { EventFeed, RoomCard, TaskCard } from "./ReplayPanels";
+import { RoomPicker } from "./RoomPicker";
 
 /** Where the robot's events a manager can read come from; the full log lives on Natteskift. */
 const RECENT_SHOWN = 8;
@@ -27,11 +28,25 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("rom"),
   );
   const [drawer, setDrawer] = useState(true);
+  const roomCard = useRef<HTMLDivElement>(null);
+  const scrollToRoom = useRef(false);
+  // A room chosen on the map or in the list: its card comes into view (on a phone it sits under the map).
+  const chooseRoom = useCallback((roomId: string | null) => {
+    scrollToRoom.current = roomId !== null;
+    setRoom(roomId);
+  }, []);
+  useEffect(() => {
+    if (!room || !scrollToRoom.current) return;
+    scrollToRoom.current = false;
+    roomCard.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [room]);
 
-  // Only a local app can reach the local viewer server; the deployed app never probes it.
+  // The live viewer is asked for only when NEXT_PUBLIC_VIEWER_URL names it (as on Oversikt and Natteskift);
+  // unset, the recorded night plays and nothing knocks on a closed port (a red line in the console).
+  const configured = Boolean(viewerUrl?.trim());
   useEffect(() => {
     let cancelled = false;
-    detectViewer(base).then((up) => {
+    detectViewer(base, configured).then((up) => {
       if (cancelled) return;
       setViewerUp(up);
       if (up) setSource("live");
@@ -39,7 +54,7 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
     return () => {
       cancelled = true;
     };
-  }, [base]);
+  }, [base, configured]);
 
   const replay = useHotelReplay(source, { viewerUrl: base });
   const ready = replay.status === "ready";
@@ -55,19 +70,24 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
   }, [ready, setT]);
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col lg:h-dvh">
+    // lg:max-h-dvh: flex-1 alone sizes main to its content, so a long drawer (a room's card) would stretch
+    // the page and the map with it; capped, the drawer scrolls on its own beside a map that stays put.
+    <main data-surface="dark" className="flex min-h-0 flex-1 flex-col bg-bg text-text lg:h-dvh lg:max-h-dvh">
       <div className="flex min-h-14 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-line px-4 py-2 sm:px-6 lg:px-6">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="font-display text-xl font-medium tracking-[-0.01em]">3D-kart</h1>
+          <h1 className="text-xl font-bold tracking-[-0.02em]">3D-kart</h1>
           <span className="hidden text-sm text-muted sm:inline">Gå rundt i hotellet og følg roboten.</span>
           <SourceBadge source={source} live={replay.live} playing={replay.playing} ready={ready} />
         </div>
         <div className="flex items-center gap-2">
           {viewerUp && <SourceTabs source={source} onChange={setSource} />}
-          <Button variant="ghost" size="sm" aria-pressed={drawer} aria-controls="hotel-drawer" onClick={() => setDrawer((value) => !value)} className="hidden lg:inline-flex">
-            <RegenIcon name={drawer ? "sidebar-right-close" : "sidebar-right-open"} size={18} />
-            {drawer ? "Skjul panel" : "Vis panel"}
-          </Button>
+          {/* The drawer only closes beside the map (lg); on a phone it is the page below, so no button. */}
+          <div className="hidden lg:block">
+            <Button variant="ghost" size="sm" aria-pressed={drawer} aria-controls="hotel-drawer" onClick={() => setDrawer((value) => !value)}>
+              <RegenIcon name={drawer ? "sidebar-right-close" : "sidebar-right-open"} size={18} />
+              {drawer ? "Skjul panel" : "Vis panel"}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -120,8 +140,9 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
       {(replay.status === "loading" || ready) && (
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="relative min-h-[56dvh] flex-1 lg:min-h-0">
-              <Hotel3D replay={replay} variant="full" selectedRoom={room} onSelectRoom={setRoom} className="h-full! max-h-none! min-h-0! rounded-none! border-0!" />
+            {/* Below lg the column has no height of its own, so the map gets one (h-full would be 0 px). */}
+            <div className="relative flex-1 lg:min-h-0">
+              <Hotel3D replay={replay} variant="full" selectedRoom={room} onSelectRoom={chooseRoom} className="h-[56dvh]! max-h-none! min-h-0! rounded-none! border-0! lg:h-full!" />
             </div>
             <StatusLegend className="px-4 pt-2 sm:hidden" />
             <div className="border-t border-line bg-surface px-4 py-3 sm:px-6">
@@ -133,14 +154,20 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
             id="hotel-drawer"
             aria-label="Status nå"
             className={cx(
-              "flex min-w-0 flex-col gap-4 overflow-y-auto border-t border-line bg-bg p-4 sm:p-6",
+              // relative: sr-only text inside is positioned against the drawer, so it can't stretch the page.
+              "relative flex min-w-0 flex-col gap-4 overflow-y-auto border-t border-line bg-bg p-4 sm:p-6",
               "lg:w-[400px] lg:shrink-0 lg:border-t-0 lg:border-l lg:p-5",
               !drawer && "lg:hidden",
             )}
           >
             {ready && snapshot ? (
               <>
-                {room && <RoomCard roomId={room} snapshot={snapshot} timeline={replay.timeline} onClose={() => setRoom(null)} />}
+                <RoomPicker map={replay.timeline?.map} snapshot={snapshot} value={room} onChange={chooseRoom} />
+                {room && (
+                  <div ref={roomCard} className="scroll-mt-4">
+                    <RoomCard roomId={room} snapshot={snapshot} timeline={replay.timeline} onClose={() => setRoom(null)} />
+                  </div>
+                )}
                 <TaskCard snapshot={snapshot} finished={snapshot.finished} />
                 <section role="group" aria-label="Natten i tall" className="grid grid-cols-2 gap-x-6 gap-y-4 border-y border-line py-4">
                   <Stat label="Fullført" value={snapshot.tasksDone} tone="success" />
@@ -171,10 +198,12 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
   );
 }
 
-async function detectViewer(base: string): Promise<boolean> {
+/** Only a configured viewer, and from a deployed (https) page only an https one: the browser blocks the rest. */
+async function detectViewer(base: string, configured: boolean): Promise<boolean> {
+  if (!configured) return false;
   const host = window.location.hostname;
   const local = host === "localhost" || host === "127.0.0.1" || /^(10|192\.168)\./.test(host);
-  return local ? probeViewer(base) : false;
+  return local || base.startsWith("https://") ? probeViewer(base) : false;
 }
 
 function SourceBadge({ source, live, playing, ready }: { source: ReplaySource; live: boolean; playing: boolean; ready: boolean }) {
@@ -189,16 +218,15 @@ function SourceTabs({ source, onChange }: { source: ReplaySource; onChange: (sou
     { id: "demo", label: "Opptak" },
   ];
   return (
-    <div role="tablist" aria-label="Kilde" className="inline-flex gap-0.5 rounded-sm bg-sunken p-0.5">
+    <div role="group" aria-label="Kilde" className="inline-flex gap-0.5 rounded-sm bg-sunken p-0.5">
       {tabs.map(({ id, label }) => (
         <button
           key={id}
           type="button"
-          role="tab"
-          aria-selected={source === id}
+          aria-pressed={source === id}
           onClick={() => onChange(id)}
           className={cx(
-            "min-h-9 rounded-sm px-3 text-sm font-semibold transition-colors duration-[120ms] ease-standard pointer-coarse:min-h-11",
+            "min-h-10 rounded-sm px-3 text-sm font-semibold transition-colors duration-[120ms] ease-standard pointer-coarse:min-h-11",
             source === id ? "bg-surface text-text" : "text-muted hover:text-text",
           )}
         >

@@ -20,6 +20,7 @@ beforeAll(async () => {
       { u: "hamad", name: "Hamad", role: "admin", hash },
       { u: "resepsjon", name: "Resepsjonist", role: "receptionist", hash },
       { u: "robot", name: "Robotansvarlig", role: "robot", hash },
+      { u: "vert", name: "Ingrid Berge", role: "host", hash },
     ]),
   };
 });
@@ -147,6 +148,15 @@ describe("POST /api/auth/login", () => {
     const offsite = await handleLogin(post("/api/auth/login", { username: "hamad", password: PASSWORD, next: "//evil.example" }), deps());
     expect((await offsite.json()).next).toBe("/");
   });
+
+  it("sends the host to their own app, never to the hotel's front page", async () => {
+    const home = await handleLogin(post("/api/auth/login", { username: "vert", password: PASSWORD }), deps());
+    expect(await home.json()).toMatchObject({ session: { user: { u: "vert", role: "host" }, view: "host" }, next: "/vert" });
+    const hotel = await handleLogin(post("/api/auth/login", { username: "vert", password: PASSWORD, next: "/rom" }), deps());
+    expect((await hotel.json()).next).toBe("/vert");
+    const own = await handleLogin(post("/api/auth/login", { username: "vert", password: PASSWORD, next: "/vert/meldinger" }), deps());
+    expect((await own.json()).next).toBe("/vert/meldinger");
+  });
 });
 
 describe("POST /api/auth/logout", () => {
@@ -200,6 +210,15 @@ describe("POST /api/auth/view", () => {
     const response = await handleView(withCookie(token, "/api/auth/view", "POST", { view: "admin" }), env);
     expect(response.status).toBe(403);
     expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("refuses the host a view switch (403), and keeps the host out of the admin's views (400)", async () => {
+    const host = signSession(newSession("vert", "host"), SECRET);
+    const response = await handleView(withCookie(host, "/api/auth/view", "POST", { view: "admin" }), env);
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    const admin = signSession(newSession("hamad", "admin"), SECRET);
+    expect((await handleView(withCookie(admin, "/api/auth/view", "POST", { view: "host" }), env)).status).toBe(400);
   });
 
   it("refuses unknown views with 400 and no session with 401", async () => {

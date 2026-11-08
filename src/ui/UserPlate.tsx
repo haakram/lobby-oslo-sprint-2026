@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useState } from "react";
-import { ROLES, type Role, roleLabel } from "@/features/auth/roles";
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { ADMIN_VIEWS, type Role, roleLabel } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
@@ -10,7 +10,8 @@ import { Monogram } from "./Monogram";
 /**
  * Bottom-left of the navigation: who is logged in (a generated monogram, the name, the role). The
  * plate opens a small menu: for admins the view switcher (Admin · Resepsjonist · Robotansvarlig),
- * which calls `switchView` (the server reloads the page), and "Logg ut" for everyone.
+ * which calls `switchView` (the server reloads the page), and "Logg ut" for everyone. Escape or a
+ * click outside closes the menu; the arrow keys move between the views (one Tab stop for the group).
  */
 export function UserPlate({ className, onSwitched }: { className?: string; onSwitched?: () => void }) {
   const { user, view, switchView, logout } = useSession();
@@ -18,6 +19,18 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
   const [pending, setPending] = useState<Role | "logout" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const listId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const plateButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (root.current && event.target instanceof Node && !root.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    return () => document.removeEventListener("pointerdown", onPointer);
+  }, [open]);
+
   if (!user) return null;
   const admin = user.role === "admin";
   const roleWord = admin && view && view !== "admin" ? `Admin · viser som ${roleLabel(view).toLowerCase()}` : roleLabel(user.role);
@@ -33,6 +46,15 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
       setError(reason instanceof Error ? reason.message : "Fikk ikke byttet visning. Prøv igjen.");
       setPending(null);
     }
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Escape" || !open) return;
+    // Close only this menu: inside the Meny sheet, the sheet stays open (it skips a handled Escape).
+    event.preventDefault();
+    event.stopPropagation();
+    setOpen(false);
+    plateButton.current?.focus();
   }
 
   async function out() {
@@ -51,19 +73,26 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
   );
 
   return (
-    <div className={cx("flex flex-col gap-1", className)}>
+    <div ref={root} onKeyDown={onKeyDown} className={cx("flex flex-col gap-1", className)}>
       {open && (
         <div id={listId} className="flex flex-col gap-0.5 rounded-sm bg-sunken p-1 animate-fade">
           {admin && (
-            <div role="radiogroup" aria-label="Vis som" className="flex flex-col gap-0.5">
+            <div role="radiogroup" aria-label="Vis som" onKeyDown={moveBetweenViews} className="flex flex-col gap-0.5">
               <p className="px-3 pt-1.5 pb-0.5 text-xs text-muted">Vis som</p>
-              {ROLES.map((role) => (
-                <ViewOption key={role} role={role} checked={view === role} pending={pending === role} onPick={() => void pick(role)} />
+              {ADMIN_VIEWS.map((role, index) => (
+                <ViewOption
+                  key={role}
+                  role={role}
+                  checked={view === role}
+                  tabbable={view === role || (index === 0 && !(ADMIN_VIEWS as readonly Role[]).includes(view as Role))}
+                  pending={pending === role}
+                  onPick={() => void pick(role)}
+                />
               ))}
             </div>
           )}
           {error && (
-            <p role="alert" className="px-3 py-1 text-xs text-danger">
+            <p role="alert" className="px-3 py-1 text-sm text-danger">
               {error}
             </p>
           )}
@@ -83,6 +112,7 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
         </div>
       )}
       <button
+        ref={plateButton}
         type="button"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
@@ -99,12 +129,23 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
   );
 }
 
-function ViewOption({ role, checked, pending, onPick }: { role: Role; checked: boolean; pending: boolean; onPick: () => void }) {
+/** Arrow keys move focus between the views; Space or Enter picks one (picking reloads the page). */
+function moveBetweenViews(event: KeyboardEvent<HTMLDivElement>) {
+  const step = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : 0;
+  if (step === 0) return;
+  event.preventDefault();
+  const radios = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'));
+  const index = radios.findIndex((radio) => radio === document.activeElement);
+  radios[(index + step + radios.length) % radios.length]?.focus();
+}
+
+function ViewOption({ role, checked, tabbable, pending, onPick }: { role: Role; checked: boolean; tabbable: boolean; pending: boolean; onPick: () => void }) {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={checked}
+      tabIndex={tabbable ? 0 : -1}
       aria-busy={pending || undefined}
       onClick={onPick}
       className={cx(

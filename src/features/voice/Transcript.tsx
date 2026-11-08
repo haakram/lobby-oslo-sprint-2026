@@ -19,16 +19,20 @@ export function Transcript({
   emptyText?: string;
 }) {
   const reduced = useReducedMotion();
-  const end = useRef<HTMLLIElement>(null);
+  const list = useRef<HTMLOListElement>(null);
 
+  // Scroll the list itself to the newest turn, never the page: the call's buttons stay where they are.
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "end", behavior: reduced ? "auto" : "smooth" });
+    const element = list.current;
+    if (!element) return;
+    if (typeof element.scrollTo === "function") element.scrollTo({ top: element.scrollHeight, behavior: reduced ? "auto" : "smooth" });
+    else element.scrollTop = element.scrollHeight;
   }, [turns.length, reduced]);
 
   return (
     <section aria-labelledby="transcript-heading" className="flex min-h-0 flex-col">
       <div className="flex items-center justify-between gap-3">
-        <h2 id="transcript-heading" className="text-xl font-bold tracking-[-0.02em]">
+        <h2 id="transcript-heading" className="text-lg font-bold tracking-[-0.01em]">
           Samtale
         </h2>
         <div aria-live="polite">
@@ -50,7 +54,7 @@ export function Transcript({
           body={emptyText}
         />
       ) : (
-        <ol aria-label="Samtalen så langt" className="mt-4 flex max-h-[44dvh] flex-col gap-3 overflow-y-auto pr-1">
+        <ol ref={list} aria-label="Samtalen så langt" className="mt-4 flex max-h-[44dvh] flex-col gap-3 overflow-y-auto pr-1">
           <AnimatePresence initial={false}>
             {turns.map((turn) => (
               <motion.li
@@ -66,7 +70,7 @@ export function Transcript({
                   </span>
                   {turn.language && (
                     // Visual only; the badge above tells screen readers the language.
-                    <span aria-hidden="true" className="font-mono text-xs text-muted uppercase tabular-nums">
+                    <span aria-hidden="true" className="font-mono text-sm text-muted tabular-nums sm:text-xs">
                       {turn.language}
                     </span>
                   )}
@@ -75,7 +79,6 @@ export function Transcript({
               </motion.li>
             ))}
           </AnimatePresence>
-          <li ref={end} aria-hidden="true" className="h-0" />
         </ol>
       )}
     </section>

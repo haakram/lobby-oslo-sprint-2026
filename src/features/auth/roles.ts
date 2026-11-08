@@ -1,19 +1,29 @@
+import { MODULES, moduleRoutesFor } from "@/features/modules/registry";
+
 /**
  * Who may open what. The proxy enforces this on the server (src/proxy.ts); the navigation uses the same
- * map only to hide links. Plain data and pure functions: safe to import on the client.
+ * map only to hide links. The pages come from the module registry (one place to add a module); the
+ * API sections are listed here. Plain data and pure functions: safe to import on the client.
  */
 
-export const ROLES = ["admin", "receptionist", "robot"] as const;
+export const ROLES = ["admin", "receptionist", "robot", "host"] as const;
 export type Role = (typeof ROLES)[number];
 
 const LABEL: Record<Role, string> = {
   admin: "Admin",
   receptionist: "Resepsjonist",
   robot: "Robotansvarlig",
+  host: "Vert",
 };
 
-/** Every page in the app, in navigation order. */
-export const PAGES = ["/", "/hotell", "/natteskift", "/oyne", "/stemme", "/ruter", "/resepsjon"] as const;
+/**
+ * The roles an admin can look through (the view switcher). The host (an Airbnb host with their own app
+ * under /vert) is not one of them: the switcher stays the hotel's.
+ */
+export const ADMIN_VIEWS = ["admin", "receptionist", "robot"] as const satisfies readonly Role[];
+
+/** Every page in the app, in navigation order (the module registry's routes). */
+export const PAGES: readonly string[] = MODULES.map((module) => module.route);
 
 /** Open to every logged-in role: the auth API, the demo run log, the "no access" page. */
 export const SHARED_ROUTES = ["/api/auth", "/runs", "/login/ingen-tilgang"] as const;
@@ -24,14 +34,9 @@ export const SHARED_ROUTES = ["/api/auth", "/runs", "/login/ingen-tilgang"] as c
  */
 export const ROUTES_BY_ROLE: Record<Role, readonly string[]> = {
   admin: ["*"],
-  receptionist: ["/", "/resepsjon", "/ruter", "/api/reception"],
+  receptionist: [...moduleRoutesFor("receptionist"), "/api/reception"],
   robot: [
-    "/",
-    "/hotell",
-    "/natteskift",
-    "/oyne",
-    "/stemme",
-    "/ruter",
+    ...moduleRoutesFor("robot"),
     "/api/identify",
     "/api/scene",
     "/api/voice",
@@ -39,6 +44,7 @@ export const ROUTES_BY_ROLE: Record<Role, readonly string[]> = {
     "/mediapipe",
     "/models",
   ],
+  host: moduleRoutesFor("host"),
 };
 
 export function isRole(value: unknown): value is Role {
@@ -47,6 +53,12 @@ export function isRole(value: unknown): value is Role {
 
 export function roleLabel(role: Role): string {
   return LABEL[role];
+}
+
+/** Where a role starts: Oversikt when it may open it, else its first page (the host: /vert). */
+export function homeFor(role: Role): string {
+  if (role === "admin" || ROUTES_BY_ROLE[role].includes("/")) return "/";
+  return ROUTES_BY_ROLE[role][0] ?? "/";
 }
 
 /**

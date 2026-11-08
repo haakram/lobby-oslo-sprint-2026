@@ -39,7 +39,7 @@ export function StatusLegend({ className }: { className?: string }) {
   return (
     <ul aria-label="Romstatus" className={cx("flex flex-wrap gap-x-3 gap-y-1", className)}>
       {LEGEND.map((status) => (
-        <li key={status} className="flex items-center gap-1.5 text-xs font-medium text-muted">
+        <li key={status} className="flex items-center gap-1.5 text-sm font-medium text-muted sm:text-xs">
           <span aria-hidden="true" className="inline-block size-2.5 rounded-[2px] border border-line-strong" style={{ background: STATUS_CSS_VAR[status] }} />
           {ROOM_STATUS_LABEL[status]}
         </li>
@@ -195,7 +195,8 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
   const robot = snapshot?.robot ?? null;
   const height = compact ? "h-[clamp(300px,52vw,460px)]" : "h-[clamp(400px,60vh,760px)]";
   const modes: Array<{ mode: FloorMode; text: string; name: string }> = [
-    { mode: "auto", text: "Følg", name: "Robotens etasje" },
+    // The visible word starts the accessible name (WCAG 2.5.3), so "klikk Følg" reaches it by voice.
+    { mode: "auto", text: "Følg", name: "Følg robotens etasje" },
     ...floors.map((floor) => ({ mode: floor as FloorMode, text: String(floor), name: `${floor}. etasje` })),
     { mode: "all", text: "Alle", name: "Alle etasjer" },
     { mode: "exploded", text: "Spredt", name: "Etasjene spredt" },
@@ -208,17 +209,23 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
       className={cx("relative overflow-hidden rounded-lg border border-line bg-bg text-text", webgl !== false && height, className)}
     >
       {webgl === false ? (
-        <HotelPlan2D
-          map={map}
-          snapshot={snapshot}
-          variant={variant}
-          selectedRoom={selected ?? null}
-          onSelectRoom={selectRoom}
-          onSelectPlace={onSelectPlace}
-        />
+        // A page may give the map a fixed height (3D-kart): the plan scrolls inside it instead of being cut.
+        // The plan shows every floor and says where the robot is, so only the legend joins it, in flow.
+        <div className="size-full overflow-y-auto">
+          <HotelPlan2D
+            map={map}
+            snapshot={snapshot}
+            variant={variant}
+            selectedRoom={selected ?? null}
+            onSelectRoom={selectRoom}
+            onSelectPlace={onSelectPlace}
+          />
+          <StatusLegend className="px-3 pb-3 max-sm:hidden" />
+        </div>
       ) : (
         <>
-          <div ref={hostRef} className="absolute inset-0" />
+          {/* The canvas fills the clipped root, so its focus ring is drawn inside it, not cut away. */}
+          <div ref={hostRef} className="absolute inset-0 [&>canvas:focus-visible]:outline-offset-[-4px]" />
           <div ref={labelsRef} className="h3d-labels" data-compact={compact || undefined} aria-hidden="true" />
           {(!scene || replay.status === "loading") && (
             <div className="absolute inset-0 flex items-end p-4" aria-busy="true" aria-label="Laster hotellet">
@@ -228,71 +235,74 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
         </>
       )}
 
-      {/* HUD: the floors, the robot, the legend. */}
-      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3 sm:p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div
-            role="group"
-            aria-label="Etasje"
-            className="pointer-events-auto inline-flex flex-wrap gap-0.5 rounded-md border border-line bg-surface/90 p-0.5 backdrop-blur-sm"
-          >
-            {modes.map(({ mode, text, name }) => {
-              const active = floorMode === mode;
-              return (
-                <button
-                  key={String(mode)}
-                  type="button"
-                  aria-pressed={active}
-                  aria-label={name}
-                  title={name}
-                  onClick={() => chooseMode(mode)}
-                  className={cx(
-                    "min-h-9 min-w-9 rounded-sm px-2 text-sm font-semibold transition-colors duration-150 ease-standard pointer-coarse:min-h-11 sm:px-2.5",
-                    active ? "bg-sunken text-text" : "text-muted hover:text-text",
-                  )}
-                >
-                  {text}
-                </button>
-              );
-            })}
-          </div>
-          {webgl && (
-            <button
-              type="button"
-              aria-pressed={follow}
-              onClick={() => {
-                if (follow) {
-                  setFollow(false);
-                } else {
-                  setFollow(true);
-                  scene?.focusRobot();
-                }
-              }}
-              className={cx(
-                "pointer-events-auto inline-flex min-h-9 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold backdrop-blur-sm transition-colors duration-150 ease-standard pointer-coarse:min-h-11",
-                follow ? "border-accent bg-accent text-on-accent" : "border-line bg-surface/90 text-text hover:bg-sunken",
-              )}
+      {/* HUD (WebGL only; the floor buttons and Følg robot steer the 3D camera): the floors, the robot, the legend. */}
+      {webgl !== false && (
+        <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3 sm:p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div
+              role="group"
+              aria-label="Etasje"
+              className="pointer-events-auto inline-flex flex-wrap gap-0.5 rounded-md border border-line bg-surface/90 p-0.5 backdrop-blur-sm"
             >
-              <RegenIcon name="target" className="size-4" />
-              {follow ? "Følger robot" : "Følg robot"}
-            </button>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div className="flex flex-col gap-1">
-            <StatusLegend className="max-sm:hidden" />
-            {webgl && !compact && (
-              <p className="text-xs text-muted max-sm:hidden">Dra for å snu · rull for å zoome · piltaster flytter · klikk et rom</p>
+              {modes.map(({ mode, text, name }) => {
+                const active = floorMode === mode;
+                return (
+                  <button
+                    key={String(mode)}
+                    type="button"
+                    aria-pressed={active}
+                    aria-label={name}
+                    title={name}
+                    onClick={() => chooseMode(mode)}
+                    className={cx(
+                      "min-h-10 min-w-10 rounded-sm px-2 text-sm font-semibold transition-colors duration-150 ease-standard pointer-coarse:min-h-11 pointer-coarse:min-w-11 sm:px-2.5",
+                      active ? "bg-sunken text-text" : "text-muted hover:text-text",
+                    )}
+                  >
+                    {text}
+                  </button>
+                );
+              })}
+            </div>
+            {webgl && (
+              <button
+                type="button"
+                aria-pressed={follow}
+                onClick={() => {
+                  if (follow) {
+                    setFollow(false);
+                  } else {
+                    setFollow(true);
+                    scene?.focusRobot();
+                  }
+                }}
+                className={cx(
+                  "pointer-events-auto inline-flex min-h-10 items-center gap-1.5 rounded-md border px-3 text-sm font-semibold backdrop-blur-sm transition-colors duration-150 ease-standard pointer-coarse:min-h-11",
+                  // Secondary, with the robot's orange on the icon: Spill av stays the one orange button.
+                  follow ? "border-line-strong bg-sunken text-text" : "border-line bg-surface/90 text-text hover:bg-sunken",
+                )}
+              >
+                <RegenIcon name="target" className={cx("size-4", follow && "text-accent-text")} />
+                {follow ? "Følger robot" : "Følg robot"}
+              </button>
             )}
           </div>
-          {robot && (
-            <p className="rounded-md bg-surface/90 px-2.5 py-1.5 text-xs text-muted backdrop-blur-sm">
-              <span className="text-text">{placeName(robot.node)}</span> · {robot.floor}. etasje
-            </p>
-          )}
+
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div className="flex flex-col gap-1">
+              <StatusLegend className="max-sm:hidden" />
+              {webgl && !compact && (
+                <p className="text-xs text-muted max-sm:hidden">Dra for å snu · rull for å zoome · piltaster flytter · klikk et rom</p>
+              )}
+            </div>
+            {robot && (
+              <p className="rounded-md bg-surface/90 px-2.5 py-1.5 text-sm text-muted backdrop-blur-sm sm:text-xs">
+                <span className="text-text">{placeName(robot.node)}</span> · {robot.floor}. etasje
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

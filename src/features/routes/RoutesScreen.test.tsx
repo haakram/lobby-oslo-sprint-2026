@@ -179,6 +179,17 @@ describe("RoutesScreen, Robot", () => {
     expect(screen.getByRole("button", { name: /R-001/ })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("shows a picked task's stops beside its route, paused on the first", async () => {
+    renderRoutes({ modus: "robot" });
+    await screen.findByRole("region", { name: "Natten i tall" });
+    fireEvent.click(screen.getByRole("button", { name: /R-001/ }));
+    const stops = within(screen.getByRole("list", { name: "Stoppene på veien" })).getAllByRole("button");
+    expect(stops).toHaveLength(1);
+    expect(stops[0]).toHaveTextContent("Rom 104");
+    expect(screen.getByText(/^Stopp/)).toHaveTextContent("Stopp 1 av 1: Rom 104");
+    expect(screen.getByRole("button", { name: "Spill av" })).toBeDisabled();
+  });
+
   it("offers a retry when the log can't be read", async () => {
     fetchMock.mockImplementation(async () => new Response("", { status: 503 }));
     renderRoutes({ modus: "robot" });
@@ -265,5 +276,30 @@ describe("RoutesScreen, Plukkliste", () => {
     expect(screen.getByRole("heading", { name: "Ingen rom valgt" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /Plukkliste/ }));
     expect(screen.getByRole("heading", { name: "Plukklisten er tom" })).toBeVisible();
+  });
+});
+
+describe("RoutesScreen, clearing a list can be undone", () => {
+  it("takes the whole round off with Fjern alle rom, and Angre (focused) puts it back", async () => {
+    renderRoutes({ rom: "room-201,room-214" });
+    await screen.findByRole("list", { name: "Rekkefølge" });
+    fireEvent.click(screen.getByRole("button", { name: "Fjern alle rom" }));
+    expect(screen.getByRole("heading", { name: "Ingen rom valgt" })).toBeInTheDocument();
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("2 rom er fjernet fra runden.");
+    const undo = within(status).getByRole("button", { name: "Angre: legg rommene tilbake" });
+    expect(undo).toHaveFocus();
+    fireEvent.click(undo);
+    expect(within(screen.getByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("empties the pick list with Tøm plukklisten, and Angre brings the scanned items back", () => {
+    renderWith(THREE);
+    fireEvent.click(screen.getByRole("button", { name: "Tøm plukklisten" }));
+    expect(screen.getByRole("heading", { name: "Plukklisten er tom" })).toBeInTheDocument();
+    const undo = within(screen.getByRole("status")).getByRole("button", { name: "Angre: legg varene tilbake" });
+    expect(undo).toHaveFocus();
+    fireEvent.click(undo);
+    expect(within(screen.getByRole("list", { name: "Plukkrekkefølge" })).getAllByRole("listitem")).toHaveLength(3);
   });
 });

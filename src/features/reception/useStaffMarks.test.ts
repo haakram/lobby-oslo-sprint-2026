@@ -22,6 +22,16 @@ describe("useStaffMarks", () => {
     expect(STAFF_MARKS_STORAGE).toBe("resepsjon-marks-v1");
   });
 
+  it("takes a mark back with null (Angre), in memory and in storage", () => {
+    const first = renderHook(() => useStaffMarks());
+    act(() => first.result.current.mark("b-1", "avvist"));
+    act(() => first.result.current.mark("m-1", "ringt"));
+    act(() => first.result.current.mark("b-1", null));
+    expect(first.result.current.marks).toEqual({ "m-1": "ringt" });
+    first.unmount();
+    expect(renderHook(() => useStaffMarks()).result.current.marks).toEqual({ "m-1": "ringt" });
+  });
+
   it("still works in memory when localStorage throws on get and set", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");

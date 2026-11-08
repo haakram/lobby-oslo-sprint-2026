@@ -13,13 +13,13 @@ import { floorGeometry, labelPoint, pathData, percentOf, runPoints, TILE, type F
 
 gsap.registerPlugin(useGSAP);
 
-// DESIGN.md: entrances ease cubic-bezier(0.2, 0, 0, 1); one route segment takes at most 300 ms.
+// DESIGN.md: ease-standard cubic-bezier(0.23, 1, 0.32, 1); one route segment takes at most 300 ms.
 const EASE = "lobby-standard";
 let easeReady = false;
 function ensureEase() {
   if (easeReady) return;
   gsap.registerPlugin(CustomEase);
-  CustomEase.create(EASE, "0.2,0,0,1");
+  CustomEase.create(EASE, "0.23,1,0.32,1");
   easeReady = true;
 }
 const SEGMENT_S = 0.3;
@@ -29,6 +29,8 @@ const PIN_S = 0.15;
 
 /** Below this the floor scrolls sideways inside its panel instead of shrinking the room tiles. */
 const MIN_PX_PER_M = 12;
+/** On touch a room tile is a target: 2.8 m × 16 px ≈ 45 px (DESIGN.md: touch targets ≥ 44 px). */
+const MIN_PX_PER_M_TOUCH = 16;
 const CONNECTOR = 2;
 
 // The one status language every screen shares (src/ui/roomStatus.ts).
@@ -38,6 +40,25 @@ export const STATUS_TONE: Record<RoomStatus, string> = {
   ma_vaskes: ROOM_STATUS.ma_vaskes.fill,
   ikke_forstyrr: ROOM_STATUS.ikke_forstyrr.fill,
 };
+
+/**
+ * The tile itself says the status too, not only the bar's hue (WCAG 1.4.1; DESIGN.md "Room states"):
+ * Må vaskes is a loud warning tile, Opptatt a quiet sunken one, Ikke forstyrr a door-hanger outline.
+ */
+const STATUS_TILE: Record<RoomStatus, string> = {
+  klar: "border border-line-strong bg-surface",
+  ma_vaskes: "border border-warning bg-warning-soft",
+  opptatt: "border border-line-strong bg-sunken",
+  ikke_forstyrr: "border-2 border-text bg-surface",
+};
+
+/** The two statuses that change the round carry their glyph as well. */
+const STATUS_GLYPH: Partial<Record<RoomStatus, true>> = { ma_vaskes: true, ikke_forstyrr: true };
+
+function StatusGlyph({ status, size, className }: { status: RoomStatus; size: number; className?: string }) {
+  if (!STATUS_GLYPH[status]) return null;
+  return <RegenIcon name={ROOM_STATUS[status].icon} size={size} className={cx(ROOM_STATUS[status].ink, className)} />;
+}
 
 export type PlanPin = { node: string; label: string; /** The route step that ends here; no step = shown at once. */ step?: number };
 export type PlanTrace = { from: string; to: string; count: number };
@@ -58,6 +79,11 @@ type Props = {
   onToggleRoom?: (room: string) => void;
   /** Bump to draw the route stop by stop; 0 shows it at once. */
   drawToken: number;
+  /**
+   * Step by step, under the caller's control (Spill av / Pause): the route is drawn up to this step,
+   * its pin is marked, later pins are hollow. Leave out to draw the whole route.
+   */
+  progress?: number;
   legend?: ReactNode;
   /** Actions under the plan, beside the legend. */
   footer?: ReactNode;
@@ -115,6 +141,7 @@ export function HotelPlan({
   selected,
   onToggleRoom,
   drawToken,
+  progress,
   legend,
   footer,
 }: Props) {
@@ -122,14 +149,22 @@ export function HotelPlan({
   const baseId = useId();
   const root = useRef<HTMLDivElement>(null);
   const floors = useMemo(() => floorsOf(map), [map]);
-  const [shown, setShown] = useState(floors[0]);
+  // On a phone (one floor at a time) the plan opens on, and follows, the floor of the stop in view.
+  const followNode = progress !== undefined ? (pins.find((p) => p.step === progress)?.node ?? pins[0]?.node) : pins[0]?.node;
+  const followFloor = followNode ? map.nodes[followNode]?.floor : undefined;
+  const [shown, setShown] = useState(followFloor ?? floors[0]);
+  const [followed, setFollowed] = useState(followFloor);
+  if (followFloor !== followed) {
+    setFollowed(followFloor);
+    if (followFloor !== undefined) setShown(followFloor);
+  }
 
   const steps = useMemo(() => route.map((path) => runsOf(map, path)), [map, route]);
   const maxTrace = Math.max(1, ...trace.map((t) => t.count));
 
   useGSAP(
     () => {
-      if (reduced || drawToken === 0 || steps.length === 0) return;
+      if (reduced || drawToken === 0 || steps.length === 0 || progress !== undefined) return;
       ensureEase();
       const tl = gsap.timeline({ defaults: { ease: EASE } });
       const perStep = Math.min(SEGMENT_S, Math.max(MIN_SEGMENT_S, WHOLE_DRAW_S / steps.length));
@@ -182,7 +217,7 @@ export function HotelPlan({
               onKeyDown={onTabKey}
               className={cx(
                 "inline-flex min-h-12 items-center justify-center gap-2 rounded-md border px-2 text-base font-semibold",
-                "transition-colors duration-150 ease-standard",
+                "transition-colors duration-[120ms] ease-standard",
                 active ? "border-line bg-surface text-text" : "border-transparent text-muted hover:text-text",
               )}
             >
@@ -197,7 +232,8 @@ export function HotelPlan({
         })}
       </div>
 
-      <div style={layout} className="md:grid md:grid-cols-(--cols-rest) md:gap-4 min-[87.5rem]:grid-cols-(--cols-all)">
+      {/* All three floors in one row only where they fit at their minimum width beside the rail. */}
+      <div style={layout} className="md:grid md:grid-cols-(--cols-rest) md:gap-4 min-[105rem]:grid-cols-(--cols-all)">
         {floors.map((floor, index) => {
           const { frame, corridors, doors } = floorGeometry(map, floor);
           const here = Object.entries(map.nodes).filter(([, n]) => n.floor === floor);
@@ -224,7 +260,7 @@ export function HotelPlan({
               className={cx(
                 "min-w-0",
                 floor !== shown && "hidden md:block",
-                index === 0 && "md:col-span-full md:w-(--first-w) min-[87.5rem]:col-span-1 min-[87.5rem]:w-auto",
+                index === 0 && "md:col-span-full md:w-(--first-w) min-[105rem]:col-span-1 min-[105rem]:w-auto",
               )}
             >
               <header className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -242,8 +278,14 @@ export function HotelPlan({
               </header>
               <div className="overflow-x-auto rounded-md">
                 <div
-                  className="relative w-full"
-                  style={{ aspectRatio: `${frame.width} / ${frame.height}`, minWidth: `${Math.round(frame.width * MIN_PX_PER_M)}px` }}
+                  className={cx("relative w-full min-w-(--min)", onToggleRoom && "pointer-coarse:min-w-(--min-touch)")}
+                  style={
+                    {
+                      aspectRatio: `${frame.width} / ${frame.height}`,
+                      "--min": `${Math.round(frame.width * MIN_PX_PER_M)}px`,
+                      "--min-touch": `${Math.round(frame.width * MIN_PX_PER_M_TOUCH)}px`,
+                    } as CSSProperties
+                  }
                 >
                   <svg viewBox={`0 0 ${frame.width} ${frame.height}`} className="absolute inset-0 size-full" aria-hidden="true">
                     <rect x="0.1" y="0.1" width={frame.width - 0.2} height={frame.height - 0.2} rx="0.8" className="fill-sunken stroke-line" strokeWidth="0.15" />
@@ -279,10 +321,18 @@ export function HotelPlan({
                           if (run.floor !== floor || run.nodes.length < 2) return null;
                           const d = pathData(runPoints(map, run.nodes), frame);
                           const common = { d, pathLength: 1, strokeDasharray: "1 1", "data-step": step, "data-sub": sub };
+                          // Stepped: drawn up to the step in view; the step that just came draws itself.
+                          const stepped =
+                            progress === undefined
+                              ? {}
+                              : {
+                                  style: { strokeDashoffset: step <= progress ? 0 : 1 },
+                                  className: "transition-[stroke-dashoffset] duration-700 ease-move motion-reduce:transition-none",
+                                };
                           return (
                             <g key={`r-${step}-${sub}`}>
-                              <path {...common} className="stroke-surface" strokeWidth="1.05" />
-                              <path {...common} className="stroke-accent" strokeWidth="0.55" />
+                              <path {...common} style={stepped.style} className={cx("stroke-surface", stepped.className)} strokeWidth="1.05" />
+                              <path {...common} style={stepped.style} className={cx("stroke-accent", stepped.className)} strokeWidth="0.55" />
                             </g>
                           );
                         }),
@@ -297,13 +347,14 @@ export function HotelPlan({
                       const on = selected?.has(id) ?? false;
                       const name = `Rom ${roomNumber(id)}${report ? `, ${STATUS_LABEL[report.status].toLowerCase()}` : ""}`;
                       const tile = cx(
-                        "absolute flex items-center justify-center overflow-hidden rounded-sm font-mono text-xs tabular-nums",
-                        "transition-colors duration-150 ease-standard",
-                        on ? "border-2 border-accent bg-accent-soft text-text" : "border border-line-strong bg-surface text-text",
+                        "absolute flex items-center justify-center overflow-hidden rounded-sm font-mono text-xs text-text tabular-nums",
+                        "transition-colors duration-[120ms] ease-standard",
+                        on ? "border-2 border-accent bg-accent-soft" : report ? STATUS_TILE[report.status] : "border border-line-strong bg-surface",
                       );
                       const inner = (
                         <>
                           {roomNumber(id)}
+                          {report && <StatusGlyph status={report.status} size={10} className="absolute top-0.5 right-0.5" />}
                           {report && (
                             <span aria-hidden="true" className={cx("absolute inset-x-1 bottom-0.5 h-[3px] rounded-full", STATUS_TONE[report.status])} />
                           )}
@@ -317,7 +368,7 @@ export function HotelPlan({
                           aria-label={name}
                           title={name}
                           onClick={() => onToggleRoom(id)}
-                          className={cx(tile, !on && "hover:bg-sunken", "cursor-pointer")}
+                          className={cx(tile, !on && "hover:brightness-95", "cursor-pointer")}
                           style={box(centre, TILE, frame)}
                         >
                           {inner}
@@ -373,7 +424,7 @@ export function HotelPlan({
 
                   {start && map.nodes[start]?.floor === floor && (
                     <span
-                      className="pointer-events-none absolute rounded-sm bg-text px-2 py-0.5 text-xs font-semibold text-surface"
+                      className="pointer-events-none absolute rounded-sm bg-text px-2 py-0.5 text-sm font-semibold text-surface sm:text-xs"
                       style={anchored(map.nodes[start], frame)}
                     >
                       Start
@@ -385,12 +436,20 @@ export function HotelPlan({
                     .map((p) => {
                       const n = map.nodes[p.node];
                       const corner = percentOf({ x: n.x + TILE / 2, z: n.z - TILE / 2 }, frame);
+                      // Stepped: the stop in view is ringed, the ones still to come are hollow.
+                      const ahead = progress !== undefined && p.step !== undefined && p.step > progress;
+                      const here = progress !== undefined && p.step === progress;
                       return (
                         <span
                           key={`pin-${p.node}-${p.label}`}
                           aria-hidden="true"
                           data-pin-step={p.step}
-                          className="pointer-events-none absolute flex h-5 min-w-5 -translate-x-2/5 -translate-y-3/5 items-center justify-center rounded-full border-2 border-surface bg-accent px-1 font-mono text-xs font-medium text-on-accent tabular-nums"
+                          data-pin-state={progress === undefined ? undefined : here ? "here" : ahead ? "ahead" : "done"}
+                          className={cx(
+                            "pointer-events-none absolute flex h-6 min-w-6 -translate-x-2/5 -translate-y-3/5 items-center justify-center rounded-full border-2 px-1 font-mono text-sm font-medium tabular-nums sm:h-5 sm:min-w-5 sm:text-xs",
+                            ahead ? "border-accent bg-surface text-accent-text" : "border-surface bg-accent text-on-accent",
+                            here && "z-10 outline-2 outline-offset-1 outline-text",
+                          )}
                           style={{ left: `${corner.left}%`, top: `${corner.top}%` }}
                         >
                           {p.label}
@@ -409,7 +468,10 @@ export function HotelPlan({
           {legend}
           {(Object.keys(STATUS_TONE) as RoomStatus[]).map((s) => (
             <li key={s} className="flex items-center gap-2">
-              <span aria-hidden="true" className={cx("h-[3px] w-5 rounded-full", STATUS_TONE[s])} />
+              <span aria-hidden="true" className={cx("relative inline-flex size-6 items-center justify-center rounded-sm", STATUS_TILE[s])}>
+                <StatusGlyph status={s} size={12} />
+                <span className={cx("absolute inset-x-1 bottom-0.5 h-[3px] rounded-full", STATUS_TONE[s])} />
+              </span>
               {STATUS_LABEL[s]}
             </li>
           ))}

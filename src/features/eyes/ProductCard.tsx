@@ -54,7 +54,8 @@ export function ProductCard({ result }: { result: IdentifyResult }) {
       )}
 
       {product ? (
-        <div className="grid grid-cols-2 gap-3">
+        // One column on a narrow phone: "Legg i plukkliste" needs more than half of 390 px.
+        <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
           <Button variant="secondary" onClick={() => router.push("/ruter?sku=" + encodeURIComponent(product.sku))}>
             <RouteIcon />
             Vis vei

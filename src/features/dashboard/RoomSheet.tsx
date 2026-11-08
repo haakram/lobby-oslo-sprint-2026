@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Badge, type BadgeTone, Button, buttonClasses, Sheet } from "@/ui";
+import { canAccess, useSession } from "@/features/auth";
+import { Badge, type BadgeTone, buttonClasses, Sheet } from "@/ui";
 import { hhmm } from "./format";
 import {
   humanizeText,
@@ -17,7 +18,8 @@ export const STATUS_TONE: Record<RoomStatus, BadgeTone> = {
   klar: "success",
   ma_vaskes: "warning",
   opptatt: "neutral",
-  ikke_forstyrr: "warning",
+  // A door hanger, not a job: amber is for what needs someone (DESIGN.md "Room states").
+  ikke_forstyrr: "neutral",
   ukjent: "neutral",
 };
 
@@ -36,6 +38,7 @@ export function RoomSheet({
   room,
   entries,
   ended,
+  dirtyIds = [],
   onClose,
 }: {
   /** The room stays set while the sheet slides out, so its content doesn't blink away. */
@@ -43,8 +46,13 @@ export function RoomSheet({
   room: RoomView | null;
   entries: RoomNightEntry[];
   ended: boolean;
+  /** Tonight's rooms that must be cleaned: "Legg i renholdsrute" adds this room to them. */
+  dirtyIds?: readonly string[];
   onClose: () => void;
 }) {
+  // The 3D-kart is the robot manager's: a receptionist would land on "Ingen tilgang", so the link is not shown.
+  const { effectiveRole } = useSession();
+  const map3d = effectiveRole === null || canAccess(effectiveRole, "/hotell");
   return (
     <Sheet open={open && room !== null} onClose={onClose} title={room ? `Rom ${room.number}` : ""}>
       {room && (
@@ -61,13 +69,25 @@ export function RoomSheet({
             </span>
           </div>
 
+          {/* The room's actions sit with its status, above the night's log, so a long night never buries them. */}
+          <div className="flex flex-wrap gap-2">
+            <Link href={cleaningHref([...new Set([...dirtyIds, room.id])])} className={buttonClasses("secondary")}>
+              Legg i renholdsrute
+            </Link>
+            {map3d && (
+              <Link href={`/hotell?rom=${encodeURIComponent(room.id)}`} className={buttonClasses("secondary")}>
+                Vis i 3D-kartet
+              </Link>
+            )}
+          </div>
+
           {entries.length === 0 ? (
             <div className="flex flex-col gap-1">
               <p className="text-base font-semibold">Roboten var ikke innom rommet i natt</p>
               <p className="text-base text-muted">Statusen er ukjent til noen har sjekket rommet.</p>
             </div>
           ) : (
-            <ol aria-label={`Natten i rom ${room.number}`} className="-mx-1 max-h-[55dvh] overflow-y-auto px-1">
+            <ol aria-label={`Natten i rom ${room.number}`}>
               {entries.map((entry, index) => (
                 <li key={index} className="flex gap-4 border-t border-line py-3 first:border-t-0 first:pt-0">
                   <span className="w-12 shrink-0 text-sm whitespace-nowrap text-muted tabular-nums">
@@ -79,17 +99,6 @@ export function RoomSheet({
             </ol>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            <Link href={cleaningHref([room.id])} className={buttonClasses("secondary")}>
-              Legg i renholdsrute
-            </Link>
-            <Link href={`/hotell?rom=${encodeURIComponent(room.id)}`} className={buttonClasses("secondary")}>
-              Vis i 3D-kartet
-            </Link>
-            <Button variant="ghost" onClick={onClose}>
-              Lukk
-            </Button>
-          </div>
         </div>
       )}
     </Sheet>

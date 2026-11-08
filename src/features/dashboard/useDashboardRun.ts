@@ -14,8 +14,15 @@ export type DashboardRun = {
   status: RunStatus;
   lines: RunLine[];
   source: RunSource;
+  /** Live only: the shift we were following has stopped running. Its last lines stay on screen. */
+  ended: boolean;
+  /** Live only: the viewer stopped answering. When it last answered (epoch ms); null while in contact. */
+  lostAfter: number | null;
   retry: () => void;
 };
+
+/** A live shift once it has lines: kept on screen when it ends or the viewer goes quiet. */
+type LiveNight = { lines: RunLine[]; ended: boolean; lostAfter: number | null };
 
 /** While a shift is live on the local viewer: follow it closely. */
 export const POLL_LIVE_MS = 3000;
@@ -36,11 +43,14 @@ async function getJson(url: string, signal: AbortSignal): Promise<unknown> {
 /**
  * The night the overview shows: the recorded demo night by default; a shift that is running right
  * now on the local viewer server (NEXT_PUBLIC_VIEWER_URL) takes over while it runs. The viewer being
- * down is not an error here: the demo night stays on screen.
+ * down is not an error here: the demo night stays on screen. Once a live shift has been shown it is
+ * never swapped back for the recording: when it ends it stays (`ended`), and when the viewer stops
+ * answering it stays with the time of the last answer (`lostAfter`), so 06:00 never shows another
+ * night as tonight's.
  */
 export function useDashboardRun(viewerUrl?: string): DashboardRun {
   const [demo, setDemo] = useState<{ status: RunStatus; lines: RunLine[] }>({ status: "loading", lines: [] });
-  const [live, setLive] = useState<RunLine[] | null>(null);
+  const [live, setLive] = useState<LiveNight | null>(null);
   const [attempt, setAttempt] = useState(0);
   const base = viewerBase(viewerUrl);
 
@@ -68,15 +78,18 @@ export function useDashboardRun(viewerUrl?: string): DashboardRun {
     let next = 0;
     let lines: RunLine[] = [];
     let busy = false;
+    let lastAnswer = Date.now();
 
     /** One look at the viewer; returns how long to wait before the next one. */
     async function look(): Promise<number> {
       try {
         const runs = z.array(z.unknown()).parse(await getJson(`${base}/api/runs`, controller.signal));
+        lastAnswer = Date.now();
         const running = runs.map((run) => runEntry.safeParse(run)).find((run) => run.success && run.data.live);
         if (!running?.success) {
           shift = null;
-          setLive(null);
+          // The shift we followed is over: keep its night on screen, marked as ended.
+          setLive((current) => (current && !current.ended ? { ...current, ended: true, lostAfter: null } : current));
           return POLL_IDLE_MS;
         }
         if (running.data.shift !== shift) {
@@ -89,13 +102,20 @@ export function useDashboardRun(viewerUrl?: string): DashboardRun {
         );
         const added = parseRunValues(run.lines).lines;
         next = run.next;
-        if (added.length) {
-          lines = [...lines, ...added];
-          setLive(lines);
-        }
+        if (added.length) lines = [...lines, ...added];
+        const shown = lines;
+        setLive((current) => {
+          // Nothing of the live shift yet: the recorded night stays until there is.
+          if (shown.length === 0) return current;
+          if (!added.length && current && !current.ended && current.lostAfter === null) return current;
+          return { lines: shown, ended: false, lostAfter: null };
+        });
         return POLL_LIVE_MS;
       } catch {
-        if (!controller.signal.aborted) setLive(null);
+        // Lost contact: keep what we had, and say since when.
+        if (!controller.signal.aborted) {
+          setLive((current) => (current && !current.ended && current.lostAfter === null ? { ...current, lostAfter: lastAnswer } : current));
+        }
         return POLL_IDLE_MS;
       }
     }
@@ -129,6 +149,6 @@ export function useDashboardRun(viewerUrl?: string): DashboardRun {
     setAttempt((count) => count + 1);
   }, []);
 
-  if (live) return { status: "ready", lines: live, source: "live", retry };
-  return { status: demo.status, lines: demo.lines, source: "demo", retry };
+  if (live) return { status: "ready", lines: live.lines, source: "live", ended: live.ended, lostAfter: live.lostAfter, retry };
+  return { status: demo.status, lines: demo.lines, source: "demo", ended: false, lostAfter: null, retry };
 }

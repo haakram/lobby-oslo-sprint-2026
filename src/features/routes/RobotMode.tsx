@@ -8,6 +8,7 @@ import { placeLabel, type HotelGraph } from "./hotelMap";
 import { HotelPlan, type PlanTrace } from "./HotelPlan";
 import { roomStatusAt, type RoomReport } from "./nightRooms";
 import { robotWalk, taskKindLabel, totalsByKind, type RobotTask } from "./robotWalk";
+import { TaskWalk } from "./TaskWalk";
 import type { NightLog } from "./useNightLog";
 
 const nb = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 0 });
@@ -111,7 +112,8 @@ export function RobotMode({ map, log }: { map: HotelGraph; log: NightLog }) {
     if (scroll) mapCard.current?.scrollIntoView?.({ block: "start", behavior: reduced ? "auto" : "smooth" });
   };
 
-  const taskMoves = task ? night.moves.filter((m) => m.request === task.request) : [];
+  // The failed tasks first: those are the ones somebody asks about at the handover.
+  const listed = [...night.tasks].sort((a, b) => Number(b.outcome === "failed") - Number(a.outcome === "failed"));
 
   return (
     <div className="flex flex-col gap-4 lg:gap-6">
@@ -135,7 +137,7 @@ export function RobotMode({ map, log }: { map: HotelGraph; log: NightLog }) {
         <Card className="p-4 sm:p-5">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0">
-              <h2 className="text-xl font-semibold tracking-tight">
+              <h2 className="text-lg font-semibold tracking-[-0.01em]">
                 {task ? `${task.request} · ${taskKindLabel(task.kind)}` : "Hele natten"}
               </h2>
               <p className="mt-1 text-sm text-muted">
@@ -177,28 +179,42 @@ export function RobotMode({ map, log }: { map: HotelGraph; log: NightLog }) {
               </select>
             </div>
           </div>
-          <HotelPlan
-            map={map}
-            label={task ? `Hotellkart med veien for ${task.request}` : "Hotellkart med veien roboten gikk i natt"}
-            statuses={statuses}
-            route={taskMoves.map((m) => [m.from, m.to])}
-            start={task ? (task.path[0] ?? null) : null}
-            trace={task ? [] : trace}
-            selected={task?.room ? new Set([task.room]) : undefined}
-            drawToken={drawToken}
-            legend={
-              <li className="flex items-center gap-2">
-                <span aria-hidden="true" className="h-1 w-6 rounded-full bg-accent" />
-                {task ? "Veien for oppgaven" : "Veien i natt"}
-              </li>
-            }
-          />
+          {task ? (
+            // A new task opens paused on its first stop (keyed: the player starts over).
+            <TaskWalk
+              key={task.request}
+              map={map}
+              statuses={statuses}
+              task={task}
+              legend={
+                <li className="flex items-center gap-2">
+                  <span aria-hidden="true" className="h-1 w-6 rounded-full bg-accent" />
+                  Veien for oppgaven
+                </li>
+              }
+            />
+          ) : (
+            <HotelPlan
+              map={map}
+              label="Hotellkart med veien roboten gikk i natt"
+              statuses={statuses}
+              route={[]}
+              trace={trace}
+              drawToken={drawToken}
+              legend={
+                <li className="flex items-center gap-2">
+                  <span aria-hidden="true" className="h-1 w-6 rounded-full bg-accent" />
+                  Veien i natt
+                </li>
+              }
+            />
+          )}
         </Card>
       </div>
 
       <div className="grid gap-4 lg:gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
         <Card className="p-4 sm:p-5">
-          <h2 className="text-xl font-semibold tracking-tight">Hvor metrene gikk</h2>
+          <h2 className="text-lg font-semibold tracking-[-0.01em]">Hvor metrene gikk</h2>
           <table className="mt-3 w-full text-left text-sm">
             <caption className="sr-only">Meter, oppgaver og heisturer per type oppgave</caption>
             <thead className="text-muted">
@@ -234,15 +250,15 @@ export function RobotMode({ map, log }: { map: HotelGraph; log: NightLog }) {
 
         <Card className="p-4 sm:p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-xl font-semibold tracking-tight">Oppgavene i natt</h2>
+            <h2 className="text-lg font-semibold tracking-[-0.01em]">Oppgavene i natt</h2>
             {task && (
               <Button variant="ghost" className="text-sm" onClick={() => pick(null, true)}>
                 Vis hele natten
               </Button>
             )}
           </div>
-          <ol aria-label="Oppgavene i natt" className="mt-2 max-h-[30rem] overflow-y-auto">
-            {night.tasks.map((t) => {
+          <ol aria-label="Oppgavene i natt" className="mt-2 lg:max-h-[30rem] lg:overflow-y-auto">
+            {listed.map((t) => {
               const on = t.request === picked;
               return (
                 <li key={t.request} className="border-b border-line last:border-b-0">
@@ -253,7 +269,7 @@ export function RobotMode({ map, log }: { map: HotelGraph; log: NightLog }) {
                     className={cx(
                       "grid min-h-12 w-full grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 rounded-md px-2 py-2 text-left",
                       "sm:flex",
-                      "transition-colors duration-150 ease-standard",
+                      "transition-colors duration-[120ms] ease-standard",
                       on ? "bg-accent-soft" : "hover:bg-sunken",
                     )}
                   >

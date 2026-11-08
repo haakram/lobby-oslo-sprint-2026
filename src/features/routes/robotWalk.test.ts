@@ -114,4 +114,39 @@ describe("robotWalk", () => {
     expect(Math.round(taskMetres + night.between.metres)).toBeCloseTo(night.metres, -1);
     expect(night.tasks.reduce((s, t) => s + t.rides, 0) + night.between.rides).toBe(night.rides);
   });
+
+  it("cuts a task's walk into its stops: what the robot did where, rides apart, metres and time per leg", () => {
+    const call = (clock: string, cmd: string, args: Record<string, unknown>) => ({ v: 1, type: "call", cmd, args, ok: true, clock, result: "ok" });
+    const lines = parseRunValues([
+      state("23:00:00", "front-desk"),
+      decision("task_start", { request: "R-012", kind: "tray", room: "room-201" }),
+      call("23:00:30", "ask", { person: "clerk", question: "Who ordered?" }),
+      move("23:00:38", "lobby", { at: "lobby", metres: 8 }),
+      move("23:00:44", "elevator-1", { at: "elevator-1", metres: 6 }),
+      move("23:01:30", "elevator-2", { at: "elevator-2" }),
+      move("23:01:36", "corridor-2a", { at: "corridor-2a", metres: 4 }),
+      call("23:01:40", "look", {}),
+      call("23:01:45", "knock", { door: "room-201" }),
+      call("23:01:50", "place", { item: "tray-201", where: "room-201" }),
+      call("23:01:52", "report", { request: "R-012", outcome: "done" }),
+      decision("task_done", { request: "R-012", status: "done" }),
+    ]).lines;
+    const [task] = robotWalk(lines, map).tasks;
+    expect(task.origin).toBe("front-desk");
+    expect(task.steps.map((s) => [s.node, s.actions, s.ride, s.metres, s.seconds])).toEqual([
+      ["front-desk", ["spør resepsjonen"], null, 0, 30],
+      ["elevator-2", ["heis til 2. etasje"], { from: 1, to: 2 }, 14, 60],
+      ["corridor-2a", ["bank på rom 201", "lever brett til 201", "meld utført"], null, 4, 15],
+    ]);
+    // The stops' paths join up into the task's whole walk.
+    expect(task.steps.flatMap((s, i) => (i === 0 ? s.path : s.path.slice(1)))).toEqual(task.path.length ? ["front-desk", ...task.path.slice(1)] : ["front-desk"]);
+  });
+
+  it("ends a walk with no action at its end on the place it got to", () => {
+    const [task] = robotWalk(NIGHT, map).tasks;
+    expect(task.steps.map((s) => [s.node, s.actions, s.ride])).toEqual([
+      ["elevator-2", ["heis til 2. etasje"], { from: 1, to: 2 }],
+      ["room-201", [], null],
+    ]);
+  });
 });

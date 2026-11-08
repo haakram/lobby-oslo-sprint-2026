@@ -50,7 +50,7 @@ export function RoomBoard({
             );
           })}
           <li className="flex items-center gap-2 text-sm">
-            <span aria-hidden="true" className="size-2 rounded-full bg-danger" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-text" />
             <span className="text-muted">Avvik</span>
             {counts ? <span className="font-semibold tabular-nums">{counts.avvik}</span> : <Skeleton className="h-4 w-4" />}
           </li>
@@ -68,7 +68,7 @@ export function RoomBoard({
                 className="grid grid-cols-[3rem_minmax(0,1fr)] gap-x-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-[4rem_minmax(0,1fr)]"
               >
                 <h3 id={`floor-${floor}`} className="flex flex-col pt-1 leading-none">
-                  <span className="font-display text-2xl font-medium tabular-nums">{floor}</span>
+                  <span className="font-mono text-2xl font-medium tabular-nums">{floor}</span>
                   <span className="mt-1 text-xs text-muted">etasje</span>
                 </h3>
                 <ul className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-1.5">
@@ -115,21 +115,23 @@ function RoomTile({ room, clock, onOpen }: { room: RoomView; clock: string | nul
           "relative flex h-full min-h-[84px] flex-col justify-between rounded-sm p-2",
           "transition-[filter] duration-[120ms] ease-standard group-hover:brightness-110",
           look.tile,
-          avvik && "shadow-[inset_3px_0_0_0_var(--danger)]",
+          // An ink mark, not red: what an avvik needs is on Vedlikehold and in the bell.
+          avvik && "shadow-[inset_3px_0_0_0_var(--text)]",
         )}
       >
         <span className="flex items-center justify-between gap-1">
           <span aria-hidden="true" className={cx("h-1.5 w-5 rounded-full", look.tag)} />
           {stale && !avvik && <span className="text-xs leading-4 text-muted tabular-nums">{hhmm(room.statusAt)}</span>}
           {avvik && (
-            <span className="text-xs leading-4 font-semibold text-danger">
+            <span className="text-xs leading-4 font-semibold text-text">
               Avvik{room.openOrders > 1 ? ` ${room.openOrders}` : ""}
             </span>
           )}
         </span>
         <span>
-          <span className="block font-display text-[22px] leading-none font-semibold tabular-nums">{room.number}</span>
-          <span className={cx("mt-1 block truncate text-sm leading-5", look.loud ? "font-semibold" : "font-medium", look.word_class)}>{look.word}</span>
+          <span className="block font-mono text-lg leading-none font-medium tabular-nums">{room.number}</span>
+          {/* The word is the tile's point: it wraps ("Ikke / sjekket") rather than cut to "Ikke sjek…". */}
+          <span className={cx("mt-1 block text-sm leading-5", look.loud ? "font-semibold" : "font-medium", look.word_class)}>{look.word}</span>
         </span>
       </span>
     </button>

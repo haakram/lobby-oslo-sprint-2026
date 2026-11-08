@@ -13,7 +13,7 @@ export function Monogram({ name, size = 36, className }: { name: string; size?: 
       aria-hidden="true"
       style={{ width: size, height: size, fontSize: Math.round(size * 0.44) }}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center rounded-full bg-accent-soft font-display font-medium leading-none text-accent-text",
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-accent-soft font-semibold leading-none text-accent-text",
         className,
       )}
     >

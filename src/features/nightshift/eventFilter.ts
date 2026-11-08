@@ -1,4 +1,4 @@
-import type { ReplayEvent, Task } from "@/features/replay";
+import { type ReplayEvent, simToClock, type Task } from "@/features/replay";
 
 /**
  * Which of the robot's events a hotel manager sees (UX audit X4): the ones with a known Norwegian
@@ -38,15 +38,21 @@ export function forManagers(events: readonly ReplayEvent[], technical: boolean):
 
 export type Failure = { task: Task; reason: string | null; clock: string };
 
-/** The failed tasks with the reason the log gave, newest first; the night report leads with them. */
-export function failures(tasks: readonly Task[], events: readonly ReplayEvent[], upToEvent: number): Failure[] {
+/**
+ * The tasks that ended without "done" by `t`, with the reason the log gave, newest first; the night
+ * report leads with them. The same rule as the snapshot's `tasksFailed` count, so the list and the
+ * figure always agree: a task the shift ended on ("Skiftet tok slutt") has no `task_failed` line but
+ * still counts, with its end as the clock.
+ */
+export function failures(tasks: readonly Task[], events: readonly ReplayEvent[], upToEvent: number, t: number): Failure[] {
   const seen = events.slice(0, upToEvent);
   return tasks
-    .filter((task) => task.outcome === "failed")
+    .filter((task): task is Task & { end: number } => task.end !== null && task.end <= t && task.outcome !== "done")
     .map((task) => {
       const failed = seen.find((event) => event.kind === "task_failed" && event.request === task.id);
-      return { task, reason: task.note ?? (failed ? managerText(failed.text) || null : null), clock: failed?.clock ?? "" };
+      const logged = failed ? managerText(failed.text) || null : null;
+      const reason = task.note ?? logged ?? (task.outcome === null ? "Ble ikke fullført." : null);
+      return { task, reason, clock: failed?.clock ?? simToClock(task.end) };
     })
-    .filter((failure) => failure.clock !== "")
     .sort((a, b) => b.task.start - a.task.start);
 }

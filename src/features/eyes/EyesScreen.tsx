@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Button, ErrorState, Sheet, Skeleton, cx } from "@/ui";
+import { Badge, Button, EmptyState, ErrorState, RegenIcon, Sheet, Skeleton, cx } from "@/ui";
 import { BoxOverlay, type BoxLabel } from "./BoxOverlay";
 import { cocoLabel, isProductClass } from "./cocoLabels";
 import { cropFrame } from "./cropFrame";
@@ -33,7 +33,7 @@ const QUOTA_BODY = "Les SKU-en på etiketten, eller spør skiftlederen.";
 
 /** Øyne: the live camera with boxes. Stable boxes are recognised on their own; tap for the card. */
 export function EyesScreen() {
-  const { video, status: cameraStatus, size: videoSize, retry: retryCamera } = useCamera();
+  const { video, status: cameraStatus, size: videoSize, start: startCamera, retry: retryCamera } = useCamera();
   const [sheet, setSheet] = useState<SheetContent | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [autoOn, setAutoOn] = useState(true);
@@ -65,8 +65,8 @@ export function EyesScreen() {
       const result = results[box.id];
       if (busy[box.id]) next[box.id] = { text: "Gjenkjenner …", state: "busy" };
       else if (result?.product) next[box.id] = { text: result.product.name, state: "known" };
-      // Not in the catalogue: Claude's own name for it ("Kaffekopp"); the card says "Ikke i katalogen".
-      else if (result) next[box.id] = { text: result.name || cocoLabel(box.label), state: "product" };
+      // Not in the catalogue: Claude's own name for it ("Kaffekopp"); the tag and the card say "ikke i katalogen".
+      else if (result) next[box.id] = { text: result.name || cocoLabel(box.label), state: "missing" };
       else next[box.id] = { text: cocoLabel(box.label), state: isProductClass(box.label) ? "product" : "object" };
     }
     return next;
@@ -122,7 +122,7 @@ export function EyesScreen() {
     void run(detector.boxes.find((box) => box.id === sheet?.boxId) ?? null);
   }, [detector.boxes, sheet, run]);
 
-  const problem = cameraStatus !== "starting" && cameraStatus !== "ready" ? cameraStatus : null;
+  const problem = cameraStatus !== "idle" && cameraStatus !== "starting" && cameraStatus !== "ready" ? cameraStatus : null;
   const ready = cameraStatus === "ready";
   const autoActive = autoOn && !quotaReached;
 
@@ -154,9 +154,14 @@ export function EyesScreen() {
         className={cx("absolute inset-0 size-full object-cover", !ready && "invisible")}
       />
 
-      {problem ? (
+      {cameraStatus === "idle" ? (
         <>
-          <h1 className="px-4 pt-8 font-display text-2xl font-medium tracking-[-0.01em] sm:px-6 lg:px-10 lg:pt-10">Robotens øyne</h1>
+          <h1 className="px-4 pt-8 text-2xl font-bold tracking-[-0.02em] sm:px-6 lg:px-10 lg:pt-10">Robotens øyne</h1>
+          <CameraStart onStart={startCamera} />
+        </>
+      ) : problem ? (
+        <>
+          <h1 className="px-4 pt-8 text-2xl font-bold tracking-[-0.02em] sm:px-6 lg:px-10 lg:pt-10">Robotens øyne</h1>
           <PermissionState problem={problem} onRetry={retryCamera} />
         </>
       ) : (
@@ -190,7 +195,7 @@ export function EyesScreen() {
 
           <header className="pointer-events-none relative flex flex-col items-start gap-2 p-4 sm:px-8 lg:px-12 lg:pt-8">
             <div className="flex w-full flex-wrap items-center justify-between gap-2">
-              <h1 className="rounded-sm bg-bg/75 px-3 py-1 font-display text-xl font-medium tracking-[-0.01em] backdrop-blur-sm">Robotens øyne</h1>
+              <h1 className="rounded-sm bg-bg/75 px-3 py-1 text-xl font-bold tracking-[-0.02em] backdrop-blur-sm">Robotens øyne</h1>
               <div className="flex flex-wrap gap-2">
                 <Switch
                   label="Automatisk gjenkjenning"
@@ -249,21 +254,32 @@ export function EyesScreen() {
           <ErrorState
             title={sheetError.title}
             body={sheetError.quota ? QUOTA_BODY : RETRY_BODY}
-            action={
-              sheetError.quota ? (
-                <Button variant="secondary" onClick={close}>
-                  Lukk
-                </Button>
-              ) : (
-                <Button onClick={retry}>Prøv igjen</Button>
-              )
-            }
+            // Out of quota there is nothing to retry; the sheet's own Lukk closes it.
+            action={sheetError.quota ? undefined : <Button onClick={retry}>Prøv igjen</Button>}
           />
         ) : (
           <CardSkeleton image={sheet?.image ?? null} />
         )}
       </Sheet>
     </main>
+  );
+}
+
+/** Before the browser is asked: what the camera is for, and the one tap that asks. */
+function CameraStart({ onStart }: { onStart: () => void }) {
+  return (
+    <div className="flex flex-1 items-center px-4 py-12 sm:px-8 lg:px-12">
+      <EmptyState
+        icon={<RegenIcon name="eye" size={32} />}
+        title="Se det roboten ser"
+        body="Roboten ser gjennom kameraet og kjenner igjen varer og omgivelser. Nettleseren spør om lov første gang."
+        action={
+          <Button size="lg" onClick={onStart}>
+            Slå på kameraet
+          </Button>
+        }
+      />
+    </div>
   );
 }
 

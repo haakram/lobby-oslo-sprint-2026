@@ -21,7 +21,8 @@ const STATUS_TONE: Record<RoomStatus, BadgeTone> = {
   klar: "success",
   ma_vaskes: "warning",
   opptatt: "neutral",
-  ikke_forstyrr: "warning",
+  // A door hanger, not a job: warning means "må vaskes" (DESIGN.md, room states).
+  ikke_forstyrr: "neutral",
   avvik: "danger",
   ukjent: "neutral",
 };
@@ -98,7 +99,7 @@ export function RoomCard({
           <ul className="mt-1 flex flex-col gap-1">
             {[...tasks].reverse().map((task) => (
               <li key={task.id} className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="font-mono text-xs tabular-nums text-muted">{simToClock(task.start, false)}</span>
+                <span className="font-mono text-sm tabular-nums text-muted sm:text-xs">{simToClock(task.start, false)}</span>
                 <Badge tone={task.outcome === "done" ? "success" : task.outcome === "failed" ? "danger" : "accent"}>
                   {task.outcome === "done" ? "Fullført" : task.outcome === "failed" ? "Feilet" : "Pågår"}
                 </Badge>
@@ -114,7 +115,7 @@ export function RoomCard({
           <ul className="mt-1 flex flex-col gap-1">
             {events.map((event) => (
               <li key={event.id} className="flex items-start gap-2 text-sm">
-                <span className="pt-0.5 font-mono text-xs tabular-nums text-muted">{event.clock.slice(0, 5)}</span>
+                <span className="pt-0.5 font-mono text-sm tabular-nums text-muted sm:text-xs">{event.clock.slice(0, 5)}</span>
                 <span className="min-w-0 break-words">
                   <span className="font-semibold">{event.label}</span> · {event.text}
                 </span>
@@ -216,7 +217,7 @@ export function EventFeed({
                 exit="exit"
                 className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-1 border-t border-line px-1 py-3 first:border-t-0 sm:grid-cols-[auto_auto_1fr]"
               >
-                <span className="pt-0.5 text-xs tabular-nums whitespace-nowrap text-muted">{event.clock.slice(0, 5)}</span>
+                <span className="pt-0.5 font-mono text-sm tabular-nums whitespace-nowrap text-muted sm:text-xs">{event.clock.slice(0, 5)}</span>
                 <Badge tone={event.tone as BadgeTone} className="justify-self-start">
                   {event.label}
                 </Badge>
@@ -254,7 +255,7 @@ export function WorkOrderList({ orders, className }: { orders: WorkOrder[]; clas
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone={ORDER_TONE[order.type] ?? "neutral"}>{workOrderType(order.type)}</Badge>
                   <span className="text-sm text-muted">{placeName(order.room ?? order.place)}</span>
-                  <span className="ml-auto text-xs tabular-nums whitespace-nowrap text-muted">{order.clock.slice(0, 5)}</span>
+                  <span className="ml-auto font-mono text-sm tabular-nums whitespace-nowrap text-muted sm:text-xs">{order.clock.slice(0, 5)}</span>
                 </div>
                 <p className="mt-1 text-base break-words">{order.text}</p>
               </div>

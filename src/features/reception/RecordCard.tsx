@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { Badge, type BadgeTone, Button, Card } from "@/ui";
 import { formatClock, formatDate } from "./format";
 import { PERKS, ROOM_TYPES } from "./hotel";
@@ -19,7 +19,10 @@ function roomName(id: string): string {
   return ROOM_TYPES.find((room) => room.id === id)?.name ?? id;
 }
 
-/** One booking or message the receptionist took down, with the staff tick that settles it. */
+/**
+ * One booking or message the receptionist took down, with the staff tick that settles it. A tick can
+ * be taken back with Angre, and focus stays in the card's actions while the buttons swap.
+ */
 export function RecordCard({
   record,
   mark,
@@ -27,14 +30,32 @@ export function RecordCard({
 }: {
   record: ReceptionRecord;
   mark: StaffMark | undefined;
-  onMark: (value: StaffMark) => void;
+  onMark: (value: StaffMark | null) => void;
 }) {
+  const actions = useRef<HTMLDivElement>(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    actions.current?.querySelector("button")?.focus();
+  }, [mark]);
+  const settle = (value: StaffMark | null) => {
+    refocus.current = true;
+    onMark(value);
+  };
   return record.kind === "booking" ? (
-    <BookingCard record={record} mark={mark} onMark={onMark} />
+    <BookingCard record={record} mark={mark} onMark={settle} actionsRef={actions} />
   ) : (
-    <MessageCard record={record} mark={mark} onMark={onMark} />
+    <MessageCard record={record} mark={mark} onMark={settle} actionsRef={actions} />
   );
 }
+
+type CardProps<R> = {
+  record: R;
+  mark: StaffMark | undefined;
+  onMark: (value: StaffMark | null) => void;
+  actionsRef: RefObject<HTMLDivElement | null>;
+};
 
 function Shell({
   id,
@@ -43,6 +64,7 @@ function Shell({
   createdAt,
   children,
   actions,
+  actionsRef,
 }: {
   id: string;
   title: ReactNode;
@@ -50,6 +72,7 @@ function Shell({
   createdAt: string;
   children: ReactNode;
   actions: ReactNode;
+  actionsRef: RefObject<HTMLDivElement | null>;
 }) {
   const headingId = `record-${id}`;
   const clock = formatClock(createdAt);
@@ -66,10 +89,15 @@ function Shell({
             </p>
           )}
         </div>
-        <Badge tone={badge.tone}>{badge.label}</Badge>
+        {/* Announced when a tick changes it. */}
+        <span aria-live="polite">
+          <Badge tone={badge.tone}>{badge.label}</Badge>
+        </span>
       </div>
       {children}
-      {actions && <div className="flex flex-wrap gap-3">{actions}</div>}
+      <div ref={actionsRef} className="flex flex-wrap gap-3">
+        {actions}
+      </div>
     </Card>
   );
 }
@@ -83,15 +111,7 @@ function Field({ label, children, mono = false }: { label: string; children: Rea
   );
 }
 
-function BookingCard({
-  record,
-  mark,
-  onMark,
-}: {
-  record: BookingRecord;
-  mark: StaffMark | undefined;
-  onMark: (value: StaffMark) => void;
-}) {
+function BookingCard({ record, mark, onMark, actionsRef }: CardProps<BookingRecord>) {
   const badge: { tone: BadgeTone; label: string } =
     mark === "bekreftet"
       ? { tone: "success", label: "Bekreftet" }
@@ -104,9 +124,13 @@ function BookingCard({
       title="Bookingforespørsel"
       badge={badge}
       createdAt={record.createdAt}
+      actionsRef={actionsRef}
       actions={
-        mark !== "bekreftet" &&
-        mark !== "avvist" && (
+        mark === "bekreftet" || mark === "avvist" ? (
+          <Button variant="ghost" onClick={() => onMark(null)}>
+            Angre
+          </Button>
+        ) : (
           <>
             <Button variant="secondary" onClick={() => onMark("bekreftet")}>
               Bekreft
@@ -146,20 +170,12 @@ function BookingCard({
   );
 }
 
-function MessageCard({
-  record,
-  mark,
-  onMark,
-}: {
-  record: MessageRecord;
-  mark: StaffMark | undefined;
-  onMark: (value: StaffMark) => void;
-}) {
+function MessageCard({ record, mark, onMark, actionsRef }: CardProps<MessageRecord>) {
   const badge: { tone: BadgeTone; label: string } = mark
     ? { tone: "success", label: "Ringt tilbake" }
     : record.urgent
       ? { tone: "danger", label: "Haster" }
-      : { tone: "accent", label: "Ring tilbake" };
+      : { tone: "warning", label: "Ring tilbake" };
   return (
     <Shell
       id={record.id}
@@ -170,8 +186,13 @@ function MessageCard({
       }
       badge={badge}
       createdAt={record.createdAt}
+      actionsRef={actionsRef}
       actions={
-        !mark && (
+        mark ? (
+          <Button variant="ghost" onClick={() => onMark(null)}>
+            Angre
+          </Button>
+        ) : (
           <Button variant="secondary" onClick={() => onMark("ringt")}>
             Ringt tilbake
           </Button>

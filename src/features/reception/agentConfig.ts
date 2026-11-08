@@ -10,6 +10,7 @@ import {
   PERK_IDS,
   ROOM_TYPES,
 } from "./hotel";
+import { CALL_PRIVACY } from "./callPrivacy";
 import { MESSAGE_TOPICS } from "./records";
 import {
   MAX_MESSAGE_CHARS,
@@ -384,7 +385,8 @@ export function receptionAgentConfig(mode: ToolMode) {
       // Staff read the call summary in Norwegian whatever language the guest spoke.
       summaryLanguage: "no",
       // GDPR data minimisation: keep transcripts only as long as the hotel says (no audio at all).
-      privacy: { recordVoice: false, retentionDays: HOTEL.privacy.retentionDays },
+      // Resepsjon says the same before the call (callPrivacy.ts).
+      privacy: { ...CALL_PRIVACY },
     },
   } satisfies ElevenLabs.conversationalAi.BodyCreateAgentV1ConvaiAgentsCreatePost;
 }

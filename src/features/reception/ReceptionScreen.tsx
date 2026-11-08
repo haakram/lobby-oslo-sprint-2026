@@ -7,6 +7,7 @@ import { Transcript } from "@/features/voice/Transcript";
 import { VoiceOrb } from "@/features/voice/VoiceOrb";
 import { Button, Card, cx, EmptyState, ErrorState, fadeRise, MicIcon } from "@/ui";
 import { CallLogPanel } from "./CallLogPanel";
+import { callNotice } from "./callPrivacy";
 import { RecordCard } from "./RecordCard";
 import type { ReceptionRecord } from "./records";
 import { useReceptionVoice } from "./useReceptionVoice";
@@ -19,6 +20,8 @@ const STATUS: Record<VoicePhase, string> = {
   listening: "Lytter",
   speaking: "Resepsjonisten snakker",
 };
+
+const NOTICE_ID = "call-notice";
 
 /** /resepsjon: call the AI receptionist as a guest; staff settle what it took down. */
 export function ReceptionScreen() {
@@ -66,10 +69,20 @@ function ReceptionSession() {
                     Legg på
                   </Button>
                 ) : (
-                  <Button size="lg" className="w-full max-w-xs" loading={busy} onClick={() => void voice.start()}>
+                  <Button
+                    size="lg"
+                    className="w-full max-w-xs"
+                    loading={busy}
+                    aria-describedby={NOTICE_ID}
+                    onClick={() => void voice.start()}
+                  >
                     Ring resepsjonen
                   </Button>
                 )}
+                {/* Before the first word: where the call goes and what is kept. */}
+                <p id={NOTICE_ID} className="max-w-xs text-center text-sm text-muted">
+                  {callNotice()}
+                </p>
                 {voice.problem && <ServiceProblem problem={voice.problem} onRetry={voice.start} />}
               </>
             )}

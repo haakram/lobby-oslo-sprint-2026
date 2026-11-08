@@ -137,6 +137,16 @@ describe("ReceptionScreen", () => {
     await screen.findByText("Ingen samtaler ennå");
   });
 
+  it("says before the call where it goes, what is kept and to use a made-up name", async () => {
+    stubCalls(ok({ calls: [] }));
+    render(<ReceptionScreen />);
+    const call = screen.getByRole("button", { name: "Ring resepsjonen" });
+    expect(call).toHaveAccessibleDescription(
+      /ElevenLabs \(USA\), som sender teksten til Claude \(Anthropic, USA\).*Ingen lydopptak lagres, og teksten slettes etter 30 dager\..*bruk et oppdiktet navn/,
+    );
+    await screen.findByText("Ingen samtaler ennå");
+  });
+
   it("shows a booking request as waiting, with room, dates and the direct price", async () => {
     stubCalls(ok({ calls: [] }));
     render(<ReceptionScreen />);

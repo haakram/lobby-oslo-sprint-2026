@@ -168,7 +168,7 @@ export function composeHandover({
   // What happened: a few lines, most telling first, then shown in the night's order.
   const ranked: Highlight[] = [];
   const end = night.clock && night.ended ? night.clock : null;
-  if (end) ranked.push({ at: hhmm(end), text: `Roboten avsluttet natten med ${night.tally.done} av ${night.tally.total} oppdrag fullført. Dommeren i Wybe-simulatoren godkjente ${night.tally.done} av ${night.tally.reported} ferdigmeldinger.`, by: "robot" });
+  if (end) ranked.push({ at: hhmm(end), text: `Roboten avsluttet natten med ${night.tally.done} av ${night.tally.total} oppdrag fullført. Dommeren i Wybe Night Shift-simulatoren godkjente ${night.tally.done} av ${night.tally.reported} ferdigmeldinger.`, by: "robot" });
   const sellable = [...reconciliation.sellable].sort((a, b) => NIGHT_ORDER(a.at ?? "00:00") - NIGHT_ORDER(b.at ?? "00:00"));
   if (sellable[0]?.at) {
     const many = sellable.length > 1;
@@ -297,7 +297,8 @@ export function composeHandover({
       text: `${needPerson.length === 1 ? "1 forespørsel" : `${needPerson.length} forespørsler`} roboten ikke fikk til eller ikke rakk, trenger en person.`,
       owner: desk,
       due: "10:00",
-      href: "/foresporsler",
+      // Opens on the robot's requests, so the first hand-back is row 1 (owner B's ?filter=robot).
+      href: "/foresporsler?filter=robot",
       linkLabel: "Åpne Forespørsler",
       urgent: false,
     });

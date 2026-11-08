@@ -59,7 +59,7 @@ describe("Overlevering 06:00, composed from the night", () => {
     expect(timeline.map((line) => line.at)).toEqual(["22:50", "01:47", "02:14", "03:14", "03:15", "04:35", "05:58"]);
     expect(timeline[0].text).toBe("Støyklage nær rom 302: roboten ba rom 302 dempe seg.");
     expect(timeline.find((line) => line.at === "03:14")?.text).toMatch(/^Roboten fant rom 311 tomt og ryddig, men systemet sa opptatt\. Det kan selges etter bekreftelse, ca\. [\d\s\u00a0]+ kr\.$/);
-    expect(timeline.at(-1)?.text).toBe("Roboten avsluttet natten med 1 av 2 oppdrag fullført. Dommeren i Wybe-simulatoren godkjente 1 av 1 ferdigmeldinger.");
+    expect(timeline.at(-1)?.text).toBe("Roboten avsluttet natten med 1 av 2 oppdrag fullført. Dommeren i Wybe Night Shift-simulatoren godkjente 1 av 1 ferdigmeldinger.");
   });
 
   it("lists what is open, each with an owner and a time, soonest first, with the room to sell right in the list", () => {
@@ -72,6 +72,8 @@ describe("Overlevering 06:00, composed from the night", () => {
     ]);
     expect(open[0]).toMatchObject({ text: "2 saker fra telefonen venter på å bli fordelt (rom 134 og 214).", urgent: true, href: "/foresporsler" });
     expect(open[2]).toMatchObject({ sell: ["room-311"], done: false });
+    // The robot's hand-backs open Forespørsler on the robot's requests, so the first one is row 1.
+    expect(open[3].href).toBe("/foresporsler?filter=robot");
     expect(open[2].text).toMatch(/^Rom 311 kan selges etter bekreftelse \(ca\. [\d\s\u00a0]+ kr\)\. Roboten fant det tomt og ryddig kl\. 03:14\. Silje Mørk står i systemet til 9\.11\.$/);
   });
 

@@ -15,7 +15,7 @@ import { type DemoCall, demoCalls } from "@/features/reception/demoCalls";
 import { formatClock } from "@/features/reception/format";
 import { useStoredRecords } from "@/features/reception/useStoredRecords";
 import { PHONE_ASSIGNMENTS, phoneTasks } from "@/features/requests/phoneTasks";
-import { selectRequests } from "@/features/requests/select";
+import { hotelRoomsOf, selectRequests } from "@/features/requests/select";
 import { moneyMethod, releasedLine } from "@/features/rooms/money";
 import type { RoomCheckMark } from "@/features/rooms/reconcile";
 import { SellSteps } from "@/features/rooms/SellSteps";
@@ -41,7 +41,9 @@ const BY: Record<Highlight["by"], { word: string; tone: "accent" | "neutral" }> 
 export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: string; demo?: readonly DemoCall[]; today?: string }) {
   const today = day ?? osloToday();
   const { resolved, statusOf } = useOrderStatuses();
-  const { run, night, rooms } = useNight(viewerUrl, resolved);
+  const { run, night, rooms, map } = useNight(viewerUrl, resolved);
+  // Tonight's rooms: a call naming a room the hotel doesn't have is "Ukjent rom", never "Gjest venter" here.
+  const hotelRooms = useMemo(() => hotelRoomsOf(map, Boolean(night?.ended)), [map, night]);
   const { user, effectiveRole } = useSession();
   const { records } = useStoredRecords();
   const seeded = useMemo(() => demo ?? demoCalls(today), [demo, today]);
@@ -57,7 +59,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
 
   const handover = useMemo(() => {
     if (!night || !rooms || !reconciliation || !safety) return null;
-    const requests = selectRequests({ night, calls: null, statusOf, phone, assignments });
+    const requests = selectRequests({ night, calls: null, statusOf, phone, assignments, hotelRooms });
     return composeHandover({
       night,
       rooms,
@@ -72,7 +74,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       resolved: (id) => statusOf(id) === "lost",
       canOpen: (route) => effectiveRole === null || canAccess(effectiveRole, route),
     });
-  }, [night, rooms, reconciliation, safety, statusOf, phone, assignments, marks, revenue, today, pms, effectiveRole]);
+  }, [night, rooms, reconciliation, safety, statusOf, phone, assignments, hotelRooms, marks, revenue, today, pms, effectiveRole]);
 
   const signButton = useRef<HTMLDivElement>(null);
   const refocus = useRef(false);
@@ -269,10 +271,10 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   );
 }
 
-/** "Godkjent av dommeren (Wybe-simulatoren): 73 av 73 · 8 avvist uten bestilling · nattevakten 3 · AI tok 2 samtaler". */
+/** "Godkjent av dommeren (Wybe Night Shift-simulatoren): 73 av 73 · 8 avvist uten bestilling · nattevakten 3 · AI tok 2 samtaler". */
 function robotLine({ robot, staffDone, calls }: { robot: { done: number; reported: number; declined: number; cancelled: number }; staffDone: number; calls: number }): string {
   return [
-    `Godkjent av dommeren (Wybe-simulatoren): ${robot.done} av ${robot.reported}`,
+    `Godkjent av dommeren (Wybe Night Shift-simulatoren): ${robot.done} av ${robot.reported}`,
     robot.declined > 0 ? `${robot.declined} avvist uten bestilling` : null,
     robot.cancelled > 0 ? `${robot.cancelled} avlyst` : null,
     staffDone > 0 ? `nattevakten ${staffDone}` : null,

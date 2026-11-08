@@ -53,7 +53,7 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(screen.getByText("Robotens oppdrag")).toBeInTheDocument();
     expect(
       screen.getByText(
-        `Godkjent av dommeren (Wybe-simulatoren): 1 av 1 · nattevakten ${STAFF_DONE} · AI tok 3 samtaler`,
+        `Godkjent av dommeren (Wybe Night Shift-simulatoren): 1 av 1 · nattevakten ${STAFF_DONE} · AI tok 3 samtaler`,
       ),
     ).toBeInTheDocument();
     // The money is the first figure: the room the system thought occupied, sold after a confirmation.

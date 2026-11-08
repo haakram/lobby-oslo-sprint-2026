@@ -124,7 +124,7 @@ describe("selectHighlights (the figures)", () => {
     expect(by.inntekt).toMatchObject({ unit: "kr", source: "test" });
     expect(by.inntekt.detail).toMatch(/^Snittpris .+ kr · RevPAR .+ kr$/);
     expect(by.oppgaver).toMatchObject({ value: NIGHT.tally.done, unit: `av ${NIGHT.tally.total}`, tone: "success", source: "run-log" });
-    expect(by.oppgaver.detail).toMatch(new RegExp(`^Godkjent av dommeren \\(Wybe-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`));
+    expect(by.oppgaver.detail).toMatch(new RegExp(`^Godkjent av dommeren \\(Wybe Night Shift-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`));
     expect(by.spart).toMatchObject({ prefix: "ca.", source: "estimate" });
     expect(by.spart.method?.join(" ")).toMatch(/Et anslag, ikke en måling/);
     expect(by.fornoyd).toMatchObject({ value: "4,7", unit: "av 5", tone: "success" });

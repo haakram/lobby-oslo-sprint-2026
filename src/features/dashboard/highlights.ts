@@ -80,7 +80,7 @@ export function timeSavedMethod(saved: TimeSaved): string[] {
     .map(([kind, minutes]) => `${requestKindLabel(kind).toLowerCase()} ${minutes}`)
     .join(", ");
   return [
-    `Et anslag, ikke en måling. Hver oppgave roboten fullførte og dommeren i Wybe-simulatoren godkjente, regnet i minutter en ansatt ville brukt: ${kinds} (annet ${MINUTES_OTHER}).`,
+    `Et anslag, ikke en måling. Hver oppgave roboten fullførte og dommeren i Wybe Night Shift-simulatoren godkjente, regnet i minutter en ansatt ville brukt: ${kinds} (annet ${MINUTES_OTHER}).`,
     `${saved.tasks} oppgaver = ${saved.gross} min. Minus ${MINUTES_PER_HANDBACK} min for hver av de ${saved.handedBack} roboten ga videre til en person (${saved.handback} min).`,
     `Til sammen ${saved.net} min, ca. ${hoursLabel(saved.net)} t.`,
   ];
@@ -332,10 +332,10 @@ export function selectHighlights(data: DashboardData): Highlight[] {
   return all.filter((figure) => canAccess(data.role, figure.route)).slice(0, MAX_HIGHLIGHTS);
 }
 
-/** "Godkjent av dommeren (Wybe-simulatoren): 73 av 73 · 8 avvist uten bestilling": the robot figure's line. */
+/** "Godkjent av dommeren (Wybe Night Shift-simulatoren): 73 av 73 · 8 avvist uten bestilling": the robot figure's line. */
 export function robotDetail(night: Night): string {
   const { tally } = night;
-  const parts = [`Godkjent av dommeren (Wybe-simulatoren): ${tally.done} av ${tally.reported}`];
+  const parts = [`Godkjent av dommeren (Wybe Night Shift-simulatoren): ${tally.done} av ${tally.reported}`];
   if (tally.declined > 0) parts.push(`${tally.declined} avvist uten bestilling`);
   if (tally.cancelled > 0) parts.push(`${tally.cancelled} avlyst`);
   return parts.join(" · ");

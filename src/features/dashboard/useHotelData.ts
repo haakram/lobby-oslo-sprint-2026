@@ -9,7 +9,7 @@ import { lowStock, STOCK } from "@/features/inventory/testData";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
 import { useOsloHour } from "@/features/modules/useNow";
 import { osloToday } from "@/features/reception/dates";
-import { selectRequests } from "@/features/requests/select";
+import { hotelRoomsOf, selectRequests } from "@/features/requests/select";
 import { useRequestInputs } from "@/features/requests/useRequestInputs";
 import { useRoomCheck } from "@/features/rooms/useRoomCheck";
 import { byRole, onShift, shiftAt } from "@/features/staff/testData";
@@ -28,7 +28,7 @@ export function useHotelData(viewerUrl?: string) {
   const { effectiveRole, user } = useSession();
   const role: Role = effectiveRole ?? "admin";
   const { resolved, statusOf } = useOrderStatuses();
-  const { run, night, rooms, orders, robot } = useNight(viewerUrl, resolved);
+  const { run, night, rooms, orders, robot, map } = useNight(viewerUrl, resolved);
   const { state: calls, retry: retryCalls } = useReceptionCalls();
   const hour = useOsloHour();
 
@@ -37,9 +37,11 @@ export function useHotelData(viewerUrl?: string) {
   // The same requests as Forespørsler (its phone tasks and Rom's tasks too), so the widget and the page agree.
   const liveCalls = calls.kind === "ready" ? calls.calls : null;
   const { phone, assignments, extra } = useRequestInputs({ today: osloToday(), calls: liveCalls });
+  // Tonight's rooms: a live call naming a room the hotel doesn't have is "Ukjent rom" in the widget and the bell too.
+  const hotelRooms = useMemo(() => hotelRoomsOf(map, Boolean(night?.ended)), [map, night]);
   const requests = useMemo(
-    () => selectRequests({ night, calls: liveCalls, statusOf, phone, assignments, extra }),
-    [night, liveCalls, statusOf, phone, assignments, extra],
+    () => selectRequests({ night, calls: liveCalls, statusOf, phone, assignments, extra, hotelRooms }),
+    [night, liveCalls, statusOf, phone, assignments, extra, hotelRooms],
   );
   const outOfOrder = useMemo(() => outOfOrderRooms(maintenance), [maintenance]);
   // The rack reads the same closed rooms as the bell: a room out of order says so on its tile.

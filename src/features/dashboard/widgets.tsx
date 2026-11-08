@@ -445,7 +445,7 @@ function RobotWidget({ data, className }: WidgetProps) {
               <>
                 <dt className="text-muted">Godkjent</dt>
                 <dd className="tabular-nums">
-                  {tally.done} av {tally.reported} av dommeren (Wybe-simulatoren)
+                  {tally.done} av {tally.reported} av dommeren
                 </dd>
               </>
             )}

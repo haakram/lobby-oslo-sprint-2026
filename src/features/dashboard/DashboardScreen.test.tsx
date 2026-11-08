@@ -109,7 +109,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(figures().getByText(/^Snittpris [\d\s\u00a0]+ kr · RevPAR [\d\s\u00a0]+ kr$/)).toBeInTheDocument();
     // The night's misses are part of its total, not a red count of their own; the server's verdict is said.
     expect(figure("Robotens oppdrag i natt")).toBe(`${DONE}av ${TOTAL}`);
-    expect(figures().getByText(new RegExp(`^Godkjent av dommeren \\(Wybe-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`))).toBeInTheDocument();
+    expect(figures().getByText(new RegExp(`^Godkjent av dommeren \\(Wybe Night Shift-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`))).toBeInTheDocument();
     expect(screen.queryByText(/feilet/)).not.toBeInTheDocument();
     // The estimate says it is one, and how it is made.
     expect(figure("Timer spart, anslag")).toMatch(/^ca\./);

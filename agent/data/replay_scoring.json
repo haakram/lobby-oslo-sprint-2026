@@ -1,0 +1,72 @@
+{
+ "fitted_on_nights": 50,
+ "growth_per_hour": 0.08,
+ "judgement_bonus": 5,
+ "kinds": {
+  "amenity": {
+   "base": 20.21,
+   "decay": 0.734,
+   "false_done": 20,
+   "n": 666,
+   "rmse": 3.72
+  },
+  "bags": {
+   "base": 33.34,
+   "decay": 0.825,
+   "false_done": 35,
+   "n": 280,
+   "rmse": 5.82
+  },
+  "followup": {
+   "base": 0,
+   "decay": 0,
+   "false_done": 20,
+   "n": 0,
+   "rmse": 0
+  },
+  "lost_item": {
+   "base": 36.53,
+   "decay": 1.012,
+   "false_done": 40,
+   "n": 238,
+   "rmse": 5.13
+  },
+  "message": {
+   "base": 15.53,
+   "decay": 0.667,
+   "false_done": 30,
+   "n": 376,
+   "rmse": 2.89
+  },
+  "noise": {
+   "base": 19.67,
+   "decay": 0.506,
+   "false_done": 30,
+   "n": 356,
+   "rmse": 3.23
+  },
+  "room_check": {
+   "base": 29.08,
+   "decay": 0.869,
+   "false_done": 30,
+   "n": 294,
+   "rmse": 3.21
+  },
+  "spill": {
+   "base": 47.8,
+   "decay": 0.88,
+   "false_done": 30,
+   "n": 123,
+   "rmse": 4.44
+  },
+  "tray": {
+   "base": 28.2,
+   "decay": 0.733,
+   "false_done": 30,
+   "n": 370,
+   "rmse": 4.71
+  }
+ },
+ "min_points": 5,
+ "verified_bonus": 5
+}

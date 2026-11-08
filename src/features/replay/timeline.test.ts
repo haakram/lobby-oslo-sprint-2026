@@ -76,11 +76,14 @@ describe("buildTimeline on the demo night", () => {
   it("describes the night in Norwegian, newest-last", () => {
     const done = timeline.events.find((event) => event.kind === "task_done");
     expect(done).toMatchObject({ label: "Fullført", tone: "success", request: "R-001" });
-    expect(done!.text).toBe("phone-charger x1 delivered to rom 319 (+23 p)");
+    expect(done!.text).toBe("Lader levert til rom 319 (+23 p)");
     const placed = timeline.events.find((event) => event.kind === "call:place" && event.text.startsWith("skilt"));
     expect(placed!.text).toMatch(/^skilt for vått gulv ved korridor /);
-    const refused = timeline.events.find((event) => event.kind === "task_failed" && /Do Not Disturb/.test(event.text));
-    expect(refused).toMatchObject({ label: "Avstått", tone: "warning" });
+    const refused = timeline.events.find((event) => event.kind === "task_failed" && /Ikke forstyrr/.test(event.text));
+    expect(refused).toMatchObject({ label: "Avstått", tone: "neutral", text: "Ikke forstyrr-skilt på rom 208; banket ikke på" });
+    // A claim checked and declined is a right call: "Avvist", in Norwegian, never red.
+    const declined = timeline.events.find((event) => event.kind === "task_failed" && event.label === "Avvist");
+    expect(declined).toMatchObject({ tone: "neutral", text: "Ingen bestilling av vannflaske fra rom 319 i natt; ingenting å levere" });
     const knock = timeline.events.find((event) => event.kind === "call:knock");
     expect(knock!.text).toMatch(/^Rom 319 · /);
     let previous = 0;

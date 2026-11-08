@@ -62,12 +62,14 @@ const ITEM_NAMES: Record<string, string> = {
   cart: "tralle",
 };
 
-/** "water-bottle" → "vannflaske", "tray-323" → "brett (323)". */
+/** "water-bottle" → "vannflaske", "tray-323" → "brett (323)", "toy-3" → "leke" (a numbered lost item). */
 export function itemName(item: string | null | undefined): string {
   if (!item) return "";
   if (ITEM_NAMES[item]) return ITEM_NAMES[item];
   if (item.startsWith("tray-")) return `brett (${item.slice(5)})`;
   if (item.startsWith("luggage-")) return `bagasje (${item.slice(8)})`;
+  const base = item.replace(/(?:-\d+)+$/, "");
+  if (ITEM_NAMES[base]) return ITEM_NAMES[base];
   return item.replace(/-/g, " ");
 }
 

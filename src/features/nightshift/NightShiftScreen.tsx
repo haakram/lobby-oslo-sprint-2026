@@ -9,6 +9,7 @@ import { RoomPicker } from "@/features/hotel3d/RoomPicker";
 import { type HotelReplay, itemName, placeName, type ReplaySource, roomNumber, simToClock, type Task, taskKindName, useHotelReplay } from "@/features/replay";
 import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, PageHeader, RegenIcon, Skeleton, Stat } from "@/ui";
 import { failures, forManagers } from "./eventFilter";
+import { RobotJudgementCard } from "./RobotJudgementCard";
 import { viewerBase } from "./useRun";
 
 const MAX_EVENTS = 40;
@@ -109,6 +110,10 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
         {ready && snapshot && (
           <>
             <StatRow replay={replay} open={open} />
+
+            {replay.timeline && (
+              <RobotJudgementCard lines={replay.timeline.lines} until={snapshot.t} asOf={snapshot.finished ? null : snapshot.clock} />
+            )}
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8">
               <div className="flex min-w-0 flex-col gap-6 lg:gap-8">

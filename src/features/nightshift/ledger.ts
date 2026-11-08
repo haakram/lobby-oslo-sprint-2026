@@ -33,6 +33,10 @@ export type LedgerNight = {
   done_room_check_credited?: number | null;
   done_spill?: number | null;
   done_spill_credited?: number | null;
+  /** Own-judgement "done" credited and not disputed by the robot's own log; room checks reported and contradicted (round 6). */
+  done_own_holds_log?: number | null;
+  room_checks_done?: number | null;
+  room_checks_contradicted?: number | null;
   /** Score-blind nights: the agent's own checks, and how many said "not done" (scripts/ledger.py). */
   blind_checks?: number | null;
   blind_said_no?: number | null;
@@ -50,11 +54,67 @@ export const LEDGER_META: { liveStarts: number | null; latestStart: string | nul
  * The final branch's own-judgement "done" counted once per (seed, request), not once per replay of the same
  * deterministic seed (jury round 5, the data juror), with a Wilson 95 % interval; null in an older file.
  */
-export type DistinctClaims = { scope: string; nights: number; reports: number; claims: number; credited: number; ci95: [number, number]; missed: string[] };
+export type DistinctClaims = {
+  scope: string;
+  nights: number;
+  reports: number;
+  claims: number;
+  credited: number;
+  ci95: [number, number];
+  missed: string[];
+  /**
+   * Round 6: the same claims against the robot's own log (the self-contradiction rule over every night, the card's
+   * `selfContradictions`): credited and never contradicted, with its own interval; absent in an older file.
+   */
+  holds_log?: number;
+  ci95_log?: [number, number];
+  contradicted?: string[];
+};
 
 export const DISTINCT_OWN: DistinctClaims | null = (() => {
   const value = (data as unknown as { distinct_own?: Partial<DistinctClaims> }).distinct_own;
   return value && typeof value.claims === "number" && typeof value.credited === "number" && Array.isArray(value.ci95) ? (value as DistinctClaims) : null;
+})();
+
+/**
+ * Room checks reported "done" and how many the robot's own log contradicts (a room reported empty after the robot put
+ * bags inside it that night), per report and once per (seed, request); `contradicted_credited`: how many of the
+ * contradicted reports the simulator credited anyway (scripts/ledger.py `room_checks`).
+ */
+export type RoomChecks = {
+  nights: number;
+  nights_firing: number;
+  reports: number;
+  contradicted: number;
+  contradicted_credited: number;
+  distinct: number;
+  distinct_contradicted: number;
+};
+
+/** The dress rehearsal: the build that plays at 12:00 on ten seeds no build had played (scripts/ledger.py `rehearsal`). */
+export type Rehearsal = {
+  build: string;
+  seeds: number[];
+  nights: number;
+  own: number;
+  own_credited: number;
+  own_holds_log: number;
+  ci95_log: [number, number];
+  room_checks: RoomChecks;
+};
+
+function roomChecksOf(value: unknown): RoomChecks | null {
+  const v = value as Partial<RoomChecks> | undefined;
+  return v && typeof v.reports === "number" && typeof v.contradicted === "number" && typeof v.distinct === "number" ? (v as RoomChecks) : null;
+}
+
+/** The final branch's room checks against the robot's own log; null in an older file. */
+export const ROOM_CHECKS_FINAL: RoomChecks | null = roomChecksOf((data as unknown as { room_checks_final?: unknown }).room_checks_final);
+
+/** The dress rehearsal against the simulator and against the robot's own log; null in an older file or before it ran. */
+export const REHEARSAL: Rehearsal | null = (() => {
+  const value = (data as unknown as { rehearsal?: Partial<Rehearsal> }).rehearsal;
+  return value && typeof value.nights === "number" && value.nights > 0 && typeof value.own === "number" && roomChecksOf(value.room_checks) ? (value as Rehearsal) : null;
 })();
 
 /** The Wilson score interval (95 %) for `successes` of `n`: honest at small n and at 100 % (scripts/ledger.py `wilson`). */
@@ -175,6 +235,40 @@ export type FaultRate = {
   saidNotDone: number;
 };
 
+/** One row of the fault bed's per-type table (scripts/ledger.py --faults-from, from hamad/faults temp/faults/real.md). */
+export type FaultTypeRow = { type: string; mode: string; rate: number; hit: number; caught: number; missed: number; repaired: number; lost: number };
+
+/**
+ * The catch rate (round 6, the data review): of the injected failures the robot did not repair itself, the share its
+ * done check refused to call "done" (caught over caught + missed). Unlike precision it does not move with how often
+ * things fail, so it is the figure that carries over. `without` leaves fault types out; null when no row matches.
+ */
+export function catchRate(
+  rows: readonly FaultTypeRow[],
+  { mode = "blind", rate, without = [] }: { mode?: string; rate?: number; without?: readonly string[] } = {},
+): { caught: number; missed: number; share: number } | null {
+  const picked = rows.filter((row) => row.mode === mode && (rate === undefined || row.rate === rate) && !without.includes(row.type));
+  const caught = picked.reduce((sum, row) => sum + row.caught, 0);
+  const missed = picked.reduce((sum, row) => sum + row.missed, 0);
+  return caught + missed > 0 ? { caught, missed, share: caught / (caught + missed) } : null;
+}
+
+/** Each fault type's misses over every rate (blind by default), the worst first: what the check cannot tell from success. */
+export function missesByType(rows: readonly FaultTypeRow[], mode = "blind"): { type: string; hit: number; missed: number }[] {
+  const byType = new Map<string, { type: string; hit: number; missed: number }>();
+  for (const row of rows) {
+    if (row.mode !== mode) continue;
+    const entry = byType.get(row.type) ?? { type: row.type, hit: 0, missed: 0 };
+    entry.hit += row.hit;
+    entry.missed += row.missed;
+    byType.set(row.type, entry);
+  }
+  return [...byType.values()].filter((entry) => entry.missed > 0).sort((a, b) => b.missed / b.hit - a.missed / a.hit);
+}
+
+/** The fault type of a guest asleep in a room the robot reports checked: the one miss the robot's own look could catch. */
+export const SLEEPING_GUEST = "room.occupied";
+
 /** The fault bed (data/fault-bed.json, hamad/faults): failures injected at known rates, offline. */
 export const FAULT_BED: {
   branch: string;
@@ -188,6 +282,7 @@ export const FAULT_BED: {
   visibleCaught: string;
   sightedSignsFalseDone: number;
   lookAlikeMissed: number;
+  types?: FaultTypeRow[];
 } = faults;
 
 /**

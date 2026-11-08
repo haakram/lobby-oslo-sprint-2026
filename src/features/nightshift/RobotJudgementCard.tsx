@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type ReactNode, useId, useMemo, useState } from "react";
 import { placeName } from "@/features/replay";
-import { cx, RegenIcon, type RegenName, Stat } from "@/ui";
+import { Badge, cx, RegenIcon, type RegenName, Stat } from "@/ui";
 import {
   type DoneBasis,
   doneBasis,
@@ -23,6 +23,7 @@ import { type DeclineSplit, declineSplit, declineSplitPlain } from "./declines";
 import { type RobotJudgement, robotJudgement } from "./judgement";
 import {
   blindChecks,
+  catchRate,
   type CrossNight,
   crossNightPrecision,
   DISTINCT_OWN,
@@ -33,7 +34,13 @@ import {
   intervalText,
   LEDGER_META,
   meanScore,
+  missesByType,
   percentText,
+  REHEARSAL,
+  type Rehearsal,
+  ROOM_CHECKS_FINAL,
+  type RoomChecks,
+  SLEEPING_GUEST,
   shareText,
   shiftOf,
   wilson,
@@ -51,8 +58,9 @@ import type { RunLine } from "./runlog";
  * The referee, the simulator, the score-hidden runs, the cross-night figures from the evidence ledger, commit
  * hashes and repo paths sit behind "Slik vet vi det" (the design juror; round 5: never on the manager's main read).
  * Each own-judgement "done" is also checked against the robot's own log (round 5, the Wybe engineer): 209 reported
- * empty after the robot put bags inside it makes the demo night 8 of 9, not 9 of 9. Calm and factual: green only where the
- * figure is good, no red or amber (DESIGN.md, where colour goes; what needs a person is in the bell).
+ * empty after the robot put bags inside it makes the demo night 8 of 9, not 9 of 9. Calm and factual (round 6): the
+ * robot's faults are amber with the words "Robotens feil" (they are what the manager acts on), its wins in ink, never
+ * green; no red.
  *
  * Natteskift passes `until` (the replay's sim second) so the card follows the scrubber; Overlevering
  * shows the whole night.
@@ -210,11 +218,13 @@ export function RobotJudgementView({
                 )}
                 {slips.map((slip, index) => (
                   <span key={`slip-${index}`} className="mt-1 block">
+                    <FaultWord />
                     {slipText(slip)}
                   </span>
                 ))}
                 {wetMoves.map((move, index) => (
                   <span key={`move-${index}`} className="mt-1 block">
+                    <FaultWord />
                     Flyttet skiltet fra {inSentence(place(move.from))}
                     {move.clock ? ` kl. ${move.clock.slice(0, 5)}` : ""}
                     {move.to ? ` til ${inSentence(place(move.to))}` : ""} mens gulvet der fortsatt var vått.
@@ -225,7 +235,7 @@ export function RobotJudgementView({
               <Row
                 icon="moon"
                 figure={doNotDisturb.rooms.length > 0 ? String(doNotDisturb.entered.length) : undefined}
-                good={doNotDisturb.rooms.length > 0 && doNotDisturb.entered.length === 0}
+                fault={doNotDisturb.entered.length > 0}
                 label={doNotDisturb.rooms.length > 0 ? "Rom med Ikke forstyrr gått inn i" : "Ikke forstyrr"}
               >
                 {doNotDisturb.rooms.length === 0
@@ -253,17 +263,26 @@ const REAL_HOTEL = (
   </>
 );
 
+/** "79 %": a catch rate in whole per cent (the figure is an estimate; a decimal would claim more than it holds). */
+const wholePercent = (share: number) => `${Math.round(share * 100)} %`;
+
 /**
- * The fault bed in one plain line (round 5, the controller's wording): how much of the robot's "done" held when
- * failures were put in on purpose, at the lowest and the highest rate. The rest is behind "Slik vet vi det".
+ * The fault bed in one plain line (round 6, the data review): the catch rate first (of the failures put in on purpose
+ * and not repaired, the share the robot's check refused to call "done"), with and without the sleeping guest it cannot
+ * see, then the precision at the lowest rate. Only on the full card; the rest is behind "Slik vet vi det".
  */
 function faultLine(): string | null {
   const rates = FAULT_BED.rates;
+  const types = FAULT_BED.types ?? [];
   if (rates.length === 0) return null;
   const low = rates[0];
-  const high = rates.at(-1)!;
-  const pct = (rate: number) => `${Math.round(rate * 100)} %`;
-  return `Testet med innlagte feil, uten nett: ${shareText(low.blind.precision)} av robotens «ferdig» holder ved ${pct(low.rate)} feil, ${shareText(high.blind.precision)} ved ${pct(high.rate)}.`;
+  const caught = catchRate(types, { rate: low.rate });
+  const awake = catchRate(types, { rate: low.rate, without: [SLEEPING_GUEST] });
+  const precision = `Når den sa «ferdig», holdt ${shareText(low.blind.precision)} ved ${Math.round(low.rate * 100)} % feil.`;
+  if (!caught) return `Feiltest uten nett: ${precision}`;
+  return `Feiltest uten nett: robotens sjekk fanget ${wholePercent(caught.share)} av feilene vi la inn${
+    awake ? ` (${wholePercent(awake.share)} uten gjesten som sover i et «sjekket» rom)` : ""
+  }. ${precision}`;
 }
 
 /**
@@ -286,7 +305,8 @@ function CompactFigures({
 }) {
   const b = basis ?? unsplit(judgement.done);
   const { strangers } = judgement;
-  const figures: { key: string; value: string | number; unit?: string; label: string; line: string | null; good?: boolean }[] = [];
+  // `fault`: the robot's own fault, amber with its word; a win stays ink (round 6).
+  const figures: { key: string; value: string | number; unit?: string; label: string; line: string | null; fault?: boolean }[] = [];
 
   // 1. "Done": what holds against the robot's own log, or (another producer) what an outside signal confirmed.
   if (b.reported === 0) figures.push({ key: "done", value: 0, label: "«ferdig» meldt så langt", line: null });
@@ -297,8 +317,13 @@ function CompactFigures({
       value: own.holds,
       unit: `av ${own.reported}`,
       label: "«ferdig» på egen vurdering holder mot robotens egen logg",
-      line: own.contradicted.length > 0 ? own.contradicted.map(contradictionShort).join(" ") : `${capitalise(ownParts(b.own))}.`,
-      good: own.holds === own.reported,
+      line:
+        own.contradicted.length > 0
+          ? `${own.contradicted.length} tatt: ${own.contradicted.map(contradictionShort).join("; ")}.`
+          : own.holds < own.reported
+            ? `${own.reported - own.holds} holdt ikke.`
+            : `${capitalise(ownParts(b.own))}.`,
+      fault: own.holds < own.reported,
     });
   } else if (b.evidence.reported > 0) {
     const ev = b.evidence;
@@ -309,9 +334,8 @@ function CompactFigures({
       unit: `av ${ev.reported}`,
       label: "«ferdig» bekreftet med et signal utenfra roboten",
       line: [ev.robotOnly > 0 ? `${ev.robotOnly} robotens egen observasjon` : null, single > 0 ? `${single} ikke bekreftet` : null].filter(Boolean).join(" · ") || null,
-      good: ev.confirmed === ev.reported,
     });
-  } else figures.push({ key: "done", value: b.confirmed, unit: `av ${b.reported}`, label: "«ferdig» bekreftet", line: null, good: b.confirmed === b.reported });
+  } else figures.push({ key: "done", value: b.confirmed, unit: `av ${b.reported}`, label: "«ferdig» bekreftet", line: null, fault: b.confirmed < b.reported });
 
   // 2. The stranger, or what the robot refused, or (another producer) what is not finished.
   if (strangers.refusals.length > 0) {
@@ -339,7 +363,7 @@ function CompactFigures({
       unit: `av ${conduct.keys.entries.length}`,
       label: "nøkkelkortinnganger uten å banke på",
       line: slip ? `Også: ${slipShort(slip)}` : null,
-      good: conduct.keys.withoutKnock === 0,
+      fault: conduct.keys.withoutKnock > 0 || Boolean(slip),
     });
   }
 
@@ -348,22 +372,31 @@ function CompactFigures({
       <ul className="mt-3 grid grid-cols-1 gap-x-8 gap-y-4 border-t border-line pt-4 sm:grid-cols-3">
         {figures.map((figure) => (
           <li key={figure.key} className="min-w-0">
-            <Stat size="lg" value={figure.value} unit={figure.unit} label={figure.label} tone={figure.good ? "success" : "default"} />
-            {figure.line && <p className="mt-1 text-xs text-muted">{figure.line}</p>}
+            <Stat size="lg" value={figure.value} unit={figure.unit} label={figure.label} tone={figure.fault ? "warning" : "default"} />
+            {(figure.line || figure.fault) && (
+              <p className="mt-1 text-sm text-muted">
+                {figure.fault && <FaultWord />}
+                {figure.line}
+              </p>
+            )}
           </li>
         ))}
       </ul>
       <p className="mt-3 max-w-[80ch] text-sm text-muted">{REAL_HOTEL}</p>
-      {!source && faultLine() && <p className="mt-1 max-w-[80ch] text-sm text-muted">{faultLine()}</p>}
     </>
   );
 }
 
-/** "Rom 209: bagasje satt inn 01:29, meldt tom 03:47." */
+/** "Robotens feil." in amber: the word that goes with the colour (DESIGN.md: amber always says its state). */
+function FaultWord() {
+  return <span className="mr-1 font-semibold text-warning">Robotens feil.</span>;
+}
+
+/** "rom 209, bagasje inn 01:29, meldt tomt 03:47": the two times that disagree, for the compact card's "1 tatt:" line. */
 function contradictionShort(entry: SelfContradiction): string {
   const first = entry.placed[0];
   const what = first && LUGGAGE_ITEM.test(first.item) ? "bagasje" : "noe";
-  return `Rom ${entry.room}: ${what} satt inn${first?.clock ? ` ${first.clock.slice(0, 5)}` : ""}, meldt tomt${entry.clock ? ` ${entry.clock.slice(0, 5)}` : ""}.`;
+  return `rom ${entry.room}, ${what} inn${first?.clock ? ` ${first.clock.slice(0, 5)}` : ""}, meldt tomt${entry.clock ? ` ${entry.clock.slice(0, 5)}` : ""}`;
 }
 
 const LUGGAGE_ITEM = /^luggage(?:-|$)/;
@@ -419,7 +452,6 @@ function DoneRow({ basis, contradictions = [] }: { basis: DoneBasis; contradicti
             {ev.confirmed} <span className="font-sans text-base font-normal">av</span> {ev.reported}
           </>
         }
-        good={ev.confirmed === ev.reported}
         label="«Ferdig» bekreftet"
       >
         {ev.confirmed > 0 && `${ev.confirmed} med et signal utenfra roboten (${joinNo(ev.signals.map(signalName))}). `}
@@ -436,7 +468,7 @@ function DoneRow({ basis, contradictions = [] }: { basis: DoneBasis; contradicti
   );
   if (own.reported === 0) {
     return (
-      <Row icon="circle-check" figure={total} good={missed === 0} label="«Ferdig» bekreftet">
+      <Row icon="circle-check" figure={total} fault={missed > 0} label="«Ferdig» bekreftet">
         {afterRise.reported > 0 ? "Alle ble meldt etter at arbeidet var bekreftet utenfra; ingen på robotens egen vurdering ennå." : "Hva hvert «ferdig» bygde på, står ikke i loggen."}
         {missed > 0 && ` ${missed} ble ikke bekreftet og telles ikke som fullført.`}
         {realHotel}
@@ -456,7 +488,7 @@ function DoneRow({ basis, contradictions = [] }: { basis: DoneBasis; contradicti
           {held.holds} <span className="font-sans text-base font-normal">av</span> {held.reported}
         </>
       }
-      good={held.holds === held.reported}
+      fault={held.holds < held.reported}
       label="«Ferdig» på egen vurdering som holder mot robotens egen logg"
     >
       {capitalise(ownParts(own))}: roboten meldte ferdig ut fra det den selv så
@@ -479,13 +511,16 @@ function DoneRow({ basis, contradictions = [] }: { basis: DoneBasis; contradicti
   );
 }
 
-/** "Rom 209: roboten satte inn bagasje kl. 01:29, så rommet tomt kl. 03:47 og meldte det tomt (R-049). Kameraet og oppgaveloggen er uenige." */
+/**
+ * "Rom 209: roboten satte inn bagasje kl. 01:29, så rommet tomt kl. 03:47 og meldte det tomt (R-049). Robotens blikk og
+ * dens egen oppgavelogg er uenige." Robotens blikk, not a camera: the simulator answers a look in text (round 6).
+ */
 function contradictionText(entry: SelfContradiction): string {
   const first = entry.placed[0];
   const what = first && LUGGAGE_ITEM.test(first.item) ? "bagasje" : "noe";
   return `Rom ${entry.room}: roboten satte inn ${what}${first?.clock ? ` kl. ${first.clock.slice(0, 5)}` : ""}, så rommet tomt${
     entry.clock ? ` kl. ${entry.clock.slice(0, 5)}` : ""
-  } og meldte det tomt (${entry.request}). Kameraet og robotens egen oppgavelogg er uenige, så Fettero regner den ikke som holdt.`;
+  } og meldte det tomt (${entry.request}). Robotens blikk og dens egen oppgavelogg er uenige, så Fettero regner den ikke som holdt.`;
 }
 
 /** "Skled i korridor 2B kl. 23:51 og krysset det samme våte gulvet 27 ganger til uten å sette skilt der." */
@@ -519,7 +554,7 @@ function MasterKeyRow({ keys }: { keys: MasterKeyEntries }) {
           {withoutKnock} <span className="font-sans text-base font-normal">av</span> {entries.length}
         </>
       }
-      good={withoutKnock === 0}
+      fault={withoutKnock > 0}
       label="Innganger med nøkkelkort uten å banke på"
     >
       {withoutKnock === 0
@@ -573,6 +608,8 @@ function HowWeKnow({
   basis,
   contradictions = [],
   distinct = DISTINCT_OWN,
+  finalRoomChecks = ROOM_CHECKS_FINAL,
+  rehearsal = REHEARSAL,
   blind = blindChecks(),
 }: {
   crossNight?: CrossNight;
@@ -581,6 +618,9 @@ function HowWeKnow({
   contradictions?: readonly SelfContradiction[];
   /** The final branch's distinct own-judgement claims (scripts/ledger.py); tests pass their own. */
   distinct?: DistinctClaims | null;
+  /** The final branch's room checks against the robot's own log, and the dress rehearsal's (scripts/ledger.py, round 6). */
+  finalRoomChecks?: RoomChecks | null;
+  rehearsal?: Rehearsal | null;
   /** The score-blind nights' own checks and how many said "not done". */
   blind?: { checks: number; saidNo: number } | null;
 }) {
@@ -618,12 +658,13 @@ function HowWeKnow({
       </summary>
       <div className="flex max-w-[72ch] flex-col gap-1.5 pb-1">
         <p>
-          «Bekreftet utenfra» betyr her at dommeren, Wybe Night Shift-simulatoren, svarte «Noted. Thanks.» på ferdigmeldingen, eller ga poeng for en
-          avvisning. En slik dommer finnes ikke i et ekte hotell.
+          «Bekreftet utenfra» og «godkjent» betyr her at Wybe Night Shift-simulatoren svarte «Noted. Thanks.» på ferdigmeldingen, eller ga poeng for
+          en avvisning. En slik dommer finnes ikke i et ekte hotell.
         </p>
         <p>
           «Egen vurdering»: poengsummen steg ikke mens roboten gjorde oppgaven, så den meldte ferdig uten å ha sett simulatorens bekreftelse. «Holder mot
-          egen logg»: ingen romsjekk ble meldt tom etter at roboten selv hadde satt noe inn i rommet samme natt.
+          egen logg»: ingen romsjekk ble meldt tom etter at roboten selv hadde satt noe inn i rommet samme natt. «Robotens blikk» er simulatorens
+          tekstsvar når roboten ser seg om: simulatoren har ikke kamera.
         </p>
         {night && (
           <p>
@@ -634,6 +675,8 @@ function HowWeKnow({
               : "."}
           </p>
         )}
+        {distinct && distinct.claims > 0 && <OwnLogAcrossNights distinct={distinct} roomChecks={finalRoomChecks} />}
+        {rehearsal && <RehearsalAgainstLog rehearsal={rehearsal} />}
         {hidden && (
           <p>
             Med poengsummen skjult ({hidden.nights} live-netter der agenten aldri leste poengsummen eller svaret når den avgjorde «ferdig»: score-blind,{" "}
@@ -648,16 +691,10 @@ function HowWeKnow({
         )}
         {FAULT_BED.rates.length > 0 && <FaultBed />}
         {HOTEL_RULES.scores.length > 0 && <HotelRules />}
-        {distinct && distinct.claims > 0 && (
-          <p>
-            Talt som ulike påstander (samme natt og forespørsel spilt på nytt teller én gang), sluttgrenens {distinct.nights} netter: {distinct.credited} av{" "}
-            {distinct.claims} på egen vurdering godkjent (95 %-intervall {intervalText(distinct.ci95, distinct.credited, distinct.claims)}; {grouped(distinct.reports)}{" "}
-            meldinger med gjentakelsene).
-          </p>
-        )}
         {all && (
           <p>
-            Alle {all.nights} live-netter med logg: {grouped(all.credited)} av {grouped(all.reported)} godkjent ({percentText(all.percent)})
+            Alle {all.nights} live-netter med logg, gjentakelser av samme seed medregnet: {grouped(all.credited)} av {grouped(all.reported)} godkjent (
+            {percentText(all.percent)})
             {allOwn ? (
               <>
                 ; på egen vurdering {grouped(allOwn.credited)} av {grouped(allOwn.reported)} ({percentText(allOwn.percent)}), romsjekker{" "}
@@ -680,7 +717,86 @@ function HowWeKnow({
   );
 }
 
-/** The fault bed behind "Slik vet vi det": what was injected, precision and recall, where it misses, and the limit. */
+/**
+ * Both figures for the final branch (round 6, the data and domain reviews): credited by the simulator, and holding
+ * against the robot's own log, counted once per (seed, request), each with its Wilson interval; then why they differ.
+ */
+function OwnLogAcrossNights({ distinct, roomChecks }: { distinct: DistinctClaims; roomChecks: RoomChecks | null }) {
+  const holds = distinct.holds_log;
+  return (
+    <p>
+      Sluttgrenens {distinct.nights} netter, talt som ulike påstander (samme seed og forespørsel spilt på nytt teller én gang): {distinct.credited} av{" "}
+      {distinct.claims} på egen vurdering godkjent av simulatoren (95 %-intervall {intervalText(distinct.ci95, distinct.credited, distinct.claims)})
+      {holds !== undefined && distinct.ci95_log ? (
+        <>
+          , men <span className="font-semibold text-text">{holds} av {distinct.claims} holder mot robotens egen logg</span> (95 %-intervall{" "}
+          {intervalText(distinct.ci95_log, holds, distinct.claims)})
+        </>
+      ) : null}
+      ; {grouped(distinct.reports)} meldinger med gjentakelsene.
+      {roomChecks && roomChecks.distinct_contradicted > 0 && (
+        <>
+          {" "}
+          {roomChecks.distinct_contradicted} av {roomChecks.distinct} romsjekker ble meldt tomme i et rom roboten selv hadde satt bagasje inn i, og simulatoren
+          godkjente {roomChecks.contradicted_credited === roomChecks.contradicted ? "alle" : `${roomChecks.contradicted_credited} av ${roomChecks.contradicted}`}: den
+          fjerner levert bagasje fra rommet, så dens romsjekk ser den ikke.
+        </>
+      )}
+    </p>
+  );
+}
+
+/** The dress rehearsal by the same rule: the build that plays the final, on ten seeds no build had played (round 6). */
+function RehearsalAgainstLog({ rehearsal }: { rehearsal: Rehearsal }) {
+  const r = rehearsal;
+  const rc = r.room_checks;
+  return (
+    <p>
+      Generalprøven (bygget som spiller finalen, <span className="font-mono text-xs">{r.build}</span>, {r.nights} netter på seeds ingen bygg hadde spilt):{" "}
+      {r.own_credited} av {r.own} på egen vurdering godkjent av simulatoren, {r.own_holds_log} av {r.own} holder mot egen logg (95 %-intervall{" "}
+      {intervalText(r.ci95_log, r.own_holds_log, r.own)}). {rc.contradicted} av {rc.reports} romsjekker motsagt, på {rc.nights_firing} av {rc.nights} netter
+      {rc.contradicted > 0
+        ? `, og simulatoren godkjente ${rc.contradicted_credited === rc.contradicted ? `alle ${rc.contradicted}` : `${rc.contradicted_credited} av dem`}.`
+        : "."}
+    </p>
+  );
+}
+
+/** "gjest som sover i et «sjekket» rom": the fault types the check misses, in the hotel's words. */
+const FAULT_NAMES: Record<string, string> = {
+  "room.occupied": "en gjest som sover i et «sjekket» rom",
+  "say.polite_off_topic": "et høflig svar som ikke handler om saken",
+  "noise.restarts": "musikk som starter igjen",
+  "lost.lookalike": "en hittegjenstand som ligner",
+  "noise.refuses": "en gjest som nekter å skru ned",
+  "noise.no_answer": "ingen svar på døren ved bråk",
+  "say.no_answer": "ingen svar på en melding",
+  "say.off_topic": "et svar om noe annet",
+  "place.wrong_room": "levert til feil rom",
+};
+
+/** The catch rate per rate, with and without the sleeping guest, and the types it misses most, from the per-type table. */
+function FaultCatch() {
+  const types = FAULT_BED.types ?? [];
+  const rates = FAULT_BED.rates;
+  const all = rates.map((rate) => catchRate(types, { rate: rate.rate }));
+  const awake = rates.map((rate) => catchRate(types, { rate: rate.rate, without: [SLEEPING_GUEST] }));
+  if (all.some((entry) => entry === null)) return null;
+  const at = rates.map((rate) => `${Math.round(rate.rate * 100)}`).join(" / ");
+  const misses = missesByType(types)
+    .filter((entry) => entry.missed / entry.hit >= 0.25)
+    .map((entry) => `${FAULT_NAMES[entry.type] ?? entry.type} (${grouped(entry.missed)} av ${grouped(entry.hit)})`);
+  return (
+    <>
+      {" "}
+      Av feilene roboten ikke rettet selv, fanget sjekken{" "}
+      {all.map((entry) => `${grouped(entry!.caught)} av ${grouped(entry!.caught + entry!.missed)} (${wholePercent(entry!.share)})`).join(" / ")} ved {at} % feil;
+      uten gjesten som sover {awake.map((entry) => (entry ? wholePercent(entry.share) : "–")).join(" / ")}. Den bommer på {joinNo(misses)}.
+    </>
+  );
+}
+
+/** The fault bed behind "Slik vet vi det": what was injected, the catch rate, precision and recall, where it misses, and the limit. */
 function FaultBed() {
   const bed = FAULT_BED;
   const rates = bed.rates;
@@ -690,14 +806,15 @@ function FaultBed() {
     <p>
       Det måler feiltesten: uten nett, i {bed.realNights} gjenoppbygde ekte netter × {bed.draws} trekninger med {bed.faultTypes} slags innlagte feil (feil rom,
       utenfor døren, skilt ved siden av sølet, ingen svar, …), med og uten poengsummen på de samme feilene ({grouped(bed.nights)} netter,{" "}
-      <span className="font-mono text-xs">{bed.branch}</span> <span className="font-mono text-xs">{bed.commit}</span>). Uten poengsummen holdt {list((rate) => shareText(rate.blind.precision))} av
+      <span className="font-mono text-xs">{bed.branch}</span> <span className="font-mono text-xs">{bed.commit}</span>).
+      <FaultCatch /> Uten poengsummen holdt {list((rate) => shareText(rate.blind.precision))} av
       «ferdig» ved {at} % feil, og sjekken fant {list((rate) => shareText(rate.blind.recall))} av det som virkelig var gjort (med poengsummen{" "}
       {rates.map((rate) => `${shareText(rate.sighted.precision)}/${shareText(rate.sighted.recall)}`).join(", ")}). Sjekken sa «ikke ferdig»{" "}
       {list((rate) => grouped(rate.saidNotDone))} ganger, mot {bed.saidNotDoneWithoutFaults === 1 ? "én gang" : `${bed.saidNotDoneWithoutFaults} ganger`} uten feil. På feil som
       synes i svaret den leser, holdt {list((rate) => shareText(rate.visible.precision))}, og den fanget {bed.visibleCaught}; med poengsummen ble{" "}
-      {shareText(bed.sightedSignsFalseDone)} av skiltene satt ved siden av sølet falske «ferdig». Den bommer på en gjest som sover i et «sjekket» rom (det gjør
-      poengsummen også), et høflig svar som ikke handler om saken, musikk som starter igjen og en hittegjenstand som ligner ({shareText(bed.lookAlikeMissed)}).
-      Feilformuleringene er skrevet av oss: de viser hva slags svar som lurer sjekken, ikke hvor ofte det skjer.
+      {shareText(bed.sightedSignsFalseDone)} av skiltene satt ved siden av sølet falske «ferdig», og poengsummen bommer også på gjesten som sover. Presisjonen
+      flytter seg med hvor ofte noe feiler, fangstraten gjør ikke det. Feilformuleringene er skrevet av oss: de viser hva slags svar som lurer sjekken, ikke
+      hvor ofte det skjer. Fasiten er simulatorens, så feiltesten ser ikke bagasjen simulatoren fjerner (rom 209).
     </p>
   );
 }
@@ -781,7 +898,7 @@ function StrangerIncident({ strangers }: { strangers: RobotJudgement["strangers"
   const roomsText = rooms.length > 1 ? `${rooms.length} ulike rom` : rooms.length === 1 ? `rom ${rooms[0]}` : "et rom";
   return (
     <div className="mt-4 flex gap-3 sm:gap-4">
-      <RegenIcon name="shield-check" size={24} className="mt-0.5 shrink-0 text-success" />
+      <RegenIcon name="shield-check" size={24} className="mt-0.5 shrink-0 text-text" />
       <div className="min-w-0">
         <p className="text-sm text-muted">Sikkerhet · én hendelse</p>
         <p className="mt-0.5 text-base font-semibold sm:text-lg">
@@ -823,14 +940,16 @@ function StrangerIncident({ strangers }: { strangers: RobotJudgement["strangers"
   );
 }
 
-function Row({ icon, figure, label, good = false, children }: { icon: RegenName; figure?: ReactNode; label: string; good?: boolean; children: ReactNode }) {
+/** One figure of the full card. `fault`: the robot's own fault, amber with the words "Robotens feil"; otherwise ink (round 6). */
+function Row({ icon, figure, label, fault = false, children }: { icon: RegenName; figure?: ReactNode; label: string; fault?: boolean; children: ReactNode }) {
   return (
     <li className="flex gap-3">
-      <RegenIcon name={icon} size={20} className={cx("mt-1 shrink-0", good ? "text-success" : "text-muted")} />
+      <RegenIcon name={fault ? "alert-triangle" : icon} size={20} className={cx("mt-1 shrink-0", fault ? "text-warning" : "text-muted")} />
       <div className="min-w-0">
         <p className="flex flex-wrap items-baseline gap-x-2">
-          {figure !== undefined && <span className={cx("font-mono text-xl font-medium tabular-nums", good ? "text-success" : "text-text")}>{figure}</span>}
+          {figure !== undefined && <span className={cx("font-mono text-xl font-medium tabular-nums", fault ? "text-warning" : "text-text")}>{figure}</span>}
           <span className="font-semibold">{label}</span>
+          {fault && <Badge tone="warning">Robotens feil</Badge>}
         </p>
         <p className="mt-0.5 text-sm text-muted">{children}</p>
       </div>

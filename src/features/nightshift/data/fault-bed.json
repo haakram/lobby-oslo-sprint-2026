@@ -1,18 +1,141 @@
 {
-  "_doc": "The offline fault bed's result (jury round 5, the Wybe juror and the data juror: give the done check negatives). Failures injected at a known rate into 20 rebuilt real nights x 5 fault draws, 13 fault types, the score-blind done check and the sighted agent on the same faults (640 nights). Run on branch hamad/faults at 4571de3 (agent/faultbed.py, output in temp/faults/ of that checkout); figures as reported by the controller on Sun 8 Nov, 05:40. Offline only: no Wybe server. The fault wordings are written by the team, so the misses show the kind of reply that fools the check, not how often it happens.",
-  "branch": "hamad/faults",
-  "commit": "4571de3",
-  "nights": 640,
-  "realNights": 20,
-  "draws": 5,
-  "faultTypes": 13,
-  "rates": [
-    { "rate": 0.05, "blind": { "precision": 0.985, "recall": 0.998 }, "sighted": { "precision": 0.988, "recall": 0.995 }, "visible": { "precision": 0.997 }, "saidNotDone": 256 },
-    { "rate": 0.15, "blind": { "precision": 0.955, "recall": 0.997 }, "sighted": { "precision": 0.964, "recall": 0.99 }, "visible": { "precision": 0.994 }, "saidNotDone": 734 },
-    { "rate": 0.3, "blind": { "precision": 0.91, "recall": 0.997 }, "sighted": { "precision": 0.92, "recall": 0.983 }, "visible": { "precision": 0.989 }, "saidNotDone": 1578 }
-  ],
-  "saidNotDoneWithoutFaults": 1,
-  "visibleCaught": "99–100 %",
-  "sightedSignsFalseDone": 0.86,
-  "lookAlikeMissed": 0.29
+ "_doc": "The offline fault bed's result (jury round 5, the Wybe juror and the data juror: give the done check negatives). Failures injected at a known rate into 20 rebuilt real nights x 5 fault draws, 13 fault types, the score-blind done check and the sighted agent on the same faults (640 nights). Run on branch hamad/faults at 4571de3 (agent/faultbed.py, output in temp/faults/ of that checkout); figures as reported by the controller on Sun 8 Nov, 05:40. Offline only: no Wybe server. The fault wordings are written by the team, so the misses show the kind of reply that fools the check, not how often it happens.",
+ "branch": "hamad/faults",
+ "commit": "4571de3",
+ "nights": 640,
+ "realNights": 20,
+ "draws": 5,
+ "faultTypes": 13,
+ "rates": [
+  {
+   "rate": 0.05,
+   "blind": {
+    "precision": 0.985,
+    "recall": 0.998
+   },
+   "sighted": {
+    "precision": 0.988,
+    "recall": 0.995
+   },
+   "visible": {
+    "precision": 0.997
+   },
+   "saidNotDone": 256
+  },
+  {
+   "rate": 0.15,
+   "blind": {
+    "precision": 0.955,
+    "recall": 0.997
+   },
+   "sighted": {
+    "precision": 0.964,
+    "recall": 0.99
+   },
+   "visible": {
+    "precision": 0.994
+   },
+   "saidNotDone": 734
+  },
+  {
+   "rate": 0.3,
+   "blind": {
+    "precision": 0.91,
+    "recall": 0.997
+   },
+   "sighted": {
+    "precision": 0.92,
+    "recall": 0.983
+   },
+   "visible": {
+    "precision": 0.989
+   },
+   "saidNotDone": 1578
+  }
+ ],
+ "saidNotDoneWithoutFaults": 1,
+ "visibleCaught": "99–100 %",
+ "sightedSignsFalseDone": 0.86,
+ "lookAlikeMissed": 0.29,
+ "_types_doc": "types: scripts/ledger.py --faults-from (hamad/faults temp/faults/real.md, copied to docs/runs/fault-bed-real.md). Per fault type, mode and rate: requests hit (the last fault on a request counts), caught (not reported done, not creditable), missed (a false done), repaired (a later attempt succeeded and was reported done), lost (creditable, not reported done).",
+ "types": [
+  {"type": "lost.lookalike", "mode": "blind", "rate": 0.05, "hit": 24, "caught": 13, "missed": 11, "repaired": 0, "lost": 0},
+  {"type": "lost.lookalike", "mode": "blind", "rate": 0.15, "hit": 64, "caught": 41, "missed": 23, "repaired": 0, "lost": 0},
+  {"type": "lost.lookalike", "mode": "blind", "rate": 0.3, "hit": 96, "caught": 77, "missed": 19, "repaired": 0, "lost": 0},
+  {"type": "lost.lookalike", "mode": "sighted", "rate": 0.05, "hit": 24, "caught": 24, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "lost.lookalike", "mode": "sighted", "rate": 0.15, "hit": 65, "caught": 65, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "lost.lookalike", "mode": "sighted", "rate": 0.3, "hit": 96, "caught": 96, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "lost.numbered", "mode": "blind", "rate": 0.05, "hit": 15, "caught": 15, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "lost.numbered", "mode": "blind", "rate": 0.15, "hit": 60, "caught": 60, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "lost.numbered", "mode": "blind", "rate": 0.3, "hit": 93, "caught": 93, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "lost.numbered", "mode": "sighted", "rate": 0.05, "hit": 14, "caught": 14, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "lost.numbered", "mode": "sighted", "rate": 0.15, "hit": 61, "caught": 61, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "lost.numbered", "mode": "sighted", "rate": 0.3, "hit": 93, "caught": 93, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "noise.no_answer", "mode": "blind", "rate": 0.05, "hit": 8, "caught": 8, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "noise.no_answer", "mode": "blind", "rate": 0.15, "hit": 38, "caught": 32, "missed": 5, "repaired": 1, "lost": 0},
+  {"type": "noise.no_answer", "mode": "blind", "rate": 0.3, "hit": 87, "caught": 81, "missed": 5, "repaired": 1, "lost": 0},
+  {"type": "noise.no_answer", "mode": "sighted", "rate": 0.05, "hit": 8, "caught": 8, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "noise.no_answer", "mode": "sighted", "rate": 0.15, "hit": 38, "caught": 33, "missed": 4, "repaired": 1, "lost": 0},
+  {"type": "noise.no_answer", "mode": "sighted", "rate": 0.3, "hit": 87, "caught": 82, "missed": 4, "repaired": 1, "lost": 0},
+  {"type": "noise.refuses", "mode": "blind", "rate": 0.05, "hit": 12, "caught": 11, "missed": 0, "repaired": 1, "lost": 0},
+  {"type": "noise.refuses", "mode": "blind", "rate": 0.15, "hit": 39, "caught": 37, "missed": 2, "repaired": 0, "lost": 0},
+  {"type": "noise.refuses", "mode": "blind", "rate": 0.3, "hit": 66, "caught": 57, "missed": 9, "repaired": 0, "lost": 0},
+  {"type": "noise.refuses", "mode": "sighted", "rate": 0.05, "hit": 12, "caught": 11, "missed": 0, "repaired": 1, "lost": 0},
+  {"type": "noise.refuses", "mode": "sighted", "rate": 0.15, "hit": 39, "caught": 38, "missed": 1, "repaired": 0, "lost": 0},
+  {"type": "noise.refuses", "mode": "sighted", "rate": 0.3, "hit": 66, "caught": 59, "missed": 7, "repaired": 0, "lost": 0},
+  {"type": "noise.restarts", "mode": "blind", "rate": 0.05, "hit": 9, "caught": 0, "missed": 9, "repaired": 0, "lost": 0},
+  {"type": "noise.restarts", "mode": "blind", "rate": 0.15, "hit": 40, "caught": 2, "missed": 38, "repaired": 0, "lost": 0},
+  {"type": "noise.restarts", "mode": "blind", "rate": 0.3, "hit": 67, "caught": 6, "missed": 61, "repaired": 0, "lost": 0},
+  {"type": "noise.restarts", "mode": "sighted", "rate": 0.05, "hit": 9, "caught": 9, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "noise.restarts", "mode": "sighted", "rate": 0.15, "hit": 40, "caught": 40, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "noise.restarts", "mode": "sighted", "rate": 0.3, "hit": 67, "caught": 62, "missed": 5, "repaired": 0, "lost": 0},
+  {"type": "place.outside", "mode": "blind", "rate": 0.05, "hit": 104, "caught": 104, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.outside", "mode": "blind", "rate": 0.15, "hit": 262, "caught": 262, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.outside", "mode": "blind", "rate": 0.3, "hit": 492, "caught": 492, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.outside", "mode": "sighted", "rate": 0.05, "hit": 104, "caught": 104, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.outside", "mode": "sighted", "rate": 0.15, "hit": 263, "caught": 263, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.outside", "mode": "sighted", "rate": 0.3, "hit": 493, "caught": 493, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.wrong_room", "mode": "blind", "rate": 0.05, "hit": 77, "caught": 77, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.wrong_room", "mode": "blind", "rate": 0.15, "hit": 234, "caught": 234, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.wrong_room", "mode": "blind", "rate": 0.3, "hit": 536, "caught": 536, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.wrong_room", "mode": "sighted", "rate": 0.05, "hit": 77, "caught": 77, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "place.wrong_room", "mode": "sighted", "rate": 0.15, "hit": 234, "caught": 233, "missed": 1, "repaired": 0, "lost": 0},
+  {"type": "place.wrong_room", "mode": "sighted", "rate": 0.3, "hit": 538, "caught": 530, "missed": 8, "repaired": 0, "lost": 0},
+  {"type": "room.occupied", "mode": "blind", "rate": 0.05, "hit": 33, "caught": 0, "missed": 33, "repaired": 0, "lost": 0},
+  {"type": "room.occupied", "mode": "blind", "rate": 0.15, "hit": 94, "caught": 0, "missed": 94, "repaired": 0, "lost": 0},
+  {"type": "room.occupied", "mode": "blind", "rate": 0.3, "hit": 195, "caught": 0, "missed": 195, "repaired": 0, "lost": 0},
+  {"type": "room.occupied", "mode": "sighted", "rate": 0.05, "hit": 33, "caught": 0, "missed": 33, "repaired": 0, "lost": 0},
+  {"type": "room.occupied", "mode": "sighted", "rate": 0.15, "hit": 94, "caught": 0, "missed": 94, "repaired": 0, "lost": 0},
+  {"type": "room.occupied", "mode": "sighted", "rate": 0.3, "hit": 195, "caught": 0, "missed": 195, "repaired": 0, "lost": 0},
+  {"type": "say.misheard", "mode": "blind", "rate": 0.05, "hit": 10, "caught": 2, "missed": 0, "repaired": 8, "lost": 0},
+  {"type": "say.misheard", "mode": "blind", "rate": 0.15, "hit": 27, "caught": 4, "missed": 0, "repaired": 23, "lost": 0},
+  {"type": "say.misheard", "mode": "blind", "rate": 0.3, "hit": 51, "caught": 14, "missed": 0, "repaired": 37, "lost": 0},
+  {"type": "say.misheard", "mode": "sighted", "rate": 0.05, "hit": 11, "caught": 3, "missed": 0, "repaired": 8, "lost": 0},
+  {"type": "say.misheard", "mode": "sighted", "rate": 0.15, "hit": 27, "caught": 4, "missed": 0, "repaired": 23, "lost": 0},
+  {"type": "say.misheard", "mode": "sighted", "rate": 0.3, "hit": 55, "caught": 17, "missed": 1, "repaired": 37, "lost": 0},
+  {"type": "say.no_answer", "mode": "blind", "rate": 0.05, "hit": 11, "caught": 1, "missed": 0, "repaired": 10, "lost": 0},
+  {"type": "say.no_answer", "mode": "blind", "rate": 0.15, "hit": 23, "caught": 1, "missed": 1, "repaired": 21, "lost": 0},
+  {"type": "say.no_answer", "mode": "blind", "rate": 0.3, "hit": 64, "caught": 14, "missed": 1, "repaired": 49, "lost": 0},
+  {"type": "say.no_answer", "mode": "sighted", "rate": 0.05, "hit": 11, "caught": 1, "missed": 0, "repaired": 10, "lost": 0},
+  {"type": "say.no_answer", "mode": "sighted", "rate": 0.15, "hit": 23, "caught": 2, "missed": 0, "repaired": 21, "lost": 0},
+  {"type": "say.no_answer", "mode": "sighted", "rate": 0.3, "hit": 67, "caught": 17, "missed": 0, "repaired": 50, "lost": 0},
+  {"type": "say.off_topic", "mode": "blind", "rate": 0.05, "hit": 8, "caught": 1, "missed": 0, "repaired": 7, "lost": 0},
+  {"type": "say.off_topic", "mode": "blind", "rate": 0.15, "hit": 27, "caught": 2, "missed": 0, "repaired": 25, "lost": 0},
+  {"type": "say.off_topic", "mode": "blind", "rate": 0.3, "hit": 64, "caught": 14, "missed": 2, "repaired": 48, "lost": 0},
+  {"type": "say.off_topic", "mode": "sighted", "rate": 0.05, "hit": 8, "caught": 1, "missed": 0, "repaired": 7, "lost": 0},
+  {"type": "say.off_topic", "mode": "sighted", "rate": 0.15, "hit": 30, "caught": 5, "missed": 0, "repaired": 25, "lost": 0},
+  {"type": "say.off_topic", "mode": "sighted", "rate": 0.3, "hit": 67, "caught": 19, "missed": 0, "repaired": 48, "lost": 0},
+  {"type": "say.polite_off_topic", "mode": "blind", "rate": 0.05, "hit": 13, "caught": 0, "missed": 13, "repaired": 0, "lost": 0},
+  {"type": "say.polite_off_topic", "mode": "blind", "rate": 0.15, "hit": 39, "caught": 0, "missed": 39, "repaired": 0, "lost": 0},
+  {"type": "say.polite_off_topic", "mode": "blind", "rate": 0.3, "hit": 67, "caught": 0, "missed": 67, "repaired": 0, "lost": 0},
+  {"type": "say.polite_off_topic", "mode": "sighted", "rate": 0.05, "hit": 12, "caught": 0, "missed": 0, "repaired": 12, "lost": 0},
+  {"type": "say.polite_off_topic", "mode": "sighted", "rate": 0.15, "hit": 36, "caught": 7, "missed": 0, "repaired": 29, "lost": 0},
+  {"type": "say.polite_off_topic", "mode": "sighted", "rate": 0.3, "hit": 58, "caught": 15, "missed": 1, "repaired": 42, "lost": 0},
+  {"type": "sign.next_to", "mode": "blind", "rate": 0.05, "hit": 19, "caught": 19, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "sign.next_to", "mode": "blind", "rate": 0.15, "hit": 65, "caught": 65, "missed": 0, "repaired": 0, "lost": 0},
+  {"type": "sign.next_to", "mode": "blind", "rate": 0.3, "hit": 116, "caught": 115, "missed": 0, "repaired": 0, "lost": 1},
+  {"type": "sign.next_to", "mode": "sighted", "rate": 0.05, "hit": 19, "caught": 2, "missed": 17, "repaired": 0, "lost": 0},
+  {"type": "sign.next_to", "mode": "sighted", "rate": 0.15, "hit": 62, "caught": 8, "missed": 54, "repaired": 0, "lost": 0},
+  {"type": "sign.next_to", "mode": "sighted", "rate": 0.3, "hit": 110, "caught": 15, "missed": 93, "repaired": 0, "lost": 2}
+ ]
 }

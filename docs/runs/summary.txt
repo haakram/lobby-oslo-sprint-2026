@@ -1,0 +1,13 @@
+310 live starts, 229 with a log, 198 complete nights; 118 board tests (113 complete); 4 score-blind experiments (4 complete)
+all nights (the card's figure): 13829 of 13866 'done' credited over 208 nights (99.7 %)
+done split, final branch's last four builds (18 nights): 1267 'done'; 1078 after the score rose; own judgement 185 of 189 (97.9 %): room checks 117 of 117, spills 68 of 72, other 0 of 0
+distinct own-judgement claims, final branch's last four builds: 64 of 65 (95 % CI 92-99.7 %; 189 reports counting replays; missed: 23/R-037)
+  holding against the robot's own log: 54 of 65 (95 % CI 72-90 %; contradicted: 10/R-031, 10/R-055, 16/R-049, 23/R-055, 23/R-067, 5/R-041, 5/R-063, 5/R-068, 9/R-060, 9/R-065)
+  room checks contradicted by the robot's own log: 10 of 40 distinct (34 of 117 reports, 34 of them credited by the simulator; on 17 of 18 nights)
+dress rehearsal (8de9ffc, 10 nights, seeds 22 34 53 55 67 70 78 83 86 93): own judgement 101 of 101 credited by the simulator, 88 of 101 hold against its own log (95 % CI 79-92 %); room checks contradicted 13 of 64, credited by the simulator 13 of 13, on 8 of 10 nights
+every complete live night (198, board tests and experiments included): room checks contradicted 357 of 994 reports (356 credited by the simulator), on 185 of 198 nights
+done split, all nights the card counts (208 nights): 13866 'done'; 11743 after the score rose; own judgement 2085 of 2119 (98.4 %): room checks 1023 of 1028, spills 815 of 838, other 247 of 253; basis unknown 4
+score-blind experiment (4 nights, 4 complete; seeds 10 16 23 5; scores 2760 2748 2304 2559): 290 of 291 'done' credited (99.7 %), false done 1; the robot's own check said no 0 of 265 times
+demo night (w2-5991166a, seed 16): own judgement 9 of 9 credited (95 % CI 70-100 %), 8 of 9 hold against its own log (contradicted: R-049:209)
+best build night: 2760 (seed 10, 8eac151)
+best live night anywhere: 2808 (seed 10, board-test, lottery)

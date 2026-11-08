@@ -1,8 +1,23 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { doneBasis } from "./conduct";
-import { crossNightPrecision, grouped, LEDGER_META, LEDGER_NIGHTS, type LedgerNight, ownPrecision, percentText, precision, shiftOf } from "./ledger";
+import { doneBasis, ownAgainstLog, selfContradictions } from "./conduct";
+import {
+  catchRate,
+  crossNightPrecision,
+  FAULT_BED,
+  type FaultTypeRow,
+  grouped,
+  LEDGER_META,
+  LEDGER_NIGHTS,
+  type LedgerNight,
+  missesByType,
+  ownPrecision,
+  percentText,
+  precision,
+  SLEEPING_GUEST,
+  shiftOf,
+} from "./ledger";
 import { parseRunLog } from "./runlog";
 
 const DEMO = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
@@ -144,5 +159,50 @@ describe("precision", () => {
   it("writes figures the Norwegian way", () => {
     expect(grouped(4340)).toBe("4 340");
     expect(percentText(99.2)).toBe("99,2 %");
+  });
+});
+
+describe("the 209 rule over every night (round 6)", () => {
+  it("agrees with the card on the demo night: scripts/ledger.py's done_own_holds_log is ownAgainstLog's 8 of 9", () => {
+    const shift = shiftOf(DEMO);
+    const row = LEDGER_NIGHTS.find((entry) => entry.shift === shift)!;
+    const basis = doneBasis(DEMO);
+    const held = ownAgainstLog(basis, selfContradictions(DEMO));
+    expect(row.done_own_holds_log).toBe(held.holds);
+    expect(row.room_checks_contradicted).toBe(selfContradictions(DEMO).length);
+    expect(held.holds).toBe(8);
+    expect(csvRows().find((entry) => entry.shift === shift)!.contradicted).toBe("R-049:209");
+  });
+});
+
+describe("the fault bed's catch rate (round 6)", () => {
+  const rows: FaultTypeRow[] = [
+    { type: "place.outside", mode: "blind", rate: 0.05, hit: 10, caught: 10, missed: 0, repaired: 0, lost: 0 },
+    { type: "room.occupied", mode: "blind", rate: 0.05, hit: 4, caught: 0, missed: 4, repaired: 0, lost: 0 },
+    { type: "say.misheard", mode: "blind", rate: 0.05, hit: 6, caught: 1, missed: 1, repaired: 4, lost: 0 },
+    { type: "room.occupied", mode: "sighted", rate: 0.05, hit: 4, caught: 4, missed: 0, repaired: 0, lost: 0 },
+  ];
+
+  it("counts caught over caught + missed, leaving repaired faults out, per mode, rate and without a type", () => {
+    expect(catchRate(rows, { rate: 0.05 })).toEqual({ caught: 11, missed: 5, share: 11 / 16 });
+    expect(catchRate(rows, { rate: 0.05, without: [SLEEPING_GUEST] })).toEqual({ caught: 11, missed: 1, share: 11 / 12 });
+    expect(catchRate(rows, { mode: "sighted" })!.share).toBe(1);
+    expect(catchRate(rows, { rate: 0.3 })).toBeNull();
+  });
+
+  it("names the types the check misses, the worst first", () => {
+    expect(missesByType(rows)).toEqual([
+      { type: "room.occupied", hit: 4, missed: 4 },
+      { type: "say.misheard", hit: 6, missed: 1 },
+    ]);
+  });
+
+  it("reads the committed table: 79 % at 5 %, 88 % without the sleeping guest", () => {
+    const types = FAULT_BED.types ?? [];
+    expect(types).toHaveLength(78);
+    const all = catchRate(types, { rate: 0.05 })!;
+    const awake = catchRate(types, { rate: 0.05, without: [SLEEPING_GUEST] })!;
+    expect([all.caught, all.caught + all.missed, Math.round(all.share * 100)]).toEqual([251, 317, 79]);
+    expect(Math.round(awake.share * 100)).toBe(88);
   });
 });

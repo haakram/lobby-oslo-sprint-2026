@@ -223,17 +223,89 @@ def test_a_score_blind_night_is_an_experiment_its_done_all_own_judgement_and_a_s
 
 
 def test_distinct_claims_count_a_replayed_seed_once_with_a_wilson_interval() -> None:
-    def night(seed: int, claims: list[tuple[str, bool]]) -> object:
+    def night(seed: int, claims: list[tuple[str, bool, bool]]) -> object:
         return ledger.Night(shift=f"w2-{seed:032x}", started="", seed=seed, checkout="x", own_claims=claims)
 
-    nights = [night(23, [("R-001", True), ("R-037", False)]), night(23, [("R-001", True), ("R-037", False)]),
-              night(10, [("R-001", True)])]
+    nights = [night(23, [("R-001", True, False), ("R-037", False, False)]),
+              night(23, [("R-001", True, True), ("R-037", False, False)]),  # the replay's R-001 was contradicted
+              night(10, [("R-001", True, False)])]
     d = ledger.distinct_own(nights)
     assert (d["reports"], d["claims"], d["credited"], d["missed"]) == (5, 3, 2, ["23/R-037"])
-    # the data juror's figures: 64 of 65 distinct claims, 95 % 92-99.7 %; the demo night's 9 of 9, 70-100 %.
+    # Against the robot's own log: a claim holds only when credited and never contradicted in any replay.
+    assert (d["holds_log"], d["contradicted"]) == (1, ["23/R-001"])
+    # The data review's figures: 64 of 65 distinct claims, 95 % 92-99.7 %; 54 of 65 against the own log, 72-90 %;
+    # the demo night's 9 of 9, 70-100 %.
     assert ledger.ci_text(ledger.wilson(64, 65), 64, 65) == "92-99.7 %"
+    assert ledger.ci_text(ledger.wilson(54, 65), 54, 65) == "72-90 %"
     assert ledger.ci_text(ledger.wilson(9, 9), 9, 9) == "70-100 %"
     assert ledger.wilson(0, 0) == (0.0, 1.0)
+
+
+def look(location: str, description: str, objects: list | None = None, clock: str = "03:47:00") -> dict:
+    return call("look", {}, {"location": location, "description": description, "objects": objects or [], "people": []}, clock)
+
+
+def test_a_room_reported_empty_after_the_robot_put_bags_inside_it_is_contradicted_by_its_own_log() -> None:
+    """The card's selfContradictions (conduct.ts) over a night: 209 is the demo night's case."""
+    night = [
+        state(100),
+        decision("task_start", "R-021", "luggage"),
+        call("place", {"item": "luggage-209", "where": "room-209"}, "Placed luggage-209 inside room-209.", "01:29:26"),
+        call("place", {"item": "wet-floor-sign", "where": "room-210"}, "Placed wet-floor-sign inside room-210."),
+        call("place", {"item": "towel", "where": "room-211"}, "Placed towel inside room-211."),
+        call("place", {"item": "pillow", "where": "room-212"}, "Placed pillow at corridor-2a."),  # not inside: no claim
+        state(120),
+        call("report", {"request": "R-021", "outcome": "done", "note": "placed"}, "Noted. Thanks."),
+        decision("task_done", "R-021"),
+        {"v": 1, "type": "decision", "kind": "task_start", "data": {"request": "R-049", "kind": "room_check", "room": "room-209"}},
+        look("room-209", "Nobody is here. The room is tidy."),
+        call("report", {"request": "R-049", "outcome": "done", "note": "looked inside room-209"}, "Noted. Thanks.", "03:47:31"),
+        decision("task_done", "R-049"),
+        {"v": 1, "type": "decision", "kind": "task_start", "data": {"request": "R-050", "kind": "room_check", "room": "room-210"}},
+        look("room-210", "Nobody is here. The room is tidy."),  # only a sign went in: never a contradiction
+        call("report", {"request": "R-050", "outcome": "done", "note": "looked"}, "Noted. Thanks."),
+        {"v": 1, "type": "decision", "kind": "task_start", "data": {"request": "R-051", "kind": "room_check", "room": "room-211"}},
+        look("room-211", "Nobody is here. The room is tidy.", ["towel"]),  # the towel is still listed: it holds
+        call("report", {"request": "R-051", "outcome": "done", "note": "looked"}, "Noted. Thanks."),
+        {"v": 1, "type": "decision", "kind": "task_start", "data": {"request": "R-052", "kind": "room_check", "room": "room-212"}},
+        call("report", {"request": "R-052", "outcome": "done", "note": "Nobody is here."}, "Noted."),  # no bags inside
+    ]
+    row = ledger.read_night(night)
+    assert (row["room_checks_done"], row["room_checks_contradicted"], row["room_checks_contradicted_credited"]) == (4, 1, 1)
+    assert row["contradicted"] == "R-049:209"
+    assert (row["done_own"], row["done_own_credited"], row["done_own_holds_log"]) == (4, 3, 2)
+    assert ("R-049", True, True) in row["own_claims"]
+    nights = [ledger.Night(shift="w2-" + "a" * 32, started="", seed=16, checkout="x", **{
+        k: v for k, v in row.items() if k in ledger.Night.__dataclass_fields__})]
+    rc = ledger.room_checks(nights)
+    assert (rc["reports"], rc["contradicted"], rc["distinct"], rc["distinct_contradicted"], rc["nights_firing"]) == (4, 1, 4, 1, 1)
+
+
+def test_the_rehearsal_is_the_12_00_builds_complete_nights_on_its_ten_seeds() -> None:
+    def night(seed: int, commit: str, holds: int, kind: str = "build") -> object:
+        return ledger.Night(shift=f"w2-{seed:032x}", started="", seed=seed, checkout="final", kind=kind, commit=commit, log="x",
+                            complete=True, done_own=10, done_own_credited=10, done_own_holds_log=holds,
+                            room_checks_contradicted=10 - holds, room_check_claims=[("R-1", holds < 10, True)])
+    nights = [night(22, "8de9ffc", 9), night(34, "8de9ffc", 10), night(16, "8de9ffc", 1), night(53, "013f90d", 1),
+              night(55, "8de9ffc", 2, kind="board-test")]
+    r = ledger.rehearsal(nights)
+    assert (r["seeds"], r["own"], r["own_credited"], r["own_holds_log"]) == ([22, 34], 20, 20, 19)
+    assert (r["room_checks"]["contradicted"], r["room_checks"]["nights_firing"]) == (1, 1)
+
+
+def test_the_fault_bed_table_becomes_rows_and_the_json_keeps_its_headline_fields() -> None:
+    table = (
+        "| Fault | Mode | 5%: hit / caught / missed / repaired | 15%: hit / caught / missed / repaired | 30%: hit / caught / missed / repaired | x |\n"
+        "|---|---|---|---|---|---|\n"
+        "| room.occupied | blind | 33 / 0 / 33 / 0 | 94 / 0 / 94 / 0 | 195 / 0 / 195 / 0 | - |\n"
+        "| sign.next_to | blind | 19 / 19 / 0 / 0 | 65 / 65 / 0 / 0 | 116 / 115 / 0 / 0 (+1 lost) | failed 196 |\n"
+    )
+    rows = ledger.fault_table(table)
+    assert len(rows) == 6
+    assert rows[0] == {"type": "room.occupied", "mode": "blind", "rate": 0.05, "hit": 33, "caught": 0, "missed": 33, "repaired": 0, "lost": 0}
+    assert rows[-1]["lost"] == 1 and rows[-1]["caught"] == 115
+    doc = json.loads(ledger.fault_bed_json(table, {"branch": "hamad/faults", "types": [{"old": True}]}))
+    assert doc["branch"] == "hamad/faults" and len(doc["types"]) == 6 and "_types_doc" in doc
 
 
 def test_a_score_blind_night_counts_its_own_checks_and_the_ones_that_said_no() -> None:

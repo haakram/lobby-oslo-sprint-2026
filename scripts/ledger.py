@@ -59,6 +59,16 @@ How each column is computed (the same rules as the app, src/features/nightshift)
 - ``declines_credited`` / ``declines_not_credited``: ``report … declined`` calls whose score went up /
   did not go up between the last score seen before the report and the first one after it
   (``declines_pending``: no score after it, e.g. a log that stops there).
+- ``room_checks_done`` / ``room_checks_contradicted`` / ``done_own_holds_log`` (jury round 6, the data and domain
+  reviews): the card's self-contradiction rule (``selfContradictions`` in src/features/nightshift/conduct.ts) over
+  every night, not only the demo night. A room check reported "done" is contradicted when the robot had placed a
+  non-sign item "inside" that room earlier the same night (the server's reply said "inside"), its last bare look
+  in the room (else its report note) reads "nobody is here", "empty" or "tidy", and the look's objects do not list
+  that item (209 on the demo night: bags placed 01:29, "Nobody is here. The room is tidy." 03:47).
+  ``room_checks_contradicted_credited``: of those, how many the simulator credited anyway (the simulator removes
+  delivered bags from the room, so its room-check credit cannot see them). ``done_own_holds_log``: own-judgement
+  "done" that were credited and that no contradiction disputes (the card's ``ownAgainstLog``). ``contradicted``:
+  the requests, ``R-049:209``.
 - ``blind_checks`` / ``blind_said_no`` (score-blind nights only): the agent's ``blind_check`` decisions, and how
   many of them observed the work as not done (``observed: false``). Zero "no" means the robot's own check never
   disagreed on those nights: the score was not needed there, which says nothing yet about how well the check
@@ -66,7 +76,11 @@ How each column is computed (the same rules as the app, src/features/nightshift)
 - Distinct claims (printed, and ``distinct_own`` in ledger.json; jury round 5, the data juror): the final branch's
   own-judgement "done" counted once per (seed, request), since its builds replay the same deterministic
   seeds; a claim is credited only when every report of it was. With a Wilson 95 % interval, as is the demo
-  night's own-judgement figure (``public/runs/demo.jsonl``).
+  night's own-judgement figure (``public/runs/demo.jsonl``). A claim holds against the robot's own log when it was
+  credited and no report of it was contradicted (``holds_log``, with its own interval; jury round 6).
+- The dress rehearsal (``rehearsal`` in ledger.json; jury round 6): the build that plays at 12:00
+  (``REHEARSAL_BUILD``) on the ten seeds no build had played (``REHEARSAL_SEEDS``, the same as scripts/forecast.py):
+  own-judgement "done" credited and holding against its own log, room checks contradicted and on how many nights.
 - ``score``: the ``end`` line's score, else the last score seen (``complete`` says which).
 - ``commit``: from ``agent/data/replay_codes.json`` (the replay bed's map of who played which night)
   when listed there (``commit_source=replay_codes``); otherwise the checkout's first-parent HEAD at the
@@ -79,6 +93,10 @@ Usage::
     python3 scripts/ledger.py --root DIR [--root DIR]  # other checkouts
     python3 scripts/ledger.py --check               # exit 1 if the committed files are out of date
     python3 scripts/ledger.py --fidelity-from out.txt  # also the replay bed's fidelity table as CSV
+    python3 scripts/ledger.py --faults-from real.md    # also the fault bed's per-type table (hamad/faults)
+
+``docs/runs/summary.txt`` holds the printed summary (every figure README and DEMO quote), so ``--check`` also
+catches a figure that moved.
 """
 
 from __future__ import annotations
@@ -103,6 +121,9 @@ BUILDS_CSV = REPO / "docs" / "runs" / "builds.csv"
 LEDGER_JSON = REPO / "src" / "features" / "nightshift" / "data" / "ledger.json"
 FIDELITY_CSV = REPO / "docs" / "runs" / "replay-fidelity.csv"
 FIDELITY_TXT = REPO / "docs" / "runs" / "replay-fidelity.txt"
+SUMMARY_TXT = REPO / "docs" / "runs" / "summary.txt"
+FAULT_TABLE_MD = REPO / "docs" / "runs" / "fault-bed-real.md"
+FAULT_BED_JSON = REPO / "src" / "features" / "nightshift" / "data" / "fault-bed.json"
 DEMO_LOG = REPO / "public" / "runs" / "demo.jsonl"
 
 # Seed-specific board experiments, not builds (see the docstring): their nights are kind=board-test.
@@ -112,6 +133,15 @@ BUILD, BOARD_TEST, EXPERIMENT = "build", "board-test", "experiment"
 # The final branch's last four builds (hamad/final, the README's "18 nights"): the done split is also
 # printed over their complete build nights. A list, not a rule: a later build is added here by hand.
 FINAL_BUILDS = ("d4e445c", "cb72845", "8eac151", "c3801e0")
+# The dress rehearsal (Sun 05:02): the build that plays at 12:00 on ten seeds no build had played. The seeds are
+# scripts/forecast.py's REHEARSAL_SEEDS; 013f90d has the same agent code but played tuned seeds, so it is not here.
+REHEARSAL_BUILD = "8de9ffc"
+REHEARSAL_SEEDS = (22, 34, 53, 55, 67, 70, 78, 83, 86, 93)
+
+# The card's self-contradiction rule (conduct.ts `selfContradictions`): a finding that calls the room empty.
+EMPTY_FINDING = re.compile(r"nobody is here|\bempty\b|\btidy\b", re.I)
+INSIDE = re.compile(r"\binside\b", re.I)
+SIGN_ITEM = re.compile(r"wet-floor-sign")
 
 
 def default_roots() -> list[Path]:
@@ -159,14 +189,22 @@ class Night:
     done_spill: int | None = None
     done_spill_credited: int | None = None
     done_basis_unknown: int | None = None
+    room_checks_done: int | None = None
+    room_checks_contradicted: int | None = None
+    room_checks_contradicted_credited: int | None = None
+    done_own_holds_log: int | None = None
+    contradicted: str = ""
     blind_checks: int | None = None
     blind_said_no: int | None = None
     t: float = field(default=0.0, repr=False)
-    # (request, credited) for every "done" said on the robot's own judgement: the distinct-claim count.
+    # (request, credited, contradicted) for every "done" said on the robot's own judgement: the distinct-claim count.
     own_claims: list = field(default_factory=list, repr=False)
+    # (request, contradicted, credited) for every room check reported "done", whatever it rested on.
+    room_check_claims: list = field(default_factory=list, repr=False)
 
 
-COLUMNS = [f for f in Night.__dataclass_fields__ if f not in ("t", "own_claims")]
+HIDDEN = ("t", "own_claims", "room_check_claims")
+COLUMNS = [f for f in Night.__dataclass_fields__ if f not in HIDDEN]
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -218,8 +256,15 @@ def read_night(lines: list[dict]) -> dict:
     basis = {"after_rise": 0, "own": 0, "own_credited": 0, "room_check": 0, "room_check_credited": 0, "spill": 0,
              "spill_credited": 0, "unknown": 0}
     open_tasks: dict[str, list] = {}  # request -> [kind, rose since its task_start]
-    own_claims: list[tuple[str, bool]] = []
+    own_claims: list[tuple[str, bool, bool]] = []
     blind_checks = blind_said_no = 0
+    # The self-contradiction rule (conduct.ts `selfContradictions`), in the same pass.
+    task_rooms: dict[str, tuple] = {}  # request -> (kind, room) from its last task_start
+    placed: dict[str, list[str]] = {}  # "room-209" -> items placed inside it tonight (no signs)
+    looks: dict[str, tuple[list[str], str | None]] = {}  # place -> (objects, description) of the last bare look
+    room_check_claims: list[tuple[str, bool, bool]] = []
+    contradicted: list[str] = []
+    own_holds_log = 0
     for index, line in enumerate(lines):
         kind = line.get("type")
         if line.get("clock"):
@@ -244,6 +289,7 @@ def read_night(lines: list[dict]) -> dict:
             if isinstance(request, str):
                 if line["kind"] == "task_start":
                     open_tasks[request] = [(line.get("data") or {}).get("kind"), False]
+                    task_rooms[request] = ((line.get("data") or {}).get("kind"), (line.get("data") or {}).get("room"))
                 else:
                     open_tasks.pop(request, None)
         if kind == "decision" and line.get("kind") == "blind_check":
@@ -264,13 +310,43 @@ def read_night(lines: list[dict]) -> dict:
             for message in line["result"].get("messages") or []:
                 if isinstance(message, dict) and isinstance(message.get("request"), str):
                     requests.add(message["request"])
+        if cmd == "place" and line.get("ok"):
+            item, where = args.get("item"), args.get("where")
+            reply = line.get("result") if isinstance(line.get("result"), str) else ""
+            if (isinstance(item, str) and item and isinstance(where, str) and where.startswith("room-")
+                    and INSIDE.search(reply) and not SIGN_ITEM.search(item)):
+                items = placed.setdefault(where, [])
+                if item not in items:
+                    items.append(item)
+        if cmd == "look" and line.get("ok") and not args.get("at") and isinstance(line.get("result"), dict):
+            result = line["result"]
+            at = result.get("location")
+            if isinstance(at, str) and at:
+                objects = [o if isinstance(o, str) else (o.get("name") if isinstance(o, dict) and isinstance(o.get("name"), str) else "")
+                           for o in (result.get("objects") if isinstance(result.get("objects"), list) else [])]
+                description = result.get("description") if isinstance(result.get("description"), str) else None
+                looks[at] = (objects, description)
         if cmd == "report" and line.get("ok"):
             outcome = args.get("outcome")
             if outcome == "done":
                 done_reports += 1
                 thanked = "thanks" in str(line.get("result", "")).lower()
                 done_credited += thanked
-                task = open_tasks.get(str(args.get("request")))
+                request = str(args.get("request"))
+                disputed = False
+                kind_room = task_rooms.get(request)
+                if kind_room and kind_room[0] == "room_check" and isinstance(kind_room[1], str) and kind_room[1]:
+                    room = kind_room[1]
+                    items = placed.get(room, [])
+                    look = looks.get(room)
+                    note = args.get("note") if isinstance(args.get("note"), str) else None
+                    finding = look[1] if look and look[1] is not None else note
+                    seen = look[0] if look else []
+                    disputed = bool(items) and bool(EMPTY_FINDING.search(finding or "")) and any(i not in seen for i in items)
+                    room_check_claims.append((request, disputed, bool(thanked)))
+                    if disputed:
+                        contradicted.append(f"{request}:{room[5:] if room.startswith('room-') else room}")
+                task = open_tasks.get(request)
                 if task is None:
                     basis["unknown"] += 1
                 elif task[1]:
@@ -278,7 +354,8 @@ def read_night(lines: list[dict]) -> dict:
                 else:
                     basis["own"] += 1
                     basis["own_credited"] += thanked
-                    own_claims.append((str(args.get("request")), bool(thanked)))
+                    own_holds_log += bool(thanked) and not disputed
+                    own_claims.append((request, bool(thanked), disputed))
                     if task[0] in ("room_check", "spill"):
                         basis[task[0]] += 1
                         basis[f"{task[0]}_credited"] += thanked
@@ -320,9 +397,15 @@ def read_night(lines: list[dict]) -> dict:
         "points_lost": lost,
         "min_battery": round(min_battery, 1) if min_battery is not None else None,
         **{f"done_{key}" if key != "unknown" else "done_basis_unknown": value for key, value in basis.items()},
+        "room_checks_done": len(room_check_claims),
+        "room_checks_contradicted": sum(1 for _, disputed, _ in room_check_claims if disputed),
+        "room_checks_contradicted_credited": sum(1 for _, disputed, credited in room_check_claims if disputed and credited),
+        "done_own_holds_log": own_holds_log,
+        "contradicted": " ".join(contradicted),
         "blind_checks": blind_checks if blind else None,
         "blind_said_no": blind_said_no if blind else None,
         "own_claims": own_claims,
+        "room_check_claims": room_check_claims,
     }
 
 
@@ -455,8 +538,8 @@ def ledger_csv(nights: list[Night]) -> str:
     writer.writeheader()
     for night in nights:
         row = asdict(night)
-        row.pop("t")
-        row.pop("own_claims")
+        for hidden in HIDDEN:
+            row.pop(hidden)
         writer.writerow({k: ("" if v is None else v) for k, v in row.items()})
     return out.getvalue()
 
@@ -470,7 +553,8 @@ def builds_csv(nights: list[Night]) -> str:
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["commit", "commit_source", "first_start", "nights", "mean_score", "best_score", "best_seed",
                      "seeds", "scores", "done_reports", "done_credited", "declines_credited",
-                     "declines_not_credited", "done_after_rise", "done_own", "done_own_credited"])
+                     "declines_not_credited", "done_after_rise", "done_own", "done_own_credited", "done_own_holds_log",
+                     "room_checks_done", "room_checks_contradicted"])
     for commit, group in sorted(by_commit.items(), key=lambda item: min(n.t for n in item[1])):
         best = max(group, key=lambda n: n.score or 0)
         writer.writerow([
@@ -490,6 +574,9 @@ def builds_csv(nights: list[Night]) -> str:
             sum(n.done_after_rise or 0 for n in group),
             sum(n.done_own or 0 for n in group),
             sum(n.done_own_credited or 0 for n in group),
+            sum(n.done_own_holds_log or 0 for n in group),
+            sum(n.room_checks_done or 0 for n in group),
+            sum(n.room_checks_contradicted or 0 for n in group),
         ])
     return out.getvalue()
 
@@ -539,19 +626,63 @@ def wilson(successes: int, n: int, z: float = 1.959964) -> tuple[float, float]:
 def distinct_own(nights: list[Night]) -> dict:
     """The robot's own-judgement "done" over `nights`, counted once per (seed, request), not once per replay
     (jury round 5, the data juror: four near-identical builds on the same deterministic seeds repeat the same
-    claims). A distinct claim counts as credited only when every report of it was credited."""
+    claims). A distinct claim counts as credited only when every report of it was credited. It holds against the
+    robot's own log (jury round 6) when it was credited and no report of it was contradicted (the self-contradiction
+    rule above)."""
     claims: dict[tuple, bool] = {}
+    disputed: dict[tuple, bool] = {}
     reports = 0
     for night in nights:
-        for request, credited in night.own_claims:
+        for request, credited, contradicted in night.own_claims:
             reports += 1
             key = (night.seed, request)
             claims[key] = claims.get(key, True) and credited
+            disputed[key] = disputed.get(key, False) or contradicted
     credited = sum(claims.values())
+    holds = sum(1 for key, ok in claims.items() if ok and not disputed[key])
     low, high = wilson(credited, len(claims))
+    log_low, log_high = wilson(holds, len(claims))
     missed = sorted(f"{seed}/{request}" for (seed, request), ok in claims.items() if not ok)
+    against = sorted(f"{seed}/{request}" for (seed, request), bad in disputed.items() if bad)
     return {"nights": len(nights), "reports": reports, "claims": len(claims), "credited": credited,
-            "ci95": [round(low, 4), round(high, 4)], "missed": missed}
+            "ci95": [round(low, 4), round(high, 4)], "missed": missed,
+            "holds_log": holds, "ci95_log": [round(log_low, 4), round(log_high, 4)], "contradicted": against}
+
+
+def room_checks(nights: list[Night]) -> dict:
+    """Room checks reported "done" over `nights` and how many the robot's own log contradicts: per report, and
+    once per (seed, request) (a distinct check is contradicted when any report of it was); `contradicted_credited`:
+    of the contradicted reports, how many the simulator credited anyway; `nights_firing`: nights with at least one."""
+    distinct: dict[tuple, bool] = {}
+    reports = contradicted = credited = 0
+    for night in nights:
+        for request, disputed, thanked in night.room_check_claims:
+            reports += 1
+            contradicted += disputed
+            credited += disputed and thanked
+            key = (night.seed, request)
+            distinct[key] = distinct.get(key, False) or disputed
+    return {"nights": len(nights), "nights_firing": sum(1 for n in nights if n.room_checks_contradicted),
+            "reports": reports, "contradicted": contradicted, "contradicted_credited": credited,
+            "distinct": len(distinct), "distinct_contradicted": sum(distinct.values())}
+
+
+def rehearsal_nights(nights: list[Night]) -> list[Night]:
+    """The dress rehearsal: REHEARSAL_BUILD's complete build nights on REHEARSAL_SEEDS, in seed order."""
+    found = [n for n in nights if n.log and n.complete and n.kind == BUILD and n.commit == REHEARSAL_BUILD
+             and n.seed in REHEARSAL_SEEDS]
+    return sorted(found, key=lambda n: n.seed or 0)
+
+
+def rehearsal(nights: list[Night]) -> dict:
+    """The rehearsal's own-judgement "done" against the simulator and against the robot's own log, and its room checks."""
+    group = rehearsal_nights(nights)
+    s = basis_split(group)
+    holds = sum(n.done_own_holds_log or 0 for n in group)
+    low, high = wilson(holds, s["done_own"])
+    return {"build": REHEARSAL_BUILD, "seeds": [n.seed for n in group], "nights": len(group),
+            "own": s["done_own"], "own_credited": s["done_own_credited"], "own_holds_log": holds,
+            "ci95_log": [round(low, 4), round(high, 4)], "room_checks": room_checks(group)}
 
 
 def ci_text(ci: list[float] | tuple[float, float], credited: int, n: int) -> str:
@@ -564,7 +695,8 @@ def ci_text(ci: list[float] | tuple[float, float], credited: int, n: int) -> str
 def ledger_json(nights: list[Night]) -> str:
     keep = ["shift", "started", "seed", "commit", "kind", "complete", "score", "done_reports", "done_credited",
             "declines_credited", "declines_not_credited", "done_after_rise", "done_own", "done_own_credited",
-            "done_room_check", "done_room_check_credited", "done_spill", "done_spill_credited"]
+            "done_room_check", "done_room_check_credited", "done_spill", "done_spill_credited", "done_own_holds_log",
+            "room_checks_done", "room_checks_contradicted"]
     rows = []
     for n in counted(nights):
         row = {k: getattr(n, k) for k in keep}
@@ -580,6 +712,9 @@ def ledger_json(nights: list[Night]) -> str:
         "latest_start": max((n.started for n in nights), default=None),
         # The final branch's own-judgement "done" as distinct (seed, request) claims with a Wilson 95 % interval.
         "distinct_own": {"scope": "final branch's last four builds", "commits": list(FINAL_BUILDS), **distinct_own(final)},
+        # Their room checks against the robot's own log (the self-contradiction rule), and the dress rehearsal's.
+        "room_checks_final": room_checks(final),
+        "rehearsal": rehearsal(nights),
         "nights": rows,
     }
     return json.dumps(doc, ensure_ascii=False, indent=1) + "\n"
@@ -615,6 +750,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", action="append", type=Path, help="a checkout with temp/live_runs.jsonl")
     parser.add_argument("--check", action="store_true", help="exit 1 if the committed files differ")
     parser.add_argument("--fidelity-from", type=Path, help="the printed output of replaybench --fidelity")
+    parser.add_argument("--faults-from", type=Path, help="the fault bed's per-type table (hamad/faults temp/faults/real.md)")
     args = parser.parse_args(argv)
     roots = [p.expanduser().resolve() for p in args.root] if args.root else default_roots()
     nights = collect(roots)
@@ -623,6 +759,11 @@ def main(argv: list[str] | None = None) -> int:
         table = args.fidelity_from.read_text(encoding="utf-8")
         outputs[FIDELITY_CSV] = fidelity_csv(table, nights)
         outputs[FIDELITY_TXT] = table
+    if args.faults_from:
+        table = args.faults_from.read_text(encoding="utf-8")
+        outputs[FAULT_TABLE_MD] = table
+        outputs[FAULT_BED_JSON] = fault_bed_json(table, json.loads(FAULT_BED_JSON.read_text(encoding="utf-8")))
+    outputs[SUMMARY_TXT] = summary(nights)
     if args.check:
         stale = [p for p, text in outputs.items() if not p.is_file() or p.read_text(encoding="utf-8") != text]
         for path in stale:
@@ -631,30 +772,60 @@ def main(argv: list[str] | None = None) -> int:
     for path, text in outputs.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+    sys.stdout.write(outputs[SUMMARY_TXT])
+    for path in outputs:
+        print(f"wrote {path.relative_to(REPO)}")
+    return 0
+
+
+def summary(nights: list[Night]) -> str:
+    """The printed summary, also written to docs/runs/summary.txt: every figure README and DEMO quote."""
+    out: list[str] = []
+    say = out.append
     logged = [n for n in nights if n.log]
     complete = [n for n in logged if n.complete]
     board = [n for n in nights if n.kind == BOARD_TEST]
     experiments = [n for n in nights if n.kind == EXPERIMENT]
-    print(f"{len(nights)} live starts, {len(logged)} with a log, {len(complete)} complete nights; "
+    say(f"{len(nights)} live starts, {len(logged)} with a log, {len(complete)} complete nights; "
           f"{len(board)} board tests ({sum(1 for n in board if n.complete)} complete); "
           f"{len(experiments)} score-blind experiments ({sum(1 for n in experiments if n.complete)} complete)")
     count, credited, reports = precision(counted(nights))
     if reports:
-        print(f"all nights (the card's figure): {credited} of {reports} 'done' credited over {count} nights "
+        say(f"all nights (the card's figure): {credited} of {reports} 'done' credited over {count} nights "
               f"({100 * credited / reports:.1f} %)")
     final = [n for n in complete if n.kind == BUILD and n.commit in FINAL_BUILDS]
     if final:
-        print("done split, " + basis_text("final branch's last four builds", final))
+        say("done split, " + basis_text("final branch's last four builds", final))
         d = distinct_own(final)
-        print(f"distinct own-judgement claims, final branch's last four builds: {d['credited']} of {d['claims']} "
+        say(f"distinct own-judgement claims, final branch's last four builds: {d['credited']} of {d['claims']} "
               f"(95 % CI {ci_text(d['ci95'], d['credited'], d['claims'])}; {d['reports']} reports counting replays; "
               f"missed: {', '.join(d['missed']) or 'none'})")
-    print("done split, " + basis_text("all nights the card counts", [n for n in counted(nights) if (n.done_reports or 0) > 0]))
+        say(f"  holding against the robot's own log: {d['holds_log']} of {d['claims']} "
+              f"(95 % CI {ci_text(d['ci95_log'], d['holds_log'], d['claims'])}; contradicted: {', '.join(d['contradicted']) or 'none'})")
+        r = room_checks(final)
+        say(f"  room checks contradicted by the robot's own log: {r['distinct_contradicted']} of {r['distinct']} distinct "
+              f"({r['contradicted']} of {r['reports']} reports, {r['contradicted_credited']} of them credited by the simulator; "
+              f"on {r['nights_firing']} of {r['nights']} nights)")
+    reh = rehearsal(nights)
+    if reh["nights"]:
+        r = reh["room_checks"]
+        say(f"dress rehearsal ({reh['build']}, {reh['nights']} nights, seeds {' '.join(map(str, reh['seeds']))}): own judgement "
+              f"{reh['own_credited']} of {reh['own']} credited by the simulator, {reh['own_holds_log']} of {reh['own']} hold against "
+              f"its own log (95 % CI {ci_text(reh['ci95_log'], reh['own_holds_log'], reh['own'])}); room checks contradicted "
+              f"{r['contradicted']} of {r['reports']}, credited by the simulator {r['contradicted_credited']} of {r['contradicted']}, "
+              f"on {r['nights_firing']} of {r['nights']} nights")
+    every = [n for n in nights if n.log and n.complete]
+    r = room_checks(every)
+    if r["reports"]:
+        say(f"every complete live night ({r['nights']}, board tests and experiments included): room checks contradicted "
+              f"{r['contradicted']} of {r['reports']} reports ({r['contradicted_credited']} credited by the simulator), "
+              f"on {r['nights_firing']} of {r['nights']} nights")
+    say("done split, " + basis_text("all nights the card counts", [n for n in counted(nights) if (n.done_reports or 0) > 0]))
     blind = [n for n in experiments if n.log]
     if blind:
         s = basis_split(blind)
         rate = f" ({100 * s['done_credited'] / s['done_reports']:.1f} %)" if s["done_reports"] else ""
-        print(f"score-blind experiment ({len(blind)} nights, {sum(1 for n in blind if n.complete)} complete; seeds "
+        say(f"score-blind experiment ({len(blind)} nights, {sum(1 for n in blind if n.complete)} complete; seeds "
               f"{' '.join(str(n.seed) for n in blind)}; scores {' '.join(str(n.score) for n in blind)}): "
               f"{s['done_credited']} of {s['done_reports']} 'done' credited{rate}, "
               f"false done {s['done_reports'] - s['done_credited']}; the robot's own check said no "
@@ -663,18 +834,53 @@ def main(argv: list[str] | None = None) -> int:
     night = next((n for n in nights if n.shift == demo), None)
     if night and night.done_own:
         ci = wilson(night.done_own_credited or 0, night.done_own)
-        print(f"demo night ({demo[:11]}, seed {night.seed}): own judgement {night.done_own_credited} of {night.done_own} "
-              f"credited (95 % CI {ci_text(ci, night.done_own_credited or 0, night.done_own)})")
+        say(f"demo night ({demo[:11]}, seed {night.seed}): own judgement {night.done_own_credited} of {night.done_own} "
+              f"credited (95 % CI {ci_text(ci, night.done_own_credited or 0, night.done_own)}), {night.done_own_holds_log} of "
+              f"{night.done_own} hold against its own log (contradicted: {night.contradicted or 'none'})")
     builds = [n for n in complete if n.kind == BUILD and n.score is not None]
     if builds:
         best = max(builds, key=lambda n: n.score or 0)
-        print(f"best build night: {best.score} (seed {best.seed}, {best.commit or 'commit unknown'})")
+        say(f"best build night: {best.score} (seed {best.seed}, {best.commit or 'commit unknown'})")
     best_any = max((n for n in complete if n.score is not None), key=lambda n: n.score or 0, default=None)
     if best_any:
-        print(f"best live night anywhere: {best_any.score} (seed {best_any.seed}, {best_any.kind}, {best_any.checkout})")
-    for path in outputs:
-        print(f"wrote {path.relative_to(REPO)}")
-    return 0
+        say(f"best live night anywhere: {best_any.score} (seed {best_any.seed}, {best_any.kind}, {best_any.checkout})")
+    return "\n".join(out) + "\n"
+
+
+FAULT_ROW = re.compile(r"^\| ([a-z_.]+) \| (blind|sighted) \| (.*)\|\s*$")
+FAULT_CELL = re.compile(r"(\d+) / (\d+) / (\d+) / (\d+)(?: \(\+(\d+) lost\))?")
+
+
+def fault_table(table: str) -> list[dict]:
+    """The fault bed's per-type table (``temp/faults/real.md`` on hamad/faults: "hit / caught / missed / repaired"
+    per rate) as rows: type, mode, rate, hit, caught, missed, repaired, lost."""
+    rows = []
+    for raw in table.splitlines():
+        match = FAULT_ROW.match(raw)
+        if not match:
+            continue
+        cells = [cell.strip() for cell in match.group(3).split("|")]
+        for rate, cell in zip((0.05, 0.15, 0.3), cells[:3]):
+            numbers = FAULT_CELL.match(cell)
+            if not numbers:
+                continue
+            hit, caught, missed, repaired, lost = (int(v) if v else 0 for v in numbers.groups())
+            rows.append({"type": match.group(1), "mode": match.group(2), "rate": rate, "hit": hit, "caught": caught,
+                         "missed": missed, "repaired": repaired, "lost": lost})
+    return rows
+
+
+def fault_bed_json(table: str, current: dict) -> str:
+    """data/fault-bed.json with its ``types`` rows from the per-type table (the card computes the catch rate from
+    them, src/features/nightshift/ledger.ts `catchRate`); the hand-copied headline fields are kept."""
+    doc = {key: value for key, value in current.items() if key not in ("types", "_types_doc")}
+    doc["_types_doc"] = ("types: scripts/ledger.py --faults-from (hamad/faults temp/faults/real.md, copied to "
+                         "docs/runs/fault-bed-real.md). Per fault type, mode and rate: requests hit (the last fault on a "
+                         "request counts), caught (not reported done, not creditable), missed (a false done), repaired "
+                         "(a later attempt succeeded and was reported done), lost (creditable, not reported done).")
+    head = json.dumps(doc, ensure_ascii=False, indent=1)
+    rows = ",\n".join("  " + json.dumps(row, ensure_ascii=False) for row in fault_table(table))
+    return head[:-2] + ',\n "types": [\n' + rows + "\n ]\n}\n"  # one row per line: 78 rows stay readable
 
 
 if __name__ == "__main__":

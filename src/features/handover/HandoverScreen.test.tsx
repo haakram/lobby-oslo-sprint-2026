@@ -200,6 +200,29 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(card!.compareDocumentPosition(sign) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("builds the same page without a robot from owner B's switch: no robot figure, card or band, the clerk's entries instead", async () => {
+    const demo = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+    serve(() => new Response(demo, { status: 200 }));
+    show();
+    await screen.findByRole("region", { name: /^Åpent nå/ });
+    expect(screen.getByRole("button", { name: "Med robot" })).toHaveAttribute("aria-pressed", "true");
+    expect(document.getElementById("vurderinger-overlevering")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Uten robot" }));
+    expect(screen.getByRole("button", { name: "Uten robot" })).toHaveAttribute("aria-pressed", "true");
+    // What only a robot gives is gone, said in one line; the night clerk's count stands where the robot's figure was.
+    expect(document.getElementById("vurderinger-overlevering")).toBeNull();
+    expect(screen.getByText(/^Ingen robot i natt:/)).toBeInTheDocument();
+    const figures = screen.getByRole("region", { name: "Natten i tall" });
+    expect(within(figures).queryByText("Robotens oppdrag")).not.toBeInTheDocument();
+    expect(within(figures).getByText("Fra nattevakten")).toBeInTheDocument();
+    // B's line says what the page rests on; the robot night's demo band and the robot's state are not shown.
+    expect(document.querySelector("[data-demo-band]")).toBeNull();
+    expect(screen.queryByText(/^Roboten står ved/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Uten robot: bookingsystemet, dørlåsen/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Med robot" }));
+    expect(document.getElementById("vurderinger-overlevering")).not.toBeNull();
+  });
+
   it("says when there is no night yet, and when the night failed to load, with Prøv igjen", async () => {
     serve(() => new Response("", { status: 200 }));
     const { unmount } = show();

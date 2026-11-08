@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { canAccess, useSession } from "@/features/auth";
 import { formatKroner, nightLabel } from "@/features/dashboard/format";
 import { declineShort, nightFacts, robotShort } from "@/features/dashboard/highlights";
@@ -11,6 +11,9 @@ import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
 import { RobotJudgementCard } from "@/features/nightshift/RobotJudgementCard";
+import { SourceSwitch } from "@/features/nightsource/SourceSwitch";
+import { useNightSource } from "@/features/nightsource/useNightSource";
+import { useWithoutRobot } from "@/features/nightsource/useWithoutRobot";
 import { SourceNote } from "@/features/modules/SourceNote";
 import { osloToday } from "@/features/reception/dates";
 import { type DemoCall, demoCalls } from "@/features/reception/demoCalls";
@@ -75,16 +78,13 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   const contradictions = useMemo(() => (lines ? selfContradictions(lines) : null), [lines]);
   const [wholeNight, setWholeNight] = useState(false);
 
-  const handover = useMemo(() => {
-    if (!night || !rooms || !reconciliation || !safety) return null;
-    const requests = selectRequests({
-      night,
-      calls: null,
-      statusOf,
-      phone,
-      assignments,
-      hotelRooms,
-    });
+  const canOpen = useCallback((route: string) => effectiveRole === null || canAccess(effectiveRole, route), [effectiveRole]);
+  const requests = useMemo(
+    () => (night ? selectRequests({ night, calls: null, statusOf, phone, assignments, hotelRooms }) : null),
+    [night, statusOf, phone, assignments, hotelRooms],
+  );
+  const robotHandover = useMemo(() => {
+    if (!night || !rooms || !reconciliation || !safety || !requests) return null;
     return composeHandover({
       night,
       rooms,
@@ -98,9 +98,16 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       safety,
       robot: robotState,
       resolved: (id) => statusOf(id) === "lost",
-      canOpen: (route) => effectiveRole === null || canAccess(effectiveRole, route),
+      canOpen,
     });
-  }, [night, rooms, reconciliation, safety, robotState, statusOf, phone, assignments, hotelRooms, marks, revenue, today, pms, effectiveRole]);
+  }, [night, rooms, reconciliation, safety, requests, robotState, statusOf, phone, marks, revenue, today, pms, canOpen]);
+  // Owner B's switch (jury round 5: "hotel number one needs no robot", shown): the same page from the
+  // booking system, the door lock's one signal per room and the night clerk's own entries.
+  const [source, setSource] = useNightSource();
+  const withoutRobot = useWithoutRobot({ today, rooms, requests, phone, canOpen });
+  const noRobot = source === "none";
+  const handover = noRobot ? (withoutRobot?.handover ?? null) : robotHandover;
+  const shownCheck = noRobot ? (withoutRobot?.reconciliation ?? null) : reconciliation;
 
   const signButton = useRef<HTMLDivElement>(null);
   const refocus = useRef(false);
@@ -148,8 +155,9 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
 
   const label = night ? nightLabel(night.startedAt) : null;
   const figures = handover?.figures;
-  const facts = figures
-    ? nightFacts({
+  const facts =
+    figures && !noRobot
+      ? nightFacts({
         confirmed: figures.robot.done,
         wetFloors: figures.safety.wetFloors,
         stranger: figures.safety.stranger,
@@ -168,6 +176,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   };
   // One orange action at a time: the money step while a room waits for it, then the signature.
   const sellWaiting = (figures?.money.toSell.length ?? 0) > 0;
+  const safetyCount = noRobot ? (withoutRobot?.safety.count ?? 0) : figures ? figures.safety.wetFloors + (figures.safety.stranger ? 1 : 0) : 0;
   const bookingRows = open.some((item) => item.booking);
 
   return (
@@ -198,8 +207,11 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       <div className="-mt-2 flex flex-col gap-1 lg:-mt-4 print:mt-0">
         {/* A div, not a p: the label's skeleton is a div while the night loads. */}
         <div className="text-sm text-muted print:hidden">
-          {label ?? <Skeleton className="inline-block h-4 w-48 align-middle" />} · 22:00 til 06:00 · Vakt: roboten og {handover?.note.author ?? "nattevakten"}
+          {label ?? <Skeleton className="inline-block h-4 w-48 align-middle" />} · 22:00 til 06:00 · Vakt: {noRobot ? "" : "roboten og "}
+          {handover?.note.author ?? "nattevakten"}
         </div>
+        {/* Which night the page is built from: owner B's switch, Med robot by default. */}
+        <SourceSwitch value={source} onChange={setSource} sources={withoutRobot?.sources ?? null} className="mt-1 mb-1 print:hidden" />
         {/* The night in one factual line: green only for what is done, the rest says plainly what needs a person. */}
         {facts && (
           <p className="text-base sm:text-lg print:hidden">
@@ -214,7 +226,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       </div>
 
       {/* The test data said once, quietly, for the whole page (jury round 4, the creative juror): never a mono chip on the money row. */}
-      {ready && run.lines.length > 0 && (
+      {ready && run.lines.length > 0 && !noRobot && (
         <p data-demo-band className="-mt-2 flex items-start gap-2 rounded-md bg-sunken px-3 py-2 text-sm text-muted lg:-mt-4 print:mt-0 print:bg-transparent print:p-0 print:text-xs">
           <RegenIcon name="info-circle" size={18} className="mt-0.5 shrink-0 print:hidden" />
           <span>
@@ -227,24 +239,34 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       {/* On paper the figures' rule sits tighter, so the page fits one sheet. */}
       <div className="contents print:block print:[&>section>div]:py-2">
       <FigureRow label="Natten i tall">
-        {figures && figures.money.caught.length > 0 && <HeldFigure figures={figures} contradicted={reconciliation?.contradicted ?? []} to={anchors.held} />}
+        {figures && figures.money.caught.length > 0 && <HeldFigure figures={figures} contradicted={shownCheck?.contradicted ?? []} to={anchors.held} />}
         <MoneyFigure figures={figures} to={anchors.money} />
         <Figure
           label="Sikkerhet, straks"
-          value={figures ? figures.safety.wetFloors + (figures.safety.stranger ? 1 : 0) : undefined}
-          unit={figures ? (figures.safety.wetFloors + (figures.safety.stranger ? 1 : 0) === 1 ? "sak" : "saker") : undefined}
-          detail={figures ? safetyDetail(figures.safety) : undefined}
+          value={figures ? safetyCount : undefined}
+          unit={figures ? (safetyCount === 1 ? "sak" : "saker") : undefined}
+          detail={figures ? (noRobot ? withoutRobot?.safety.detail : safetyDetail(figures.safety)) : undefined}
           to={anchors.safety ? itemAnchor(anchors.safety) : undefined}
         />
-        <Figure
-          label="Robotens oppdrag"
-          value={figures?.robot.done}
-          unit={figures ? `av ${figures.robot.total}` : undefined}
-          tone="success"
-          detail={figures ? robotShort(figures.robot) : undefined}
-          more={figures ? <Disclosure summary="Slik vet vi det">{robotProof(figures, declines)}</Disclosure> : undefined}
-          to={ready && run.lines.length > 0 ? "vurderinger-overlevering" : undefined}
-        />
+        {noRobot ? (
+          // No robot tonight: what the night clerk logged stands where the robot's figure was.
+          <Figure
+            label="Fra nattevakten"
+            value={withoutRobot?.sources.staffEntries}
+            unit={withoutRobot ? (withoutRobot.sources.staffEntries === 1 ? "registrering" : "registreringer") : undefined}
+            detail={withoutRobot?.sources.clerk ? `Ført av ${withoutRobot.sources.clerk}` : undefined}
+          />
+        ) : (
+          <Figure
+            label="Robotens oppdrag"
+            value={figures?.robot.done}
+            unit={figures ? `av ${figures.robot.total}` : undefined}
+            tone="success"
+            detail={figures ? robotShort(figures.robot) : undefined}
+            more={figures ? <Disclosure summary="Slik vet vi det">{robotProof(figures, declines)}</Disclosure> : undefined}
+            to={ready && run.lines.length > 0 ? "vurderinger-overlevering" : undefined}
+          />
+        )}
       </FigureRow>
       </div>
 
@@ -271,7 +293,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
               </ul>
             )}
 
-            <SourceNote className="mt-3 print:hidden" sources={["run-log", "test", "local"]} />
+            <SourceNote className="mt-3 print:hidden" sources={noRobot ? ["test", "local"] : ["run-log", "test", "local"]} />
           </Card>
         </section>
 
@@ -313,15 +335,22 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
                 ))}
               </ol>
             )}
-            <SourceNote className="mt-3 print:hidden" sources={["run-log", "reception", "test"]} />
+            <SourceNote className="mt-3 print:hidden" sources={noRobot ? ["reception", "test"] : ["run-log", "reception", "test"]} />
           </Card>
         </section>
 
         {/* The evidence: the robot's judgement calls (owner C's card, the whole night). On paper, one line instead. */}
-        {ready && run.lines.length > 0 && (
+        {ready && run.lines.length > 0 && !noRobot && (
           <div data-enter className="lg:col-span-2 lg:row-start-2 print:hidden [&>*]:scroll-mt-24">
             <RobotJudgementCard lines={run.lines} id="vurderinger-overlevering" compact />
           </div>
+        )}
+        {/* Without a robot its section collapses to one line (jury round 4, the product juror): what only a robot sees is not here. */}
+        {noRobot && (
+          <p className="flex items-start gap-2 text-sm text-muted lg:col-span-2 lg:row-start-2 print:hidden">
+            <RegenIcon name="info-circle" size={18} className="mt-0.5 shrink-0" />
+            Ingen robot i natt: det bare en robot ser på runden sin, står ikke her. Resten kommer fra bookingsystemet, dørlåsen og nattevakten.
+          </p>
         )}
 
         {/* The signature, last: after the work and the evidence (jury round 3: never sign above what you are asked to read). */}
@@ -353,7 +382,9 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
                   </>
                 ) : (
                   <>
-                    <p className="text-base text-muted print:hidden">Les gjennom det som er åpent og robotens vurderinger, og kvitter når du har tatt over vakten.</p>
+                    <p className="text-base text-muted print:hidden">
+                      Les gjennom det som er åpent{noRobot ? "" : " og robotens vurderinger"}, og kvitter når du har tatt over vakten.
+                    </p>
                     {/* TODO(phase-3): the sign-off goes to the server with the user's id, so the night shift sees it was read. */}
                     <p className="text-xs text-muted print:hidden">Du kvitterer som {user?.name ?? "morgenvakten"}. Kvitteringen lagres på denne enheten.</p>
                     <p className="hidden text-sm print:block">Mottatt av: ______________________ kl. ________</p>

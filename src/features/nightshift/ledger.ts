@@ -301,7 +301,36 @@ export const HOTEL_RULES: {
   keycard: { entries: number; knockedFirst: number };
   finalKeycard: { entries: number; knockedFirst: number };
   replay: { nights: number; plain: number; seedWeighted: number; signsInStore: number };
+  /** Rules 5 and 6 (round 6): the replay bed's frozen 202 nights; plain and seed-weighted points a night; absent in an older file. */
+  rules2?: {
+    commit: string;
+    nights: number;
+    seeds: number;
+    selfConflict: { plain: number; seedWeighted: number; fired: number; firedNights: number; persons: number; liveChecks: number; liveThanked: number; creditEach: number; failedCostPerNight: number };
+    homeBy0545: { plain: number; seedWeighted: number; keycardReturnedNights: number; dockedMedianMinAfter: number };
+    fourRules: { plain: number; seedWeighted: number };
+    allSix: { plain: number; seedWeighted: number };
+    strands: number;
+  };
 } = hotelRules;
+
+/** "ca. 120–210 poeng": what the hotel's rules cost a night in the replay, from the four first rules to all six, to the nearest ten. */
+export function hotelRulesCostRange(rules = HOTEL_RULES): [number, number] | null {
+  const r = rules.rules2;
+  if (!r) return null;
+  const ten = (points: number) => Math.round(Math.abs(points) / 10) * 10;
+  const [a, b] = [ten(r.fourRules.plain), ten(r.allSix.plain)];
+  return [Math.min(a, b), Math.max(a, b)];
+}
+
+/** True for a log played in hotel-rules mode (the start line's flags name the rules or NS_HOTEL_RULES). */
+export function isHotelRulesNight(lines: readonly RunLine[]): boolean {
+  const start = lines.find((line) => line.type === "start");
+  if (start?.type !== "start") return false;
+  const rules = start.flags?.hotel_rules;
+  const env = start.flags?.env as { NS_HOTEL_RULES?: unknown } | undefined;
+  return (Array.isArray(rules) && rules.length > 0) || env?.NS_HOTEL_RULES === "1";
+}
 
 export type ForecastBand = { median: number; low: number; high: number; basis: string };
 

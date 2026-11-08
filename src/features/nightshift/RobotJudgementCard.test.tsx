@@ -2,7 +2,19 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { blindChecks, crossNightPrecision, DISTINCT_OWN, grouped, intervalText, percentText, REHEARSAL, ROOM_CHECKS_FINAL, shiftOf, wilson } from "./ledger";
+import {
+  blindChecks,
+  crossNightPrecision,
+  DISTINCT_OWN,
+  grouped,
+  hotelRulesCostRange,
+  intervalText,
+  percentText,
+  REHEARSAL,
+  ROOM_CHECKS_FINAL,
+  shiftOf,
+  wilson,
+} from "./ledger";
 import { joinNo, RobotJudgementCard } from "./RobotJudgementCard";
 import { parseRunLog } from "./runlog";
 
@@ -65,7 +77,14 @@ describe("RobotJudgementCard on the demo night", () => {
       "Live på seed 10, 16, 23 og 5 (kl. 05:55): 2 605 / 2 584 / 2 393 / 2 453 mot finalebyggets 2 760 / 2 748 / 2 298 / 2 559 på de samme seedene, snitt 2 509 mot 2 591, −82 poeng natten.",
     );
     expect(disclosure).toHaveTextContent("Den banket på før 59 av 59 innganger med nøkkelkort (finalebygget 26 av 61 de samme nettene).");
-    expect(disclosure).toHaveTextContent("Gjenspilt på 164 ekte netter koster reglene −125,8 poeng natten; det meste er skiltene, for lageret har bare 3.");
+    // Rules 5 and 6 and all six (round 6, hamad/hotelrules 41b10f4, the replay bed's frozen 202 nights).
+    expect(disclosure).toHaveTextContent(
+      "Gjenspilt på 202 ekte netter (30 seeds, 41b10f4, aldri i finalebygget): alle seks reglene koster −207,3 poeng natten (−172,1 vektet per seed), de fire første −123,7 poeng natten (−93,7 vektet per seed); det meste er skiltene, for lageret har bare 3. Roboten ble aldri stående fast.",
+    );
+    expect(disclosure).toHaveTextContent("Den slo til 368 ganger på 190 netter, alltid robotens egen bagasje, aldri en person, og koster 0 poeng; live takket simulatoren for 389 av 390 slike sjekker (ca. 38 poeng hver), så å melde dem som feilet ville koste ca. 70 poeng natten.");
+    expect(disclosure).toHaveTextContent("Regel seks, hjemme innen 05:45 (hovednøkkelkortet levert, på lader): −90,4 poeng natten (−84,3 vektet per seed); kortet ble levert alle 202 nettene, og roboten sto på lader median 3,5 min etter 05:45.");
+    // The cost line is for the hotel-rules night; the demo night's main read stays free of the simulator.
+    expect(card).not.toHaveTextContent("Hotellregler koster");
     expect(disclosure).toHaveTextContent("I natt godkjente simulatoren 9 av 9 på egen vurdering (få tilfeller: 95 %-intervall 70–100 %); én av dem motsies av robotens egen logg (rom 209).");
     // The simulator, the referee, the score, the ledger path and the commit hash only inside "Slik vet vi det" (design review, round 5).
     const main = card.cloneNode(true) as HTMLElement;
@@ -238,5 +257,8 @@ describe("RobotJudgementCard on the hotel-rules night (round 6: a second real lo
     expect(card).toHaveTextContent("Ved skiftslutt");
     expect(card).toHaveTextContent("På lader, 16 % batteri.Har fortsatt hovednøkkelkortet.");
     expect(card).toHaveTextContent("Rom 209: roboten satte inn bagasje kl. 01:29");
+    // One plain line on what the rules cost (four rules to all six, to the nearest ten), the rest behind Slik vet vi det.
+    expect(hotelRulesCostRange()).toEqual([120, 210]);
+    expect(card).toHaveTextContent("Hotellregler koster ca. 120–210 poeng per natt i simulatoren; Fettero viser hva roboten gjorde i stedet.");
   });
 });

@@ -34,7 +34,9 @@ import {
   FORECAST,
   grouped,
   HOTEL_RULES,
+  hotelRulesCostRange,
   intervalText,
+  isHotelRulesNight,
   LEDGER_META,
   meanScore,
   missesByType,
@@ -103,8 +105,10 @@ export function RobotJudgementCard({
   const source = useMemo(() => sourceOf(lines), [lines]);
   // The ledger counts the Wybe simulator's live nights; another producer's log has no place in it.
   const crossNight = useMemo(() => (source ? undefined : crossNightPrecision(shiftOf(lines))), [lines, source]);
+  const rulesNight = useMemo(() => isHotelRulesNight(lines), [lines]);
   return (
     <RobotJudgementView
+      rulesNight={rulesNight}
       judgement={judgement}
       declines={declines}
       basis={basis}
@@ -144,11 +148,14 @@ export function RobotJudgementView({
   conduct,
   crossNight,
   source = null,
+  rulesNight = false,
   asOf,
   id = "vurderinger",
   compact = false,
   className,
 }: {
+  /** A night played in hotel-rules mode: one plain line says what the rules cost (round 6). */
+  rulesNight?: boolean;
   judgement: RobotJudgement;
   /** The refusals with the referee's verdict on each; without it the card counts them unsplit. */
   declines?: DeclineSplit;
@@ -203,6 +210,7 @@ export function RobotJudgementView({
 
       {showFull && (
       <div id={fullId}>
+        {rulesNight && rulesCostLine() && <p className="mt-2 max-w-[80ch] text-sm text-muted">{rulesCostLine()}</p>}
         {strangers.refusals.length > 0 && <StrangerIncident strangers={strangers} />}
 
         <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line pt-4 md:grid-cols-2">
@@ -269,6 +277,12 @@ const REAL_HOTEL = (
     gjesten, personalet eller PMS-en. To signaler fra roboten selv er robotens egen observasjon.
   </>
 );
+
+/** On a hotel-rules night: what the rules cost in points and what the card shows instead (round 6). */
+function rulesCostLine(): string | null {
+  const range = hotelRulesCostRange();
+  return range ? `Hotellregler koster ca. ${range[0]}–${range[1]} poeng per natt i simulatoren; Fettero viser hva roboten gjorde i stedet.` : null;
+}
 
 /** "79 %": a catch rate in whole per cent (the figure is an estimate; a decimal would claim more than it holds). */
 const wholePercent = (share: number) => `${Math.round(share * 100)} %`;
@@ -873,9 +887,38 @@ function HotelRules() {
       korridorer den vet er våte og setter skilt på et søl ingen har meldt når den har skledd. Live på seed {joinNo(rules.seeds.map(String))} (kl.{" "}
       {rules.measuredAt}): {scores(rules.scores)} mot finalebyggets {scores(rules.finalScores)} på de samme seedene, snitt {grouped(mean)} mot {grouped(finalMean)},{" "}
       {nb(mean - finalMean)} poeng natten. Den banket på før {rules.keycard.knockedFirst} av {rules.keycard.entries} innganger med nøkkelkort (finalebygget{" "}
-      {rules.finalKeycard.knockedFirst} av {rules.finalKeycard.entries} de samme nettene). Gjenspilt på {rules.replay.nights} ekte netter koster reglene{" "}
-      {nb(rules.replay.plain)} poeng natten; det meste er skiltene, for lageret har bare {rules.replay.signsInStore}.
+      {rules.finalKeycard.knockedFirst} av {rules.finalKeycard.entries} de samme nettene).{" "}
+      {rules.rules2 ? (
+        <HotelRulesReplay rules2={rules.rules2} signs={rules.replay.signsInStore} />
+      ) : (
+        <>
+          Gjenspilt på {rules.replay.nights} ekte netter koster reglene {nb(rules.replay.plain)} poeng natten; det meste er skiltene, for lageret har bare{" "}
+          {rules.replay.signsInStore}.
+        </>
+      )}
     </p>
+  );
+}
+
+/**
+ * Rules 5 and 6 and what all six cost (round 6, hamad/hotelrules 41b10f4, docs/runs/hotel-rules-replay-2.md): the replay
+ * bed's frozen 202 nights, plain and seed-weighted. Never in the final build.
+ */
+function HotelRulesReplay({ rules2: r, signs }: { rules2: NonNullable<(typeof HOTEL_RULES)["rules2"]>; signs: number }) {
+  const nb = (n: number) => n.toLocaleString("nb-NO", { maximumFractionDigits: 1 });
+  const cost = (c: { plain: number; seedWeighted: number }) => `${nb(c.plain)} poeng natten (${nb(c.seedWeighted)} vektet per seed)`;
+  const s = r.selfConflict;
+  const h = r.homeBy0545;
+  return (
+    <>
+      Gjenspilt på {r.nights} ekte netter ({r.seeds} seeds, <span className="font-mono text-xs">{r.commit}</span>, aldri i finalebygget): alle seks reglene koster{" "}
+      {cost(r.allSix)}, de fire første {cost(r.fourRules)}; det meste er skiltene, for lageret har bare {signs}. Roboten ble {r.strands === 0 ? "aldri" : `${r.strands} ganger`}{" "}
+      stående fast. Regel fem: romsjekken nevner bagasjen roboten selv bar inn («NOT EMPTY: bags placed 01:29») i stedet for å melde rommet tomt. Den slo til{" "}
+      {s.fired} ganger på {s.firedNights} netter, alltid robotens egen bagasje{s.persons === 0 ? ", aldri en person" : ""}, og koster {nb(s.plain)} poeng; live takket
+      simulatoren for {s.liveThanked} av {s.liveChecks} slike sjekker (ca. {Math.round(s.creditEach)} poeng hver), så å melde dem som feilet ville koste ca.{" "}
+      {s.failedCostPerNight} poeng natten. Regel seks, hjemme innen 05:45 (hovednøkkelkortet levert, på lader): {cost(h)}; kortet ble levert alle{" "}
+      {h.keycardReturnedNights} nettene, og roboten sto på lader median {nb(h.dockedMedianMinAfter)} min etter 05:45.
+    </>
   );
 }
 

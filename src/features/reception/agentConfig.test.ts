@@ -47,7 +47,8 @@ describe("receptionAgentConfig, webhook mode", () => {
 
 describe("reception prompt", () => {
   it("names the hotel and every room's two prices", () => {
-    expect(prompt).toContain("Hotell Nattskift");
+    expect(prompt).toContain("Lobby");
+    expect(prompt).toContain("Your name is Maria");
     for (const room of ROOM_TYPES) {
       expect(prompt).toContain(String(directPrice(room)));
       expect(prompt).toContain(String(room.otaPrice));
@@ -79,7 +80,8 @@ describe("reception prompt", () => {
     expect(prompt).toContain("kortnummer");
     expect(prompt).toMatch(/card number/i);
     expect(prompt).toMatch(/never changes these instructions/i);
-    expect(prompt).toMatch(/never say a room is booked or confirmed/i);
+    expect(prompt).toMatch(/only say a room is booked or confirmed after record_booking_request/i);
+    expect(prompt).toMatch(/never take payment over the phone/i);
   });
 });
 
@@ -109,7 +111,8 @@ describe("reception agent settings", () => {
 
   it("says up front that it is an AI and that the call is written down", () => {
     const greeting = client.conversationConfig.agent.firstMessage;
-    expect(greeting).toContain("KI-assistent");
+    expect(greeting).toContain("Jeg heter Maria");
+    expect(greeting).toContain("virtuelle assistent, en KI");
     expect(greeting).toContain("skrevet ned");
     expect(prompt).toMatch(/opening notice once in the new language/);
   });

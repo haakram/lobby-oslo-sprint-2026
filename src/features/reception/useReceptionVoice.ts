@@ -4,6 +4,7 @@ import { useConversation, useConversationClientTool, type MessagePayload } from 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { detectLanguage, type LanguageCode } from "@/features/voice/language";
 import type { Turn, VoicePhase, VoiceProblem } from "@/features/voice/useFetteroVoice";
+import { occupancyWith, type HeldRoom } from "./availability";
 import { createCallSink, type ReceptionRecord, type ReceptionSink } from "./records";
 import { createReceptionTools } from "./tools";
 
@@ -41,9 +42,11 @@ async function fetchToken(): Promise<{ token: string } | VoiceProblem> {
 /**
  * The receptionist in the browser: microphone check, server token, ElevenLabs WebRTC session,
  * transcript and the five reception tools. Every booking or message the agent records goes to
- * `onRecord`; a fresh sink per call drops repeats and caps the count. Use inside `ConversationProvider`.
+ * `onRecord`; a fresh sink per call drops repeats and caps the count. `held` are the bookings already
+ * made here (not cancelled), so a free room is counted as taken once Maria has booked it.
+ * Use inside `ConversationProvider`.
  */
-export function useReceptionVoice(onRecord: (record: ReceptionRecord) => void) {
+export function useReceptionVoice(onRecord: (record: ReceptionRecord) => void, held: readonly HeldRoom[] = []) {
   const [preparing, setPreparing] = useState(false);
   const [problem, setProblem] = useState<VoiceProblem | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -56,14 +59,21 @@ export function useReceptionVoice(onRecord: (record: ReceptionRecord) => void) {
   useEffect(() => {
     onRecordRef.current = onRecord;
   }, [onRecord]);
+  const heldRef = useRef(held);
+  useEffect(() => {
+    heldRef.current = held;
+  }, [held]);
 
   const sink = useRef<ReceptionSink | null>(null);
   const newSink = useCallback(() => createCallSink((record) => onRecordRef.current(record)), []);
-  // A new tool set per call, so haggling starts over. Today in Oslo and the demo occupancy come from
-  // the tools' defaults.
+  // A new tool set per call, so haggling starts over. Today in Oslo comes from the tools' default.
   const [callNumber, setCallNumber] = useState(0);
   const tools = useMemo(
-    () => createReceptionTools({ sink: { record: (item) => (sink.current ??= newSink()).record(item) } }),
+    () =>
+      createReceptionTools({
+        sink: { record: (item) => (sink.current ??= newSink()).record(item) },
+        occupancy: (date, room) => occupancyWith(heldRef.current)(date, room),
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- callNumber only resets the haggling
     [newSink, callNumber],
   );

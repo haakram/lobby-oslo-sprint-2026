@@ -3,7 +3,7 @@
 import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { Badge, type BadgeTone, Button, Card } from "@/ui";
 import { formatClock, formatDate } from "./format";
-import { PERKS, ROOM_TYPES } from "./hotel";
+import { PERKS, RECEPTIONIST_NAME, ROOM_TYPES } from "./hotel";
 import type { BookingRecord, MessageRecord, MessageTopic, ReceptionRecord } from "./records";
 import type { StaffMark } from "./useStaffMarks";
 
@@ -112,16 +112,20 @@ function Field({ label, children, mono = false }: { label: string; children: Rea
 }
 
 function BookingCard({ record, mark, onMark, actionsRef }: CardProps<BookingRecord>) {
+  // Maria confirms a booking herself when the room is free; staff can still cancel it.
+  const confirmed = record.confirmed === true;
   const badge: { tone: BadgeTone; label: string } =
-    mark === "bekreftet"
-      ? { tone: "success", label: "Bekreftet" }
-      : mark === "avvist"
-        ? { tone: "danger", label: "Avvist" }
-        : { tone: "warning", label: "Venter" };
+    mark === "avvist"
+      ? { tone: "danger", label: confirmed ? "Avbestilt" : "Avvist" }
+      : mark === "bekreftet"
+        ? { tone: "success", label: "Bekreftet" }
+        : confirmed
+          ? { tone: "success", label: `Bekreftet av ${RECEPTIONIST_NAME}` }
+          : { tone: "warning", label: "Venter" };
   return (
     <Shell
       id={record.id}
-      title="Bookingforespørsel"
+      title={confirmed ? "Booking" : "Bookingforespørsel"}
       badge={badge}
       createdAt={record.createdAt}
       actionsRef={actionsRef}
@@ -129,6 +133,10 @@ function BookingCard({ record, mark, onMark, actionsRef }: CardProps<BookingReco
         mark === "bekreftet" || mark === "avvist" ? (
           <Button variant="ghost" onClick={() => onMark(null)}>
             Angre
+          </Button>
+        ) : confirmed ? (
+          <Button variant="ghost" onClick={() => onMark("avvist")}>
+            Avbestill
           </Button>
         ) : (
           <>

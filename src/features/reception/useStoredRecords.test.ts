@@ -19,6 +19,7 @@ const BOOKING = {
   perk: null,
   pricePerNight: 1521,
   directTotal: 3042,
+  confirmed: true,
 } as BookingRecord;
 
 const MESSAGE: MessageRecord = {
@@ -76,6 +77,14 @@ describe("useStoredRecords", () => {
       JSON.stringify([{ kind: "booking", id: "x", name: { evil: true } }, { kind: "other", id: "y" }, 7, MESSAGE]),
     );
     expect(renderHook(() => useStoredRecords()).result.current.records).toEqual([MESSAGE]);
+  });
+
+  it("reads a booking stored before Maria could confirm as a request waiting for staff", () => {
+    const old: Record<string, unknown> = { ...BOOKING };
+    delete old.confirmed;
+    localStorage.setItem(RECORDS_STORAGE, JSON.stringify([old]));
+    const [record] = renderHook(() => useStoredRecords()).result.current.records;
+    expect(record).toMatchObject({ kind: "booking", confirmed: false });
   });
 
   it("treats broken JSON or a stored object as none", () => {

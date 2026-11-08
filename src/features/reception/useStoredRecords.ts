@@ -24,6 +24,8 @@ const Booking = z.looseObject({
   room: z.enum(ROOM_TYPE_IDS),
   note: z.string(),
   directTotal: z.number(),
+  // Bookings stored before Maria could confirm them are requests waiting for staff.
+  confirmed: z.boolean().default(false),
 });
 const Message = z.looseObject({
   kind: z.literal("message"),

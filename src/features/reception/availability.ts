@@ -36,6 +36,18 @@ export function defaultOccupancy(date: string, room: RoomTypeId): number {
   return Math.min(type.rooms, Math.round((type.rooms * percent) / 100));
 }
 
+/** A booking already made in this app: it holds one room of its type on every night of the stay. */
+export type HeldRoom = { room: RoomTypeId; arrival: string; departure: string };
+
+/**
+ * The demo occupancy plus the bookings made here, so the last free room is never sold twice.
+ * TODO(phase-3): the real booking system's occupancy instead of the demo numbers.
+ */
+export function occupancyWith(held: readonly HeldRoom[], base: Occupancy = defaultOccupancy): Occupancy {
+  return (date, room) =>
+    base(date, room) + held.filter((b) => b.room === room && b.arrival <= date && date < b.departure).length;
+}
+
 export type StayQuery = { arrival: unknown; departure: unknown; guests: unknown; room?: unknown };
 
 export type StayProblem =

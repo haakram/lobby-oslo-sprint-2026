@@ -27,7 +27,7 @@ import { entryText, placePhrase, readStaffLog, type StaffEntry, type StaffHazard
 
 export type RoomEvidence = {
   room: string;
-  /** What each source said about the room, in plain words ("dørlåsen: ingen kort i energibryteren siden 22:10"). */
+  /** What each source said about the room, one sentence each ("Dørlåsen: ingen kort i energibryteren siden 22:10."). */
   lines: string[];
   verdict: EvidenceVerdict;
   /** "bekreftet" · "ikke bekreftet". */
@@ -81,20 +81,23 @@ function roomEvidence(room: string, door: DoorSignal | undefined, staff: StaffRo
   const lines: string[] = [];
   if (door) {
     signals.push({ signal: "door_lock", origin: "building", detail: doorSignalText(door) });
-    lines.push(`dørlåsen: ${doorSignalText(door)}`);
+    lines.push(`Dørlåsen: ${doorSignalText(door)}.`);
   }
   if (staff) {
     signals.push({ signal: "staff_check", origin: "staff", detail: statusWord(staff.status), at: staff.at });
-    lines.push(`${byWhen(staff)}: ${statusWord(staff.status)}`);
+    lines.push(`${staff.by} så ${SAW[staff.status]}${inNight(staff.at) ? ` kl. ${hhmm(staff.at)}` : ""}.`);
   }
   const { verdict } = evidenceVerdict(signals);
   return { room, lines, verdict, word: EVIDENCE_WORDS[verdict] };
 }
 
-/** "Bevis: dørlåsen: …; Kjersti Lund kl. 04:24: tomt og ryddig. Bekreftet." */
+/** What the clerk saw, after "Kjersti Lund så …". */
+const SAW: Record<StaffRoom["status"], string> = { klar: "rommet tomt og ryddig", opptatt: "gjest eller bagasje i rommet", ma_vaskes: "at rommet trenger vask" };
+
+/** "Dørlåsen: ingen kort … siden 22:10. Kjersti Lund så rommet tomt og ryddig kl. 04:24. Bekreftet av to kilder." */
 function evidenceSentence(evidence: RoomEvidence): string {
   const word = evidence.word.charAt(0).toUpperCase() + evidence.word.slice(1);
-  return `Bevis: ${evidence.lines.join("; ")}. ${word}${evidence.verdict === "confirmed" ? " av to kilder" : ""}.`;
+  return `${evidence.lines.join(" ")} ${word}${evidence.verdict === "confirmed" ? " av to kilder" : ""}.`;
 }
 
 function guestReason(row: { guest: string | null; departure: string | null }, today: string): string {
@@ -129,11 +132,33 @@ function hazardItem(hazard: StaffHazard, canOpen: (route: string) => boolean): O
   };
 }
 
+/** "Kjersti Lund så rom 213 tomt og ryddig." · "Kjersti Lund meldte vått gulv i lobbyen: Ved inngangen." */
+function timelineText(entry: StaffEntry): string {
+  if (entry.kind === "room") {
+    const room = `rom ${number(entry.room)}`;
+    if (entry.status === "klar") return `${entry.by} så ${room} tomt og ryddig.`;
+    if (entry.status === "opptatt") return `${entry.by} så gjest eller bagasje på ${room}.`;
+    return `${entry.by} meldte at ${room} trenger vask.`;
+  }
+  const text = entryText(entry);
+  const said = entry.kind === "note" ? text : `${text.charAt(0).toLowerCase()}${text.slice(1)}`;
+  return `${entry.by} meldte ${said}${/[.!?]$/.test(said) ? "" : "."}`;
+}
+
 function clerkNote(entries: readonly StaffEntry[]): NightNote {
   const notes = staffNotes(entries);
   const clerk = notes.at(-1)?.by ?? entries.at(-1)?.by ?? "Nattevakten";
   if (notes.length === 0) return { author: clerk, role: "Nattevakt", text: "Ingen notat fra nattevakten i natt." };
   return { author: clerk, role: "Nattevakt", text: notes.map((note) => note.text).join(" ") };
+}
+
+/**
+ * The night clerk's own note for the robot night too (Med robot): her notes on this device and the sample
+ * night, or null when she wrote none (the page keeps its own text then).
+ */
+export function clerkNoteOf(staff: readonly RunLine[]): NightNote | null {
+  const entries = readStaffLog(staff);
+  return staffNotes(entries).length > 0 ? clerkNote(entries) : null;
 }
 
 export function composeWithoutRobot({
@@ -258,7 +283,7 @@ export function composeWithoutRobot({
   // What happened: the clerk's entries and the calls; nothing from a robot.
   const clerkLines: Highlight[] = entries
     .filter((entry) => !entry.retracted && entry.kind !== "note" && entry.at)
-    .map((entry) => ({ at: hhmm(entry.at as string), text: `${entry.by}: ${entryText(entry)}.`.replace(/\.\.$/, "."), by: "staff" as const }));
+    .map((entry) => ({ at: hhmm(entry.at as string), text: timelineText(entry), by: "staff" as const }));
   const timeline = [...clerkLines, ...base.timeline.filter((line) => line.by !== "robot")]
     .slice(0, MAX_HIGHLIGHTS)
     .sort((a, b) => NIGHT_ORDER(a.at) - NIGHT_ORDER(b.at));

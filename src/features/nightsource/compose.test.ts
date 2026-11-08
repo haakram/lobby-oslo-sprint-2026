@@ -12,7 +12,7 @@ import { phoneTasks } from "@/features/requests/phoneTasks";
 import { selectRequests } from "@/features/requests/select";
 import type { RoomCheckMark } from "@/features/rooms/reconcile";
 import { CLERK_SAMPLE, hazardLine, retractLine, roomLine } from "@/features/staffinput/entries";
-import { composeWithoutRobot } from "./compose";
+import { clerkNoteOf, composeWithoutRobot } from "./compose";
 
 const TODAY = "2026-11-08";
 const robotNight = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
@@ -51,7 +51,7 @@ describe("Overlevering without a robot", () => {
     expect(sale?.text).toMatch(/^Rom 213 kan selges fra kl. 06:00/);
     expect(sale?.text).toContain("hvis natten blir utsolgt");
     expect(sale?.text).toContain("Ola Nygård skulle reist 7.11, men utsjekken ble aldri registrert");
-    expect(sale?.text).toContain("dørlåsen: ingen kort i energibryteren siden 22:10; Kjersti Lund kl. 04:24: tomt og ryddig");
+    expect(sale?.text).toContain("Dørlåsen: ingen kort i energibryteren siden 22:10. Kjersti Lund så rommet tomt og ryddig kl. 04:24.");
     expect(sale?.text).toMatch(/Bekreftet av to kilder\.$/);
     expect(result.evidence.get("room-213")).toMatchObject({ verdict: "confirmed", word: "bekreftet" });
   });
@@ -67,15 +67,20 @@ describe("Overlevering without a robot", () => {
   it("names a guest the booking system doesn't have, from the lock's card and the clerk's knock", () => {
     const guest = withoutRobot().handover.open.find((item) => item.id === "guest-room-210");
     expect(guest?.text).toContain("Rom 210: en gjest uten booking");
-    expect(guest?.text).toContain("dørlåsen: kort i energibryteren siden 23:05; Kjersti Lund kl. 23:24: ikke tomt. Bekreftet");
+    expect(guest?.text).toContain("Dørlåsen: kort i energibryteren siden 23:05. Kjersti Lund så gjest eller bagasje i rommet kl. 23:24. Bekreftet av to kilder.");
   });
 
   it("uses the clerk's note and her entries for what happened, in the night's order, beside the AI receptionist's calls", () => {
     const { handover, sources } = withoutRobot();
     expect(handover.note).toMatchObject({ author: "Kjersti Lund", role: "Nattevakt" });
     expect(handover.note.text).toMatch(/^Rolig natt\. Støy fra rom 210/);
-    const staff = handover.timeline.filter((line) => line.by === "staff" && line.text.startsWith("Kjersti Lund:"));
-    expect(staff.map((line) => line.at)).toEqual(["23:24", "02:15", "04:24"]);
+    const staff = handover.timeline.filter((line) => line.by === "staff" && line.text.startsWith("Kjersti Lund "));
+    expect(staff.map((line) => [line.at, line.text])).toEqual([
+      ["23:24", "Kjersti Lund så gjest eller bagasje på rom 210."],
+      ["02:15", "Kjersti Lund meldte vått gulv i lobbyen: Ved inngangen, etter regnet."],
+      ["04:24", "Kjersti Lund så rom 213 tomt og ryddig."],
+      ["04:35", "Kjersti Lund ordnet det AI-resepsjonisten tok imot: Rom 310 ber om vekking kl. 06:30."],
+    ]);
     expect(handover.timeline.some((line) => line.by === "ai")).toBe(true);
     expect(sources).toEqual({ staffEntries: 4, samples: 4, clerk: "Kjersti Lund", doorLockRooms: 36, doorLockFlags: 2 });
   });
@@ -89,7 +94,7 @@ describe("Overlevering without a robot", () => {
     expect(flag?.text).toContain("Rom 213: ingen kort i energibryteren siden 22:10. Ola Nygård skulle reist 7.11");
     expect(flag).toMatchObject({ owner: DESK_OWNER, booking: true });
     expect(flag?.text).toContain("Ingen har sett i rommet: sjekk det før det selges.");
-    expect(flag?.text).toContain("Ikke bekreftet.");
+    expect(flag?.text).toMatch(/Dørlåsen: ingen kort i energibryteren siden 22:10\. Ikke bekreftet\.$/);
     expect(result.evidence.get("room-213")?.verdict).toBe("unconfirmed");
   });
 
@@ -133,5 +138,10 @@ describe("Overlevering without a robot", () => {
     expect(handover.open.map((item) => item.id)).toContain("lock-room-213");
     expect(handover.open.some((item) => item.safety)).toBe(false);
     expect(sources.staffEntries).toBe(0);
+  });
+
+  it("gives the robot night the clerk's own note when she wrote one", () => {
+    expect(clerkNoteOf(CLERK_SAMPLE)?.text).toMatch(/^Rolig natt\./);
+    expect(clerkNoteOf(CLERK_SAMPLE.filter((line) => line.type === "decision" && line.kind !== "note"))).toBeNull();
   });
 });

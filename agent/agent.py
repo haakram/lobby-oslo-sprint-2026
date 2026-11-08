@@ -18,7 +18,7 @@ from pathlib import Path
 
 import httpx
 
-from agent import flows
+from agent import flows, price
 from agent.client import ShiftEnded, ShiftSession, WybeClient, WybeError
 from agent.config import Settings
 from agent.executor import NOTE_MAX, ActionFailed, Executor
@@ -259,8 +259,9 @@ def _plan_mode(ex: Executor, pending: list[Task], params: Params, battery: float
                                                    movable_signs=signs)
     if over != was_overloaded:
         backlog = backlog_seconds(pending, ex.state, ex.hotel, params, movable_signs=signs)
+        extra = {"price": round(ex.robot_price(), 2)} if price.on("overload") else {}
         ex.log("plan_mode", mode="overload" if over else "spt", queue=len(pending),
-               backlog_min=round(backlog / 60, 1), battery=None if battery is None else round(battery, 1))
+               backlog_min=round(backlog / 60, 1), battery=None if battery is None else round(battery, 1), **extra)
     return over
 
 

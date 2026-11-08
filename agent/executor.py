@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from agent import price
 from agent.client import STATE_FIELDS, Reply, ShiftEnded, ShiftSession, WybeError
 from agent.routing import MOVE_S_PER_M, NoRoute, Route, best_tour, route_seconds, shortest_route
 from agent.tasks import Entry, Kind, Ledger, Task, normalise
@@ -252,6 +253,7 @@ class Executor:
         self._visited: set[str] = set()  # places the robot has stood in: navigate works only there
         self._exp_pending: str | None = None
         self._topping_up = False
+        self._price_cache: tuple[tuple, tuple[float, float | None, float]] | None = None
 
     def experiment(self, name: str) -> bool:
         """True while the named experiment is switched on and not yet refuted this shift."""
@@ -705,6 +707,53 @@ class Executor:
             self.log("navigate_short", at=result["at"], to=leg[-1])
         return True
 
+    def price_state(self) -> tuple[float, float | None, float] | None:
+        """(sim second, battery, queued backlog seconds) for the robot-minute price (agent/price.py), the
+        running task left out; None when the clock is unreadable. Cached while those stand still."""
+        from agent.planner import Params, backlog_seconds
+
+        now = self._now_s()
+        if now is None:
+            return None
+        battery = self._battery()
+        key = (now, battery, tuple(t.request for t in self.queue))
+        if self._price_cache is not None and self._price_cache[0] == key:
+            return self._price_cache[1]
+        backlog = backlog_seconds(self.queue, self.state, self.hotel, self.params or Params(),
+                                  movable_signs=self.movable_signs())
+        self._price_cache = (key, (now, battery, backlog))
+        return self._price_cache[1]
+
+    def robot_price(self) -> float:
+        """lambda now: points per robot-minute (agent/price.py); 0 with the clock unreadable."""
+        st = self.price_state()
+        return 0.0 if st is None else price.lam(*st)
+
+    def _look_worth(self, to: str, now: int, last: int) -> bool:
+        """Price switch "wet": look again when P(a new patch since `last`) x a slip's cost beats the look's
+        cost at the robot-minute price (price.look_worth); spill messages on that floor since `last` raise
+        P. The look also delays the running task and the queue: their decay per minute counts."""
+        from agent.planner import Params, _decay
+
+        params = self.params or Params()
+        nodes = self.hotel.nodes
+        floor = nodes.get(to, {}).get("floor")
+        corridors = [n for n, v in nodes.items() if v.get("kind") == "corridor"]
+        on_floor = sum(1 for n in corridors if nodes[n].get("floor") == floor)
+        spills = 0
+        for entry in self.ledger.entries.values():
+            t = entry.task
+            if t.kind is not Kind.SPILL or t.floor != floor:
+                continue
+            try:
+                if clock_to_seconds(t.arrived) > last:
+                    spills += 1
+            except (TypeError, ValueError):
+                continue
+        waiting = [*self.queue, *([self.current] if self.current is not None else [])]
+        decay = sum(_decay(t, params) for t in waiting)
+        return price.look_worth(now - last, now, len(corridors), spills, on_floor, self.robot_price(), decay)
+
     def _stale_before_corridor(self, here: str, to: str) -> bool:
         """Step into a corridor whose wetness is unknown and whose approach was never looked at,
         or last looked at more than WET_LOOK_S ago (WET_LOOK_BUSY_S while busy) (live seed 1: 6-7
@@ -722,6 +771,8 @@ class Executor:
         # The floor of `to` was seen by any look that listed it as an exit (a spot is wet from
         # every side, world.mark_wet), not only by a look from here: the newest such look counts.
         seen = [t for t in (self._look_clock.get(here), self._exit_seen.get(to)) if t is not None]
+        if seen and price.on("wet"):
+            return self._look_worth(to, now, max(seen))
         return not seen or now - max(seen) > (WET_LOOK_BUSY_S if self._busy() else WET_LOOK_S)
 
     def _busy(self) -> bool:
@@ -1489,6 +1540,9 @@ class Executor:
             return False
         # A far dock (forced by its reserve) is charged for at least that reserve.
         target = max(self._block_target(), min(reserve, 100.0)) if forced else enough
+        if forced and price.on("charge") and price.CHARGE_FORECAST_TARGET and (st := self.price_state()) is not None:
+            # the forecast work to 06:00 plus the stranding margin (price.charge_target)
+            target = max(CHARGE_TARGET_MIN, price.charge_target(st[0], battery, st[2], min(reserve, 100.0)))
         self.log("battery_low", battery=battery, at=self.state.location, dock=dock,
                  reserve=round(reserve, 1), forced=forced, target=round(target, 1))
         self._charge_block(target, forced=forced)
@@ -1509,8 +1563,8 @@ class Executor:
                 break
             now = self._now_s()
             if (forced and battery >= BATTERY_LOW and now is not None and start_s is not None
-                    and now - start_s >= FORCED_BLOCK_MAX_S):
-                break
+                    and now - start_s >= FORCED_BLOCK_MAX_S and not price.on("charge")):
+                break  # (price switch "charge": the price decides when the block ends, _charge_not_worth)
             dock = self.hotel.special.get("dock", "charging-dock")
             if not self._reach_dock(dock):
                 self.log("charge_failed", reason=f"could not reach {dock}")
@@ -1534,12 +1588,31 @@ class Executor:
                 break
             self._inbox_now()
             self.log("charge_woken", battery=self.state.battery, queued=len(self.queue))
+            if price.on("charge") and self._charge_not_worth():
+                break
         self.log("charged", battery=self.state.battery, woken=self.inbox_waiting or woken > 0, wakes=woken)
         end_s = self._now_s()
         minutes = (end_s - start_s) / 60 if end_s is not None and start_s is not None else None
         self.log("charge_block", **{"from": start_battery}, to=self._battery(),
                  minutes=None if minutes is None else round(minutes, 1), queued=len(self.queue),
                  woken=woken, forced=forced, target=round(target, 1))
+
+    def _charge_not_worth(self) -> bool:
+        """Price switch "charge": a forced block stops after a wake-up once the battery covers the queued
+        work above BATTERY_CRITICAL (and is at least BATTERY_LOW) and the next docked minute is worth less
+        than the robot-minute it costs (price.energy_worth: the queue makes time dearer now than the
+        energy later)."""
+        st = self.price_state()
+        battery = self._battery()
+        if st is None or battery is None:
+            return False
+        now, _, backlog = st
+        cover = price.profile()["drain_per_min"] * backlog / 60  # the queue served before the next forced charge
+        if battery < max(BATTERY_LOW, BATTERY_CRITICAL + cover) or price.energy_worth(now, battery, backlog):
+            return False
+        self.log("charge_interrupted", battery=battery, queued=len(self.queue), backlog_min=round(backlog / 60, 1),
+                 price=round(price.lam(now, battery, backlog), 2))
+        return True
 
     # --- waiting -------------------------------------------------------------------------------
 

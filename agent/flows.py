@@ -14,8 +14,9 @@ import re
 from collections.abc import Callable
 from dataclasses import replace
 
+from agent import price
 from agent.executor import ActionFailed, Declined, Executor, lost_object
-from agent.routing import NoRoute, best_tour
+from agent.routing import NoRoute, best_tour, route_seconds
 from agent.tasks import ITEM_ALIASES, Kind, Task, is_override
 from agent.world import Hotel
 
@@ -813,13 +814,19 @@ def _find(ex: Executor, item: str, hint: str | None, request: str | None = None)
         cap = min(cap, SCAN_CAP_BUSY)
         ex.log("scan_cap", request=request, cap=cap, queued=len(ex.queue))
     rest = [n for n in secondary if n not in likely]
+    stopped = False
     for group in (primary, likely, rest):
+        if stopped:
+            break
         try:
             order, _ = best_tour(ex.hotel, ex.state.location, group, with_cart=ex.state.has_cart)
         except NoRoute:
             order = group
         for place in order:
             if scans >= cap:
+                break
+            if scans >= 1 and price.on("hunt") and not _hunt_worth(ex, place, scans + 1, request):
+                stopped = True
                 break
             try:
                 ex.go(place)
@@ -838,9 +845,41 @@ def _find(ex: Executor, item: str, hint: str | None, request: str | None = None)
             scans += 1
             if name := _pick_found(ex, item, primary, request):
                 return name
+    if stopped:
+        raise ActionFailed(f"{item} not found after {scans} scans (another place not worth its minutes)")
     if busy and scans >= cap:
         raise ActionFailed(f"{item} not found after {scans} scans (others waiting)")
     raise ActionFailed(f"{item} not found after {scans} scans")
+
+
+def _hunt_worth(ex: Executor, place: str, k: int, request: str | None) -> bool:
+    """Price switch "hunt": search the k-th place (k >= 2; the hinted place is always searched) only when
+    P(found there | not before) x (the item's value at delivery - the price x the delivery's minutes)
+    beats the price x the minutes of the walk there, the look and the scan (price.hunt_worth). True
+    whenever the price is 0 or the request is unknown."""
+    from agent.planner import Params, value_at
+
+    lam = ex.robot_price()
+    task = ex.current
+    if lam <= 0 or task is None or task.request != request:
+        return True
+    params = ex.params or Params()
+    walk = ex._seconds_to(place)
+    walk = 120.0 if walk == float("inf") else walk
+    deliver = 90.0
+    try:
+        if task.room:
+            deliver = route_seconds(ex.hotel, place, ex.hotel.room_corridor(task.room), with_cart=ex.state.has_cart) + 10
+    except (NoRoute, KeyError):
+        pass
+    now = ex._now_s() or 0
+    minutes = (walk + 5 + 60) / 60
+    value = value_at(task, now + 60 * minutes + deliver, params)
+    if price.hunt_worth(k, value, minutes, deliver / 60, lam):
+        return True
+    ex.log("hunt_stop", request=request, place=place, k=k, price=round(lam, 2), p=round(price.hunt_p(k), 3),
+           value=round(value, 1), minutes=round(minutes, 1))
+    return False
 
 
 def scan_candidates(hotel: Hotel, hint: str | None) -> tuple[list[str], list[str]]:

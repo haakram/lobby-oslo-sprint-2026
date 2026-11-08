@@ -7,6 +7,7 @@ import math
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field
 
+from agent import price
 from agent.routing import NoRoute, route_seconds
 from agent.tasks import Kind, Task
 from agent.world import Hotel, RobotState, clock_to_seconds
@@ -243,18 +244,33 @@ def overloaded(tasks: list[Task], state: RobotState, hotel: Hotel, params: Param
     backlog = backlog_seconds(tasks, state, hotel, params, movable_signs=movable_signs)
     if backlog <= 0:
         return False
+    if price.on("overload"):  # the robot-minute price: queue + forecast arrivals against time and battery
+        return robot_price(state, battery, backlog) > price.EPS
     if clock_to_seconds(state.clock) + backlog > SHIFT_END_S:
         return True
     return battery is not None and battery - backlog / 60.0 * OVERLOAD_DRAIN_PER_MIN < OVERLOAD_BATTERY_FLOOR
 
 
-def _overload_rank(task: Task, secs: float, now: int, params: Params) -> tuple[float, float]:
+def robot_price(state: RobotState, battery: float | None, backlog_s: float) -> float:
+    """lambda (agent/price.py) at the robot's clock, 0 when the clock is unreadable."""
+    try:
+        now = clock_to_seconds(state.clock)
+    except (AttributeError, TypeError, ValueError):
+        return 0.0
+    return price.lam(now, battery, backlog_s)
+
+
+def _overload_rank(task: Task, secs: float, now: int, params: Params,
+                   lam: float | None = None) -> tuple[float, float]:
     """-(value at the finish per robot-second), then seconds. A lost-item hunt counts as at least
-    LOST_ITEM_HUNT_S and pays LOST_ITEM_FOUND_P of its value (live hunts take minutes, often fail)."""
+    LOST_ITEM_HUNT_S and pays LOST_ITEM_FOUND_P of its value (live hunts take minutes, often fail).
+    With a robot-minute price `lam` (price switch "overload"): -(value - lam x its robot-minutes)."""
     found = 1.0
     if task.kind is Kind.LOST_ITEM:
         secs, found = max(secs, LOST_ITEM_HUNT_S), LOST_ITEM_FOUND_P
     value = value_at(task, now + BACKLOG_FACTOR * secs, params) * found
+    if lam is not None:
+        return -(value - lam * BACKLOG_FACTOR * secs / 60.0), secs
     return -value / max(secs, 1.0), secs
 
 
@@ -276,6 +292,9 @@ def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Para
     if overload is None:
         overload = params.order != "ratio" and overloaded(tasks, state, hotel, params, battery,
                                                           movable_signs=movable_signs)
+    lam = None
+    if overload and params.order != "ratio" and price.on("overload") and price.OVERLOAD_RANK == "net":
+        lam = robot_price(state, battery, backlog_seconds(tasks, state, hotel, params, movable_signs=movable_signs))
     best: tuple | None = None
     pick: Task | None = None
     for idx, t in enumerate(tasks):
@@ -283,7 +302,7 @@ def choose_next(tasks: list[Task], state: RobotState, hotel: Hotel, params: Para
         if params.order == "ratio":
             rank: tuple = (-estimate_value(t, int(now + secs), params) / max(secs, 1.0),)
         elif overload:
-            rank = _overload_rank(t, secs, now, params)
+            rank = _overload_rank(t, secs, now, params, lam)
         else:
             rank = (secs,)
         key = (t.kind is Kind.UNKNOWN, *rank, clock_to_seconds(t.arrived), idx)

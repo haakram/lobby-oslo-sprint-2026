@@ -69,7 +69,8 @@ def load_settings(env_files: tuple[str, ...] = (".env", ".env.local")) -> Settin
         key=get("WYBE_NIGHTSHIFT_KEY"),
         anthropic_key=get("ANTHROPIC_API_KEY") or None,
         budget_usd=float(get("ANTHROPIC_BUDGET_USD", "30")),
-        max_rps=_rps(get("NIGHTSHIFT_MAX_RPS", "5")),
+        # Measured live 2026-11-07: 20 req/s clean, HTTP 429 above ~22 req/s per key.
+        max_rps=_rps(get("NIGHTSHIFT_MAX_RPS", "16")),
         # Environment only, never a file, so nobody arms the final by accident.
         final_armed=os.environ.get("FINAL_ARMED") == "1",
     )

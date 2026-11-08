@@ -278,3 +278,22 @@ def test_final_loads_params_and_the_hotel_before_any_start(tmp_path, monkeypatch
     assert cli.main(["final"], client_factory=factory) == 2
     assert "params" in capsys.readouterr().err.lower()
     assert router.final_starts == 0 and not (tmp_path / "temp" / "final.lock").exists()
+
+
+def test_the_finals_run_shift_gets_the_call_cap(tmp_path, monkeypatch):
+    # Task 2 review: without call_cap a final shift navigates once its pace projects past 1,250 calls,
+    # far under what one final shift gets at our rate (default_max_calls(16) = 4,224).
+    import agent.agent as mod
+    from agent.bench import default_max_calls
+
+    cli, _router, factory = _cli_final(tmp_path, monkeypatch)
+    monkeypatch.setenv("NIGHTSHIFT_MAX_RPS", "16")
+    seen = []
+
+    def run_shift(client, **kw):
+        seen.append(kw.get("call_cap"))
+        return {"shift": kw["session"].shift_id, "score": 0, "reason": "test"}
+
+    monkeypatch.setattr(mod, "run_shift", run_shift)
+    assert cli.main(["final"], client_factory=factory) == 0
+    assert seen == [default_max_calls(16)] == [4224]

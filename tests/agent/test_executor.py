@@ -6,6 +6,7 @@ from dataclasses import replace
 import httpx
 import pytest
 
+from agent import price
 from agent.client import WybeClient
 from agent.config import Settings
 from agent.executor import Executor
@@ -329,7 +330,7 @@ def test_scan_candidates_from_hints():
         "corridor-2a", "corridor-2b", "corridor-2c", "corridor-2d"]
     assert scan_candidates(hotel, "corridor 2b")[0] == ["corridor-2b"]
     primary, secondary = scan_candidates(hotel, None)
-    assert primary == [] and secondary[:3] == ["lobby-bar", "front-desk", "lobby"]
+    assert primary == [] and secondary[:3] == ["lobby-bar", "corridor-1b", "corridor-1a"]
 
 
 def test_go_from_an_unknown_place_looks_once_then_routes(tmp_path):
@@ -533,12 +534,76 @@ def solo(tmp_path, text, **fake_kw):
     return fake, session, ex, task
 
 
-def test_every_knock_is_preceded_by_a_door_look(tmp_path):
+def test_a_delivery_knock_issues_no_door_look(tmp_path):
+    """Task 8: the knock reply names a DND sign, so a plain knock is not preceded by a door look."""
     for rid in ("R-001", "R-002", "R-003", "R-005"):
         fake, _, _, out = run_one(tmp_path, rid)
         assert out.status == "done", (rid, out)
         assert calls(fake, "knock")
-        assert_every_knock_looked_first(fake)
+        assert not [e for e in calls(fake, "look") if (e["args"] or {}).get("at")], rid
+
+
+def _room_323_off_3a(data):
+    """Another night's floor 3: room-323 hangs off corridor-3a, not 3d as on the seed-1 map."""
+    for e in data["edges"]:
+        if {e["a"], e["b"]} == {"corridor-3d", "room-323"}:
+            e["a"], e["b"] = "corridor-3a", "room-323"
+
+
+@pytest.mark.parametrize("refusal", [None, "No door to room-323 here."])
+def test_a_knock_refused_at_a_stale_corridor_relinks_the_room_and_knocks_again(tmp_path, monkeypatch, refusal):
+    """Live seeds 5 and 16 (the final build): with no door look before a knock, the stale seed-1 link
+    showed as the knock's "No door to room-311 here." and the request failed. The knock now relinks the
+    room (as the door look did), walks to the corridor it hangs off and knocks once more."""
+    fake, session, ex, task = solo(tmp_path, "323 wants a water bottle.",
+                                   hotel_path=map_file(tmp_path, _room_323_off_3a))
+    if refusal:  # the live wording; the fake's own is "There's no door called room-323 here."
+        real = fake._cmd_knock
+
+        def knock(args):
+            ok, text = real(args)
+            return (ok, text) if ok else (False, refusal)
+
+        monkeypatch.setattr(fake, "_cmd_knock", knock)
+    out = ex.run(task)
+    assert out.status == "done", out
+    knocks = calls(fake, "knock")
+    assert len(knocks) == 2 and not knocks[0]["ok"] and knocks[1]["ok"]
+    assert decisions(session, "stale_room_link") == [{"room": "room-323", "corridor": "corridor-3d"}]
+    assert ex.hotel.room_corridor("room-323") == "corridor-3a"
+    assert fake.reports == {"R-001": "done"} and not fake.false_done
+
+
+def test_a_knock_refused_twice_fails_without_a_third_try(tmp_path, monkeypatch):
+    fake, _session, ex, task = solo(tmp_path, "323 wants a water bottle.",
+                                    hotel_path=map_file(tmp_path, _room_323_off_3a))
+    monkeypatch.setattr(fake, "_cmd_knock", lambda args: (False, "No door to room-323 here."))
+    out = ex.run(task)
+    assert out.status == "failed" and "No door to room-323" in out.note, out
+    assert len(calls(fake, "knock")) == 2
+
+
+def test_a_room_check_still_looks_at_the_door_before_its_knock(tmp_path):
+    fake, _, _, out = run_one(tmp_path, "R-004", absent_rooms={"room-103"})
+    assert out.status == "done", out
+    assert calls(fake, "knock")
+    assert_every_knock_looked_first(fake)
+
+
+def test_a_dnd_knock_reply_marks_the_room_and_stops_the_delivery(tmp_path):
+    fake, _session, ex, task = solo(tmp_path, "208 wants a water bottle.", dnd_rooms={"room-208"})
+    out = ex.run(task)
+    assert out.status == "failed" and "Do Not Disturb" in out.note
+    assert not [e for e in calls(fake, "look") if (e["args"] or {}).get("at")]
+    assert "room-208" in ex.ledger.dnd and not calls(fake, "place") and not calls(fake, "use")
+    assert fake.score == 0 and not fake.unsafe
+
+
+def test_look_before_knock_switch_restores_the_look(tmp_path, monkeypatch):
+    monkeypatch.setattr("agent.flows.LOOK_BEFORE_KNOCK", True)
+    fake, _, _, out = run_one(tmp_path, "R-001")
+    assert out.status == "done", out
+    assert_every_knock_looked_first(fake)
 
 
 DND_208 = [
@@ -563,7 +628,8 @@ def test_dnd_door_is_never_knocked_or_keycarded_in_any_flow(tmp_path):
         out = ex.run(task)
         assert out.status == "failed", (text, out)
         assert "Do Not Disturb" in out.note, (text, out.note)
-        assert not [e for e in calls(fake, "knock") if e["args"]["door"] == "room-208"], text
+        if text in (DND_208[4], DND_208[5]):  # bags, room check: the look first, never a knock
+            assert not [e for e in calls(fake, "knock") if e["args"]["door"] == "room-208"], text
         assert not [e for e in calls(fake, "use") if e["args"].get("on") == "room-208"], text
         assert not fake.unsafe and fake.score == 0 and fake.reports == {"R-001": "failed"}, text
 
@@ -619,7 +685,7 @@ def test_noise_complaint_asks_the_named_room_to_keep_it_down(tmp_path):
     out = ex.run(task)
     assert out.status == "done", out
     assert [e["args"]["door"] for e in calls(fake, "knock")] == ["room-202"]
-    assert_every_knock_looked_first(fake)
+    assert not [e for e in calls(fake, "look") if (e["args"] or {}).get("at")]  # a plain knock: no door look
     said = calls(fake, "say")[0]["args"]["text"]
     assert "keep the noise down" in said
     assert fake.reports == {"R-001": "done"} and not fake.false_done
@@ -658,12 +724,12 @@ def test_spill_sign_placed_on_the_wet_patch(tmp_path):
     assert hypotheses(session, "H-spill")
 
 
-def test_spill_not_found_reports_failed_with_what_was_seen(tmp_path):
+def test_spill_not_found_reports_declined_with_what_was_seen(tmp_path):
     fake, _session, ex, task = solo(tmp_path, "Someone mentioned a spill on floor 2.", spill_spots={2: None})
     out = ex.run(task)
-    assert out.status == "failed" and "corridor-2" in out.note
+    assert out.status == "declined" and "corridor-2" in out.note
     assert not [e for e in calls(fake, "place") if e["args"].get("item") == "wet-floor-sign"]
-    assert fake.reports == {"R-001": "failed"}
+    assert fake.reports == {"R-001": "declined"}
 
 
 # H-followup
@@ -673,9 +739,9 @@ def test_follow_up_without_an_order_delivers_nothing(tmp_path):
     fake, session, ex, task = solo(tmp_path, FOLLOW.format(319, "water bottle"))
     assert task.kind is Kind.FOLLOWUP
     out = ex.run(task)
-    assert out.status == "failed" and out.note == "no order for water-bottle from 319 on record"
+    assert out.status == "declined" and out.note == "No water-bottle order from 319 on record tonight; nothing was ordered."
     assert not calls(fake, "place") and not calls(fake, "knock")
-    assert fake.reports == {"R-001": "failed"} and fake.score == 0
+    assert fake.reports == {"R-001": "declined"} and fake.score == 5  # live: +5 for the declined false claim
     assert hypotheses(session, "H-followup")
 
 
@@ -685,8 +751,8 @@ def test_follow_up_for_a_done_order_delivers_nothing(tmp_path):
     assert ex.run(next_task(ex, session, "R-001")).status == "done"
     places = len(calls(fake, "place"))
     out = ex.run(next_task(ex, session, "R-002"))
-    assert out.status == "failed" and "no order for phone-charger from 319 on record" in out.note
-    assert len(calls(fake, "place")) == places and fake.reports["R-002"] == "failed"
+    assert out.status == "declined" and "already delivered under R-001" in out.note
+    assert len(calls(fake, "place")) == places and fake.reports["R-002"] == "declined"
 
 
 def test_follow_up_runs_the_pending_original_first(tmp_path):
@@ -697,8 +763,8 @@ def test_follow_up_runs_the_pending_original_first(tmp_path):
     ex.ledger.add(first)
     ex.queue.append(first)  # still waiting in the shift loop's queue
     out = ex.run(got["R-002"])
-    assert out.status == "failed" and out.note == "delivered via R-001"
-    assert fake.reports == {"R-001": "done", "R-002": "failed"} and not fake.false_done
+    assert out.status == "declined" and "delivered now under R-001" in out.note
+    assert fake.reports == {"R-001": "done", "R-002": "declined"} and not fake.false_done
     assert first not in ex.queue
     assert ex.ledger.get("R-001").status == "done"
 
@@ -713,9 +779,9 @@ def test_duplicate_request_is_reported_failed_not_redone(tmp_path):
     got = collect(ex, session, {"R-001", "R-002"})
     ex.ledger.add(got["R-001"])
     ex.ledger.add(got["R-002"])
-    out = ex.run(got["R-002"])
-    assert out.status == "failed" and out.note == "duplicate of R-001"
-    assert not calls(fake, "pick") and not calls(fake, "move")
+    out = ex.run(got["R-002"])  # judged at the kitchen pass: one tray, and it is R-001's
+    assert out.status == "declined" and out.note.startswith("Duplicate of R-001")
+    assert not calls(fake, "pick")
     assert ex.run(got["R-001"]).status == "done"
     assert hypotheses(session, "H-duplicate")
 
@@ -800,14 +866,16 @@ def test_bathrobe_man_during_a_keycard_task_gets_a_polite_no_and_no_keycard(
 # Lost items
 
 
-def test_lost_toy_found_under_a_numbered_name(tmp_path):
+def test_lost_toy_numbered_beyond_the_known_requests_is_left_where_it_lies(tmp_path):
+    # Live seed 5: wallet-3 handed to the 2nd wallet request cost 20; the 3rd request came minutes
+    # later. An item numbered past the requests known so far belongs to a request not seen yet.
     text = "Guest in 320 lost a child's toy, maybe the ground floor corridor."
     fake, _session, ex, task = solo(tmp_path, text, hidden={"toy-2": "corridor-1a"})
     assert task.item == "toy"
     fake._requests["R-001"].item = "toy-2"
     out = ex.run(task)
-    assert out.status == "done", out
-    assert any(e["ok"] and e["args"] == {"item": "toy-2", "where": "room-320"} for e in calls(fake, "place"))
+    assert out.status == "failed", out
+    assert not any(e["args"].get("item") == "toy-2" for e in calls(fake, "place"))
 
 
 def test_scan_candidates_map_hint_words_then_the_rest_of_floor_one():
@@ -855,7 +923,8 @@ def test_room_status_ikke_forstyrr_on_a_dnd_door(tmp_path):
     _, session, _, out = run_one(tmp_path, "R-006", dnd_rooms={"room-208"})
     assert out.status == "failed"
     assert decisions(session, "room_status") == [
-        {"room": "room-208", "status": "ikke_forstyrr", "source": "door_sign", "note": "Do Not Disturb sign"}]
+        {"room": "room-208", "status": "ikke_forstyrr", "source": "knock",
+         "note": "No answer. A Do Not Disturb sign hangs on the handle."}]
 
 
 def test_room_status_opptatt_when_a_guest_answers(tmp_path):
@@ -929,18 +998,18 @@ HYPOTHESIS_RUNS = {
                              "H-bags", "failed"),
     "bags dnd": (BAGS_TEXT.format(206), {"dnd_rooms": {"room-206"}}, None, "H-bags", "failed"),
     "bags not at the desk": (BAGS_TEXT.format(206), {}, lambda f, e, m: f._objects["front-desk"].pop("bags-206"),
-                             "H-bags", "failed"),
+                             "H-bags", "declined"),
     "noise done": (NOISE_201, NOISY_203_HOME, None, "H-noise", "done"),
-    "noise door unseen": (NOISE_201, NOISY_203_HOME, lambda f, e, m: _door_unseen(f, m), "H-noise", "failed"),
+    "noise door unseen": (NOISE_201, NOISY_203_HOME, lambda f, e, m: _door_unseen(f, m), "H-noise", "done"),  # no door look any more
     "noise dnd": (NOISE_201, {**NOISY_203_HOME, "dnd_rooms": {"room-203"}}, None, "H-noise", "failed"),
     "noise nothing named": (NOISE_201, {"noise_sources": {"room-201": None}}, None, "H-noise", "failed"),
     "spill done": ("Someone mentioned a spill on floor 3.", {"spill_spots": {3: "corridor-3c"}}, None,
                    "H-spill", "done"),
     "spill no signs": ("Someone mentioned a spill on floor 3.", {"spill_spots": {3: "corridor-3c"}},
-                       lambda f, e, m: f._objects["storage"].pop("wet-floor-sign"), "H-spill", "failed"),
+                       lambda f, e, m: f._objects["storage"].pop("wet-floor-sign"), "H-spill", "declined"),
     "spill not found": ("Someone mentioned a spill on floor 2.", {"spill_spots": {2: None}}, None,
-                        "H-spill", "failed"),
-    "followup no order": (FOLLOW.format(319, "water bottle"), {}, None, "H-followup", "failed"),
+                        "H-spill", "declined"),
+    "followup no order": (FOLLOW.format(319, "water bottle"), {}, None, "H-followup", "declined"),
     "named done": ("Mr Aas would like a pillow.", {"guests": {"Mr Aas": "room-318"}}, None, "H-named", "done"),
     "named unknown guest": ("Mr Nobody would like a pillow.", {"guests": {}}, None, "H-named", "failed"),
     "named dnd": ("Ms Kvam would like a pillow.", {"guests": {"Ms Kvam": "room-208"}, "dnd_rooms": {"room-208"}},
@@ -963,6 +1032,8 @@ def test_every_hypothesis_run_logs_exactly_one_line(tmp_path, monkeypatch, case)
     assert isinstance(line["score_before"], int) and isinstance(line["score_after"], int)
     if status == "done":  # the delta covers the rewarded action (H-named: the delivery, not the ask)
         assert line["score_after"] > line["score_before"], line
+    elif status == "declined":  # a +5 (false follow-up) lands on the report, after the hypothesis line
+        assert line["score_after"] == line["score_before"] and fake.score - line["score_after"] in (0, 5), line
     else:
         assert line["score_after"] == line["score_before"] == fake.score, line
 
@@ -988,9 +1059,9 @@ def test_follow_up_finds_a_named_guest_order_that_has_not_run_yet(tmp_path):
     ex.ledger.add(got["R-002"])
     ex.queue.append(got["R-001"])  # still waiting: its room is not known yet
     out = ex.run(got["R-002"])
-    assert out.status == "failed" and out.note == "delivered via R-001"
+    assert out.status == "declined" and "delivered now under R-001" in out.note
     assert [e["args"] for e in calls(fake, "place") if e["ok"]] == [{"item": "water-bottle", "where": "room-202"}]
-    assert fake.reports == {"R-001": "done", "R-002": "failed"} and not fake.false_done
+    assert fake.reports == {"R-001": "done", "R-002": "declined"} and not fake.false_done
     assert [e["args"]["question"] for e in calls(fake, "ask")] == ["Which room is Ms Kvam in?"]
     assert ex.ledger.get("R-001").status == "done" and ex.queue == []
 
@@ -1003,15 +1074,15 @@ def test_follow_up_redelivers_a_failed_order_once(tmp_path):
     assert first.status == "failed" and "no answer" in first.note
     fake._absent.discard("room-319")  # the guest is back and calls the desk
     out = ex.run(next_task(ex, session, "R-002"))
-    assert out.status == "failed" and out.note == "delivered via R-001"
+    assert out.status == "declined" and "delivered now under R-001" in out.note
     assert [e["args"] for e in calls(fake, "place") if e["ok"]] == [
         {"item": "phone-charger", "where": "room-319"}]
     assert fake._requests["R-001"].completed and not fake.wrong_deliveries
     assert ex.ledger.get("R-001").status == "done"
     again = ex.run(next_task(ex, session, "R-003"))  # a second call about the same order
-    assert again.status == "failed" and again.note == "no order for phone-charger from 319 on record"
+    assert again.status == "declined" and "already delivered under R-001" in again.note
     assert len([e for e in calls(fake, "place") if e["ok"]]) == 1
-    assert fake.reports == {"R-001": "failed", "R-002": "failed", "R-003": "failed"} and not fake.false_done
+    assert fake.reports == {"R-001": "failed", "R-002": "declined", "R-003": "declined"} and not fake.false_done
     assert [d["request"] for d in hypotheses(session, "H-followup")] == ["R-002", "R-003"]
 
 
@@ -1133,13 +1204,17 @@ def test_scan_count_stays_bounded_when_the_item_is_nowhere(tmp_path):
     fake, _session, ex, task = solo(tmp_path, text, hidden={})
     ex.max_scans = 2
     ex.run(task)
-    assert 3 + 3 <= len(scan_places(fake)) <= 9
+    assert 3 + 3 <= len(scan_places(fake)) <= 12  # alone: the whole ground floor
+    fake2, _session2, ex2, task2 = solo(tmp_path / "queued", text, hidden={})
+    ex2.max_scans = 2
+    ex2.queue.append(parse_request("R-009", "319 wants a pillow.", "22:30:00"))  # others waiting
+    ex2.run(task2)
+    assert 3 + 3 <= len(scan_places(fake2)) <= 9
 
 
-def test_lost_toy_hinted_at_the_bar_is_found_as_numbered_toy(tmp_path):
+def test_lost_toy_hinted_at_the_bar_is_found_when_its_number_is_this_request(tmp_path):
     text = "Guest in 320 lost a child's toy, maybe the lobby bar."
-    fake, _session, ex, task = solo(tmp_path, text, hidden={"toy-2": "lobby-bar"})
-    fake._requests["R-001"].item = "toy-2"
+    _fake, _session, ex, task = solo(tmp_path, text, hidden={"toy": "lobby-bar"})
     out = ex.run(task)
     assert out.status == "done", out
 
@@ -1258,3 +1333,506 @@ def test_ambiguity_stops_the_search_at_once(tmp_path):
     with pytest.raises(ActionFailed, match="did not guess"):  # request unknown to the ledger: both free
         flows._find(ex, "wallet", "ground floor corridor", None)
     assert not calls(fake, "scan") and not calls(fake, "pick")
+
+
+# --- Late-night capacity Task 2: navigate only in the final; a busy robot re-looks less often ----------
+
+
+def _pace(ex, session, *, clock, calls, mode="practice", cap=None):
+    """The executor at `clock` with `calls` sent so far, in `mode`, with the session's call cap."""
+    session.mode, session.call_cap, session.calls = mode, cap, calls
+    ex.state.clock = clock
+    return ex._nav_min_hops()
+
+
+def test_practice_never_navigates_even_at_a_high_call_pace(tmp_path, monkeypatch):
+    monkeypatch.delenv("NS_NAV_MIN_HOPS", raising=False)
+    _, session, ex = setup(tmp_path, rids=set())
+    # 01:00, 3,000 calls: a 8,000-call night, far past any limit; a practice night still walks
+    assert _pace(ex, session, clock="01:00:00", calls=3000) is None
+    assert _pace(ex, session, clock="05:30:00", calls=1500, cap=1320) is None
+
+
+def test_final_navigates_on_the_call_pace_against_its_cap_or_the_default_limit(tmp_path, monkeypatch):
+    from agent.executor import CALL_PROJECTION_LIMIT, NAV_MIN_HOPS
+
+    monkeypatch.delenv("NS_NAV_MIN_HOPS", raising=False)
+    _, session, ex = setup(tmp_path, rids=set())
+    # 3 sim hours in: projected = calls x 8 / 3
+    assert _pace(ex, session, clock="01:00:00", calls=600, mode="final") == NAV_MIN_HOPS  # 1,600
+    assert _pace(ex, session, clock="01:00:00", calls=450, mode="final") is None  # 1,200
+    assert CALL_PROJECTION_LIMIT == 1250
+    assert _pace(ex, session, clock="22:50:00", calls=900, mode="final") is None  # first hour: no projection
+    # the cap, when the final sets one (default_max_calls(16) = 4,224), replaces the default limit
+    assert _pace(ex, session, clock="01:00:00", calls=600, mode="final", cap=4224) is None  # 1,600
+    assert _pace(ex, session, clock="01:00:00", calls=1700, mode="final", cap=4224) == NAV_MIN_HOPS  # 4,533
+
+
+def test_the_nav_env_override_wins_in_both_modes(tmp_path, monkeypatch):
+    _, session, ex = setup(tmp_path, rids=set())
+    monkeypatch.setenv("NS_NAV_MIN_HOPS", "3")
+    assert _pace(ex, session, clock="22:10:00", calls=0) == 3  # practice, no pace at all
+    assert _pace(ex, session, clock="22:10:00", calls=0, mode="final") == 3
+    monkeypatch.setenv("NS_NAV_MIN_HOPS", "0")  # 0 switches navigate off, even at a final's high pace
+    assert _pace(ex, session, clock="01:00:00", calls=3000, mode="final") is None
+    assert _pace(ex, session, clock="01:00:00", calls=3000) is None
+
+
+def test_the_wet_look_window_is_45_min_when_busy_and_10_min_when_not(tmp_path, monkeypatch):
+    monkeypatch.setitem(price.SWITCHES, "wet", False)  # pins the old fixed-window wet look; wet on is covered in test_price.py
+    from agent.executor import WET_LOOK_BUSY_S, WET_LOOK_S
+    from agent.world import clock_to_seconds
+
+    assert (WET_LOOK_S, WET_LOOK_BUSY_S) == (10 * 60, 45 * 60)
+    _, _session, ex = setup(tmp_path, rids=set())
+    here, to = "corridor-1a", "corridor-1b"
+    assert ex.hotel.nodes[here]["kind"] == ex.hotel.nodes[to]["kind"] == "corridor"
+    assert not ex.hotel.is_wet(here, to)
+    queued = [Task(f"R-90{i}", Kind.AMENITY, "x", "22:00:00", room="317", item="towel") for i in range(2)]
+
+    def stale(clock, *, queue=(), battery=80.0):
+        ex.state.clock, ex.queue, ex.state.battery = clock, list(queue), battery
+        return ex._stale_before_corridor(here, to)
+
+    ex._look_clock[here] = clock_to_seconds("23:00:00")
+    assert stale("23:20:00")  # not busy: 20 min > 10 min
+    assert not stale("23:20:00", queue=queued)  # 2 queued: 20 min < 45 min
+    assert not stale("23:20:00", queue=queued[:1], battery=35.0)  # battery under 40 %: busy too
+    assert stale("23:20:00", queue=queued[:1])  # one queued task and a good battery: not busy
+    assert stale("23:50:00", queue=queued)  # 50 min > 45 min
+    del ex._look_clock[here]  # never looked at: looked at before the first step in, busy or not
+    assert stale("23:20:00", queue=queued, battery=20.0)
+
+
+# --- late-night capacity Task 3: a forced charge is a block of chained docks -----------------------
+
+
+def _every(minutes, start="22:02:00", n=20, text="104 wants a towel."):
+    """A request every `minutes` sim-minutes from `start` (the rush: one per 2-4 min live)."""
+    from agent.offline import seconds_to_clock
+    from agent.world import clock_to_seconds
+
+    t0 = clock_to_seconds(start)
+    return [(seconds_to_clock(t0 + i * minutes * 60), f"R-{i + 1:03d}", text) for i in range(n)]
+
+
+def _inbox_hook(ex):
+    """What run_shift's inbox hook does, minus the Brain: read, clear the flag, queue each request.
+    Returns the list of message counts per read."""
+    reads = []
+
+    def read():
+        msgs = ex.cmd("inbox").result.get("messages") or []
+        ex.inbox_waiting = False
+        reads.append(len(msgs))
+        for m in msgs:
+            if isinstance(m.get("request"), str):
+                ex.queue.append(parse_request(m["request"], m["text"], m["at"]))
+
+    ex.read_inbox = read
+    return reads
+
+
+def _unread_at_docks(fake):
+    """The fake's unread count at each dock command (a dock with a message unread returns at once)."""
+    seen = []
+    real = fake._cmd_dock
+
+    def dock(args):
+        seen.append(len(fake._unread))
+        return real(args)
+
+    fake._cmd_dock = dock
+    return seen
+
+
+def test_forced_charge_docks_again_after_each_wake(tmp_path):
+    from agent.executor import CHARGE_TARGET_FORCED
+
+    fake, session, ex = setup(tmp_path, requests=_every(2))
+    reads = _inbox_hook(ex)
+    ex.read_inbox()  # the welcome message
+    unread = _unread_at_docks(fake)
+    fake.battery = 10
+    ex.refresh()
+    assert ex.ensure_battery() is True
+    docks = calls(fake, "dock")
+    assert ex.state.battery >= 25 and ex.state.location == "charging-dock"  # 15 min and back to 25 %
+    assert len(docks) >= 7, len(docks)  # woken every 2 min: one walk, many docks
+    assert unread == [0] * len(docks)  # never a dock with a message unread (it would return at once)
+    assert len(reads) == 1 + len(docks)  # the inbox read after every wake
+    assert [t.request for t in ex.queue] == [f"R-{i:03d}" for i in range(1, len(ex.queue) + 1)]
+    woken = decisions(session, "charge_woken")
+    assert len(woken) == len(docks) and woken[-1]["queued"] == len(ex.queue)
+    assert all(isinstance(w["battery"], int | float) for w in woken)
+    [block] = decisions(session, "charge_block")
+    assert block["forced"] is True and block["target"] == CHARGE_TARGET_FORCED
+    assert block["from"] == 10 and block["to"] == ex.state.battery
+    assert block["woken"] == len(docks) and block["queued"] == len(ex.queue)
+    assert 15 <= block["minutes"] <= 17, block
+
+
+def test_forced_charge_docks_through_wakes_up_to_a_target_it_can_reach(tmp_path, monkeypatch):
+    # 05:30: the target has shrunk to 22 % (10 + 0.4 x 30), reached in ~12 min, before the 15 min bound.
+    monkeypatch.setattr("agent.executor.END_STOP", False)  # the chain to the target; the stop: test_end_of_night.py
+    fake, session, ex = _at_clock(tmp_path, _every(2, start="05:32:00", n=12), battery=10, clock="05:30:00")
+    _inbox_hook(ex)
+    unread = _unread_at_docks(fake)
+    assert ex.ensure_battery() is True
+    [block] = decisions(session, "charge_block")
+    assert block["target"] == 22.0 and ex.state.battery >= 22.0 and block["minutes"] < 15, block
+    assert block["woken"] == len(calls(fake, "dock")) >= 5 and unread == [0] * block["woken"]
+
+
+def test_message_on_the_way_to_a_forced_charge_is_read_before_the_dock(tmp_path):
+    # Task 1 review: the message came on the walk, the dock returned "0 min", the charge ended and
+    # the loop ran a task at 9 % (offline seed 6 at scale 1.3 bottomed at 0.7 %).
+    from agent.executor import CHARGE_TARGET_FORCED
+
+    fake, _session, ex = setup(tmp_path, requests=[("22:00:50", "R-001", "104 wants a towel.")])
+    _inbox_hook(ex)
+    ex.read_inbox()
+    ex._looked.update(ex.hotel.nodes)  # no first-visit looks: only the walks spend time
+    ex.go("storage")  # 35 m: here at 22:00:35
+    unread = _unread_at_docks(fake)
+    fake.battery = 10
+    ex.refresh()
+    assert ex.ensure_battery() is True  # the walk back (35 s) brings R-001's inbox event
+    docks = calls(fake, "dock")
+    assert docks and unread == [0] * len(docks)
+    # "Docked for 0 min" exactly: "Docked for 90 min" (a full charge from 10 %) contains "0 min" too
+    assert not any(str(d["result"]).startswith("Docked for 0 min") for d in docks), docks
+    assert [t.request for t in ex.queue] == ["R-001"]  # read through the hook: queued, not lost
+    assert ex.state.battery >= CHARGE_TARGET_FORCED
+
+
+def test_forced_charge_without_a_hook_reads_the_inbox_itself(tmp_path):
+    fake, _session, ex = setup(tmp_path, requests=_every(2, n=8))
+    ex.cmd("inbox")
+    unread = _unread_at_docks(fake)
+    fake.battery = 10
+    ex.refresh()
+    assert ex.read_inbox is None and ex.ensure_battery() is True
+    docks = calls(fake, "dock")
+    assert len(docks) >= 8 and unread == [0] * len(docks)
+    assert not ex.inbox_waiting and ex.state.battery >= 25
+
+
+def test_non_forced_charge_still_stops_on_the_first_wake(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=_every(2))
+    reads = _inbox_hook(ex)
+    ex.read_inbox()
+    fake.battery = 20  # under 25 %, over BATTERY_CRITICAL: the request goes first
+    ex.refresh()
+    assert ex.ensure_battery() is True
+    assert len(calls(fake, "dock")) == 1 and ex.inbox_waiting  # left for the loop to read
+    assert reads == [1] and not ex.queue
+    [block] = decisions(session, "charge_block")
+    assert block["forced"] is False and block["woken"] == 1 and block["queued"] == 0
+    assert not decisions(session, "charge_woken")
+
+
+def test_the_forced_block_target_shrinks_toward_six(tmp_path):
+    from agent.executor import CHARGE_TARGET_FORCED, CHARGE_TARGET_MIN
+
+    _, _session, ex = setup(tmp_path, rids=set())
+    assert (CHARGE_TARGET_FORCED, CHARGE_TARGET_MIN) == (40.0, 20.0)
+
+    def target(clock):
+        ex.state.clock = clock
+        return ex._block_target()
+
+    assert target("23:00:00") == 40.0
+    assert target("03:00:00") == 40.0  # 10 + 0.4 x 180 = 82: capped at 40
+    assert target("04:45:00") == 40.0  # 10 + 0.4 x 75
+    assert target("05:00:00") == 34.0  # 10 + 0.4 x 60
+    assert target("05:30:00") == 22.0
+    assert target("05:40:00") == 20.0  # 18: never under CHARGE_TARGET_MIN
+    assert target("05:59:00") == 20.0
+
+
+def test_battery_critical_is_15_and_rounds_20(tmp_path):
+    from agent.executor import BATTERY_CRITICAL, CHARGE_ROUNDS
+
+    assert (BATTERY_CRITICAL, CHARGE_ROUNDS) == (15.0, 20)
+    fake, _session, ex = setup(tmp_path, requests=[])
+    ex.cmd("inbox")
+    ex.go("lobby")
+    fake.battery = 14
+    ex.refresh()
+    ex.queue.append(parse_request("R-009", "104 wants a towel.", "22:01:00"))
+    assert ex.ensure_battery() is True  # under 15 %: charges even with work waiting
+    assert calls(fake, "dock") and ex.state.location == "charging-dock"
+
+
+def test_no_charge_is_started_while_a_task_runs(tmp_path):
+    fake, session, ex, task = solo(tmp_path, "104 wants a towel.")
+    fake.battery = ex.state.battery = 20  # under 25 %, but the running task is work waiting
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status == "done", out
+    assert not calls(fake, "dock", since=since)
+    deferred = decisions(session, "charge_deferred")
+    assert deferred and deferred[-1]["running"] == "R-001"
+    assert ex.current is None  # cleared once the task is over
+
+
+def test_current_is_cleared_when_the_flow_raises(tmp_path, monkeypatch):
+    from agent import flows
+
+    _fake, _session, ex, task = solo(tmp_path, "104 wants a towel.")
+    seen = []
+
+    def boom(ex_, task_):
+        seen.append(ex_.current)
+        raise RuntimeError("odd")
+
+    monkeypatch.setattr(flows, "handle", boom)
+    out = ex.run(task)
+    assert out.status == "failed" and seen == [task] and ex.current is None
+
+
+def test_run_shift_wires_the_inbox_hook_into_the_forced_block(tmp_path):
+    from agent.agent import run_shift
+    from agent.planner import Params
+
+    fake = FakeWybe(requests=_every(3, start="22:03:00", n=12))
+    unread = _unread_at_docks(fake)
+
+    def handler(request):
+        reply = fake.handler(request)
+        if json.loads(request.content).get("cmd") == "start_shift":
+            fake.battery = 9  # the shift starts nearly flat
+        return reply
+
+    client = WybeClient(settings(tmp_path), transport=httpx.MockTransport(handler), sleep=lambda s: None)
+    result = run_shift(client, seed=1, params=Params(use_cart=False), sim_end="23:30:00")
+    lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
+    kinds = [x["kind"] for x in lines if x["type"] == "decision"]
+    assert "charge_woken" in kinds and "charge_block" in kinds
+    first_block = kinds.index("charge_block")
+    assert kinds[:first_block].count("request") >= 5  # the requests were read and queued in the block
+    assert "task_start" not in kinds[:first_block]  # no task at 9 %
+    docks = calls(fake, "dock")
+    assert unread == [0] * len(docks)
+    assert not fake.false_done and not fake.unsafe
+
+
+# --- late-night capacity Task 3, fix round 1: bounded blocks, the end of the night, skips -----------
+
+
+def _at_clock(tmp_path, requests, battery, clock):
+    """A shift whose fake clock is moved to `clock` (requests after it), the robot at the dock."""
+    from agent.world import clock_to_seconds
+
+    fake, session, ex = setup(tmp_path, requests=requests)
+    fake._now = clock_to_seconds(clock)
+    ex.cmd("inbox")  # the welcome message (and anything due before `clock`)
+    ex.inbox_waiting = False
+    fake.battery = battery
+    ex.refresh()
+    return fake, session, ex
+
+
+def test_a_forced_block_starts_no_dock_after_15_min_once_over_25(tmp_path):
+    # Live manager skips arrive 7-30 min after a request (median 18.7) and a skipped request scores 0
+    # even when done: a forced block leaves with 25 % or more after 15 min instead of filling to 40 %.
+    from agent.executor import BATTERY_LOW, FORCED_BLOCK_MAX_S
+
+    assert FORCED_BLOCK_MAX_S == 15 * 60
+    fake, session, ex = setup(tmp_path, requests=_every(2, n=30))
+    _inbox_hook(ex)
+    ex.read_inbox()
+    fake.battery = 14.5
+    ex.refresh()
+    assert ex.ensure_battery() is True
+    [block] = decisions(session, "charge_block")
+    assert block["forced"] is True and block["minutes"] <= 16.5, block
+    assert ex.state.battery >= BATTERY_LOW and ex.state.battery < block["target"]
+
+
+def test_a_forced_block_under_25_after_15_min_keeps_docking(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=_every(2, n=30))
+    _inbox_hook(ex)
+    ex.read_inbox()
+    fake.battery = 5
+    ex.refresh()
+    assert ex.ensure_battery() is True
+    [block] = decisions(session, "charge_block")
+    assert block["minutes"] > 16 and ex.state.battery >= 25, block  # 5 % + 16 min is still under 25
+
+
+def test_no_forced_charge_when_the_battery_lasts_to_six(tmp_path):
+    fake, session, ex = _at_clock(tmp_path, [], battery=14.5, clock="05:50:00")
+    ex.queue.append(parse_request("R-009", "104 wants a towel.", "05:49:00"))
+    assert ex.ensure_battery() is False  # 10 min x 0.8 + 2 = 10 <= 14.5: work, not a charge
+    assert not calls(fake, "dock") and decisions(session, "charge_deferred")
+    fake, _session, ex = _at_clock(tmp_path, _every(2, start="05:42:00", n=8), battery=14.5, clock="05:40:00")
+    ex.queue.append(parse_request("R-009", "104 wants a towel.", "05:39:00"))
+    assert ex.ensure_battery() is True  # 20 min x 0.8 + 2 = 18 > 14.5: forced
+    assert calls(fake, "dock")
+
+
+def _far_from_the_dock(tmp_path, battery, clock):
+    """At the lobby with a queued task, the dock believed 4,000 m away: a reserve of ~65 %."""
+    from agent.offline import seconds_to_clock
+    from agent.world import clock_to_seconds
+
+    start = seconds_to_clock(clock_to_seconds(clock) + 120)
+    fake, session, ex = _at_clock(tmp_path, _every(2, start=start, n=12), battery, clock)
+    ex.go("lobby")
+    ex.hotel.set_metres("charging-dock", "lobby", 4000.0)
+    ex.queue.append(parse_request("R-900", "104 wants a towel.", clock))
+    assert ex._dock_reserve("charging-dock") > battery
+    return fake, session, ex
+
+
+def test_the_guard_never_skips_a_forced_charge_below_the_dock_reserve(tmp_path):
+    # 45 % with 60 min left: 60 x 0.8 + 2 = 50 > 45, the guard does not skip.
+    fake, session, ex = _far_from_the_dock(tmp_path, 45, "05:00:00")
+    assert not ex._lasts_the_night(45)
+    assert ex.ensure_battery() is True and calls(fake, "dock")
+    assert decisions(session, "battery_low")[-1]["forced"] is True
+    # 50 % with 20 min left lasts the night by the drain (18 % needed), but it is under the dock
+    # reserve: still charged.
+    fake, session, ex = _far_from_the_dock(tmp_path, 50, "05:40:00")
+    assert ex._lasts_the_night(50)
+    assert ex.ensure_battery() is True and calls(fake, "dock")
+    assert decisions(session, "battery_low")[-1]["forced"] is True
+
+
+def test_the_battery_needed_to_six_is_conservative_and_wraps_midnight(tmp_path):
+    from agent import executor
+    from agent.executor import DRAIN_PER_MIN
+
+    assert DRAIN_PER_MIN == 0.9 and not hasattr(executor, "DRAIN_EST_PER_MIN")
+    _, _session, ex = setup(tmp_path, rids=set())
+
+    def needed(clock):
+        ex.state.clock = clock
+        return ex._needed_to_six()
+
+    assert needed("05:50:00") == 0.8 * 10 + 2  # END_DRAIN_PER_MIN and END_MARGIN (tests/agent/test_end_of_night.py)
+    assert needed("00:00:00") == 0.8 * 360 + 2  # after midnight: 6 h left, not 30 h or -18 h
+    assert needed("23:30:00") == 0.8 * 390 + 2
+    assert needed("06:00:00") == 2.0
+
+    def lasts(battery, clock):
+        ex.state.clock = clock
+        return ex._lasts_the_night(battery)
+
+    assert not lasts(45, "05:00:00")  # 60 min left: 50 % needed
+    assert lasts(30, "05:40:00")  # 20 min left: 18 % needed
+
+
+def test_charged_line_counts_the_wakes_of_a_chain(tmp_path):
+    fake, session, ex = setup(tmp_path, requests=_every(2))
+    _inbox_hook(ex)
+    ex.read_inbox()
+    fake.battery = 10
+    ex.refresh()
+    ex.ensure_battery()
+    [charged] = decisions(session, "charged")
+    [block] = decisions(session, "charge_block")
+    assert charged["woken"] is True and charged["wakes"] == block["woken"] > 1
+
+
+def test_a_request_skipped_during_a_block_in_its_flow_ends_declined(tmp_path):
+    from agent.agent import _read_inbox
+
+    reqs = [("22:01:00", "R-001", "319 wants a towel."),
+            ("22:06:00", "skip", "Skip R-001, 319 checked out. Don't bother with it."),
+            *_every(3, start="22:09:00", n=10)[1:]]
+    fake, session, ex = setup(tmp_path, requests=reqs)
+    task = next_task(ex, session, "R-001")
+    seen, pending = {"R-001"}, ex.queue
+    ex.read_inbox = lambda: _read_inbox(ex, None, seen, pending)
+    fake.battery = ex.state.battery = 10  # forced: the block reads the skip while R-001 runs
+    since = len(fake.log)
+    out = ex.run(task)
+    assert out.status in ("declined", "skipped"), out
+    assert not calls(fake, "place", since=since)  # no 0-point delivery
+    assert not calls(fake, "pick", since=since)
+    assert fake.reports.get("R-001") == "cancelled"
+    assert decisions(session, "skipped_while_charging")
+
+
+# --- late-night capacity Task 3 (5): a floor-1 top-up before a ride up ----------------------------
+
+
+@pytest.fixture
+def top_on(monkeypatch):
+    """The floor-1 top-up switched on (TOP_UP_BEFORE_UP)."""
+    from agent import executor
+
+    monkeypatch.setattr(executor, "TOP_UP_BEFORE_UP", True)
+
+
+def test_top_up_is_off_by_default():
+    from agent.executor import TOP_UP_BEFORE_UP, TOP_UP_BELOW, TOP_UP_DOCK_M
+
+    assert TOP_UP_BEFORE_UP is False  # bench: scale 1.0 -20, 1.3 -3 with it (stress 1.6 +10, 2.0 +50)
+    assert (TOP_UP_BELOW, TOP_UP_DOCK_M) == (70.0, 25.0)
+
+
+def _upstairs_trip(tmp_path, battery, *, at="lobby", running=True, requests=None):
+    fake, session, ex = setup(tmp_path, requests=requests or [("22:05:00", "R-001", "104 wants a towel.")])
+    ex.cmd("inbox")
+    ex.inbox_waiting = False
+    ex._looked.update(ex.hotel.nodes)  # no first-visit looks
+    ex.go(at)
+    fake.battery = battery
+    ex.refresh()
+    if running:
+        # 22:05: younger than SKIP_MIN_AGE_S through the trip, so var-20's mid-task skip checkpoint
+        # (a walk step reads a waiting message once the running request is 8 min old) stays out of it.
+        ex.current = parse_request("R-900", "319 wants a towel.", "22:05:00")
+    return fake, session, ex
+
+
+def _cmds(fake, since=0):
+    return [e["cmd"] for e in fake.log[since:]]
+
+
+def test_top_up_docks_before_leaving_the_docks_floor(tmp_path, top_on):
+    fake, session, ex = _upstairs_trip(tmp_path, 60)
+    since = len(fake.log)
+    ex.go("corridor-3a")
+    cmds = _cmds(fake, since)
+    assert "dock" in cmds and cmds.index("dock") < cmds.index("call_elevator"), cmds
+    assert ex.state.location == "corridor-3a"
+    [top] = decisions(session, "top_up")
+    assert top["from"] == 60 and top["to"] > 60 and top["woken"] is True
+
+
+def test_no_top_up_when_full_enough_far_not_running_same_floor_or_off(tmp_path, top_on, monkeypatch):
+    from agent import executor
+
+    fake, _s, ex = _upstairs_trip(tmp_path, 75)  # 70 % or more: no top-up
+    ex.go("corridor-3a")
+    assert not calls(fake, "dock")
+    fake, _s, ex = _upstairs_trip(tmp_path, 60, at="corridor-1b")  # the dock is over 25 m away
+    assert ex._seconds_to("charging-dock") > 25
+    ex.go("corridor-3a")
+    assert not calls(fake, "dock")
+    fake, _s, ex = _upstairs_trip(tmp_path, 60, running=False)  # no task: an idle walk
+    ex.go("corridor-3a")
+    assert not calls(fake, "dock")
+    fake, _s, ex = _upstairs_trip(tmp_path, 60)  # the way does not leave floor 1
+    ex.go("storage")
+    assert not calls(fake, "dock")
+    monkeypatch.setattr(executor, "TOP_UP_BEFORE_UP", False)
+    fake, _s, ex = _upstairs_trip(tmp_path, 60)
+    ex.go("corridor-3a")
+    assert not calls(fake, "dock")
+
+
+def test_top_up_reads_a_waiting_message_before_docking(tmp_path, top_on):
+    fake, _session, ex = _upstairs_trip(tmp_path, 60, requests=[("22:00:05", "R-001", "104 wants a towel."),
+                                                              ("22:09:00", "R-002", "105 wants a towel.")])
+    reads = _inbox_hook(ex)
+    assert ex.inbox_waiting  # R-001 came on the walk to the lobby
+    unread = _unread_at_docks(fake)
+    ex.go("corridor-3a")
+    assert unread == [0] and reads == [1]
+    assert [t.request for t in ex.queue] == ["R-001"]

@@ -5,9 +5,10 @@ from itertools import pairwise
 
 import httpx
 
+from agent import price
 from agent.client import WybeClient
 from agent.config import Settings
-from agent.executor import IDLE_STATUS_EVERY, IDLE_STEPS, Executor
+from agent.executor import IDLE_SCANS_PER_DOCK, IDLE_STATUS_EVERY, IDLE_STEPS, Executor
 from agent.world import Hotel, RobotState, clock_to_seconds
 from tests.fakes.fake_wybe import FakeWybe
 
@@ -39,8 +40,9 @@ def test_idle_hour_polls_status_only_every_tenth_check(tmp_path):
     cmds = _cmds(fake, since)
     assert cmds.count("status") == 3  # checks 0, 10 and 20
     assert all(b != "status" for a, b in pairwise(cmds) if a == "dock")
-    assert cmds.count("dock") == 25 and cmds.count("scan") == 25
-    assert IDLE_STATUS_EVERY == 10 and IDLE_STEPS == 200
+    # one dock per IDLE_SCANS_PER_DOCK scans: the first step docks, then 5 scans, dock again, ...
+    assert cmds.count("dock") == 5 and cmds.count("scan") == 25
+    assert IDLE_STATUS_EVERY == 10 and IDLE_STEPS == 200 and IDLE_SCANS_PER_DOCK == 5
 
 
 def test_wait_for_request_keeps_a_pending_inbox_flag_and_makes_no_call(tmp_path):
@@ -51,7 +53,8 @@ def test_wait_for_request_keeps_a_pending_inbox_flag_and_makes_no_call(tmp_path)
     assert _cmds(fake, since) == [] and ex.inbox_waiting is True
 
 
-def test_request_during_the_walk_back_stops_at_the_next_node(tmp_path):
+def test_request_during_the_walk_back_stops_at_the_next_node(tmp_path, monkeypatch):
+    monkeypatch.setitem(price.SWITCHES, "wet", False)  # pins the old fixed-window wet look; wet on is covered in test_price.py
     fake, _, ex = _setup(tmp_path, requests=[("22:10:00", "R-001", CHARGER)])
     ex.go("corridor-1b")  # three nodes from the dock
     fake._now = clock_to_seconds("22:09:55")  # the first move back crosses the request's time
@@ -102,4 +105,5 @@ def test_wait_for_request_returns_when_told_to_stop(tmp_path):
 
     since = len(fake.log)
     ex.wait_for_request(should_stop=out_of_time)
-    assert _cmds(fake, since).count("dock") == 2
+    cmds = _cmds(fake, since)
+    assert cmds.count("dock") == 1 and cmds.count("scan") == 2  # two idle steps: dock+scan, scan

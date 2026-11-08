@@ -24,7 +24,7 @@ def test_settings_repr_hides_keys(tmp_path):
     s = load_settings((str(f),))
     assert "secret123abc" not in repr(s) and "sk-ant-hidden999" not in repr(s)
     assert s.key == "secret123abc" and s.anthropic_key == "sk-ant-hidden999"
-    assert s.max_rps == 5.0 and s.budget_usd == 30.0
+    assert s.max_rps == 16.0 and s.budget_usd == 30.0  # measured live: 20 req/s clean, 429 above ~22
     assert s.url == "https://nightshift.wybe.me/" and s.final_armed is False
 
 

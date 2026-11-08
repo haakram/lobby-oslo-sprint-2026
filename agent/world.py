@@ -9,7 +9,7 @@ from pathlib import Path
 
 DEFAULT_MAP = Path(__file__).parent / "data" / "hotel_seed1.json"
 NAMED_KINDS = ("corridor", "elevator", "stairwell", "room")  # "corridor-1a" -> corridor, ...
-BLOCK_S = 30 * 60  # a corridor "closed off for cleaning" is avoided this long (sim s), or until seen open
+BLOCK_S = 90 * 60  # a corridor "closed off for cleaning" is avoided this long (sim s), or until seen open; [obs] 227 live cleaning blocks were all still closed 2 h+ after first sighting (median 6.6 h)
 _COUNT = re.compile(r"^(.*\S)\s+x(\d+)$")  # "towel x8" -> ("towel", 8)
 
 

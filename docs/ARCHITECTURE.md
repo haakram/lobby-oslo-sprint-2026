@@ -153,6 +153,17 @@ ignore fields they do not know. Schema for every line type: `docs/runlog.schema.
 - A non-Wybe source: `src/features/nightshift/openRmf.ts` turns an Open-RMF `task_state` + `fleet_state`
   sample (`src/features/nightshift/fixtures/open-rmf-night.json`, test data the team wrote) into v1 lines.
   Natteskift's *Kilde* switch shows it.
+- Two producers without a robot (jury round 5, owner B; Overlevering's *Uten robot* builds the page from them
+  and the booking system only, `src/features/nightsource/compose.ts`):
+  - the night clerk (`src/features/staffinput/entries.ts`, Nattevaktens logg on `/natt`): `room_status`
+    (`source: "staff"`, status `klar` | `opptatt` | `ma_vaskes`), `hazard` (`wet`), `security_event`
+    (`door_open` | `unknown_person`), `note` and `retracted` (`{"target": id}`: Angre adds a line, it never
+    deletes one); every line carries `source: "staff"`, `id`, `by`, `at` (Oslo clock) and `stamp` (ISO),
+    and `sample: true` on the test night. Kept on the device in the pilot (localStorage
+    `lobby:nattevakt-logg`, per handover day; from 21:00 an entry belongs to the next morning);
+    `TODO(phase-3)` a server store;
+  - the door lock (`src/features/doorlock/feed.ts`, test data): one `room_signal` per room,
+    `{"room", "signal": "no_card" | "card_in", "since", "source": "door_lock"}`, never who.
 
 **Read by the app (Lobby), additive, jury branch.** Rom og renhold compares the last `room_status` per
 room with the booking system's test snapshot (`src/features/rooms/pms.ts`, `TODO(phase-3)`):

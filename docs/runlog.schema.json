@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://fettero.local/schemas/runlog-v1.json",
   "title": "Fettero run log v1: one JSON object per line",
-  "description": "What a robot sends Fettero so the 06:00 handover can be written from its night (docs/ARCHITECTURE.md § 4.3). Each line of a .jsonl file is one object, \"v\": 1 on every line; unknown line types and unknown fields are ignored, so a producer can add its own. The handover reads the semantic layer: tasks (start, done with its evidence, failed, declined, handed back), room status, hazards, security events, position and battery. `call` lines are a producer's raw commands (the Wybe Night Shift simulator writes them; another robot need not). Producers today: the Night Shift agent (agent/, every line type) and the Open-RMF adapter (src/features/nightshift/openRmf.ts: start, state, decision, end). A \"done\" counts as confirmed only with two different signals, at least one from outside the robot (the evidence rule, src/features/nightshift/conduct.ts evidenceVerdict): the referee's reply in the simulator, or from a real robot e.g. the compartment sensor and the guest's PIN; two signals that both come from the robot read \"robotens egen observasjon\"; one signal alone reads \"ikke bekreftet\".",
+  "description": "What a robot sends Fettero so the 06:00 handover can be written from its night (docs/ARCHITECTURE.md § 4.3). Each line of a .jsonl file is one object, \"v\": 1 on every line; unknown line types and unknown fields are ignored, so a producer can add its own. The handover reads the semantic layer: tasks (start, done with its evidence, failed, declined, handed back), room status, hazards, security events, position and battery. `call` lines are a producer's raw commands (the Wybe Night Shift simulator writes them; another robot need not). Producers today: the Night Shift agent (agent/, every line type), the Open-RMF adapter (src/features/nightshift/openRmf.ts: start, state, decision, end), the night clerk (src/features/staffinput/entries.ts: decision lines only, every one with data.source \"staff\" plus id, by, at, stamp, and sample on the test night) and the door lock (src/features/doorlock/feed.ts: one room_signal decision per room, data.source \"door_lock\", never who). A \"done\" counts as confirmed only with two different signals, at least one from outside the robot (the evidence rule, src/features/nightshift/conduct.ts evidenceVerdict): the referee's reply in the simulator, or from a real robot e.g. the compartment sensor and the guest's PIN; two signals that both come from the robot read \"robotens egen observasjon\"; one signal alone reads \"ikke bekreftet\".",
   "oneOf": [
     { "$ref": "#/$defs/start" },
     { "$ref": "#/$defs/state" },
@@ -182,7 +182,7 @@
                 "properties": {
                   "room": { "type": "string" },
                   "status": { "enum": ["klar", "opptatt", "ikke_forstyrr", "ma_vaskes"] },
-                  "source": { "type": "string", "description": "room_check | knock | door_sign | lock | energy_slot" },
+                  "source": { "type": "string", "description": "room_check | knock | door_sign | lock | energy_slot | staff (the night clerk looked: by, at, id on the line)" },
                   "note": { "type": "string" }
                 }
               }
@@ -207,6 +207,45 @@
           }
         },
         {
+          "if": { "properties": { "kind": { "const": "room_signal" } } },
+          "then": {
+            "description": "The door lock and the energy slot: one derived signal per room at the handover, never who (staff and master cards filtered at the source; no card id, no entry list).",
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["room", "signal", "source"],
+                "properties": {
+                  "room": { "type": "string" },
+                  "signal": { "enum": ["no_card", "card_in"], "description": "no_card: no guest card used at the door and none in the energy slot since `since`; card_in: a guest card in the energy slot since `since`." },
+                  "since": { "$ref": "#/$defs/clock", "description": "Null: the whole window from 18:00." },
+                  "source": { "const": "door_lock" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "note" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["text"],
+                "properties": { "text": { "type": "string", "maxLength": 280 }, "source": { "type": "string" }, "by": { "type": "string" } }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "retracted" } } },
+          "then": {
+            "description": "A correction (Angre): the line with this id no longer counts. Nothing is deleted.",
+            "properties": {
+              "data": { "type": "object", "required": ["target"], "properties": { "target": { "type": "string" }, "source": { "type": "string" }, "by": { "type": "string" } } }
+            }
+          }
+        },
+        {
           "if": { "properties": { "kind": { "const": "security_event" } } },
           "then": {
             "properties": {
@@ -215,7 +254,7 @@
                 "required": ["place", "event"],
                 "properties": {
                   "place": { "type": "string" },
-                  "event": { "type": "string", "description": "entry_refused | tailgating_blocked | door_forced | unknown_person | …" },
+                  "event": { "type": "string", "description": "entry_refused | tailgating_blocked | door_forced | door_open | unknown_person | …" },
                   "room": { "type": ["string", "null"] },
                   "note": { "type": "string" }
                 }

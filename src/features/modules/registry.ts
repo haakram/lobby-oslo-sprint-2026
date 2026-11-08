@@ -35,6 +35,7 @@ export type ModuleId =
   | "gjester"
   | "ruter"
   | "overlevering"
+  | "natt"
   | "foresporsler"
   | "vedlikehold"
   | "lager"
@@ -85,6 +86,8 @@ export const MODULES: readonly HotelModule[] = [
   { id: "ruter", name: "Ruter", hint: "Korteste vei mellom etasjene", icon: "route", route: "/ruter", group: "hotellet", roles: BOTH, data: "run-log" },
   // Drift
   { id: "overlevering", name: "Overlevering 06:00", short: "Overlevering", hint: "Natten oppsummert for morgenvakten, med kvittering", icon: "clipboard-check", route: "/overlevering", group: "drift", roles: ["receptionist"], data: "mixed" },
+  // The night clerk's own input (jury round 5): what the night staff saw, as the same run-log lines the robot writes.
+  { id: "natt", name: "Nattevaktens logg", short: "Logg", hint: "Rom, farer og notater fra nattevakten til overleveringen", icon: "pencil", route: "/natt", group: "drift", roles: ["receptionist"], data: "mixed" },
   { id: "foresporsler", name: "Forespørsler", hint: "Alt gjestene ber om, fra telefon, robot og personale", icon: "inbox", route: "/foresporsler", group: "drift", roles: BOTH, pinned: true, widget: true, data: "mixed" },
   { id: "vedlikehold", name: "Vedlikehold", hint: "Arbeidsordre: robotens funn og meldte feil", icon: "tool", route: "/vedlikehold", group: "drift", roles: ["robot"], pinned: true, widget: true, data: "mixed" },
   { id: "lager", name: "Lager og lin", short: "Lager", hint: "Lin og utstyr per lagerrom", icon: "archive", route: "/lager", group: "drift", roles: ["robot"], widget: true, data: "test" },
@@ -105,13 +108,14 @@ export const MODULES: readonly HotelModule[] = [
 ];
 
 /**
- * The pilot (jury round 3, the product juror: "ship the cut you claim"): the four screens the first pilot hotel's
- * morning manager works in, in this order. The admin's menu (the siri, jury and admin accounts) shows these
+ * The pilot (jury round 3, the product juror: "ship the cut you claim"): the screens the first pilot hotel works in, in
+ * this order: the morning manager's four and, after the handover, the night clerk's log that feeds it
+ * (jury round 5: a hotel without a robot). The admin's menu (the siri, jury and admin accounts) shows these
  * under *Piloten*, with Oversikt as the start page above them; every other hotel module stays reachable
  * under one collapsed *Utenfor piloten* group (`groupsFor` in `src/ui/nav.ts`). The other roles keep their
  * own menus, and nothing here changes who may open what.
  */
-export const PILOT_MODULES: readonly ModuleId[] = ["overlevering", "rom", "foresporsler", "natteskift"];
+export const PILOT_MODULES: readonly ModuleId[] = ["overlevering", "natt", "rom", "foresporsler", "natteskift"];
 
 export function moduleById(id: ModuleId): HotelModule {
   const found = MODULES.find((module) => module.id === id);

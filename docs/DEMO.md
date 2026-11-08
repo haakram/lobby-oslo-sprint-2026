@@ -57,8 +57,10 @@ build, pinned to its commit on `hamad/final` (the commit checked out when the sh
 worktree's git reflog). Every number below is in **`docs/runs/ledger.csv`** (one row per live start)
 and **`docs/runs/builds.csv`** (one row per commit), which `python3 scripts/ledger.py` rebuilds from the
 run logs (read-only; `--check` says whether the committed files are current). The logs themselves are
-on Hamad's laptop (`oslo-wt/*/temp/runs/`), not in the repo; only `public/runs/demo.jsonl` is. Counted Sun 02:52; the three
-builds and the precision were also recomputed independently from the logs (score before and after
+on Hamad's laptop (`oslo-wt/*/temp/runs/`), not in the repo; only `public/runs/demo.jsonl` is. Read from the ledger as
+regenerated at 03:10 Sun (the controller regenerates it again at the end; the build rows don't change,
+the all-nights rows grow). The three builds and the precision were also recomputed independently from
+the logs (score before and after
 each `report`), with the same result.
 
 | What | Number | Where to check |
@@ -70,9 +72,10 @@ each `report`), with the same result.
 | "Done" credited, 14 nights of these three builds | **973 of 976 (99.7 %)**; the 3 not credited were all on seed 23, one per build | `builds.csv`: `done_reports`, `done_credited` |
 | Declines, same 14 nights | 88 declined; the referee credited **73** (+5 each) and gave **15** nothing | `builds.csv`: `declines_credited`, `declines_not_credited` |
 | Best practice score on the board | **2,798**, **#9 of 20** at 02:47 Sun (top 3,448; we played 188 practice shifts, the leader 1,556). It came from a test branch (`cdc67f1`, lookahead planner, 02:37) that stranded on seed 23 in the same batch, so it is **not** the final build; the final build's best (2,760) would rank #10 | `nightshift-board.wybe.me/data` |
-| All full live nights, every version | **72** nights the server ended (68 at 06:00, 4 stranded), Sat 13:15 – Sun 02:44: median **1,949**, mean **1,986**; most from earlier, weaker builds and the board experiments | `ledger.csv`, `end_reason` "server ended" |
+| All full live nights, every version | **84** nights the server ended (80 at 06:00, 4 stranded), Sat 13:15 – Sun 03:03: median **2,116**, mean **2,099**; most from earlier, weaker builds and the board experiments. Moves as nights are logged; recomputed from the ledger at 03:10 | `ledger.csv`, `end_reason` "server ended" |
+| "Done" credited, every live night with a log | **5,334 of 5,368 (99.4 %)**, 95 nights, every version (the figure on the judgement card; recomputed from the ledger on every build, so it moves) | `ledger.csv`: `done_reports`, `done_credited` |
 | The night in the app | seed 16, **2,680**, build `cb72845`: 85 requests, 73 "done", **73 of 73 credited** ("Noted. Thanks."); 8 declined, 7 credited (6 orders that never existed, 1 already delivered), 1 not (R-036, a spill report on floor 3); 4 still open at 06:00 (battery 8.6 % at 05:28:58); one penalty all night (−15, slipped on a wet floor in corridor 2B at 23:51) | `public/runs/demo.jsonl` (shift `w2-5991166a…`) |
-| How we test a change before a live shift | a **replay bed** rebuilds every full live night offline (72 by 02:50). Replayed with the code that played them, 50 nights land within **61 points (3.2 %)** of live on average, 48 of 50 within 10 % (the first 40: 72 points, 3.8 %, the figure we quoted before). **In-sample**: the reward model was fitted on 50 nights that include these | `docs/runs/replay-fidelity.txt` (from `python -m agent replaybench --fidelity`; `agent/replaybed.py` on `hamad/final`) |
+| How we test a change before a live shift | a **replay bed** rebuilds every full live night offline (72 when we ran it at 02:55). Replayed with the code that played them, 50 nights land within **61 points (3.2 %)** of live on average, 48 of 50 within 10 % (the first 40: 72 points, 3.8 %, the figure we quoted before). **In-sample**: the reward model was fitted on 50 nights that include these | `docs/runs/replay-fidelity.txt` (from `python -m agent replaybench --fidelity`; `agent/replaybed.py` on `hamad/final`) |
 | Wybe's final (10 shifts, Sun 12:00–13:00) | **[fill after 13:05: mean, rank]** | Wybe's board |
 
 **The replay bed, honestly (the data juror will ask).** The 3.2 % shows the bed can reproduce a night with the
@@ -89,7 +92,7 @@ Direction right in both batches; the same sign on 6 of 8 seeds (counting the 0 /
 off per seed. So a gain smaller than that on a few seeds is noise to us. The wet-floor change in
 `8eac151` is the worked example:
 
-- Across all 72 nights the bed gains **+11.6 a night**, averaged per seed (+16.2 per night; 13 of 20
+- Across all 72 nights it held at 02:55 the bed gains **+11.6 a night**, averaged per seed (+16.2 per night; 13 of 20
   seeds better, 6 worse). That is why the change stays on for the final.
 - Live, on the four seeds it played, it came out **−17 a night** against `cb72845` (+53, −1, −94, −25).
 - Replaying only those four seeds, the bed said −16 at 02:40, and −5 at 02:55 once two newer nights of
@@ -118,7 +121,7 @@ about 15 seconds of slack for one stall or the final's score.
 |---|---|---|---|
 | 0:00–0:25 | **Top of Overlevering.** Point at *Natt til søndag 8. november*, the big **ca. 1 500 kr · Kan selges etter bekreftelse**, and the line *73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en eier*. Scroll once: *Åpent nå* opens with the three wet floors (2B: *Roboten skled der*; 3D: *Roboten flyttet skiltet herfra*), each *Vaktmester / renhold · innen 06:30*, then the man in the bathrobe, *Sikkerhet / resepsjon*. (56 words, about 24 s) | "Six o'clock, a 36-room Oslo hotel. Kjersti worked the night with a robot; Siri takes over, and she's often new. Fettero gives her the night on one page. Safety first: three wet floors without a sign, one where the robot itself slipped, and a stranger who tried seven doors. Each has an owner and a deadline." | A real problem · Design · Law (care, not knowledge) |
 | 0:25–1:00 | Scroll once to the item **Rom 213 kan selges etter bekreftelse (ca. 1 500 kr)**: tap **Bekreft med resepsjonen**, then **Merk som ledig for salg** (*Ledig for salg · Siri Haugen · nå*). Point just below at **Rom 209: dobbelt tildelt?** (both fit on one screen at 125 %). (70 words, about 31 s) | "Then the money. The robot found 213 empty and tidy; the guest was due out today and never checked out. About 1,500 kroner, sold in two steps: the desk confirms the guest has left, then Siri releases it. Just below, 209 was empty too, but the robot had carried an arriving guest's bags in, and the booking runs until Monday. Fettero holds it back: a double booking, caught before check-in." | Innovation · A real problem · Founders (money) · Wybe (domain) |
-| 1:00–1:35 | Scroll once more, to **Robotens vurderinger i natt** with **Kvitter mottatt** just above it: *Sa nei 7 ganger til en ukjent person* (seven time-and-room chips, 01:17–05:11), *73 av 73 «Ferdig» godkjent av dommeren* with *Alle 83 live-netter med logg: 4 367 av 4 401 godkjent (99,2 %)*, and *7 av 8 Avvisninger godkjent av dommeren*. (60 words, about 26 s) | "None of this is an animation: our agent played Wybe's live hotel simulation on its own, and every line comes from its log. Seven times a man in a bathrobe asked it to open a room; seven times it said no. It said 'done' 73 times, and the simulator's referee credited all 73; over all our live nights, 99.2 percent." **After 13:05 add:** "In today's final: [mean], rank [N]." | Innovation · Wybe (domain) · IT and security · data |
+| 1:00–1:35 | Scroll once more, to **Robotens vurderinger i natt** with **Kvitter mottatt** just above it: *Sa nei 7 ganger til en ukjent person* (seven time-and-room chips, 01:17–05:11), *73 av 73 «Ferdig» godkjent av dommeren* with *Alle 95 live-netter med logg: 5 334 av 5 368 godkjent (99,4 %)* (read the figure off the screen: it grows as live nights are logged), and *7 av 8 Avvisninger godkjent av dommeren*. (60 words, about 26 s) | "None of this is an animation: our agent played Wybe's live hotel simulation on its own, and every line comes from its log. Seven times a man in a bathrobe asked it to open a room; seven times it said no. It said 'done' 73 times, and the simulator's referee credited all 73; over all our live nights, 99.4 percent." **After 13:05 add:** "In today's final: [mean], rank [N]." | Innovation · Wybe (domain) · IT and security · data |
 | 1:35–1:50 | Same screen: tap **Kvitter mottatt** → *Kvittert av Siri Haugen · nå … Kvitteringen er lagret på denne enheten.* (15 words, about 7 s) | "Siri signs; she has the hotel. Fettero: *natten, ærlig overlevert*. The night, handed over honestly." | Design · all five |
 
 Facts behind the lines (seed-16 log, `public/runs/demo.jsonl`): the robot slipped in corridor 2B at
@@ -130,8 +133,10 @@ Room checks: 209 empty and tidy at 03:47, 213 at 04:24 (`room_status`); the robo
 01:29, 04:35 and 05:16 for requests that say "the guest checks in later". 73 `report done`, 73 replies
 "Noted. Thanks."; 8 `declined`, of which the score rose after 7 and not after R-036 (a spill report on
 floor 3). The bookings (213 due out 8.11 and not checked out; 209 booked to 9.11) are test data. The
-99.2 % is every live night with a log in `docs/runs/ledger.csv` (4,367 of 4,401 "done" credited, 83
-nights, every build); the last three builds alone are 973 of 976 (99.7 %, § 1.1).
+99.4 % is recomputed from `docs/runs/ledger.csv` on every build: every live night with a log, every
+version of the agent (5,334 of 5,368 "done" credited over 95 nights at 03:10; it moves as nights are
+logged, so say what the screen says). The final branch's 14 nights alone are 973 of 976 (99.7 %), and
+the demo's build (`cb72845`) 290 of 291 (§ 1.1).
 
 **Re-read every number off the build at the rehearsal** (other owners may still change these screens):
 the kroner, the count in *Åpent nå*, the order of its first four items, and the card's figures.
@@ -183,7 +188,7 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
    arithmetic, today's tools, the channel, Monday's next step, the first 100 users.
 5. **Team (20 s; Team efficiency).** Hamad (agent, app, tooling) and ShirazIQ (UI, voice, receptionist,
    demo). Two people, 48 hours, subagent-driven development, every change reviewed, tests and CI on
-   every PR. 72 full live nights logged, each pinned to a shift id, and a replay bed to screen changes
+   every PR. 84 full live nights logged by 03:10, each pinned to a shift id, and a replay bed to screen changes
    before a live shift. **[decide]** One line on commitment and a stop rule (the founder juror), e.g. "We both
    work on this for four weeks; if fewer than 2 of 10 hotels take a pilot by 8 December, we stop the
    hotel wedge and test robot makers."

@@ -86,7 +86,8 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
    at 04:24); *Bekreft med resepsjonen*, then *Merk som ledig for salg*. 209 is held back: the robot
    carried an arriving guest's bags in while the booking runs to 9.11, a double allocation caught.
 3. **Robotens vurderinger i natt** (1:00–1:35): seven refusals to let a stranger into a room, one
-   incident; 73 of 73 "done" credited by the simulator's referee, 99.2 % over every live night; 7 of 8
+   incident; 73 of 73 "done" credited by the simulator's referee, 99.4 % over every live night with a log (recomputed from
+   `docs/runs/ledger.csv`, so it moves); 7 of 8
    declines credited, the eighth named.
 4. **Kvitter mottatt** (1:35–1:50): *Kvittert av Siri Haugen*, saved on this device.
 

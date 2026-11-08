@@ -62,7 +62,9 @@ test data, and every list says so.
   nights a build played without being tuned on them: 1,940 there against 2,504 on its tuned seeds, 22 %
   lower. The final build averages 2,560 on tuned seeds; 2,560 × 1,940 / 2,504 ≈ 1,980.
 - **"Done" is checked:** over those 14 nights the agent said "done" 976 times and the referee (Wybe's
-  server) credited 973, **99.7 %**; the 3 it didn't credit were all on seed 23. It declined 88 requests
+  server) credited 973, **99.7 %**; the 3 it didn't credit were all on seed 23. Over every live night
+  with a log, every version, it is 5,334 of 5,368 (99.4 %, 95 nights at 03:10; the app's judgement card
+  recomputes it from the ledger, so it grows as nights are logged). It declined 88 requests
   as false or impossible; the referee credited 73 of those declines and gave 15 nothing.
 - **Board:** best practice score **2,798**, **#9 of 20** on Wybe's practice board at 02:47 Sun (top 3,448;
   we played 188 practice shifts, the leader 1,556). That night came from a test branch (`cdc67f1`,
@@ -73,7 +75,7 @@ test data, and every list says so.
   1 already delivered) and not 1 (a spill report on floor 3); 4 still open at 06:00; one penalty (−15,
   it slipped on a wet floor at 23:51).
 - **How we test a change before a live shift:** a replay bed (`agent/replaybed.py` on `hamad/final`)
-  rebuilds every full live night offline from its log: 72 nights by 02:50 Sun. Replayed with the code
+  rebuilds every full live night offline from its log (72 when we ran it at 02:55 Sun). Replayed with the code
   that played them, 50 nights land within 61 points of live on average (**3.2 %**, 48 of 50 within
   10 %; [`docs/runs/replay-fidelity.txt`](./docs/runs/replay-fidelity.txt)). That number is
   **in-sample**: the bed's reward model was fitted on those same 50 nights. It shows the bed can

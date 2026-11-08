@@ -41,6 +41,14 @@ the ledger.json nights that reported at least one "done"; printed by this script
 How each column is computed (the same rules as the app, src/features/nightshift):
 - ``done_reports``: ``report`` calls with outcome ``done`` that the server accepted (ok).
 - ``done_credited``: those the server answered with its verified reply ("Noted. Thanks.").
+- ``done_after_rise`` / ``done_own`` (jury round 4, the data juror and the Wybe juror): what each "done" rested on. After the
+  rise: a score the robot saw between the request's last ``task_start`` and its report was higher than the
+  score before it, so the simulator's referee had confirmed the work before the robot said "done" (the
+  agent's ``_deliver``/``message`` flows read that rise). Own judgement: no rise during the task; the robot
+  said "done" from what it saw. ``done_own_credited`` of those were credited; ``done_room_check`` /
+  ``done_spill`` (and ``…_credited``) split them by the task's kind. ``done_basis_unknown``: no
+  ``task_start`` line for the request (the earliest logs). The app's ``doneBasis``
+  (src/features/nightshift/conduct.ts) runs the same rule on the night on screen.
 - ``declines_credited`` / ``declines_not_credited``: ``report … declined`` calls whose score went up /
   did not go up between the last score seen before the report and the first one after it
   (``declines_pending``: no score after it, e.g. a log that stops there).
@@ -85,6 +93,9 @@ FIDELITY_TXT = REPO / "docs" / "runs" / "replay-fidelity.txt"
 BOARD_CHECKOUTS = frozenset({"lottery", "lawet", "wetoff", "lafinal", "boardtune"})
 BOARD_BRANCH = re.compile(r"(^|/)board-")
 BUILD, BOARD_TEST = "build", "board-test"
+# The final branch's last four builds (hamad/final, the README's "18 nights"): the done split is also
+# printed over their complete build nights. A list, not a rule: a later build is added here by hand.
+FINAL_BUILDS = ("d4e445c", "cb72845", "8eac151", "c3801e0")
 
 
 def default_roots() -> list[Path]:
@@ -124,6 +135,14 @@ class Night:
     score_drops: int | None = None
     points_lost: int | None = None
     min_battery: float | None = None
+    done_after_rise: int | None = None
+    done_own: int | None = None
+    done_own_credited: int | None = None
+    done_room_check: int | None = None
+    done_room_check_credited: int | None = None
+    done_spill: int | None = None
+    done_spill_credited: int | None = None
+    done_basis_unknown: int | None = None
     t: float = field(default=0.0, repr=False)
 
 
@@ -165,6 +184,9 @@ def read_night(lines: list[dict]) -> dict:
     end: dict | None = None
     last_score: int | None = None
     scores: list[tuple[int, int]] = []  # (index, score) in order
+    basis = {"after_rise": 0, "own": 0, "own_credited": 0, "room_check": 0, "room_check_credited": 0, "spill": 0,
+             "spill_credited": 0, "unknown": 0}
+    open_tasks: dict[str, list] = {}  # request -> [kind, rose since its task_start]
     for index, line in enumerate(lines):
         kind = line.get("type")
         if line.get("clock"):
@@ -174,6 +196,9 @@ def read_night(lines: list[dict]) -> dict:
             if last_score is not None and score < last_score:
                 drops += 1
                 lost += last_score - score
+            if last_score is not None and score > last_score:
+                for task in open_tasks.values():
+                    task[1] = True
             last_score = score
             scores.append((index, score))
         if kind == "state" and isinstance(line.get("battery"), (int, float)):
@@ -181,6 +206,13 @@ def read_night(lines: list[dict]) -> dict:
             min_battery = battery if min_battery is None else min(min_battery, battery)
         if kind == "end":
             end = line
+        if kind == "decision" and line.get("kind") in ("task_start", "task_done", "task_failed"):
+            request = (line.get("data") or {}).get("request")
+            if isinstance(request, str):
+                if line["kind"] == "task_start":
+                    open_tasks[request] = [(line.get("data") or {}).get("kind"), False]
+                else:
+                    open_tasks.pop(request, None)
         if kind == "decision" and line.get("kind") == "request":
             request = (line.get("data") or {}).get("request")
             if isinstance(request, str):
@@ -200,8 +232,19 @@ def read_night(lines: list[dict]) -> dict:
             outcome = args.get("outcome")
             if outcome == "done":
                 done_reports += 1
-                if "thanks" in str(line.get("result", "")).lower():
-                    done_credited += 1
+                thanked = "thanks" in str(line.get("result", "")).lower()
+                done_credited += thanked
+                task = open_tasks.get(str(args.get("request")))
+                if task is None:
+                    basis["unknown"] += 1
+                elif task[1]:
+                    basis["after_rise"] += 1
+                else:
+                    basis["own"] += 1
+                    basis["own_credited"] += thanked
+                    if task[0] in ("room_check", "spill"):
+                        basis[task[0]] += 1
+                        basis[f"{task[0]}_credited"] += thanked
             elif outcome == "declined":
                 declines.append(index)
             elif outcome == "failed":
@@ -239,6 +282,7 @@ def read_night(lines: list[dict]) -> dict:
         "score_drops": drops,
         "points_lost": lost,
         "min_battery": round(min_battery, 1) if min_battery is not None else None,
+        **{f"done_{key}" if key != "unknown" else "done_basis_unknown": value for key, value in basis.items()},
     }
 
 
@@ -378,7 +422,7 @@ def builds_csv(nights: list[Night]) -> str:
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["commit", "commit_source", "first_start", "nights", "mean_score", "best_score", "best_seed",
                      "seeds", "scores", "done_reports", "done_credited", "declines_credited",
-                     "declines_not_credited"])
+                     "declines_not_credited", "done_after_rise", "done_own", "done_own_credited"])
     for commit, group in sorted(by_commit.items(), key=lambda item: min(n.t for n in item[1])):
         best = max(group, key=lambda n: n.score or 0)
         writer.writerow([
@@ -395,6 +439,9 @@ def builds_csv(nights: list[Night]) -> str:
             sum(n.done_credited or 0 for n in group),
             sum(n.declines_credited or 0 for n in group),
             sum(n.declines_not_credited or 0 for n in group),
+            sum(n.done_after_rise or 0 for n in group),
+            sum(n.done_own or 0 for n in group),
+            sum(n.done_own_credited or 0 for n in group),
         ])
     return out.getvalue()
 
@@ -410,14 +457,37 @@ def precision(nights: list[Night]) -> tuple[int, int, int]:
     return len(with_done), sum(n.done_credited or 0 for n in with_done), sum(n.done_reports or 0 for n in with_done)
 
 
+def basis_split(nights: list[Night]) -> dict[str, int]:
+    """The done split summed over `nights`: after the rise, own judgement (credited), by kind, unknown."""
+    keys = ["done_reports", "done_credited", "done_after_rise", "done_own", "done_own_credited", "done_room_check",
+            "done_room_check_credited", "done_spill", "done_spill_credited", "done_basis_unknown"]
+    return {key: sum(getattr(n, key) or 0 for n in nights) for key in keys}
+
+
+def basis_text(label: str, nights: list[Night]) -> str:
+    s = basis_split(nights)
+    own = f"{s['done_own_credited']} of {s['done_own']}"
+    if s["done_own"]:
+        own += f" ({100 * s['done_own_credited'] / s['done_own']:.1f} %)"
+    other = s["done_own"] - s["done_room_check"] - s["done_spill"]
+    other_credited = s["done_own_credited"] - s["done_room_check_credited"] - s["done_spill_credited"]
+    return (f"{label} ({len(nights)} nights): {s['done_reports']} 'done'; {s['done_after_rise']} after the score rose; "
+            f"own judgement {own}: room checks {s['done_room_check_credited']} of {s['done_room_check']}, "
+            f"spills {s['done_spill_credited']} of {s['done_spill']}, other {other_credited} of {other}"
+            + (f"; basis unknown {s['done_basis_unknown']}" if s["done_basis_unknown"] else ""))
+
+
 def ledger_json(nights: list[Night]) -> str:
     keep = ["shift", "started", "seed", "commit", "kind", "complete", "score", "done_reports", "done_credited",
-            "declines_credited", "declines_not_credited"]
+            "declines_credited", "declines_not_credited", "done_after_rise", "done_own", "done_own_credited",
+            "done_room_check", "done_room_check_credited", "done_spill", "done_spill_credited"]
     rows = [{k: asdict(n)[k] for k in keep} for n in counted(nights)]
     doc = {
         "_doc": "Generated by scripts/ledger.py from the live run logs; do not edit. One row per live "
                 "practice shift whose log was found, board tests (kind=board-test) only when complete "
                 "(docs/runs/ledger.csv has every live start).",
+        "live_starts": len(nights),
+        "latest_start": max((n.started for n in nights), default=None),
         "nights": rows,
     }
     return json.dumps(doc, ensure_ascii=False, indent=1) + "\n"
@@ -478,6 +548,10 @@ def main(argv: list[str] | None = None) -> int:
     if reports:
         print(f"all nights (the card's figure): {credited} of {reports} 'done' credited over {count} nights "
               f"({100 * credited / reports:.1f} %)")
+    final = [n for n in complete if n.kind == BUILD and n.commit in FINAL_BUILDS]
+    if final:
+        print("done split, " + basis_text("final branch's last four builds", final))
+    print("done split, " + basis_text("all nights the card counts", [n for n in counted(nights) if (n.done_reports or 0) > 0]))
     builds = [n for n in complete if n.kind == BUILD and n.score is not None]
     if builds:
         best = max(builds, key=lambda n: n.score or 0)

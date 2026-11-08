@@ -157,3 +157,39 @@ def test_a_checkout_whose_tracked_files_differ_from_its_commit_is_a_board_test(t
     (repo / "price.py").write_text("WET = True\n")
     subprocess.run([*git, "switch", "-q", "-c", "hamad/board-lottery2"], check=True)
     assert ledger.kind_of(repo) == "board-test"  # a board branch, under any checkout name
+
+
+def decision(kind: str, request: str, task: str | None = None) -> dict:
+    data = {"request": request} if task is None else {"request": request, "kind": task}
+    return {"v": 1, "type": "decision", "kind": kind, "data": data}
+
+
+def test_done_is_split_by_what_it_rested_on_a_rise_during_the_task_or_the_robots_own_judgement() -> None:
+    night = [
+        state(100),
+        decision("task_start", "R-001", "amenity"),
+        state(90),  # a slip cost points first; the rise after it still counts
+        call("place", {"item": "pillow", "where": "room-101"}, "Placed pillow inside room-101."),
+        state(110),
+        call("report", {"request": "R-001", "outcome": "done", "note": "placed"}, "Noted. Thanks."),
+        decision("task_done", "R-001"),
+        decision("task_start", "R-002", "room_check"),
+        call("report", {"request": "R-002", "outcome": "done", "note": "looked inside"}, "Noted. Thanks."),
+        decision("task_done", "R-002"),
+        state(140),  # the server's credit for R-002 arrives after the report: not a rise R-003 rests on
+        decision("task_start", "R-003", "spill"),
+        call("report", {"request": "R-003", "outcome": "done", "note": "sign placed"}, "Noted."),
+        decision("task_failed", "R-003"),
+        call("report", {"request": "R-004", "outcome": "done", "note": "no task_start"}, "Noted. Thanks."),
+    ]
+    row = ledger.read_night(night)
+    assert row["done_reports"] == 4 and row["done_after_rise"] == 1
+    assert (row["done_own"], row["done_own_credited"]) == (2, 1)
+    assert (row["done_room_check"], row["done_room_check_credited"]) == (1, 1)
+    assert (row["done_spill"], row["done_spill_credited"]) == (1, 0)
+    assert row["done_basis_unknown"] == 1
+    nights = [ledger.Night(shift="w2-" + "a" * 32, started="", seed=1, checkout="x", **{
+        k: v for k, v in row.items() if k in ledger.Night.__dataclass_fields__})]
+    split = ledger.basis_split(nights)
+    assert (split["done_own"], split["done_own_credited"], split["done_after_rise"]) == (2, 1, 1)
+    assert "own judgement 1 of 2 (50.0 %): room checks 1 of 1, spills 0 of 1" in ledger.basis_text("t", nights)

@@ -54,7 +54,7 @@ function Figure({ figure, loading }: { figure: Highlight; loading: boolean }) {
         {figure.method && (
           <details className="group text-xs text-muted">
             <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-accent-text hover:underline pointer-fine:min-h-8">
-              Slik regner vi
+              {figure.methodLabel ?? "Slik regner vi"}
             </summary>
             <div className="flex max-w-[40ch] flex-col gap-1.5 pb-1">
               {figure.method.map((line) => (

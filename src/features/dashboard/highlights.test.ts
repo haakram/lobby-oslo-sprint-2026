@@ -26,6 +26,7 @@ import {
   nightTotals,
   nightVerdict,
   robotDetail,
+  robotShort,
   selectHighlights,
   shiftHour,
   timeSaved,
@@ -116,9 +117,11 @@ describe("the night in facts, by its own clock", () => {
 });
 
 describe("selectHighlights (the figures)", () => {
-  it("gives the admin six good-news figures, green where the figure is good, each with its source", () => {
+  it("gives the admin six good-news figures, green where the figure is good, each with its source, and no vanity figure", () => {
     const figures = selectHighlights(data());
-    expect(figures.map((figure) => figure.label)).toEqual(["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Timer spart, anslag", "Rom klare til salg", "Gjester fornøyd"]);
+    expect(figures.map((figure) => figure.label)).toEqual(["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Rom klare til salg", "Nye bookinger i dag", "Rom sjekket av roboten"]);
+    // Jury round 3 (the product juror): no hours-saved estimate and no test-data guest rating on screen one.
+    expect(figures.some((figure) => figure.id === "spart" || figure.id === "fornoyd")).toBe(false);
     expect(figures).toHaveLength(MAX_HIGHLIGHTS);
     const by = Object.fromEntries(figures.map((figure) => [figure.id, figure]));
     const rooms = data().rooms!.length;
@@ -127,10 +130,10 @@ describe("selectHighlights (the figures)", () => {
     expect(by.inntekt).toMatchObject({ unit: "kr", source: "test" });
     expect(by.inntekt.detail).toMatch(/^Snittpris .+ kr · RevPAR .+ kr$/);
     expect(by.oppgaver).toMatchObject({ value: NIGHT.tally.done, unit: `av ${NIGHT.tally.total}`, tone: "success", source: "run-log" });
-    expect(by.oppgaver.detail).toMatch(new RegExp(`^Godkjent av dommeren \\(Wybe Night Shift-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`));
-    expect(by.spart).toMatchObject({ prefix: "ca.", source: "estimate" });
-    expect(by.spart.method?.join(" ")).toMatch(/Et anslag, ikke en måling/);
-    expect(by.fornoyd).toMatchObject({ value: "4,7", unit: "av 5", tone: "success" });
+    // One line a manager reads; the referee is one tap away, behind "Slik vet vi det".
+    expect(by.oppgaver.detail).toBe(robotShort(NIGHT.tally));
+    expect(by.oppgaver).toMatchObject({ methodLabel: "Slik vet vi det" });
+    expect(by.oppgaver.method?.[0]).toMatch(new RegExp(`^Godkjent av dommeren \\(Wybe Night Shift-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`));
     // One Klare til salg on every screen: ready and free in the booking system (or released), "av 36", with the money line.
     expect(by.klare).toMatchObject({ value: MONEY.readyToSell, unit: `av ${data().rooms!.length}` });
     expect(by.klare.detail).toBe(moneyHeadline(MONEY) ?? undefined);
@@ -139,7 +142,7 @@ describe("selectHighlights (the figures)", () => {
   });
 
   it("gives the robot manager the night's work, the rooms checked and the stores instead of bookings", () => {
-    expect(selectHighlights(data({ role: "robot" })).map((figure) => figure.id)).toEqual(["oppgaver", "spart", "klare", "sjekket", "lager"]);
+    expect(selectHighlights(data({ role: "robot" })).map((figure) => figure.id)).toEqual(["oppgaver", "klare", "sjekket", "lager"]);
     const lager = selectHighlights(data({ role: "robot" })).find((figure) => figure.id === "lager");
     expect(lager).toMatchObject({ value: STOCK.length - 1, unit: `av ${STOCK.length}`, tone: "success" });
   });
@@ -153,7 +156,7 @@ describe("selectHighlights (the figures)", () => {
   it("names under the row which figures are the robot's log, which test data, which estimates", () => {
     const line = figureSources(selectHighlights(data()));
     expect(line).toBe(
-      "Fra robotens natt (kjøringsloggen): Robotens oppdrag i natt, Rom klare til salg. Testdata til bookingsystemet er koblet til: Belegg i natt, Losjiinntekt i natt, Gjester fornøyd. Anslag: Timer spart.",
+      "Fra robotens natt (kjøringsloggen): Robotens oppdrag i natt, Rom klare til salg, Rom sjekket av roboten. Testdata til bookingsystemet er koblet til: Belegg i natt, Losjiinntekt i natt, Nye bookinger i dag.",
     );
   });
 
@@ -171,12 +174,13 @@ describe("selectHighlights (the figures)", () => {
 });
 
 describe("the robot figure's refusals, split by the referee (the judgement card's count)", () => {
-  it("on the demo night: 7 false claims refused and approved, 1 not approved, never \"8 avvist uten bestilling\"", () => {
+  it("on the demo night: the refusals in a manager's words (never \"falske klager\"), 1 not approved, never \"8 avvist uten bestilling\"", () => {
     const lines = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
     const night = foldNight(lines);
     const detail = robotDetail(night, declineSplit(lines));
-    expect(detail).toBe(`Godkjent av dommeren (Wybe Night Shift-simulatoren): ${night.tally.done} av ${night.tally.reported} · 7 falske klager avvist · 1 ikke godkjent`);
-    expect(detail).not.toMatch(/uten bestilling/);
+    expect(detail).toBe(`Godkjent av dommeren (Wybe Night Shift-simulatoren): ${night.tally.done} av ${night.tally.reported} · 6 meldinger uten bestilling og 1 alt levert · 1 ikke godkjent`);
+    expect(detail).not.toMatch(/8 avvist uten bestilling|falsk/);
+    expect(robotShort(night.tally)).toBe(`Alle ${night.tally.done} «ferdig» bekreftet · ${night.tally.handedBack} til en person`);
     // Without the split, the plain count.
     expect(declineShort(null, 3)).toBe("3 avvist etter sjekk");
     expect(declineShort(null, 0)).toBeNull();

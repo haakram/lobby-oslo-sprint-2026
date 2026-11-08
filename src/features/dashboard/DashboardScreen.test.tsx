@@ -26,7 +26,7 @@ const ROBOT = selectRobot(NIGHT);
 const STAFF_DONE = MANUAL_REQUESTS.filter((request) => atNight(request.at) && request.status === "fullfort").length;
 const DONE = NIGHT.tally.done;
 const TOTAL = NIGHT.tally.total;
-const ADMIN_FIGURES = ["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Timer spart, anslag", "Rom klare til salg", "Gjester fornøyd"];
+const ADMIN_FIGURES = ["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Rom klare til salg", "Nye bookinger i dag", "Rom sjekket av roboten"];
 
 /** The widget's heading as the registry names the module; the robot's widget is "Roboten". */
 function widgetName(id: ModuleId): RegExp {
@@ -109,13 +109,15 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(figures().getByText(/^Snittpris [\d\s\u00a0]+ kr · RevPAR [\d\s\u00a0]+ kr$/)).toBeInTheDocument();
     // The night's misses are part of its total, not a red count of their own; the server's verdict is said.
     expect(figure("Robotens oppdrag i natt")).toBe(`${DONE}av ${TOTAL}`);
+    // One line a manager reads; the referee one tap away, behind "Slik vet vi det".
+    expect(figures().getByText(`Alle ${NIGHT.tally.done} «ferdig» bekreftet · ${NIGHT.tally.handedBack} til en person`)).toBeInTheDocument();
+    expect(figures().getByText("Slik vet vi det")).toBeInTheDocument();
     expect(figures().getByText(new RegExp(`^Godkjent av dommeren \\(Wybe Night Shift-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`))).toBeInTheDocument();
     expect(screen.queryByText(/feilet/)).not.toBeInTheDocument();
-    // The estimate says it is one, and how it is made.
-    expect(figure("Timer spart, anslag")).toMatch(/^ca\./);
-    expect(figures().getByText("Slik regner vi")).toBeInTheDocument();
-    // Under the row: which figures are the robot's log, which test data, which estimates.
-    expect(figures().getByText(/^Fra robotens natt \(kjøringsloggen\): Robotens oppdrag i natt, Rom klare til salg\. Testdata/)).toHaveTextContent(/Anslag: Timer spart\.$/);
+    // No vanity figure on screen one (jury round 3, the product juror): no hours saved, no test-data guest rating.
+    expect(figures().queryByText(/Timer spart|Gjester fornøyd/)).not.toBeInTheDocument();
+    // Under the row: which figures are the robot's log and which are test data.
+    expect(figures().getByText(/^Fra robotens natt \(kjøringsloggen\): Robotens oppdrag i natt, Rom klare til salg, Rom sjekket av roboten\. Testdata/)).not.toHaveTextContent(/Anslag/);
 
     // One widget per module that has one, in registry order; the robot is one small widget.
     const widgets = WIDGET_MODULES.map((module) => screen.getByRole("region", { name: widgetName(module.id) }));
@@ -209,8 +211,8 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
   });
 
   it.each<[Role, string[], string[]]>([
-    ["receptionist", ADMIN_FIGURES, ["Rom sjekket av roboten", "Varer over minimum"]],
-    ["robot", ["Robotens oppdrag i natt", "Timer spart, anslag", "Rom klare til salg", "Rom sjekket av roboten", "Varer over minimum"], ["Belegg i natt", "Losjiinntekt i natt", "Gjester fornøyd"]],
+    ["receptionist", ["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Rom klare til salg", "Nye bookinger i dag"], ["Rom sjekket av roboten", "Varer over minimum"]],
+    ["robot", ["Robotens oppdrag i natt", "Rom klare til salg", "Rom sjekket av roboten", "Varer over minimum"], ["Belegg i natt", "Losjiinntekt i natt", "Nye bookinger i dag"]],
   ])("shows the %s only the figures of screens they may open", async (role, shown, hidden) => {
     route();
     render(as(role, <DashboardScreen />));

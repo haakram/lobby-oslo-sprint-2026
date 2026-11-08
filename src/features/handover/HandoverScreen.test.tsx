@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
@@ -43,25 +45,27 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("HandoverScreen (Overlevering 06:00)", () => {
-  it("shows the night's good news, what is open with an owner and a time, and what happened", async () => {
+  it("shows the night's decision figures, what is open with an owner and a time, and what happened", async () => {
     serve(() => new Response(TEST_NIGHT_JSONL, { status: 200 }));
     show();
     // The labels stand under skeletons while the night loads; the details come with it.
-    expect(await screen.findByText("1 støyklage")).toBeInTheDocument();
-    expect(screen.getByText("Gjestesaker løst")).toBeInTheDocument();
-    // The robot's figure is its night's one tally, with the server's verdict on every "done".
+    expect(await screen.findByText("1 «ferdig» bekreftet · 1 til en person")).toBeInTheDocument();
+    // The robot's figure is its night's one tally; the referee and the simulator sit behind "Slik vet vi det".
     expect(screen.getByText("Robotens oppdrag")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        `Godkjent av dommeren (Wybe Night Shift-simulatoren): 1 av 1 · nattevakten ${STAFF_DONE} · AI tok 3 samtaler`,
-      ),
-    ).toBeInTheDocument();
-    // The money is the first figure: the room the system thought occupied, sold after a confirmation.
+    const proof = within(screen.getByRole("region", { name: "Natten i tall" })).getByText("Slik vet vi det").closest("details");
+    expect(proof).toHaveTextContent(
+      `Hver «ferdig» er godkjent av dommeren i Wybe Night Shift-simulatoren: 1 av 1. Nattevakten fullførte ${STAFF_DONE} forespørsler selv. AI-resepsjonisten tok 3 samtaler. I et hotell finnes ingen dommer: der bekrefter dørlåsloggen og robotens foto.`,
+    );
+    expect(screen.queryByText(/Godkjent av dommeren \(Wybe/)).not.toBeInTheDocument();
+    // The money: the room the system holds tonight, sold after a confirmation; then the safety items.
     const figures = screen.getByRole("region", { name: "Natten i tall" });
     expect(within(figures).getByText("Kan selges etter bekreftelse")).toBeInTheDocument();
-    expect(within(figures).getByText("Rom 311")).toBeInTheDocument();
-    expect(within(figures).getByText("Frigitt i dag: ingen ennå")).toBeInTheDocument();
-    expect(screen.getByText("Losjiinntekt i natt")).toBeInTheDocument();
+    expect(within(figures).getByText("Rom 311 · ellers usolgt i natt")).toBeInTheDocument();
+    expect(within(figures).getByText("Sikkerhet, innen 06:30")).toBeInTheDocument();
+    expect(within(figures).getByText("Ingenting som kan skade en gjest")).toBeInTheDocument();
+    // Last night's revenue and the guest matters are rear-view figures: not on the manager's page.
+    expect(screen.queryByText("Losjiinntekt i natt")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gjestesaker løst")).not.toBeInTheDocument();
     // One factual line, green only for what is done.
     expect(screen.getByText("1 oppgave bekreftet")).toBeInTheDocument();
 
@@ -77,7 +81,7 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     const night = screen.getByRole("region", { name: "Dette skjedde i natt" });
     expect(
       within(night).getByText(
-        /^Roboten fant rom 311 tomt og ryddig, men systemet sa opptatt\. Det kan selges etter bekreftelse, ca\. [\d\s\u00a0]+ kr\.$/,
+        /^Roboten fant rom 311 tomt og ryddig, men systemet holder det opptatt\. Det kan selges etter bekreftelse, ca\. [\d\s\u00a0]+ kr\.$/,
       ),
     ).toBeInTheDocument();
     expect(within(night).getByText("Kjersti Lund")).toBeInTheDocument();
@@ -107,7 +111,7 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
 
     show();
     expect(
-      await screen.findByText(/Kvittert av Ana Pereira/),
+      await screen.findByText("Kvittert av Ana Pereira · nå"),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Angre kvitteringen" }));
     expect(
@@ -129,11 +133,39 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(within(open).getByText("Gjort i dag")).toBeInTheDocument();
     const figures = screen.getByRole("region", { name: "Natten i tall" });
     expect(within(figures).getByText("Frigitt for salg i dag")).toBeInTheDocument();
-    expect(within(figures).getByText(/^Frigitt i dag: 1 rom · ca\. [\d\s\u00a0]+ kr$/)).toBeInTheDocument();
-    // The print carries the name, the line and who made it; no contact address exists, so none is invented.
-    const footer = screen.getByText("Fettero · Natten, ærlig overlevert. · Team Fettero, Oslo Sprint 2026");
+    expect(within(figures).getByText("Rom 311")).toBeInTheDocument();
+    // The print carries the masthead, the line, who made it and that it names guests; no contact address exists, so none is invented.
+    const footer = screen.getByText("Fettero · Natten, ærlig overlevert. · Team Fettero, Oslo Sprint 2026 · Inneholder personopplysninger. Makuleres etter vakten.");
     expect(footer.tagName).toBe("FOOTER");
     expect(footer.textContent).not.toMatch(/@|kontakt|https?:|www\./i);
+    expect(document.querySelector("[data-print-masthead]")).toHaveTextContent(/^Fettero\s*Natten, ærlig overlevert\./);
+  });
+
+  it("on the demo night reads act → evidence → sign: safety in the bell's red, the catch, the sleeper with its test-data note, the signature last", async () => {
+    const demo = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+    serve(() => new Response(demo, { status: 200 }));
+    show();
+    const open = await screen.findByRole("region", { name: /^Åpent nå/ });
+    // Safety is never quieter than "Gjest venter" (jury round 3, the design juror): the danger tone, as in the bell.
+    const safety = within(open).getAllByText("Sikkerhet");
+    expect(safety).toHaveLength(2);
+    expect(safety[0].className).toMatch(/text-danger/);
+    expect(within(open).getByText("Gjest venter").className).toMatch(/text-warning/);
+    // The catch, said as what Fettero did, and the bookings said to be the team's test data, with the pilot's evidence.
+    expect(within(open).getByText("Fettero holdt rommet tilbake")).toBeInTheDocument();
+    expect(within(open).getAllByText("Testdata: bookingen er lagt inn av teamet")).toHaveLength(2);
+    expect(within(open).getAllByText("I en pilot: dørlåsloggen og energibryteren. Roboten går ikke inn i rom som er booket.")).toHaveLength(2);
+    // The catch leads the figures, then the money.
+    const figures = screen.getByRole("region", { name: "Natten i tall" });
+    expect(within(figures).getByText("Holdt tilbake fra salg")).toBeInTheDocument();
+    expect(within(figures).getByText("Rom 209: dobbelt tildelt?")).toBeInTheDocument();
+    expect(within(figures).getByText("Rom 213 · ellers usolgt i natt")).toBeInTheDocument();
+    // Reading order: the work, the robot's judgement card, the signature last.
+    const card = document.getElementById("vurderinger-overlevering");
+    const sign = screen.getByRole("region", { name: "Kvitter mottatt" });
+    expect(card).not.toBeNull();
+    expect(open.compareDocumentPosition(card!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card!.compareDocumentPosition(sign) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("says when there is no night yet, and when the night failed to load, with Prøv igjen", async () => {

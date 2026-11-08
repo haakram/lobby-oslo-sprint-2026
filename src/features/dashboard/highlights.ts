@@ -1,7 +1,7 @@
 import { canAccess } from "@/features/auth/roles";
 import { moneyHeadline } from "@/features/rooms/money";
 import { occupancy, revenueLastNight } from "@/features/rooms/pms";
-import { type DeclineSplit, declineSplitText } from "@/features/nightshift/declines";
+import { type DeclineSplit, declineSplitPlain } from "@/features/nightshift/declines";
 import type { DashboardData } from "./data";
 import { formatKroner } from "./format";
 import { requestKindLabel } from "./labels";
@@ -211,8 +211,10 @@ export type Highlight = {
   prefix?: string;
   /** One quiet line under the label ("Snittpris 1 462 kr · RevPAR 1 259 kr"). */
   detail?: string;
-  /** "Slik regner vi": how an estimate is made, one tap away. */
+  /** "Slik regner vi": how an estimate is made, one tap away (or, with `methodLabel`, how a figure is known). */
   method?: string[];
+  /** The disclosure's name when it is proof, not arithmetic: "Slik vet vi det". */
+  methodLabel?: string;
   source: FigureSource;
   tone: "default" | "success";
   /** The screen the figure belongs to: a role sees only figures of screens it may open. */
@@ -226,7 +228,9 @@ export const MAX_HIGHLIGHTS = 6;
 
 /**
  * The hotel's good news in figures, in the order a manager reads them: last night's rooms and money,
- * the robot's night, the rooms to sell, the guests. Filtered by what the role may open, six at most,
+ * the robot's night, the rooms to sell, the guests. No estimate and no test-data rating among them (jury
+ * round 3, the product juror: "Timer spart" and "Gjester fornøyd" were vanity figures on screen one; DEMO § 1: hours
+ * saved are never claimed as a measurement). Filtered by what the role may open, six at most,
  * so the receptionist and the robot manager each get a full row of their own. The robot's figures
  * are the one tally of its night (nightTotals); occupancy and money are the booking system's
  * (rooms/pms.ts, the same as Gjester and Overlevering).
@@ -242,23 +246,9 @@ export function selectHighlights(data: DashboardData): Highlight[] {
   const total = rooms?.length ?? ROOMS_IN_HOTEL;
   const revenue = revenueLastNight(total);
   const belegg = occupancy(revenue, total);
-  const saved = night ? timeSaved(night) : null;
   const aboveMinimum = data.stock.length - data.lowStock.length;
 
-  const rating: Highlight | null = data.reviews
-    ? {
-        id: "fornoyd",
-        label: "Gjester fornøyd",
-        value: data.reviews.average.toFixed(1).replace(".", ","),
-        unit: "av 5",
-        source: "test",
-        tone: data.reviews.average >= 4 ? "success" : "default",
-        route: "/gjester",
-        fromNight: false,
-      }
-    : null;
-
-  const all: Highlight[] = ([
+  const all: Highlight[] = [
     {
       id: "belegg",
       label: "Belegg i natt",
@@ -286,20 +276,10 @@ export function selectHighlights(data: DashboardData): Highlight[] {
       label: "Robotens oppdrag i natt",
       value: totals ? totals.done : null,
       unit: totals ? `av ${totals.total}` : undefined,
-      detail: night ? robotDetail(night, data.declines) : undefined,
+      detail: night ? robotShort(night.tally) : undefined,
+      method: night ? [robotDetail(night, data.declines)] : undefined,
+      methodLabel: "Slik vet vi det",
       source: "run-log",
-      tone: "success",
-      route: "/",
-      fromNight: true,
-    },
-    {
-      id: "spart",
-      label: "Timer spart, anslag",
-      value: saved ? hoursLabel(saved.net) : null,
-      prefix: "ca.",
-      unit: saved ? "t" : undefined,
-      method: saved ? timeSavedMethod(saved) : undefined,
-      source: "estimate",
       tone: "success",
       route: "/",
       fromNight: true,
@@ -315,7 +295,6 @@ export function selectHighlights(data: DashboardData): Highlight[] {
       route: "/rom",
       fromNight: true,
     },
-    rating,
     { id: "bookinger", label: "Nye bookinger i dag", value: data.guests.bookedToday.length, source: "test", tone: "default", route: "/gjester", fromNight: false },
     { id: "sjekket", label: "Rom sjekket av roboten", value: checked, unit: checked !== null ? `av ${total}` : undefined, source: "run-log", tone: "success", route: "/hotell", fromNight: true },
     {
@@ -328,18 +307,27 @@ export function selectHighlights(data: DashboardData): Highlight[] {
       route: "/lager",
       fromNight: false,
     },
-  ] satisfies (Highlight | null)[]).filter((figure): figure is Highlight => figure !== null);
+  ];
 
   return all.filter((figure) => canAccess(data.role, figure.route)).slice(0, MAX_HIGHLIGHTS);
 }
 
 /**
  * The robot's refusals in short, split by the referee's verdict (owner C's declineSplit, the judgement
- * card's count): "7 falske klager avvist · 1 ikke godkjent". Without the run log's split, the plain count.
+ * card's count, in its plain words): "6 meldinger uten bestilling og 1 alt levert · 1 ikke godkjent".
+ * Never "falske klager" on a page that is printed and filed (jury round 3, the design juror): a guest who said
+ * something never came is not called a liar. Without the run log's split, the plain count.
  */
 export function declineShort(split: DeclineSplit | null | undefined, declined: number): string | null {
-  if (split && split.total > 0) return declineSplitText(split).replace(" (godkjent av dommeren)", "");
+  if (split && split.total > 0) return declineSplitPlain(split);
   return declined > 0 ? `${declined} avvist etter sjekk` : null;
+}
+
+/** "Alle 73 «ferdig» bekreftet · 4 til en person": the robot figure's one line on a manager's page (jury round 3). */
+export function robotShort(robot: { done: number; reported: number; handedBack: number }): string {
+  const all = robot.reported > 0 && robot.done === robot.reported;
+  const confirmed = all ? (robot.done === 1 ? "1 «ferdig» bekreftet" : `Alle ${robot.done} «ferdig» bekreftet`) : `${robot.done} av ${robot.reported} «ferdig» bekreftet`;
+  return robot.handedBack > 0 ? `${confirmed} · ${robot.handedBack} til en person` : confirmed;
 }
 
 /** "Godkjent av dommeren (Wybe Night Shift-simulatoren): 73 av 73 · 7 falske klager avvist · 1 ikke godkjent": the robot figure's line. */

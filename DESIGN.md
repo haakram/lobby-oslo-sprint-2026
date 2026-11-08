@@ -29,14 +29,23 @@ page title (`Rom og renhold | Fettero`) and the meta description read them from 
 - **The line: *Natten, ærlig overlevert.*** In English: *The night, handed over honestly.* It names the
   differentiator: the morning gets the night as it was, every "done" confirmed by the server. Login lede,
   meta description, README top, first slide and last spoken line; nowhere a second tagline.
-- **What it is, in one sentence:** *Roboten tar natten, og morgenvakten får hele hotellet på én side kl.
-  06:00.* Goes after the line (login, meta description).
+- **What it is, in one sentence:** *Morgenvakten på hotellet får natten på én side kl. 06:00: rom som kan
+  selges, det som er åpent med eier og frist, og hva som faktisk ble gjort, fra nattevaktens notater og
+  eventuelt en robot.* Goes after the line (login, meta description, link preview, app manifest). It sells
+  without a robot (jury round 3, the marketing juror): the handover is the product, the robot one source beside the night
+  staff's own notes. "kl. 06:00" never breaks.
 - **The hotel is *Hotell Nattskift*:** only the demo hotel's name, under the product's name in the rail and
   in Oversikt's top bar. The host sees *Korttidsutleie i Oslo* there instead.
 - **The robot is *roboten*,** lower case, in running text ("Roboten fullførte 73 av 77 oppdrag"). It is
   not called Fettero: Fettero is the product the robot works for.
 - The name is set in Schibsted Grotesk 700, tight (−0.02 em in the rail, −0.03 em on login); no logo mark,
   no orange in the name (orange is the one action and the robot).
+- **The icon is the name's F:** Schibsted Grotesk 700's F (its stem and arms read from the font, on whole
+  pixels at 16, 32 and 48) in night steel's ink `#e8edf0` on night steel `#121c24`, 6 px corners on the
+  32 px grid: `src/app/favicon.ico`, `icon.svg`, `apple-icon.png`, and `public/icon-192/512.png` plus a
+  maskable 512 for the manifest (`src/app/manifest.ts`). A shared link previews with
+  `src/app/opengraph-image.png` (1200×630, the name, the line, the handover's three promises and *Kvitter
+  mottatt*, no figures from a night). The proxy serves these brand files without a session.
 
 ## Character, one decision per axis
 
@@ -123,6 +132,19 @@ left out for every role (`needs` in the registry: *Snakk gjennom roboten* withou
 opened by its address, the screen says what is missing). Entries per role, without the voice agent:
 admin 13 (was 18), robotansvarlig 9 (was 10), resepsjonist 8, vert 4.
 
+**The admin's menu is the pilot** (jury round 3, the product juror: 13 modules in the sidebar for a four-screen pilot).
+The admin accounts (`siri`, `jury`, `admin`) see Oversikt on its own at the top (the start page, no label),
+then **Piloten**: Overlevering 06:00 · Rom og renhold · Forespørsler · Natteskift (`PILOT_MODULES` in the
+registry, in that order). Every other hotel screen sits in one folded group, **Utenfor piloten**, in
+registry order: a disclosure button with the label, the count in Martian Mono and a chevron
+(`aria-expanded`, named "Utenfor piloten, 8 skjermer"); open, it says *Bygget, men ikke med i piloten.*
+and lists them. It opens by itself while one of its screens is on (the current screen is never hidden) and
+otherwise stays as the person left it. The host's group, on a host screen, comes before it. Only the menu
+changes: the admin may still open everything, and an admin viewing as another role gets that role's menu.
+The other roles' groups below are unchanged.
+
+Groups for the desk and the robot manager (and the registry's order):
+
 - **Hotellet:** Oversikt · Rom og renhold · Gjester og bookinger · Ruter
 - **Drift:** Overlevering 06:00 · Forespørsler · Vedlikehold · Lager og lin · Ansatte og vakter
 - **Roboten:** 3D-kart · Natteskift · Robotens øyne · Snakk gjennom roboten
@@ -140,7 +162,8 @@ phone reads one dark header.
 
 The phone bar holds the role's first four *pinned* modules (Oversikt, Rom, then Gjester / Forespørsler
 / Vedlikehold by role; the admin's bar is Oversikt, Overlevering, Rom, Forespørsler, so the 06:00 handover is one
-tap away) and *Meny*; everything else is in the sheet, each with its one-line hint. Short
+tap away) and *Meny*; everything else is in the sheet, each with its one-line hint (the admin's sheet: Oversikt,
+Piloten, then *Utenfor piloten* folded, as in the rail). Short
 names (`short` in the registry: Rom, Gjester, Lager, Vakter, Øyne, Stemme) go under the icons.
 
 ### Oversikt, the whole hotel, good news first
@@ -344,7 +367,7 @@ All in `src/ui/`, exported from `src/ui/index.ts`. The module frame lives in
 | `Sheet` | `open`, `onClose`, `title` | Bottom sheet, `role="dialog"`, Escape and scrim close it, focus returns to the opener. |
 | `Skeleton` | `className` | `sunken`, pulse, `aria-hidden`. |
 | `EmptyState` / `ErrorState` | `title`, `body`, `action` | As above. |
-| `AppNav` | `bell` | Desktop (≥ 1024 px): a 232 px dark rail with the bell beside the name at the top (not for the host, nor on the host's screens), the labelled groups and the user plate bottom-left. Phone: a 56 px dark top bar (name, bell) and a 64 px dark bottom bar with the role's first four pinned screens and *Meny*, which opens a sheet with every group, each screen's hint and the user plate. Filtered by `canAccess(effectiveRole, path)`. The active item carries a 2 px `accent` mark on its left (rail) or top (bar) that fades in, and its icon in `accent-text`. |
+| `AppNav` | `bell` | Desktop (≥ 1024 px): a 232 px dark rail with the bell beside the name at the top (not for the host, nor on the host's screens), the labelled groups (the admin's: Oversikt, *Piloten*, *Utenfor piloten* folded) and the user plate bottom-left. Phone: a 56 px dark top bar (name, bell) and a 64 px dark bottom bar with the role's first four pinned screens and *Meny*, which opens a sheet with every group, each screen's hint and the user plate. Filtered by `canAccess(effectiveRole, path)`. The active item carries a 2 px `accent` mark on its left (rail) or top (bar) that fades in, and its icon in `accent-text`. |
 | `UserPlate` | — | Generated monogram (no photos), name, role; opens a menu with the view switcher for admins (Admin · Resepsjonist · Robotansvarlig, calls `switchView`) and *Logg ut*. |
 | `Monogram` | `name`, `size` | Initials on `accent-soft`, `accent-text`; the robot's is `accent` with `on-accent`. |
 | `ViewAsBanner` (auth) | — | The band under the top edge while an admin views as another role: "Viser som Resepsjonist · Tilbake til admin". |

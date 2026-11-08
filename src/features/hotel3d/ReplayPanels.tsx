@@ -4,9 +4,9 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   itemName,
   nodeFloor,
+  placeInSentence,
   placeName,
   type ReplayEvent,
-  ROOM_STATUS_LABEL,
   type RoomStatus,
   simToClock,
   type Snapshot,
@@ -14,18 +14,38 @@ import {
   type WorkOrder,
   workOrderType,
 } from "@/features/replay";
-import { Badge, type BadgeTone, Button, Card, cx, fadeRise, RegenIcon } from "@/ui";
-import { STATUS_CSS_VAR } from "./tokens";
+import { osloToday } from "@/features/reception/dates";
+import type { Sellable } from "@/features/rooms/reconcile";
+import { bookingLine, heldLine } from "@/features/rooms/RoomChecksPanel";
+import { AvvikMark, Badge, type BadgeTone, Button, Card, cx, fadeRise, RegenIcon, RoomStatusTag } from "@/ui";
+import { isRoomStatusKey, ROOM_STATUS } from "@/ui/roomStatus";
+import { checkWord, heldOf, pendingOf, roomWord, toConfirmOf } from "./held";
 
-const STATUS_TONE: Record<RoomStatus, BadgeTone> = {
-  klar: "success",
-  ma_vaskes: "warning",
-  opptatt: "neutral",
-  // A door hanger, not a job: warning means "må vaskes" (DESIGN.md, room states).
-  ikke_forstyrr: "neutral",
-  avvik: "danger",
-  ukjent: "neutral",
-};
+/** The replay's status as the shared room-status key (avvik is a mark, not a status). */
+function statusKey(status: RoomStatus) {
+  return isRoomStatusKey(status) ? status : "ukjent";
+}
+
+/** The rack's "Holdt tilbake" or "Bekreft først" as a key tag: the taken (opptatt) look, never the green of Klar. */
+function CheckTag({ word }: { word: string }) {
+  const look = ROOM_STATUS.opptatt;
+  return (
+    <span className={cx("inline-flex items-center gap-1.5 text-sm font-medium whitespace-nowrap", look.ink)}>
+      <span aria-hidden="true" className={cx("h-1.5 w-5 shrink-0 rounded-full", look.tag)} />
+      {word}
+    </span>
+  );
+}
+
+/**
+ * A sleeper in the room check's words (Rom's row): "Systemet: opptatt i natt (Ola Nygård), skulle reist
+ * 7.11. Utsjekk ikke registrert. Roboten fant rommet tomt og ryddig kl. 04:24. Bekreft med resepsjonen,
+ * så kan det selges."
+ */
+export function toConfirmLine(row: Sellable, today: string = osloToday()): string {
+  const at = row.at ? ` kl. ${row.at.slice(0, 5)}` : "";
+  return `${bookingLine(row, today)}. Roboten fant rommet tomt og ryddig${at}. Bekreft med resepsjonen, så kan det selges.`;
+}
 
 /** One room, as the night has seen it so far: status, the robot's visits, open faults. */
 export function RoomCard({
@@ -43,6 +63,11 @@ export function RoomCard({
 }) {
   const room = snapshot.rooms[roomId];
   const status = room?.status ?? "ukjent";
+  // Held back by the room check (held.ts), or a sleeper still to confirm: taken, in the rack's words, with why.
+  const held = heldOf(room);
+  const toConfirm = toConfirmOf(room);
+  const pending = pendingOf(room);
+  const word = checkWord(room);
   const tasks = (timeline?.tasks ?? []).filter((task) => task.room === roomId && task.start <= snapshot.t);
   const requests = new Set(tasks.map((task) => task.id));
   const roomWord = `rom ${roomId.replace(/^room-/, "")}`;
@@ -67,20 +92,24 @@ export function RoomCard({
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span aria-hidden="true" className="inline-block size-3 rounded-[2px] border border-line-strong" style={{ background: STATUS_CSS_VAR[status] }} />
-        <Badge tone={STATUS_TONE[status]}>{ROOM_STATUS_LABEL[status]}</Badge>
+        {/* The same tag as the key rack on Rom (src/ui/roomStatus.ts), and the avvik as its quiet mark. */}
+        {word ? <CheckTag word={word} /> : <RoomStatusTag status={statusKey(status)} />}
+        <AvvikMark count={orders.length} />
         {room?.since !== null && room?.since !== undefined && (
           <span className="font-mono text-sm tabular-nums text-muted">siden {simToClock(room.since, false)}</span>
         )}
       </div>
       {room?.note && <p className="text-base text-muted">{room.note}</p>}
+      {held && <p className="text-base">{heldLine(held)}</p>}
+      {toConfirm && <p className="text-base">{toConfirmLine(toConfirm)}</p>}
+      {pending && <p className="text-base">Sendt til resepsjonen for utsjekk i bookingsystemet. Venter på PMS-en før rommet selges.</p>}
       {orders.length > 0 && (
         <ul aria-label="Arbeidsordre for rommet" className="flex flex-col gap-1">
           {orders.map((order) => (
             <li key={order.id} className="flex items-start gap-2 text-sm">
-              <RegenIcon name="alert-triangle" className="mt-0.5 size-4 shrink-0 text-danger" />
+              <RegenIcon name="alert-triangle" className="mt-0.5 size-4 shrink-0 text-muted" />
               <span>
-                <Badge tone="danger" className="mr-2">
+                <Badge tone="neutral" className="mr-2">
                   {workOrderType(order.type)}
                 </Badge>
                 {order.text}
@@ -154,7 +183,7 @@ export function TaskCard({ snapshot, finished, className }: { snapshot: Snapshot
             {task.room && (
               <div>
                 <dt className="text-muted">{placeName(task.room)}</dt>
-                <dd>{ROOM_STATUS_LABEL[room?.status ?? "ukjent"]}</dd>
+                <dd>{roomWord(room)}</dd>
               </div>
             )}
           </dl>
@@ -164,7 +193,7 @@ export function TaskCard({ snapshot, finished, className }: { snapshot: Snapshot
           <p className="text-lg font-semibold tracking-[-0.01em]">
             {finished ? "Skiftet er ferdig" : robot?.node === "charging-dock" ? "Lader" : "Venter på oppgave"}
           </p>
-          <p className="text-base text-muted">{robot ? `Roboten står ved ${placeName(robot.node).toLowerCase()}.` : "Venter på skiftet."}</p>
+          <p className="text-base text-muted">{robot ? `Roboten står ved ${placeInSentence(robot.node)}.` : "Venter på skiftet."}</p>
         </>
       )}
       {robot && robot.carrying.length > 0 && (

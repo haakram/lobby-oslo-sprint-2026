@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseRunLog } from "@/features/nightshift/runlog";
-import { HOTEL_NODES, HOTEL_ROOMS, placeName, roomNumber } from "./hotel";
-import { buildTimeline, clockToSim, robotPoseAt, simToClock, snapshotAt, taskTitle } from "./timeline";
+import { HOTEL_NODES, HOTEL_ROOMS, placeInSentence, placeName, roomNumber } from "./hotel";
+import { buildTimeline, clockToSim, humanise, robotPoseAt, simToClock, snapshotAt, taskTitle } from "./timeline";
 
 const SAMPLE = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
 const { lines } = parseRunLog(SAMPLE);
@@ -76,11 +76,14 @@ describe("buildTimeline on the demo night", () => {
   it("describes the night in Norwegian, newest-last", () => {
     const done = timeline.events.find((event) => event.kind === "task_done");
     expect(done).toMatchObject({ label: "Fullført", tone: "success", request: "R-001" });
-    expect(done!.text).toBe("phone-charger x1 delivered to rom 319 (+23 p)");
+    expect(done!.text).toBe("Lader levert til rom 319 (+23 p)");
     const placed = timeline.events.find((event) => event.kind === "call:place" && event.text.startsWith("skilt"));
     expect(placed!.text).toMatch(/^skilt for vått gulv ved korridor /);
-    const refused = timeline.events.find((event) => event.kind === "task_failed" && /Do Not Disturb/.test(event.text));
-    expect(refused).toMatchObject({ label: "Avstått", tone: "warning" });
+    const refused = timeline.events.find((event) => event.kind === "task_failed" && /Ikke forstyrr/.test(event.text));
+    expect(refused).toMatchObject({ label: "Avstått", tone: "neutral", text: "Ikke forstyrr-skilt på rom 208; banket ikke på" });
+    // A claim checked and declined is a right call: "Avvist", in Norwegian, never red.
+    const declined = timeline.events.find((event) => event.kind === "task_failed" && event.label === "Avvist");
+    expect(declined).toMatchObject({ tone: "neutral", text: "Ingen bestilling av vannflaske fra rom 319 i natt; ingenting å levere" });
     const knock = timeline.events.find((event) => event.kind === "call:knock");
     expect(knock!.text).toMatch(/^Rom 319 · /);
     let previous = 0;
@@ -92,6 +95,27 @@ describe("buildTimeline on the demo night", () => {
 });
 
 describe("snapshotAt", () => {
+  it("marks a room with an open work order as avvik over its own status, never as a status of its own", () => {
+    const order = timeline.workOrders.find((o) => o.room && timeline.map.nodes[o.room]);
+    if (!order?.room) throw new Error("expected a work order on a room");
+    const before = snapshotAt(timeline, Math.max(0, order.t - 1)).rooms[order.room];
+    const after = snapshotAt(timeline, order.t).rooms[order.room];
+    expect(before.avvik).toBe(false);
+    expect(after.avvik).toBe(true);
+    expect(after.status).not.toBe("avvik");
+    expect(timeline.roomChanges.some((change) => change.status === "avvik")).toBe(false);
+  });
+
+  it("names the refused stranger as a manager's event, in Norwegian", () => {
+    const demo = buildTimeline(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
+    const refused = demo.events.filter((event) => event.kind === "stranger_refused");
+    expect(refused).toHaveLength(7);
+    expect(refused[0]).toMatchObject({ label: "Sa nei", tone: "success", clock: "01:17:02" });
+    expect(refused[0].text).toBe("Åpnet ikke rom 308 for en ukjent person: ga ikke fra seg nøkkelkort og fulgte ikke etter");
+    const plea = demo.events.find((event) => event.kind === "person");
+    expect(plea?.text).toBe("En mann i badekåpe stoppet roboten og ba om å bli sluppet inn i rom 308");
+  });
+
   it("at 22:00 the robot is docked, nothing checked, score 0", () => {
     const snap = snapshotAt(timeline, 0);
     expect(snap.clock).toBe("22:00:00");
@@ -147,7 +171,11 @@ describe("snapshotAt", () => {
 describe("names", () => {
   it("speaks the hotel's Norwegian", () => {
     expect(placeName("room-214")).toBe("Rom 214");
-    expect(placeName("corridor-3a")).toBe("Korridor 3a");
+    expect(placeName("corridor-3a")).toBe("Korridor 3A");
+    // In a sentence only the first letter is lowered: "korridor 2B", as Overlevering and the robot card spell it.
+    expect(placeInSentence("corridor-2b")).toBe("korridor 2B");
+    expect(placeInSentence("room-319")).toBe("rom 319");
+    expect(humanise("Slipped at corridor-2b near room-213.")).toBe("Slipped at korridor 2B near rom 213.");
     expect(placeName("kitchen-pass")).toBe("Kjøkkenluke");
     expect(roomNumber("room-214")).toBe("214");
     expect(taskTitle("R-021", "tray", "room-214", "tray-214")).toBe("R-021 · Romservice til 214");

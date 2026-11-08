@@ -136,7 +136,7 @@ describe("robotWalk", () => {
     expect(task.steps.map((s) => [s.node, s.actions, s.ride, s.metres, s.seconds])).toEqual([
       ["front-desk", ["spør resepsjonen"], null, 0, 30],
       ["elevator-2", ["heis til 2. etasje"], { from: 1, to: 2 }, 14, 60],
-      ["corridor-2a", ["bank på rom 201", "lever brett til 201", "meld utført"], null, 4, 15],
+      ["corridor-2a", ["bank på rom 201", "lever brett til 201", "meld fullført"], null, 4, 15],
     ]);
     // The stops' paths join up into the task's whole walk.
     expect(task.steps.flatMap((s, i) => (i === 0 ? s.path : s.path.slice(1)))).toEqual(task.path.length ? ["front-desk", ...task.path.slice(1)] : ["front-desk"]);

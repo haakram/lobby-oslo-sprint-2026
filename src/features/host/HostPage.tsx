@@ -48,7 +48,7 @@ export function HostPage({
           <EmptyState
             icon={<RegenIcon name="home" size={28} />}
             title="Ingen boliger ennå"
-            body="Når Airbnb-kontoen din er koblet til, henter Lobby boligene, bookingene og meldingene dine hit av seg selv."
+            body="Når Airbnb-kontoen din er koblet til, henter Fettero boligene, bookingene og meldingene dine hit av seg selv."
           />
         )}
         {host.kind === "error" && (
@@ -150,8 +150,8 @@ export function Bell() {
       <Sheet open={open} onClose={() => setOpen(false)} title="Varsler" surface="light">
         <p className="text-base text-muted">
           {waiting.length === 0
-            ? "Alt er i orden. Lobby sier fra her når noe trenger deg."
-            : `${waiting.length} ting trenger deg. Resten har Lobby ordnet.`}
+            ? "Alt er i orden. Fettero sier fra her når noe trenger deg."
+            : `${waiting.length} ting trenger deg. Resten har Fettero ordnet.`}
         </p>
         <ul className="mt-3 divide-y divide-line">
           {[...waiting, ...items.filter((item) => item.done)].map((item) => (

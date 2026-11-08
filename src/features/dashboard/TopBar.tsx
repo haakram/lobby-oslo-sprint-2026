@@ -1,4 +1,5 @@
 import { Badge, RegenIcon, Skeleton } from "@/ui";
+import { HandoverLink } from "@/ui/HandoverLink";
 import { hhmm, percent } from "./format";
 import { placeLabel, requestKindLabel } from "./labels";
 import type { RobotView } from "./selectors";
@@ -58,6 +59,7 @@ export function TopBar({
           {/* The phone's app bar already names the hotel. */}
           <span className="hidden text-base font-semibold lg:inline">{HOTEL_NAME}</span>
           <span className="text-sm text-muted">{night ?? "Natten"} · overlevering 06:00</span>
+          <HandoverLink />
         </div>
 
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">

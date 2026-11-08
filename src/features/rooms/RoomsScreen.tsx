@@ -8,7 +8,7 @@ import { placeLabel } from "@/features/dashboard/labels";
 import { RoomBoard } from "@/features/dashboard/RoomBoard";
 import { RoomSheet } from "@/features/dashboard/RoomSheet";
 import { RunBadge } from "@/features/dashboard/TopBar";
-import { cleaningHref, countRooms, selectRoomNight } from "@/features/dashboard/selectors";
+import { cleaningHref, countRooms, DAY_ROUND, selectRoomNight, withClosed, withHeld } from "@/features/dashboard/selectors";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
@@ -17,6 +17,8 @@ import { SourceNote } from "@/features/modules/SourceNote";
 import { byRole, cleanersToday } from "@/features/staff/testData";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, Monogram, Skeleton, Stat } from "@/ui";
 import { assignRooms } from "./housekeeping";
+import { RoomChecksPanel } from "./RoomChecksPanel";
+import { useRoomCheck } from "./useRoomCheck";
 
 /**
  * Rom og renhold: the key rack (every room's status as the robot last saw it), today's cleaning
@@ -35,7 +37,24 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
   const technician = byRole("Vedlikehold").find((member) => member.shift === "dag") ?? null;
   const maintenance = useMemo(() => selectMaintenance({ orders, statusOf, assignee: technician?.name ?? null }), [orders, statusOf, technician]);
   const outOfOrder = useMemo(() => outOfOrderRooms(maintenance), [maintenance]);
+  const rackRooms = useMemo(() => (rooms ? withClosed(rooms, outOfOrder) : null), [rooms, outOfOrder]);
   const assignments = useMemo(() => (rooms ? assignRooms(rooms, cleanersToday()) : null), [rooms]);
+  // "Klare til salg" is the one figure Oversikt shows too: ready, free in the booking system or released today.
+  const { money } = useRoomCheck(ready ? run.lines : null, rackRooms);
+  // The rack says what the room check says: a room held back is taken, one still to confirm is not a green Klar,
+  // and one sent to reception reads "Venter på PMS-en" until the booking system confirms it (as Oversikt and the 3D map).
+  const boardRooms = useMemo(
+    () =>
+      rackRooms && money
+        ? withHeld(
+            rackRooms,
+            money.held.map((row) => row.room),
+            money.toSell.map((row) => row.room),
+            money.released.map((row) => row.room),
+          )
+        : rackRooms,
+    [rackRooms, money],
+  );
 
   const [sheet, setSheet] = useState<{ room: string; open: boolean } | null>(initialRoom ? { room: initialRoom, open: true } : null);
   const openRoom = useCallback((room: string | null) => {
@@ -78,11 +97,11 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
     <ModulePage
       module="rom"
       ready={ready}
-      lede="Slik roboten sist så rommene, hvem som vasker i dag, og rommene som ikke kan selges."
+      lede="Slik roboten sist så rommene, hva som kan selges i dag, og hvem som vasker."
       meta={run.source === "live" ? <RunBadge run={run} /> : undefined}
       actions={
         dirty.length > 0 ? (
-          <Link href={cleaningHref(dirtyIds)} className={buttonClasses("primary")}>
+          <Link href={DAY_ROUND} className={buttonClasses("primary")}>
             Lag renholdsrute
           </Link>
         ) : unchecked.length > 0 ? (
@@ -94,14 +113,22 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
     >
       <FigureRow label="Rommene i tall">
         {/* Ready rooms in green; the rest are plain counts. The rooms to clean are the header's action. */}
-        <Figure label="Klare til salg" value={counts?.klar} unit={rooms ? `av ${rooms.length}` : undefined} tone={counts?.klar ? "success" : "default"} />
+        <Figure
+          label="Klare til salg"
+          value={money?.readyToSell ?? undefined}
+          unit={rooms ? `av ${rooms.length}` : undefined}
+          tone={money?.readyToSell ? "success" : "default"}
+        />
         <Figure label="Må vaskes" value={counts?.ma_vaskes} />
         <Figure label="Ikke sjekket" value={counts?.ukjent} />
         <Figure label="Ute av drift" value={rooms ? outOfOrder.length : undefined} />
       </FigureRow>
 
+      {/* Good news first: rooms the booking system thought were taken that can be sold today. */}
+      <RoomChecksPanel lines={ready ? run.lines : null} rooms={rackRooms} />
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] lg:items-start lg:gap-8">
-        <RoomBoard rooms={rooms} clock={robot?.clock ?? null} onOpen={openRoom} />
+        <RoomBoard rooms={boardRooms} clock={robot?.clock ?? null} onOpen={openRoom} />
 
         <div className="flex min-w-0 flex-col gap-6 lg:gap-8">
           {/* The route itself is the header's action; the panel says what it will cover. */}

@@ -59,7 +59,7 @@ describe("TaskWalk (Ruter → Robot, one task)", () => {
       expect.stringMatching(/^1Resepsjon · spør resepsjonen/),
       expect.stringMatching(/^2Kjøkkenluke · hent brett til 201.*46 m/),
       expect.stringMatching(/^3Heis til 2\. etasje · fra 1\. etasje/),
-      expect.stringMatching(/^4Korridor 2A · bank på rom 201, lever brett til 201, meld utført/),
+      expect.stringMatching(/^4Korridor 2A · bank på rom 201, lever brett til 201, meld fullført/),
     ]);
     const pins = [...container.querySelectorAll<HTMLElement>("[data-pin-step]")].map((pin) => pin.textContent);
     expect(pins).toEqual(["1", "2", "3", "4"]);

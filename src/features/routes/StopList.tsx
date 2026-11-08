@@ -1,24 +1,28 @@
 import type { Product } from "@/features/catalog/products";
+import { PICKLIST_WORDS, type PicklistWords } from "@/features/picklist/guides";
 import { Button } from "@/ui";
 import type { RouteMatrix, TourLeg } from "./types";
 
-function via(m: RouteMatrix, leg: TourLeg): string {
+/** " via heis" / " via trapp" (or the guide language's words) when a leg changes floor, else nothing. */
+export function via(m: RouteMatrix, leg: TourLeg, words: PicklistWords = PICKLIST_WORDS.nb): string {
   const kinds = new Set(leg.path.map((id) => m.nodes[id].kind));
-  if (kinds.has("elevator")) return " via heis";
-  if (kinds.has("stairwell")) return " via trapp";
+  if (kinds.has("elevator")) return ` ${words.viaLift}`;
+  if (kinds.has("stairwell")) return ` ${words.viaStairs}`;
   return "";
 }
 
-/** One product with its SKU and a way to take it off the pick list. */
-export function ProductRow({ product, onRemove }: { product: Product; onRemove: (sku: string) => void }) {
+/** One product with its SKU and a way to take it off the pick list. The name is the catalogue's, in bokmål. */
+export function ProductRow({ product, onRemove, words = PICKLIST_WORDS.nb }: { product: Product; onRemove: (sku: string) => void; words?: PicklistWords }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <p className="min-w-0">
-        <span className="block truncate text-base">{product.name}</span>
+        <span lang="nb" className="block truncate text-base">
+          {product.name}
+        </span>
         <span className="font-mono text-sm text-muted tabular-nums">{product.sku}</span>
       </p>
-      <Button variant="ghost" className="shrink-0 text-sm" aria-label={`Fjern ${product.name}`} onClick={() => onRemove(product.sku)}>
-        Fjern
+      <Button variant="ghost" className="shrink-0 text-sm" aria-label={words.removeLabel(product.name)} onClick={() => onRemove(product.sku)}>
+        {words.remove}
       </Button>
     </div>
   );
@@ -31,20 +35,26 @@ export function StopList({
   order,
   productsAt,
   onRemove,
+  words = PICKLIST_WORDS.nb,
 }: {
   matrix: RouteMatrix;
   legs: TourLeg[];
   order: string[];
   productsAt: Map<string, Product[]>;
   onRemove: (sku: string) => void;
+  /** The pick list's words in the guide language (bokmål by default). */
+  words?: PicklistWords;
 }) {
   const back = legs.at(-1);
   return (
     <div>
       <p className="text-sm text-muted">
-        Start: <span className="text-text">{matrix.nodes[matrix.start].label ?? matrix.start}</span>
+        {words.start}:{" "}
+        <span lang="nb" className="text-text">
+          {matrix.nodes[matrix.start].label ?? matrix.start}
+        </span>
       </p>
-      <ol aria-label="Plukkrekkefølge" className="mt-3 flex flex-col">
+      <ol aria-label={words.heading} className="mt-3 flex flex-col">
         {order.map((id, i) => {
           const products = productsAt.get(id) ?? [];
           const leg = legs[i];
@@ -58,16 +68,18 @@ export function StopList({
                 {i + 1}
               </span>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-semibold">{products[0]?.locationLabel ?? matrix.nodes[id].label ?? id}</h3>
+                <h3 lang="nb" className="text-base font-semibold">
+                  {products[0]?.locationLabel ?? matrix.nodes[id].label ?? id}
+                </h3>
                 <p className="text-sm text-muted">
-                  {matrix.nodes[id].floor}. etasje ·{" "}
-                  <span className="font-mono whitespace-nowrap tabular-nums">{Math.round(leg.metres)} m</span>
-                  {i === 0 ? " fra start" : ` fra stopp ${i}`}
-                  {via(matrix, leg)}
+                  {words.floor(matrix.nodes[id].floor)} ·{" "}
+                  <span className="font-mono whitespace-nowrap tabular-nums">{Math.round(leg.metres)} m</span>{" "}
+                  {i === 0 ? words.fromStart : words.fromStop(i)}
+                  {via(matrix, leg, words)}
                 </p>
                 <div className="mt-2 flex flex-col gap-1">
                   {products.map((p) => (
-                    <ProductRow key={p.sku} product={p} onRemove={onRemove} />
+                    <ProductRow key={p.sku} product={p} onRemove={onRemove} words={words} />
                   ))}
                 </div>
               </div>
@@ -77,8 +89,8 @@ export function StopList({
       </ol>
       {back && (
         <p className="mt-4 border-t border-line pt-3 text-sm text-muted">
-          Tilbake til start: <span className="font-mono whitespace-nowrap text-text tabular-nums">{Math.round(back.metres)} m</span>
-          {via(matrix, back)}
+          {words.backToStart}: <span className="font-mono whitespace-nowrap text-text tabular-nums">{Math.round(back.metres)} m</span>
+          {via(matrix, back, words)}
         </p>
       )}
     </div>

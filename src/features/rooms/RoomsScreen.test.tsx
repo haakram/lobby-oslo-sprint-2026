@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { foldNight, selectRooms } from "@/features/dashboard/selectors";
 import { parseRunLog } from "@/features/nightshift/runlog";
+import { osloToday } from "@/features/reception/dates";
 import { assignRooms, roomsToClean } from "./housekeeping";
 import { RoomsScreen } from "./RoomsScreen";
 
@@ -67,7 +68,8 @@ describe("RoomsScreen (Rom og renhold)", () => {
 
     // One primary on the screen, in the header, above the rack (a phone sees it without scrolling).
     const send = await screen.findByRole("link", { name: "Lag renholdsrute" });
-    expect(send).toHaveAttribute("href", "/ruter?rom=room-201,room-214");
+    // Ruter opens on Dagens renhold (the night's dirty rooms and today's departures), where the saving shows.
+    expect(send).toHaveAttribute("href", "/ruter");
     expect(send.compareDocumentPosition(screen.getByRole("region", { name: "Romstatus" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(rack().getByRole("button", { name: /^Rom 201: Må vaskes/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Renholdere i dag" })).toBeInTheDocument();
@@ -92,6 +94,23 @@ describe("RoomsScreen (Rom og renhold)", () => {
     render(<RoomsScreen initialRoom="room-319" />);
     const sheet = await screen.findByRole("dialog", { name: "Rom 319" });
     expect(within(sheet).getAllByText("Gjesteklage").length).toBe(2);
+  });
+
+  it("shows a room sent to reception as Venter på PMS-en on its own rack, never a green Klar, like Oversikt and the 3D map", async () => {
+    // The demo night: 213 is free in the room check but still booked, so the rack says "Bekreft først" until reception acts.
+    const demo = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+    route({ run: demo });
+    const { unmount } = render(<RoomsScreen />);
+    expect(await rack().findByRole("button", { name: /^Rom 213: Bekreft først/ })).toBeInTheDocument();
+    unmount();
+
+    // Step 2 done (on Rom or Overlevering): sent to reception, the booking system not yet confirming it.
+    const at = { at: "06:05", by: "Hanne Vold", receptionist: "Hanne Vold", checks: ["folio", "bagasje", "kort"] };
+    localStorage.setItem("lobby:room-check-marks", JSON.stringify({ [osloToday()]: { "room-213": { action: "released", ...at, confirmed: at } } }));
+    route({ run: demo });
+    render(<RoomsScreen />);
+    expect(await rack().findByRole("button", { name: /^Rom 213: Venter på PMS-en/ })).toBeInTheDocument();
+    expect(rack().queryByRole("button", { name: /^Rom 213: (Klar|Bekreft først)/ })).not.toBeInTheDocument();
   });
 
   it("shows an error with a retry when the night can't be loaded", async () => {

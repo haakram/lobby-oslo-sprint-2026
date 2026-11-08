@@ -21,19 +21,23 @@ import {
 import { HostFigures, HostPage, longDate } from "./HostPage";
 import { type HostReady, useHost } from "./HostProvider";
 
-export const OVERVIEW_FIGURES = ["Bookinger i november", "Belegg i november", "Inntekt hittil i november", "Snittvurdering", "Timer spart", "Oppgaver gjort for deg"];
+/**
+ * Only figures the host's own data proves (product review, round 3): no "Timer spart" or "Oppgaver
+ * gjort for deg", which were per-stay assumptions shown as facts, unlike the hotel side's "ca." and method.
+ */
+export const OVERVIEW_FIGURES = ["Bookinger i november", "Belegg i november", "Inntekt hittil i november", "Snittvurdering", "Netter booket i november", "Opphold fulgt opp"];
 
 const STATUS_TONE: Record<ApartmentStatus, BadgeTone> = { klar: "success", "ny-gjest": "success", "gjest-inne": "neutral", rengjores: "neutral" };
 
 export const HANDLER: Record<HandlerKind, { icon: RegenName; word: string; className: string }> = {
   renholder: { icon: "user", word: "Renholder", className: "text-muted" },
-  // The robot keeps its orange, as everywhere in Lobby.
+  // The robot keeps its orange, as everywhere in Fettero.
   robot: { icon: "agent", word: "Robot", className: "text-accent-text" },
   automatikk: { icon: "zap", word: "Automatisk", className: "text-muted" },
 };
 
 const STEP: Record<StepState, { word: string; icon: RegenName; className: string }> = {
-  done: { word: "Ferdig", icon: "circle-check", className: "text-success" },
+  done: { word: "Fullført", icon: "circle-check", className: "text-success" },
   active: { word: "Pågår", icon: "clock", className: "text-text" },
   planned: { word: "Planlagt", icon: "circle-frame", className: "text-line-strong" },
 };
@@ -73,8 +77,8 @@ function Overview({ host }: { host: HostReady }) {
         <Stat label={`Belegg i ${month.month}`} value={percent(month.occupancy)} tone="success" />
         <Stat label={`Inntekt hittil i ${month.month}`} value={kr(month.earned)} unit="kr" />
         <Stat label="Snittvurdering" value={decimal(month.rating)} unit="av 5" tone="success" />
-        <Stat label="Timer spart" value={month.hoursSaved} unit="t" tone="success" />
-        <Stat label="Oppgaver gjort for deg" value={month.tasksDone} tone="success" />
+        <Stat label={`Netter booket i ${month.month}`} value={month.nights} />
+        <Stat label="Opphold fulgt opp" value={month.staysSoFar} tone="success" />
       </HostFigures>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:items-start lg:gap-8">
@@ -89,12 +93,14 @@ function Overview({ host }: { host: HostReady }) {
           </section>
 
           <section aria-labelledby="bytter-heading" data-enter>
-            <Card className="sm:p-6">
+            {/* Two apartments side by side only when the panel itself has room (design review, round 5: at
+                1152 px the two columns squeezed to two or three words a line). */}
+            <Card className="@container sm:p-6">
               <PanelHead id="bytter-heading" title="Dagens bytter" note="Utsjekk, rengjøring og innsjekk, og hvem som tar hvert steg." />
               {day.turnovers.length === 0 ? (
                 <p className="mt-3 text-base text-muted">Ingen bytter i dag. Alle gjestene blir der de er.</p>
               ) : (
-                <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
+                <div className="mt-4 grid grid-cols-1 gap-6 @min-[40rem]:grid-cols-2 @min-[40rem]:gap-8">
                   {day.turnovers.map((turnover) => (
                     <TurnoverSteps key={turnover.apartment.id} turnover={turnover} />
                   ))}
@@ -121,15 +127,20 @@ function Overview({ host }: { host: HostReady }) {
 function ApartmentTile({ entry }: { entry: ApartmentNow }) {
   return (
     <li data-tile>
-      <Card className="flex h-full flex-col gap-3 sm:p-6">
-        <div className="flex items-start justify-between gap-3">
+      <Card className="@container flex h-full flex-col gap-3 sm:p-6">
+        {/* The badge sits beside the name only when the tile has room, else above it (design review, round
+            5: at 1152 px "Ny gjest i dag" covered "Grünerløkka-leiligheten"). */}
+        <div className="flex flex-col-reverse items-start gap-2 @min-[18rem]:flex-row @min-[18rem]:justify-between @min-[18rem]:gap-3">
           <div className="min-w-0">
-            <h3 className="font-semibold">{entry.apartment.name}</h3>
+            <h3 className="font-semibold [overflow-wrap:anywhere]">{entry.apartment.name}</h3>
+            {/* The dot stays with the place, so a wrapped line never starts or stands with a lone "·". */}
             <p className="text-sm text-muted">
-              <span className="whitespace-nowrap">{entry.apartment.area}</span> · <span className="whitespace-nowrap">{entry.apartment.layout}</span>
+              <span className="whitespace-nowrap">{entry.apartment.area} ·</span> <span className="whitespace-nowrap">{entry.apartment.layout}</span>
             </p>
           </div>
-          <Badge tone={STATUS_TONE[entry.status]}>{STATUS_WORD[entry.status]}</Badge>
+          <Badge tone={STATUS_TONE[entry.status]} className="shrink-0">
+            {STATUS_WORD[entry.status]}
+          </Badge>
         </div>
         <p className="text-sm">{entry.line}</p>
         {entry.guards.length > 0 && (
@@ -248,7 +259,7 @@ function AutomationLog({ day }: { day: HostDay }) {
       <Card className="sm:p-6">
         <PanelHead id="ordnet-heading" title="Ordnet for deg" count={day.log.length} note="Siste døgn" />
         {shown.length === 0 ? (
-          <p className="mt-3 text-base text-muted">Ingenting å gjøre ennå i dag. Lobby fører det opp her når det skjer.</p>
+          <p className="mt-3 text-base text-muted">Ingenting å gjøre ennå i dag. Fettero fører det opp her når det skjer.</p>
         ) : (
           <ul className="mt-2 divide-y divide-line">
             {shown.map((entry) => {

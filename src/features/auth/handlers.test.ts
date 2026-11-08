@@ -51,7 +51,7 @@ describe("POST /api/auth/login", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.session).toMatchObject({ user: { u: "hamad", name: "Hamad", role: "admin" }, view: "admin", effectiveRole: "admin" });
-    expect(body.next).toBe("/");
+    expect(body.next).toBe("/overlevering"); // the pilot accounts land on the one page (round 5)
     const header = response.headers.get("set-cookie") ?? "";
     expect(header).toMatch(/HttpOnly/i);
     expect(header).toMatch(/SameSite=lax/i);
@@ -146,7 +146,9 @@ describe("POST /api/auth/login", () => {
     const wrongRole = await handleLogin(post("/api/auth/login", { username: "resepsjon", password: PASSWORD, next: "/hotell" }), deps());
     expect((await wrongRole.json()).next).toBe("/");
     const offsite = await handleLogin(post("/api/auth/login", { username: "hamad", password: PASSWORD, next: "//evil.example" }), deps());
-    expect((await offsite.json()).next).toBe("/");
+    expect((await offsite.json()).next).toBe("/overlevering");
+    const oversikt = await handleLogin(post("/api/auth/login", { username: "hamad", password: PASSWORD, next: "/foresporsler" }), deps());
+    expect((await oversikt.json()).next).toBe("/foresporsler");
   });
 
   it("sends the host to their own app, never to the hotel's front page", async () => {

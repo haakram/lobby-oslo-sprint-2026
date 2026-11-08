@@ -1,9 +1,13 @@
 import type { Role } from "@/features/auth/roles";
 import type { GuestDay } from "@/features/guests/testData";
+import type { NightSafety } from "@/features/handover/safety";
 import type { StockItem } from "@/features/inventory/testData";
 import type { WorkOrderView } from "@/features/maintenance/select";
+import type { DoneBasis, SelfContradiction } from "@/features/nightshift/conduct";
+import type { DeclineSplit } from "@/features/nightshift/declines";
 import type { RunStatus } from "@/features/nightshift/useRun";
 import type { RequestView } from "@/features/requests/select";
+import type { RoomMoney } from "@/features/rooms/money";
 import type { ShiftId, StaffMember } from "@/features/staff/testData";
 import type { Night, RobotView, RoomView } from "./selectors";
 import type { CallsState } from "./useReceptionCalls";
@@ -23,6 +27,15 @@ export type DashboardData = {
   nightStatus: RunStatus;
   night: Night | null;
   rooms: RoomView[] | null;
+  /** What can hurt a guest, from the run log (unsigned wet floors, the stranger); null until the night is in. */
+  safety: NightSafety | null;
+  /** The room check's money and the one Klare til salg figure (rooms/money.ts); moves when a room is released. */
+  money: RoomMoney | null;
+  /** The robot's refusals split by the referee's verdict (nightshift/declines.ts); null until the night is in. */
+  declines?: DeclineSplit | null;
+  /** What each "done" rested on, and the room checks the robot's own log disputes (nightshift/conduct.ts); null until the night is in. */
+  basis?: DoneBasis | null;
+  contradictions?: SelfContradiction[] | null;
   robot: RobotView | null;
   requests: RequestView[];
   maintenance: WorkOrderView[];

@@ -6,6 +6,8 @@
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  /* The renderer gives each label a z-index; kept inside this layer, so the HUD (floors, legend) stays on top (round 6). */
+  isolation: isolate;
 }
 
 .h3d-labels > div {
@@ -59,11 +61,14 @@
 .h3d-place[data-dim],
 .h3d-floor[data-dim],
 .h3d-room[data-quiet],
-.h3d-place[data-quiet] {
+.h3d-place[data-quiet],
+.h3d-room[data-hidden] {
   opacity: 0;
 }
 
 .h3d-robot {
+  /* Beside the robot, not over it: the scene anchors the left edge at the robot's middle. */
+  margin-left: 22px;
   font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;
   font-weight: 600;
@@ -72,16 +77,30 @@
   background: var(--accent);
   padding: 6px 10px;
   border-radius: 6px;
-  max-width: 280px;
+  /* Beside the robot it must still fit a phone's width: the rest ellipsises. */
+  max-width: min(280px, 42vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Near the view's right edge the label sits on the robot's left, anchored by its right edge (scene.ts placeRobotLabel). */
+.h3d-robot[data-flip] {
+  margin-left: -22px;
 }
 
 .h3d-robot > div {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* No side holds the whole label: it narrows to the room there is and each line wraps, two lines at most. */
+.h3d-robot[data-narrow] > div {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
 }
 
 .h3d-robot:empty {
@@ -134,7 +153,7 @@
 .h3d-labels[data-compact] .h3d-robot {
   font-size: 12px;
   padding: 4px 8px;
-  max-width: 220px;
+  max-width: min(220px, 42vw);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,10 +1,13 @@
 import { canAccess } from "@/features/auth/roles";
 import type { DashboardData } from "@/features/dashboard/data";
-import { percent } from "@/features/dashboard/format";
+import { hhmm, percent } from "@/features/dashboard/format";
 import { placeLabel } from "@/features/dashboard/labels";
 import { batteryLow } from "@/features/dashboard/TopBar";
+import { corridorName, SAFETY_DUE, STRANGER_CHECK, STRANGER_OWNER, WET_FLOOR_OWNER, type WetFloor } from "@/features/handover/safety";
+import { openWetFloorsInOrder, staffSafetyText } from "@/features/handover/select";
 import { storeName } from "@/features/inventory/testData";
 import { type ModuleId, moduleById } from "@/features/modules/registry";
+import { placePhrase } from "@/features/staffinput/read";
 import type { RegenName } from "@/ui/icons/regenPaths";
 
 /**
@@ -33,7 +36,8 @@ export type Alert = {
 /** The bell lists this many; anything after it is named in one line, never dropped silently. */
 export const MAX_ALERTS = 5;
 
-export type AlertData = Pick<DashboardData, "role" | "requests" | "maintenance" | "outOfOrder" | "guests" | "calls" | "lowStock" | "robot">;
+export type AlertData = Pick<DashboardData, "role" | "requests" | "maintenance" | "outOfOrder" | "guests" | "calls" | "lowStock" | "robot"> &
+  Partial<Pick<DashboardData, "safety">>;
 
 function open(module: ModuleId) {
   const definition = moduleById(module);
@@ -51,12 +55,107 @@ function roomNumber(room: string): string {
   return room.replace(/^room-/, "");
 }
 
+/**
+ * "Vått gulv uten skilt i korridor 2B" · "Vått gulv i lobbyen, skilt satt ut": a floor with a sign out is
+ * still Overlevering's safety sak (it needs mopping), so it stays here, said as it is.
+ */
+function wetFloorTitle(floor: WetFloor): string {
+  const place = floor.source === "staff" ? placePhrase(floor.place) : `i ${corridorName(floor.place)}`;
+  return floor.signed ? `Vått gulv ${place}, skilt satt ut` : `Vått gulv uten skilt ${place}`;
+}
+
+/** Since when and why, or who on the night shift reported it: "Siden 02:15. Meldt av Kjersti Lund, skilt satt ut 02:16." */
+function wetFloorDetail(floor: WetFloor): string {
+  const since = floor.since ? `Siden ${hhmm(floor.since)}.` : "I natt.";
+  if (floor.source === "staff") return `${since} Meldt av ${floor.reported?.by ?? "nattevakten"}${floor.sign ? `, ${floor.sign}` : ""}.`;
+  const why = floor.signMoved
+    ? ` Skiltet ble flyttet til ${floor.signMoved.to ? corridorName(floor.signMoved.to) : "et nytt søl"}.`
+    : floor.slippedAt
+      ? " Roboten skled der."
+      : "";
+  return `${since}${why}`;
+}
+
 /** Every alert the role may act on, Haster first. The bell shows the first MAX_ALERTS. */
 export function selectAlerts(data: AlertData): Alert[] {
   const alerts: Alert[] = [];
   const may = (route: string) => canAccess(data.role, route);
 
-  // The robot gave these back: it failed them, or the night ended before it got there.
+  // Safety first (review round 3): each open wet floor is its own Haster, with an owner and a time, then the
+  // stranger the robot refused all night and the night clerk's doors and persons: Overlevering's straks
+  // saker, one for one (the bell passes the same safety as the page, useHandover).
+  const wet = data.maintenance.filter((order) => order.safety && order.status !== "lost");
+  const wetScreen: ModuleId = may("/vedlikehold") ? "vedlikehold" : "hotell3d";
+  const wetAction = wetScreen === "vedlikehold" ? open("vedlikehold") : { label: "Vis i 3D-kartet", href: "/hotell" };
+  const lost = new Set(data.maintenance.filter((order) => order.status === "lost").map((order) => order.id));
+  // The same open floors in the same order as Overlevering's safety row (handover/select.ts).
+  const floors = data.safety ? openWetFloorsInOrder(data.safety.wetFloors, (id) => lost.has(id)) : null;
+  if (floors) {
+    for (const floor of floors) {
+      alerts.push({
+        id: `wet-floor:${floor.place}`,
+        level: 1,
+        module: wetScreen,
+        priority: "hoy",
+        icon: "alert-triangle",
+        title: wetFloorTitle(floor),
+        detail: `${wetFloorDetail(floor)} ${WET_FLOOR_OWNER}, ${SAFETY_DUE}.`,
+        action: wetAction,
+      });
+    }
+  } else if (wet.length > 0) {
+    // Without the run log's safety reading (a test, an old caller): one alert from Vedlikehold's orders.
+    const places = wet.map((order) => {
+      const label = placeLabel(order.place ?? order.room);
+      return label.charAt(0).toLowerCase() + label.slice(1);
+    });
+    alerts.push({
+      id: "wet-floor",
+      level: wet.length,
+      module: wetScreen,
+      priority: "hoy",
+      icon: "alert-triangle",
+      title: wet.length === 1 ? `Vått gulv uten skilt i ${places[0]}` : `${wet.length} våte gulv uten skilt`,
+      detail: `${wet.length === 1 ? `Siden ${wet[0].at ?? "i natt"}` : `I ${list(places)}`}. Sett ut et varselskilt eller tørk opp før gjestene står opp.`,
+      action: wetAction,
+    });
+  }
+
+  // The robot refused a stranger at door after door and told no one (round 2, robot-domain review): a person must know.
+  const stranger = data.safety?.stranger;
+  if (stranger) {
+    const rooms = stranger.rooms.length || stranger.refusals.length;
+    const screen: ModuleId = may("/overlevering") ? "overlevering" : "natteskift";
+    alerts.push({
+      id: "stranger",
+      level: stranger.refusals.length,
+      module: screen,
+      priority: "hoy",
+      icon: "shield",
+      // Overlevering's neutral words (round 4, marketing review): who he is, nobody knows; check the innocent explanation first.
+      title: `En person ba roboten slippe ham inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}`,
+      detail: `${stranger.refusals.length > 1 ? `${hhmm(stranger.first)}–${hhmm(stranger.last)}. Roboten sa nei hver gang.` : `Kl. ${hhmm(stranger.first)}. Roboten sa nei.`} ${STRANGER_CHECK} ${STRANGER_OWNER}, ${SAFETY_DUE}.`,
+      action: open(screen),
+    });
+  }
+
+  // The night clerk's own doors and persons the robot's log has no item for: Overlevering's same safety rows.
+  const clerkScreen: ModuleId = may("/natt") ? "natt" : "overlevering";
+  for (const entry of data.safety?.staff ?? []) {
+    alerts.push({
+      id: `staff-${entry.id}`,
+      level: 1,
+      module: clerkScreen,
+      priority: "hoy",
+      icon: entry.hazard === "door" ? "key" : "shield",
+      title: entry.hazard === "door" ? `Dør ${placePhrase(entry.place)}: sjekk at den er lukket og låst` : `En person ${placePhrase(entry.place)}, meldt av nattevakten`,
+      detail: `${staffSafetyText(entry)} ${STRANGER_OWNER}, ${SAFETY_DUE}.`,
+      action: open(clerkScreen),
+    });
+  }
+
+  // The robot gave these back: it failed them, or the night ended before it got there. Not what it
+  // refused on good grounds (no order on record) or what the night manager called off: those are done with.
   const handed = data.requests.filter((request) => request.source === "robot" && (request.status === "feilet" || request.status === "venter"));
   if (handed.length > 0) {
     const rooms = [...new Set(handed.flatMap((request) => (request.room ? [roomNumber(request.room)] : [])))];
@@ -159,7 +258,8 @@ export function selectAlerts(data: AlertData): Alert[] {
       module: "hotell3d",
       priority: "obs",
       icon: "battery-low",
-      title: "Roboten bør settes på lading",
+      // The robot docks itself; what the morning needs to know is that it did not get there in time.
+      title: data.robot.ended ? "Roboten rakk ikke å lade før 06:00" : "Roboten må lade snart",
       detail: `Batteriet står på ${percent(data.robot.battery)}${data.robot.ended ? " etter natten" : ""}.`,
       action: { label: "Vis i 3D-kartet", href: "/hotell" },
     });

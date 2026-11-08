@@ -13,7 +13,9 @@ import {
   type Snapshot,
   type Timeline,
 } from "@/features/replay";
-import { type SceneTokens, STATUS_TOKEN } from "./tokens";
+import { roomPaint } from "@/ui/roomStatus";
+import { checkWord } from "./held";
+import { type SceneTokens, STATUS_TOKEN, tokenKey } from "./tokens";
 
 /**
  * The hotel in three.js: floors stacked (or spread apart), rooms as tiles in their status colour,
@@ -48,7 +50,20 @@ type FloorParts = {
   labels: HTMLElement[];
 };
 
-type RoomSlot = { index: number; floor: number; colour: THREE.Color; status: RoomStatus; mesh: THREE.InstancedMesh };
+type RoomSlot = {
+  index: number;
+  floor: number;
+  colour: THREE.Color;
+  status: RoomStatus;
+  mesh: THREE.InstancedMesh;
+  /** The room's number label, shown only when it matters (robot's room, chosen, one floor in view). */
+  tag: HTMLElement;
+  /** The quiet ink frame of an open avvik, drawn over the room's own status colour (never red). */
+  avvikFrame: THREE.LineSegments;
+  avvik: boolean;
+  /** The room check's word (held.ts): "Holdt tilbake" or "Bekreft først", painted as taken; null otherwise. */
+  word: string | null;
+};
 type Link = { line: THREE.Line; base: THREE.Vector3[] };
 export type Pick = { kind: "room" | "place"; id: string; floor: number };
 
@@ -79,6 +94,9 @@ function label(text: string, className: string): CSS2DObject {
   return object;
 }
 
+/** Above every depth-sorted label the renderer stacks (one per room and place), under the HUD (`.h3d-labels` is isolated). */
+const ROBOT_LABEL_Z = "100000";
+
 export class HotelScene {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly labelRenderer: CSS2DRenderer;
@@ -102,12 +120,19 @@ export class HotelScene {
   private readonly robotLabel: HTMLElement;
   private readonly robotTask: HTMLElement;
   private readonly robotCarry: HTMLElement;
+  private readonly robotTag: CSS2DObject;
+  /** The robot label's width (measured on the first frame after its text changes; -1: not yet), the view's width (at resize). */
+  private robotLabelWidth = -1;
+  private viewWidth = 1;
+  private robotLabelFlipped = false;
+  private robotLabelCap = 0;
   private readonly hover: HTMLElement;
   private readonly attention: THREE.Mesh;
   private readonly selection: THREE.LineSegments;
   private attentionTween: gsap.core.Tween | null = null;
   private attentionRoom: string | null = null;
   private selectedRoom: string | null = null;
+  private numbersFloor: number | null = null;
   private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new THREE.Raycaster();
@@ -251,9 +276,13 @@ export class HotelScene {
     this.robotCarry.className = "h3d-robot-carry";
     this.robotLabel.append(this.robotTask, this.robotCarry);
     const robotTag = new CSS2DObject(this.robotLabel);
-    robotTag.center.set(0.5, 1);
-    robotTag.position.y = 1.9;
+    // Beside the robot, not on it (review round 1: the tooltip hid the robot): its left edge at the
+    // robot's middle, pushed right in CSS (.h3d-robot margin). Near the view's right edge it flips to the
+    // robot's left (round 6: at 1152 px the side panel clipped it), see `placeRobotLabel`.
+    robotTag.center.set(0, 0.5);
+    robotTag.position.y = 0.9;
     this.robot.add(robotTag);
+    this.robotTag = robotTag;
     this.scene.add(this.robot);
 
     this.attention = new THREE.Mesh(
@@ -297,6 +326,7 @@ export class HotelScene {
     }
 
     const roomGeometry = this.track(new THREE.BoxGeometry(ROOM_SIZE, ROOM_HEIGHT, ROOM_SIZE));
+    const avvikEdges = this.track(new THREE.EdgesGeometry(this.track(new THREE.BoxGeometry(ROOM_SIZE + 0.25, ROOM_HEIGHT + 0.12, ROOM_SIZE + 0.25))));
     const tileGeometry = this.track(new THREE.BoxGeometry(2.8, TILE_HEIGHT, 2.8));
     const shaftGeometry = this.track(new THREE.BoxGeometry(2.2, SHAFT_HEIGHT, 2.2));
     const unit = this.track(new THREE.BoxGeometry(1, 1, 1));
@@ -379,6 +409,10 @@ export class HotelScene {
         new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, transparent: true, opacity: 1 }),
       );
       const roomMesh = new THREE.InstancedMesh(roomGeometry, roomMaterial, rooms.length);
+      const avvikMaterial = this.track(
+        new THREE.LineBasicMaterial({ color: new THREE.Color(tokens.text), transparent: true, opacity: 0.95 }),
+      );
+      materials.push(avvikMaterial);
       roomMesh.userData.floor = floor;
       roomMesh.userData.rooms = rooms.map((room) => room.id);
       rooms.forEach((room, index) => {
@@ -386,11 +420,17 @@ export class HotelScene {
         roomMesh.setMatrixAt(index, matrix);
         const colour = new THREE.Color(tokens[STATUS_TOKEN.ukjent]);
         roomMesh.setColorAt(index, colour);
-        this.rooms.set(room.id, { index, floor, colour, status: "ukjent", mesh: roomMesh });
         const tag = label(roomNumber(room.id), "h3d-room");
         tag.position.set(room.x, y + ROOM_HEIGHT + 0.05, room.z);
+        // Room numbers are quiet until they matter: 36 of them over stacked floors collide (review round 1).
+        tag.element.toggleAttribute("data-hidden", true);
         group.add(tag);
         labels.push(tag.element);
+        const avvikFrame = new THREE.LineSegments(avvikEdges, avvikMaterial);
+        avvikFrame.position.set(room.x, y + ROOM_HEIGHT / 2, room.z);
+        avvikFrame.visible = false;
+        group.add(avvikFrame);
+        this.rooms.set(room.id, { index, floor, colour, status: "ukjent", mesh: roomMesh, tag: tag.element, avvikFrame, avvik: false, word: null });
       });
       roomMesh.instanceMatrix.needsUpdate = true;
       if (roomMesh.instanceColor) roomMesh.instanceColor.needsUpdate = true;
@@ -513,12 +553,29 @@ export class HotelScene {
     this.flyTo(centre, offset);
   }
 
+  /**
+   * Which floor shows every room number (null: none). The robot's room and the chosen room always
+   * show theirs; the rest stay quiet, so labels never pile up over stacked or spread floors.
+   */
+  setRoomNumbers(floor: number | null) {
+    this.numbersFloor = floor;
+    this.refreshRoomTags();
+  }
+
+  private refreshRoomTags() {
+    for (const [id, slot] of this.rooms) {
+      const show = id === this.attentionRoom || id === this.selectedRoom || (this.numbersFloor !== null && slot.floor === this.numbersFloor);
+      slot.tag.toggleAttribute("data-hidden", !show);
+    }
+  }
+
   /** Shows room and place names on one floor only (null: every floor), so stacked floors don't mix. */
   setLabelFloor(floor: number | null) {
     for (const parts of this.floors) {
       const quiet = floor !== null && parts.floor !== floor;
       for (const element of parts.labels) {
-        if (element.classList.contains("h3d-floor")) continue;
+        // Room numbers have their own rule (setRoomNumbers); floor names always show.
+        if (element.classList.contains("h3d-floor") || element.classList.contains("h3d-room")) continue;
         element.toggleAttribute("data-quiet", quiet);
       }
     }
@@ -623,6 +680,7 @@ export class HotelScene {
     if (roomId === this.selectedRoom) return;
     this.selectedRoom = roomId && this.positions.has(roomId) ? roomId : null;
     this.selection.visible = this.selectedRoom !== null;
+    this.refreshRoomTags();
     if (this.selectedRoom) {
       this.placeMarkers();
       if (!this.reduced) {
@@ -637,10 +695,18 @@ export class HotelScene {
   setSnapshot(snapshot: Snapshot | null) {
     const { tokens } = this;
     for (const [id, slot] of this.rooms) {
-      const status = snapshot?.rooms[id]?.status ?? "ukjent";
+      const view = snapshot?.rooms[id];
+      const status = view?.status ?? "ukjent";
+      const avvik = view?.avvik ?? false;
+      slot.word = checkWord(view);
+      if (avvik !== slot.avvik) {
+        slot.avvik = avvik;
+        slot.avvikFrame.visible = avvik;
+      }
       if (status === slot.status) continue;
       slot.status = status;
-      const target = new THREE.Color(tokens[STATUS_TOKEN[status]]);
+      // One look per state across the app (src/ui/roomStatus.ts): avvik is the ink frame, not a colour.
+      const target = new THREE.Color(tokens[tokenKey(roomPaint(status).fill)]);
       const paint = () => {
         slot.mesh.setColorAt(slot.index, slot.colour);
         if (slot.mesh.instanceColor) slot.mesh.instanceColor.needsUpdate = true;
@@ -662,11 +728,13 @@ export class HotelScene {
     const carrying = snapshot?.robot.carrying ?? [];
     this.robotCarry.textContent = carrying.length ? `Har med: ${summariseItems(carrying)}` : "";
     this.robotCarry.hidden = carrying.length === 0;
+    this.robotLabelWidth = -1;
     this.cart.visible = snapshot?.robot.cart ?? false;
 
     const room = snapshot?.robot.attention ?? null;
     if (room !== this.attentionRoom) {
       this.attentionRoom = room;
+      this.refreshRoomTags();
       const at = room ? this.positions.get(room) : undefined;
       this.attentionTween?.kill();
       this.attentionTween = null;
@@ -700,6 +768,7 @@ export class HotelScene {
     // setSize also sets the canvas's CSS size, so a 2× screen draws at 2× and still fits the box.
     this.renderer.setSize(width, height);
     this.labelRenderer.setSize(width, height);
+    this.viewWidth = width;
     this.camera.aspect = width / height;
     // A portrait canvas (phone) sees less sideways, so it opens the lens a little.
     this.camera.fov = this.camera.aspect < 1 ? this.baseFov + 10 : this.baseFov;
@@ -805,8 +874,8 @@ export class HotelScene {
       this.renderer.domElement.style.cursor = this.down ? "grabbing" : "grab";
       return;
     }
-    const text =
-      hit.kind === "room" ? `${placeName(hit.id)} · ${ROOM_STATUS_LABEL[this.rooms.get(hit.id)?.status ?? "ukjent"]}` : placeName(hit.id);
+    const slot = hit.kind === "room" ? this.rooms.get(hit.id) : undefined;
+    const text = hit.kind === "room" ? `${placeName(hit.id)} · ${slot?.word ?? ROOM_STATUS_LABEL[slot?.status ?? "ukjent"]}` : placeName(hit.id);
     if (this.hover.textContent !== text) this.hover.textContent = text;
     this.hover.style.transform = `translate(${Math.round(this.pointerPx.x + 14)}px, ${Math.round(this.pointerPx.y + 16)}px)`;
     this.hover.hidden = false;
@@ -848,8 +917,46 @@ export class HotelScene {
     this.controls.update();
     if (this.pointerDirty) this.updateHover();
     this.renderer.render(this.scene, this.camera);
+    this.placeRobotLabel();
     this.labelRenderer.render(this.scene, this.camera);
+    // The renderer stacks labels by depth; the robot's own label stays over the room numbers it passes (round 6).
+    this.robotLabel.style.zIndex = ROBOT_LABEL_Z;
   };
+
+  /**
+   * Keep the robot's label inside the view (round 6: at 1152 px the side panel clipped it). Its natural width is
+   * measured once per text; each frame it goes on the side with room (right by default, the robot's left when the
+   * right is short and the left has more, with 16 px of slack so it never flickers), and when neither side holds it,
+   * it narrows to the room there is and its lines wrap (`data-narrow`, two lines at most).
+   */
+  private placeRobotLabel() {
+    if (this.robotLabelWidth < 0 && this.robotLabel.isConnected) {
+      this.robotLabel.style.maxWidth = "";
+      this.robotLabel.removeAttribute("data-narrow");
+      this.robotLabelCap = 0;
+      this.robotLabelWidth = this.robotLabel.offsetWidth;
+    }
+    const width = this.robotLabelWidth;
+    if (width <= 0) return;
+    this.tmp.setFromMatrixPosition(this.robotTag.matrixWorld).project(this.camera);
+    const x = ((this.tmp.x + 1) / 2) * this.viewWidth;
+    const gap = 22;
+    const margin = 8;
+    const right = this.viewWidth - margin - x - gap;
+    const left = x - gap - margin;
+    const flip = width <= right ? false : this.robotLabelFlipped ? left + 16 >= Math.min(width, right) : left > right + 16;
+    if (flip !== this.robotLabelFlipped) {
+      this.robotLabelFlipped = flip;
+      this.robotTag.center.set(flip ? 1 : 0, 0.5);
+      this.robotLabel.toggleAttribute("data-flip", flip);
+    }
+    const room = Math.floor((flip ? left : right) / 8) * 8;
+    const cap = room >= width ? 0 : Math.max(120, room);
+    if (cap === this.robotLabelCap) return;
+    this.robotLabelCap = cap;
+    this.robotLabel.style.maxWidth = cap ? `${cap}px` : "";
+    this.robotLabel.toggleAttribute("data-narrow", cap > 0);
+  }
 
   dispose() {
     if (this.disposed) return;

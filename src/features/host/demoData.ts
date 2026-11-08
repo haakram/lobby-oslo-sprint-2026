@@ -273,7 +273,7 @@ function stepsFor(turnover: Turnover, stays: Stay[], today: string): Step[] {
       at: clock(at),
       start: at,
       end: at,
-      handler: { kind: "automatikk", name: "Lobby" },
+      handler: { kind: "automatikk", name: "Fettero" },
       text: {
         planned: `${next.guest} kommer ${dayWord(today, next.from)} ${clock(turnover.checkInFrom)}. Koden sendes ${clock(at)}.`,
         active: `Sender koden til ${firstName(next.guest)}.`,
@@ -422,7 +422,7 @@ const THREADS: readonly Thread[] = [
     text: "Hei! Kan vi forlate leiligheten klokka 13 på tirsdag? Flyet vårt går 17.",
     reply: {
       kind: "waiting",
-      suggestion: `Lobby foreslår å si ja: neste gjest kommer 16:00, og ${CLEANER_FIRST} rekker å vaske fra 13:15.`,
+      suggestion: `Fettero foreslår å si ja: neste gjest kommer 16:00, og ${CLEANER_FIRST} rekker å vaske fra 13:15.`,
       accept: "Ja, det går fint å sjekke ut 13:00. God tur hjem!",
       decline: "Dessverre kommer neste gjest tidlig. Utsjekk er 11:00, men dere kan sette fra dere bagasjen i gangen til 13:00.",
     },

@@ -47,8 +47,36 @@ describe("decide: not logged in", () => {
     }
   });
 
+  it("lets the brand files through, so a tab, a home screen and a Slack preview get them before anyone logs in", () => {
+    for (const pathname of [
+      "/icon.svg",
+      "/apple-icon.png",
+      "/manifest.webmanifest",
+      "/opengraph-image.png",
+      "/twitter-image.png",
+      "/icon-192.png",
+      "/icon-512.png",
+      "/icon-maskable-512.png",
+    ]) {
+      expect(decide({ pathname, search: "", session: null })).toEqual({ kind: "next" });
+      // And for every role: the receptionist's tab gets the icon too, not a 403 page.
+      expect(decide({ pathname, search: "", session: as("receptionist") })).toEqual({ kind: "next" });
+      expect(decide({ pathname, search: "", session: as("host") })).toEqual({ kind: "next" });
+    }
+  });
+
   it("does not treat look-alike paths as public", () => {
-    for (const pathname of ["/loginx", "/login/ingen-tilgang", "/api/auth/loginx", "/api/reception/toolsx", "/favicon.ico.php"]) {
+    for (const pathname of [
+      "/loginx",
+      "/login/ingen-tilgang",
+      "/api/auth/loginx",
+      "/api/reception/toolsx",
+      "/favicon.ico.php",
+      "/icon.svg/x",
+      "/opengraph-image.png.php",
+      "/icon-1024.png",
+      "/runs/icon.svg",
+    ]) {
       expect(decide({ pathname, search: "", session: null }).kind).not.toBe("next");
     }
   });
@@ -90,7 +118,10 @@ describe("decide: logged in", () => {
     expect(decide({ pathname: "/login", search: "", session: as("robot") })).toMatchObject({ kind: "redirect", location: "/" });
     expect(decide({ pathname: "/login", search: "?next=%2Fhotell", session: as("robot") })).toMatchObject({ location: "/hotell" });
     expect(decide({ pathname: "/login", search: "?next=%2Fhotell", session: as("receptionist") })).toMatchObject({ location: "/" });
-    expect(decide({ pathname: "/login", search: "?next=%2F%2Fevil.example", session: as("admin") })).toMatchObject({ location: "/" });
+    expect(decide({ pathname: "/login", search: "?next=%2F%2Fevil.example", session: as("admin") })).toMatchObject({ location: "/overlevering" });
+    expect(decide({ pathname: "/login", search: "", session: as("admin") })).toMatchObject({ location: "/overlevering" });
+    // The pilot accounts still open Oversikt when they ask for it.
+    expect(decide({ pathname: "/", search: "", session: as("admin") })).toEqual({ kind: "next" });
   });
 });
 

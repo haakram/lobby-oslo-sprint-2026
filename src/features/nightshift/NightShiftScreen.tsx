@@ -6,12 +6,21 @@ import { Hotel3D, StatusLegend } from "@/features/hotel3d/Hotel3D";
 import { PlaybackControls } from "@/features/hotel3d/PlaybackControls";
 import { EventFeed, RoomCard, TaskCard, WorkOrderList } from "@/features/hotel3d/ReplayPanels";
 import { RoomPicker } from "@/features/hotel3d/RoomPicker";
+import { useHeldReplay } from "@/features/hotel3d/useHeldReplay";
 import { type HotelReplay, itemName, placeName, type ReplaySource, roomNumber, simToClock, type Task, taskKindName, useHotelReplay } from "@/features/replay";
 import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, PageHeader, RegenIcon, Skeleton, Stat } from "@/ui";
-import { failures, forManagers } from "./eventFilter";
+import { doneBasis, ownAgainstLog, type SelfContradiction, selfContradictions } from "./conduct";
+import { forManagers } from "./eventFilter";
+import { HANDED_BACK, type NightOutcomes, type OutcomeRow, outcomeRows, outcomesAt, reasonGroups, RIGHTLY_NOT_DONE } from "./outcomes";
+import rmfSample from "./fixtures/open-rmf-night.json";
+import { fromOpenRmf, type RmfSample, rmfTiles } from "./openRmf";
+import { RobotJudgementCard } from "./RobotJudgementCard";
+import type { RunLine } from "./runlog";
 import { viewerBase } from "./useRun";
 
 const MAX_EVENTS = 40;
+/** The hotel-rules night (round 6): the same seed as the demo night, played live by hamad/hotelrules 70d5be4 (NS_HOTEL_RULES=1). */
+export const HOTEL_RULES_RUN_URL = "/runs/hotel-rules-seed16.jsonl";
 
 /**
  * Natteskift, the night report for the robot manager: how the night went, what failed and why
@@ -22,11 +31,18 @@ const MAX_EVENTS = 40;
 export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   const base = viewerBase(viewerUrl);
   const [source, setSource] = useState<ReplaySource>("demo");
-  const replay = useHotelReplay(source, { viewerUrl: base });
+  // Which robot log the whole page reads (round 6): the night played for points, the same night under the hotel's
+  // rules, or a second producer's sample through the Open-RMF adapter. Only for the recording; Direkte is the live shift.
+  const [logChoice, setLog] = useState<LogSource>("wybe");
+  const log: LogSource = source === "demo" ? logChoice : "wybe";
+  // The room check applied to the map and the room card (hotel3d/held.ts): 209, held back, never a green Klar.
+  const replay = useHeldReplay(useHotelReplay(source, { viewerUrl: base, demoUrl: log === "hotelrules" ? HOTEL_RULES_RUN_URL : undefined }));
   const ready = replay.status === "ready";
   const snapshot = replay.snapshot;
   const [room, setRoom] = useState<string | null>(null);
   const [technical, setTechnical] = useState(false);
+  const rmfLines = useMemo(() => fromOpenRmf(rmfSample as RmfSample), []);
+  const rmf = log === "rmf";
   const roomCard = useRef<HTMLDivElement>(null);
   const scrollToRoom = useRef(false);
   // The room's card opens right under the map it was chosen on, and comes into view.
@@ -46,13 +62,18 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
     return upTo.slice(-MAX_EVENTS).reverse();
   }, [replay.timeline, snapshot, technical]);
 
-  const failed = useMemo(
-    () => (replay.timeline && snapshot ? failures(replay.timeline.tasks, replay.timeline.events, snapshot.eventCount, snapshot.t) : []),
+  // How each request ended at this point of the night: the same reading Oversikt, Forespørsler and Overlevering count with.
+  const verdicts = useMemo(
+    () => (replay.timeline && snapshot ? outcomesAt(replay.timeline, snapshot.eventCount, snapshot.t) : null),
     [replay.timeline, snapshot],
   );
-  const open = useMemo(
-    () => (replay.timeline && snapshot ? replay.timeline.tasks.filter((task) => task.start <= snapshot.t && task.outcome === null && snapshot.finished).length : 0),
-    [replay.timeline, snapshot],
+  const handedBack = useMemo(
+    () => (replay.timeline && snapshot && verdicts ? outcomeRows(replay.timeline, snapshot.eventCount, verdicts.outcomes, HANDED_BACK) : []),
+    [replay.timeline, snapshot, verdicts],
+  );
+  const rightlyNot = useMemo(
+    () => (replay.timeline && snapshot && verdicts ? outcomeRows(replay.timeline, snapshot.eventCount, verdicts.outcomes, RIGHTLY_NOT_DONE) : []),
+    [replay.timeline, snapshot, verdicts],
   );
 
   return (
@@ -60,7 +81,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8 px-4 py-6 sm:px-6 lg:gap-10 lg:px-10 lg:py-10">
         <PageHeader
           title="Natteskift"
-          meta={ready && <ShiftBadge replay={replay} />}
+          meta={ready && !rmf && <ShiftBadge replay={replay} />}
           lede="Rapporten fra robotens natt: hva som ble gjort, hva som feilet og hvorfor."
           actions={
             <>
@@ -72,8 +93,20 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
           }
         />
 
-        {replay.status === "loading" && <LoadingRun />}
-        {replay.status === "error" &&
+        {source === "demo" && <LogSwitch value={log} onChange={setLog} />}
+
+        {rmf && (
+          <>
+            <RmfStatRow lines={rmfLines} />
+            <RobotJudgementCard lines={rmfLines} id="vurderinger-rmf" />
+            <p className="text-sm text-muted">
+              Open-RMF-eksempelet har ingen hotellkart og ingen avspilling, så resten av siden hører til Wybe-nettene. Velg en av dem for å se natten steg for steg.
+            </p>
+          </>
+        )}
+
+        {!rmf && replay.status === "loading" && <LoadingRun />}
+        {!rmf && replay.status === "error" &&
           (source === "live" ? (
             <ErrorState
               title="Fikk ikke kontakt med viewer-serveren"
@@ -95,7 +128,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
               }
             />
           ))}
-        {replay.status === "empty" &&
+        {!rmf && replay.status === "empty" &&
           (source === "live" ? (
             <EmptyState icon={<RegenIcon name="moon" size={32} />} title="Ingen skift ennå" body="Start et skift med agenten, så dukker det opp her." />
           ) : (
@@ -106,45 +139,56 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
             />
           ))}
 
-        {ready && snapshot && (
+        {!rmf && ready && snapshot && (
           <>
-            <StatRow replay={replay} open={open} />
+            {verdicts && <StatRow replay={replay} verdicts={verdicts} />}
+
+            {replay.timeline && (
+              <RobotJudgementCard
+                key={log}
+                lines={replay.timeline.lines}
+                until={snapshot.t}
+                asOf={snapshot.finished ? null : snapshot.clock}
+              />
+            )}
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-8">
               <div className="flex min-w-0 flex-col gap-6 lg:gap-8">
                 <section aria-labelledby="failed-heading">
                   <div className="flex items-baseline gap-2">
                     <h2 id="failed-heading" className="text-lg font-semibold tracking-[-0.01em]">
-                      Feilet
+                      Trenger en person
                     </h2>
-                    <span className="text-sm text-muted tabular-nums">{failed.length}</span>
+                    <span className="text-sm text-muted tabular-nums">{handedBack.length}</span>
                   </div>
-                  {failed.length === 0 ? (
-                    <p className="mt-2 text-base text-muted">Ingen oppgaver har feilet så langt i natt.</p>
+                  {/* "Feilet", split by reason: what the robot could not do, apart from what it was right not to do. */}
+                  {handedBack.length > 0 && (
+                    <p className="mt-1 text-sm text-muted">{reasonGroups([...(verdicts?.outcomes.values() ?? [])].filter((outcome) => HANDED_BACK.has(outcome.verdict)))
+                        .map((group) => `${group.label} ${group.count}`)
+                        .join(" · ")}</p>
+                  )}
+                  {handedBack.length === 0 ? (
+                    <p className="mt-2 text-base text-muted">Roboten har ikke gitt noe videre så langt i natt.</p>
                   ) : (
                     <ol className="mt-2 divide-y divide-line rounded-md bg-surface">
-                      {failed.map(({ task, reason, clock }) => (
-                        <li key={task.id} className="flex flex-col gap-1 px-4 py-3">
-                          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                            <span className="font-semibold">{taskName(task)}</span>
-                            <span className="font-mono text-sm whitespace-nowrap text-muted tabular-nums">{clock.slice(0, 5)}</span>
-                          </div>
-                          {reason && <p className="text-sm text-muted">{reason}</p>}
-                          {task.text && (
-                            <p lang="en" className="text-sm text-muted">
-                              «{task.text}»
-                            </p>
-                          )}
-                          <span className="font-mono text-sm text-muted sm:text-xs">{task.id}</span>
-                          <Link
-                            href={`/hotell?t=${Math.round(task.start)}${task.room ? `&rom=${task.room}` : ""}`}
-                            className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent-text hover:underline"
-                          >
-                            Vis i 3D-kartet kl. {simToClock(task.start, false)}
-                          </Link>
-                        </li>
+                      {handedBack.map((row) => (
+                        <OutcomeItem key={row.request} row={row} />
                       ))}
                     </ol>
+                  )}
+                  {rightlyNot.length > 0 && (
+                    <details className="mt-4 group">
+                      <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
+                        Avvist eller avlyst, ikke feil
+                        <span className="font-normal text-muted tabular-nums">{rightlyNot.length}</span>
+                      </summary>
+                      <p className="text-sm text-muted">Roboten sjekket og fant ingen bestilling, eller nattsjefen avlyste. Ingen trenger å ta over disse.</p>
+                      <ol className="mt-2 divide-y divide-line rounded-md bg-surface">
+                        {rightlyNot.map((row) => (
+                          <OutcomeItem key={row.request} row={row} />
+                        ))}
+                      </ol>
+                    </details>
                   )}
                 </section>
 
@@ -209,6 +253,31 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   );
 }
 
+/** One request the robot did not finish: what, when, why in Norwegian, the guest's words, the way into the 3D map. */
+function OutcomeItem({ row }: { row: OutcomeRow }) {
+  return (
+    <li className="flex flex-col gap-1 px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="font-semibold">{row.task ? taskName(row.task) : "Ikke startet"}</span>
+        <span className="font-mono text-sm whitespace-nowrap text-muted tabular-nums">{simToClock(row.t, false)}</span>
+      </div>
+      {row.reason && <p className="text-sm">{row.reason}</p>}
+      {row.text && (
+        <p lang="en" className="text-sm text-muted">
+          «{row.text}»
+        </p>
+      )}
+      <span className="font-mono text-sm text-muted sm:text-xs">{row.request}</span>
+      <Link
+        href={`/hotell?t=${Math.round(row.t)}${row.task?.room ? `&rom=${row.task.room}` : ""}`}
+        className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent-text hover:underline"
+      >
+        Vis i 3D-kartet kl. {simToClock(row.t, false)}
+      </Link>
+    </li>
+  );
+}
+
 /** "Romservice til 319", "Mobillader til 104": the task without its id. */
 function taskName(task: Task): string {
   const what = task.kind === "amenity" && task.item ? capitalise(itemName(task.item)) : taskKindName(task.kind);
@@ -251,19 +320,102 @@ function Tabs({ source, onChange }: { source: ReplaySource; onChange: (source: R
   );
 }
 
-function StatRow({ replay, open }: { replay: HotelReplay; open: number }) {
-  const snapshot = replay.snapshot!;
-  const low = snapshot.battery !== null && snapshot.battery < 20;
+type LogSource = "wybe" | "hotelrules" | "rmf";
+
+const LOGS: Array<{ id: LogSource; label: string; about: string }> = [
+  { id: "wybe", label: "Spillbygget", about: "Natten roboten spilte for poeng på Wybes simulator." },
+  {
+    id: "hotelrules",
+    label: "Hotellregler",
+    about: "Samme natt, live, med hotellets regler: banker på før hver inngang med nøkkelkort og flytter aldri et skilt fra et vått gulv. Bygget vi ville kjørt i et hotell.",
+  },
+  { id: "rmf", label: "Open-RMF (eksempel)", about: "En annen robots oppgavelogg i Open-RMF-format: testdata skrevet av teamet, ingen dommer og ingen poeng." },
+];
+
+/** Which robot log the whole page reads: the figures, the card and (for the two Wybe nights) the night itself. */
+function LogSwitch({ value, onChange }: { value: LogSource; onChange: (source: LogSource) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="text-sm text-muted">Robotlogg</span>
+        <div role="group" aria-label="Robotlogg" className="inline-flex max-w-full flex-wrap gap-0.5 rounded-sm bg-sunken p-0.5">
+          {LOGS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={value === id}
+              onClick={() => onChange(id)}
+              className={cx(
+                "min-h-10 rounded-sm px-4 text-sm font-semibold transition-colors duration-[120ms] ease-standard pointer-coarse:min-h-11",
+                value === id ? "bg-surface text-text" : "text-muted hover:text-text",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="max-w-[80ch] text-sm text-muted">{LOGS.find((entry) => entry.id === value)?.about}</p>
+    </div>
+  );
+}
+
+/** The figures for the Open-RMF sample: tasks, what an outside signal confirmed, what is unfinished, the battery. No score. */
+function RmfStatRow({ lines }: { lines: readonly RunLine[] }) {
+  const tiles = useMemo(() => rmfTiles(lines), [lines]);
   return (
     <section role="group" aria-label="Skiftet i tall" className="border-y border-line py-5">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Oppgaver fullført" value={snapshot.tasksDone} tone="success" />
-        {/* Plain counts beside the green one: the night's misses are part of its total, not an alarm. */}
-        <Stat label={open > 0 ? `Feilet · ${open} ikke ferdig` : "Oppgaver feilet"} value={snapshot.tasksFailed} />
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
+        <Stat label="Oppdrag fullført" value={tiles.done} unit={`av ${tiles.tasks}`} />
+        <Stat label="«Ferdig» bekreftet utenfra" value={tiles.confirmed} unit={`av ${tiles.reported}`} />
+        <Stat label="Robotens egen observasjon" value={tiles.robotOnly} />
+        <Stat label="Ikke fullført" value={tiles.unfinished} />
+        <Stat label="Siste melding" value={tiles.clock ? tiles.clock.slice(0, 5) : "–"} />
+        <Stat label="Batteri" value={tiles.battery === null ? "–" : Math.round(tiles.battery)} unit={tiles.battery === null ? undefined : "%"} />
+      </div>
+      <p className="mt-4 text-sm text-muted">Ingen poeng: Open-RMF har ingen dommer, bare robotens egne meldinger og signalene i dem.</p>
+    </section>
+  );
+}
+
+/**
+ * "1 motsagt av egen logg (rom 209)": why a reported "done" does not hold (round 7, data and robot-domain reviews:
+ * the tile read "73 av 73 «Ferdig» bekreftet" above the card's 209). Null when every one holds.
+ */
+export function notHoldingLine(tally: { done: number; reported: number }, contradicted: readonly Pick<SelfContradiction, "room">[]): string | null {
+  const rooms = contradicted.map((entry) => entry.room);
+  const parts = [
+    rooms.length > 0 ? `${rooms.length} motsagt av egen logg (rom\u00a0${rooms.length < 2 ? rooms.join("") : `${rooms.slice(0, -1).join(", ")} og ${rooms.at(-1)}`})` : null,
+    tally.reported > tally.done ? `${tally.reported - tally.done} ikke godkjent av simulatoren` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function StatRow({ replay, verdicts }: { replay: HotelReplay; verdicts: NightOutcomes }) {
+  const snapshot = replay.snapshot!;
+  const low = snapshot.battery !== null && snapshot.battery < 20;
+  const { tally } = verdicts;
+  // The robot's own log against its own "done", up to the scrubber (the judgement card's rule): 209 on the demo night.
+  const lines = replay.timeline?.lines;
+  const contradicted = useMemo(() => (lines ? ownAgainstLog(doneBasis(lines, snapshot.t), selfContradictions(lines, snapshot.t)).contradicted : []), [lines, snapshot.t]);
+  const notHolding = notHoldingLine(tally, contradicted);
+  return (
+    <section role="group" aria-label="Skiftet i tall" className="border-y border-line py-5">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 2xl:grid-cols-8">
+        {/* Task state, in ink (round 7): the 73 hold one "done" the robot's own log contradicts. */}
+        <Stat label="Oppdrag fullført" value={tally.done} unit={`av ${tally.total}`} />
+        {/* The result: a "done" holds when the simulator credited it and the robot's own log does not contradict it. */}
+        <div className="min-w-0">
+          <Stat label="«Ferdig» som holder" value={tally.done - contradicted.length} unit={`av ${tally.reported}`} />
+          {notHolding && <p className="mt-1 text-sm text-muted">{notHolding}</p>}
+        </div>
+        {/* Plain counts: the night's misses are part of its total, not an alarm. */}
+        <Stat label="Ga videre til en person" value={tally.handedBack} />
+        <Stat label="Avvist eller avlyst" value={tally.declined + tally.cancelled} />
         <Stat label="Avvik meldt" value={snapshot.workOrders.length} />
         <Stat label="Klokke" value={snapshot.clock} />
         <Stat label={low ? "Batteri · lavt" : "Batteri"} value={snapshot.battery === null ? "–" : Math.round(snapshot.battery)} unit={snapshot.battery === null ? undefined : "%"} />
-        <Stat label="Poeng" value={snapshot.score} />
+        <Stat label="Wybe-poeng (simulering)" value={snapshot.score} />
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-muted">
         <dl className="flex gap-2">

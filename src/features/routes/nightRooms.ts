@@ -52,7 +52,7 @@ export function roomStatusAt(lines: readonly RunLine[], cutoff = "06:00:00"): Ma
   return rooms;
 }
 
-export type PresetId = "ma_vaskes" | "opptatt";
+export type PresetId = "dag" | "ma_vaskes" | "opptatt";
 
 export type RoomPreset = { id: PresetId; label: string; hint: string; rooms: string[] };
 
@@ -69,7 +69,7 @@ export function cleaningPresets(statuses: ReadonlyMap<string, RoomReport>): {
   return {
     presets: [
       { id: "ma_vaskes", label: "Må vaskes", hint: "Rom roboten fant urene i natt", rooms: withStatus("ma_vaskes") },
-      { id: "opptatt", label: "Opptatt i natt", hint: "Rom med gjester: daglig renhold", rooms: withStatus("opptatt") },
+      { id: "opptatt", label: "Opptatt", hint: "Rom med gjester i natt: daglig renhold", rooms: withStatus("opptatt") },
     ],
     doNotDisturb: withStatus("ikke_forstyrr"),
   };

@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fettero.local/schemas/runlog-v1.json",
+  "title": "Fettero run log v1: one JSON object per line",
+  "description": "What a robot sends Fettero so the 06:00 handover can be written from its night (docs/ARCHITECTURE.md § 4.3). Each line of a .jsonl file is one object, \"v\": 1 on every line; unknown line types and unknown fields are ignored, so a producer can add its own. The handover reads the semantic layer: tasks (start, done with its evidence, failed, declined, handed back), room status, hazards, security events, position and battery. `call` lines are a producer's raw commands (the Wybe Night Shift simulator writes them; another robot need not). Producers today: the Night Shift agent (agent/, every line type), the Open-RMF adapter (src/features/nightshift/openRmf.ts: start, state, decision, end), the night clerk (src/features/staffinput/entries.ts: decision lines only, every one with data.source \"staff\" plus id, by, at, stamp, and sample on the test night) and the door lock (src/features/doorlock/feed.ts: one room_signal decision per room, data.source \"door_lock\", never who). A \"done\" counts as confirmed only with two different signals, at least one from outside the robot (the evidence rule, src/features/nightshift/conduct.ts evidenceVerdict): the referee's reply in the simulator, or from a real robot e.g. the compartment sensor and the guest's PIN; two signals that both come from the robot read \"robotens egen observasjon\"; one signal alone reads \"ikke bekreftet\".",
+  "oneOf": [
+    { "$ref": "#/$defs/start" },
+    { "$ref": "#/$defs/state" },
+    { "$ref": "#/$defs/decision" },
+    { "$ref": "#/$defs/call" },
+    { "$ref": "#/$defs/end" }
+  ],
+  "$defs": {
+    "v": { "const": 1 },
+    "clock": {
+      "description": "Hotel time of the night, HH:MM:SS (the night runs 22:00 to 06:00).",
+      "type": ["string", "null"],
+      "pattern": "^\\d{2}:\\d{2}:\\d{2}$"
+    },
+    "start": {
+      "type": "object",
+      "required": ["v", "type", "shift", "mode"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "start" },
+        "t": { "type": "number", "description": "Unix seconds." },
+        "shift": { "type": "string", "pattern": "^w2-[0-9a-f]{8,64}$", "description": "The night's id (a hex id; a non-Wybe adapter derives one)." },
+        "mode": { "type": "string", "description": "practice | final | live | sample, or the producer's own word." },
+        "seed": { "type": ["integer", "null"] },
+        "source": { "type": "string", "description": "Who wrote the log: \"wybe-nightshift\", \"open-rmf\", …" },
+        "build": {
+          "type": "object",
+          "description": "The code that played: the agent checkout's git commit and whether tracked files differed from it (null where git cannot say). The ledger dates a night by this commit; dirty: true makes a build night a board test.",
+          "properties": {
+            "commit": { "type": ["string", "null"] },
+            "dirty": { "type": ["boolean", "null"] }
+          }
+        },
+        "flags": {
+          "type": "object",
+          "description": "The switches in force at the start. score_blind: true means the agent never read the score (the ledger counts the night as an experiment, every \"done\" its own judgement).",
+          "properties": {
+            "score_blind": { "type": "boolean" },
+            "experiments": { "type": "array", "items": { "type": "string" } },
+            "price_switches": { "type": "array", "items": { "type": "string" } },
+            "env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Every NS_* environment variable, no secrets." }
+          }
+        }
+      }
+    },
+    "state": {
+      "description": "Position and battery. `score` is the simulator's points; a source with no score writes 0.",
+      "type": "object",
+      "required": ["v", "type", "score"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "state" },
+        "t": { "type": "number" },
+        "clock": { "$ref": "#/$defs/clock" },
+        "location": { "type": ["string", "null"], "description": "A place id on the hotel map (room-213, corridor-2b, elevator-1, …)." },
+        "score": { "type": "number" },
+        "battery": { "type": "number", "minimum": 0, "maximum": 100, "description": "Per cent." },
+        "hands": { "type": "array" },
+        "cart": { "type": ["array", "null"] }
+      }
+    },
+    "end": {
+      "type": "object",
+      "required": ["v", "type", "score"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "end" },
+        "score": { "type": "number" },
+        "requests_served": { "type": "number" },
+        "reason": { "type": "string" }
+      }
+    },
+    "call": {
+      "description": "A raw command and the robot's reply (Wybe simulator only; optional for other producers).",
+      "type": "object",
+      "required": ["v", "type", "cmd", "ok"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "call" },
+        "cmd": { "type": "string" },
+        "args": {},
+        "ok": { "type": "boolean" },
+        "clock": { "$ref": "#/$defs/clock" },
+        "result": {},
+        "events": { "type": "array" }
+      }
+    },
+    "evidence": {
+      "description": "The signals behind a \"done\". Two different signals with at least one from outside the robot confirm it; two from the robot alone read \"robotens egen observasjon\"; one alone leaves it \"ikke bekreftet\".",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["signal"],
+        "properties": {
+          "signal": {
+            "enum": ["referee", "lock", "photo", "guest_ack", "compartment", "sign_placed", "door_answered", "item_placed", "door_lock", "energy_slot", "staff_check", "pms"],
+            "description": "referee: the simulator's verified reply. lock / door_lock: the door-lock audit trail. energy_slot: the room's energy slot (one derived signal per room, never who). photo: the robot's camera. guest_ack: the guest confirmed (app, tablet, PIN, voice). compartment: the robot's compartment sensor. sign_placed: a wet-floor sign stands at the place. door_answered / item_placed: what the robot itself observed. staff_check: a person on the night shift checked it. pms: the booking system (read-only)."
+          },
+          "origin": {
+            "enum": ["robot", "building", "guest", "staff", "pms", "referee"],
+            "description": "Where the signal comes from (optional). Absent: read from the signal (photo, compartment, sign_placed, door_answered, item_placed: robot; lock, door_lock, energy_slot: building, except a lock opened with the robot's own credential, which is the robot's; guest_ack: guest; staff_check: staff; pms: pms; referee: referee)."
+          },
+          "at": { "$ref": "#/$defs/clock" },
+          "detail": { "type": "string" }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["v", "type", "kind"],
+      "properties": {
+        "v": { "$ref": "#/$defs/v" },
+        "type": { "const": "decision" },
+        "t": { "type": "number" },
+        "kind": { "type": "string" },
+        "data": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "task_start" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["request", "kind"],
+                "properties": {
+                  "request": { "type": "string", "description": "The task's id (R-001, an RMF booking id, …)." },
+                  "kind": { "type": "string", "description": "amenity | bags | tray | message | room_check | spill | noise | lost_item | delivery | clean | patrol | …" },
+                  "room": { "type": ["string", "null"] },
+                  "item": { "type": ["string", "null"] }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "task_done" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["request", "status"],
+                "properties": {
+                  "request": { "type": "string" },
+                  "status": { "const": "done" },
+                  "note": { "type": "string" },
+                  "points": { "type": "number" },
+                  "evidence": { "$ref": "#/$defs/evidence" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "task_failed" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["request", "status"],
+                "properties": {
+                  "request": { "type": "string" },
+                  "status": { "enum": ["failed", "declined", "skipped", "handed_back"], "description": "handed_back: given to a person (the night clerk) to finish." },
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "room_status" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["room", "status"],
+                "properties": {
+                  "room": { "type": "string" },
+                  "status": { "enum": ["klar", "opptatt", "ikke_forstyrr", "ma_vaskes"] },
+                  "source": { "type": "string", "description": "room_check | knock | door_sign | lock | energy_slot | staff (the night clerk looked: by, at, id on the line)" },
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "hazard" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["place", "hazard"],
+                "properties": {
+                  "place": { "type": "string" },
+                  "hazard": { "enum": ["wet", "obstacle", "other"] },
+                  "since": { "$ref": "#/$defs/clock" },
+                  "signed": { "type": "boolean", "description": "A warning sign stands there. The night clerk answers it on every wet floor (Skilt satt ut? Ja / Nei)." },
+                  "signedAt": { "description": "When the sign went out (HH:MM:SS), or null; a later `sign_placed` line sets it too.", "anyOf": [{ "$ref": "#/$defs/clock" }, { "type": "null" }] }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "room_signal" } } },
+          "then": {
+            "description": "The door lock and the energy slot: one derived signal per room at the handover, never who and never when (staff and master cards filtered at the source; no card id, no entry list, no guest's clock).",
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["room", "signal", "source"],
+                "properties": {
+                  "room": { "type": "string" },
+                  "signal": { "enum": ["no_card", "card_in"], "description": "no_card: no guest card used at the door and none in the energy slot in the window; card_in: a guest card is in the energy slot (a yes, with no clock)." },
+                  "since": { "$ref": "#/$defs/clock", "description": "no_card only; null (the whole window from 18:00) in the sample. Never on card_in: a time sent there is dropped on read (data minimisation)." },
+                  "source": { "const": "door_lock" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "note" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["text"],
+                "properties": { "text": { "type": "string", "maxLength": 280 }, "source": { "type": "string" }, "by": { "type": "string" } }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "retracted" } } },
+          "then": {
+            "description": "A correction (Angre): the line with this id no longer counts. Nothing is deleted.",
+            "properties": {
+              "data": { "type": "object", "required": ["target"], "properties": { "target": { "type": "string" }, "source": { "type": "string" }, "by": { "type": "string" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "sign_placed" } } },
+          "then": {
+            "description": "The night clerk put a sign out later on a wet floor she reported without one. Angre retracts this line.",
+            "properties": {
+              "data": { "type": "object", "required": ["target"], "properties": { "target": { "type": "string", "description": "The wet floor's hazard line id." }, "source": { "type": "string" }, "by": { "type": "string" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "acknowledged" } } },
+          "then": {
+            "description": "The night clerk saw a robot hazard (Kvitter on /natt): who and when, the outside signal the handover times the wait against.",
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["target", "hazard"],
+                "properties": {
+                  "target": { "type": "string", "description": "wet:<place>:<since> for a wet floor, person:<first refusal> for the person at the doors." },
+                  "hazard": { "enum": ["wet", "person"] },
+                  "place": { "type": ["string", "null"] },
+                  "robotAt": { "description": "The robot's clock for the hazard.", "anyOf": [{ "$ref": "#/$defs/clock" }, { "type": "null" }] },
+                  "source": { "type": "string" },
+                  "by": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "security_event" } } },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["place", "event"],
+                "properties": {
+                  "place": { "type": "string" },
+                  "event": { "type": "string", "description": "entry_refused | tailgating_blocked | door_forced | door_open | unknown_person | …" },
+                  "room": { "type": ["string", "null"] },
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

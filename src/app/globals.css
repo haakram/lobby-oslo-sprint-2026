@@ -176,3 +176,31 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Printing a screen (Overlevering 06:00): the page itself on white paper, without the navigation, on one
+   A4 sheet (round 3, marketing review: the leave-behind was four pages). Every size is in rem, so a smaller
+   root type scales the whole page down to fit; the screen hides what paper doesn't need (print:hidden). */
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm 12mm;
+  }
+  html {
+    font-size: 10px;
+  }
+  /* The navigation, and the phone's top bar (paper is narrower than lg, so it would show). */
+  nav,
+  header:not(main header) {
+    display: none !important;
+  }
+  /* A page with its own masthead (Overlevering) prints it instead of the screen's header. */
+  main:has([data-print-masthead]) header:not([data-print-masthead]) {
+    display: none !important;
+  }
+  #innhold {
+    padding-bottom: 0 !important;
+  }
+  body {
+    background: #ffffff;
+  }
+}

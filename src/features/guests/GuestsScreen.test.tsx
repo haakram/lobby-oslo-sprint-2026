@@ -4,6 +4,9 @@ import { render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { foldNight, selectRooms } from "@/features/dashboard/selectors";
 import { parseRunLog } from "@/features/nightshift/runlog";
+import { roomMoney } from "@/features/rooms/money";
+import { pmsLastNight, revenueLastNight } from "@/features/rooms/pms";
+import { reconcileNight } from "@/features/rooms/reconcile";
 import { GuestsScreen } from "./GuestsScreen";
 import { selectGuestDay } from "./testData";
 
@@ -11,6 +14,9 @@ import { selectGuestDay } from "./testData";
 const DEMO = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
 const ROOMS = selectRooms(foldNight(parseRunLog(DEMO).lines));
 const DAY = selectGuestDay();
+// "Klar" is one number everywhere (round 3, design review): the room check's Klare til salg, as on Oversikt and Rom.
+const PMS = pmsLastNight(DAY.today);
+const READY = roomMoney({ reconciliation: reconcileNight(parseRunLog(DEMO).lines, PMS, DAY.today), marks: {}, revenue: revenueLastNight(ROOMS.length, PMS), rooms: ROOMS, pms: PMS }).readyToSell;
 
 const CALL = {
   id: "conv_1",
@@ -52,10 +58,12 @@ describe("GuestsScreen (Gjester og bookinger)", () => {
     route();
     render(<GuestsScreen />);
     const arrivals = within(screen.getByRole("region", { name: /^Ankomster i dag/ }));
-    const ready = ROOMS.filter((room) => room.status === "klar").length;
+    const ready = READY;
+    // Not the raw night status: a booked room the robot saw ready is not ready to sell until a person released it.
+    expect(ready).toBeLessThanOrEqual(ROOMS.filter((room) => room.status === "klar").length);
     const noRoom = DAY.arrivals.filter((stay) => !stay.room).length;
     expect(noRoom).toBeGreaterThan(0);
-    const links = await arrivals.findAllByRole("link", { name: `${ready} klare rom` });
+    const links = await arrivals.findAllByRole("link", { name: ready === 1 ? "1 klart rom" : `${ready} klare rom` });
     expect(links).toHaveLength(noRoom);
     expect(links[0]).toHaveAttribute("href", "/rom");
 

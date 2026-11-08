@@ -1,7 +1,12 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RobotView } from "@/features/dashboard/selectors";
+import { nightSafety } from "@/features/handover/safety";
+import { parseRunLog } from "@/features/nightshift/runlog";
 import type { WorkOrderView } from "@/features/maintenance/select";
 import type { RequestView } from "@/features/requests/select";
+import { CLERK_SAMPLE, hazardLine } from "@/features/staffinput/entries";
 import { type AlertData, MAX_ALERTS, selectAlerts } from "./alerts";
 
 // The bell: only what needs a person, each with its one way in, Haster first, per role.
@@ -83,7 +88,8 @@ describe("selectAlerts (the bell)", () => {
       action: { label: "Åpne Vedlikehold", href: "/vedlikehold" },
     });
     expect(alerts.find((alert) => alert.id === "stock")).toMatchObject({ title: "Badehåndklær er under minimum", detail: "38 av 120 igjen i vaskeri.", action: { href: "/lager" } });
-    expect(alerts.find((alert) => alert.id === "battery")).toMatchObject({ title: "Roboten bør settes på lading", detail: "Batteriet står på 13 % etter natten.", action: { href: "/hotell" } });
+    // The robot docks itself: the morning needs to know it did not get there in time.
+    expect(alerts.find((alert) => alert.id === "battery")).toMatchObject({ title: "Roboten rakk ikke å lade før 06:00", detail: "Batteriet står på 13 % etter natten.", action: { href: "/hotell" } });
     // More than the bell lists: the selector keeps them all, the bell names the rest.
     expect(alerts.length).toBeGreaterThan(MAX_ALERTS);
   });
@@ -101,10 +107,82 @@ describe("selectAlerts (the bell)", () => {
     expect(selectAlerts(data({ maintenance: [order("wo-8", { priority: "hoy", status: "lost" })] }))).toEqual([]);
   });
 
+  it("puts an unsigned wet floor first, before every other Haster", () => {
+    const wet = order("wo-12", { origin: "robot", type: "sol", text: "Vått gulv ved corridor-1c, uten skilt", room: null, place: "corridor-1c", priority: "hoy", status: "ny", assignee: null, at: "05:35", safety: true });
+    const alerts = selectAlerts({ ...busy(), maintenance: [order("wo-m1", { outOfOrder: true }), wet] });
+    expect(alerts[0]).toMatchObject({
+      id: "wet-floor",
+      priority: "hoy",
+      title: "Vått gulv uten skilt i korridor 1C",
+      detail: "Siden 05:35. Sett ut et varselskilt eller tørk opp før gjestene står opp.",
+      action: { href: "/vedlikehold" },
+    });
+    expect(alerts[1].id).toBe("handover");
+    // Once someone marks it Løst, it leaves the bell.
+    expect(selectAlerts({ ...busy(), maintenance: [{ ...wet, status: "lost" }] }).some((alert) => alert.id === "wet-floor")).toBe(false);
+  });
+
+  it("never lists what the robot refused on good grounds or what the night manager called off", () => {
+    const quiet = selectAlerts(data({ requests: [request("r1", "avvist"), request("r2", "avlyst")] }));
+    expect(quiet).toEqual([]);
+  });
+
   it("counts in its level, so a seen alert only comes back when there is more of it", () => {
     const two = selectAlerts(data({ requests: [request("r1", "feilet"), request("r2", "feilet")] }))[0];
     const one = selectAlerts(data({ requests: [request("r1", "feilet")] }))[0];
     expect([two.id, two.level]).toEqual(["handover", 2]);
     expect([one.id, one.level]).toEqual(["handover", 1]);
+  });
+
+  it("on the demo night: each unsigned wet floor is its own Haster with an owner and straks, then the stranger, before anything else", () => {
+    const safety = nightSafety(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
+    const alerts = selectAlerts({ ...busy(), safety });
+    expect(alerts.slice(0, 5).map((alert) => [alert.id, alert.priority])).toEqual([
+      ["wet-floor:corridor-2b", "hoy"],
+      ["wet-floor:corridor-3d", "hoy"],
+      ["wet-floor:corridor-1c", "hoy"],
+      ["stranger", "hoy"],
+      ["handover", "hoy"],
+    ]);
+    expect(alerts[0]).toMatchObject({ title: "Vått gulv uten skilt i korridor 2B", detail: "Siden 23:51. Roboten skled der. Vaktmester, straks.", action: { href: "/vedlikehold" } });
+    expect(alerts[1].detail).toBe("Siden 04:38. Skiltet ble flyttet til korridor 3C. Vaktmester, straks.");
+    expect(alerts[3]).toMatchObject({
+      level: 7,
+      icon: "shield",
+      // Overlevering's neutral words: never "se på kamera og skriv en avviksmelding" about a possibly locked-out guest.
+      title: "En person ba roboten slippe ham inn på 7 rom",
+      detail:
+        "01:17–05:11. Roboten sa nei hver gang. Sjekk først om en gjest var låst ute (ring rommene, se nøkkelkortloggen). Ved tvil: avvik etter hotellets rutine. Resepsjon, straks.",
+      action: { label: "Åpne Overlevering", href: "/overlevering" },
+    });
+    // The robot manager can't open Overlevering: the stranger opens Natteskift for them.
+    expect(selectAlerts({ ...busy("robot"), safety }).find((alert) => alert.id === "stranger")?.action.href).toBe("/natteskift");
+    // A floor Vedlikehold marked Løst leaves the bell.
+    const twoB = safety.wetFloors.find((floor) => floor.place === "corridor-2b")?.orderIds ?? [];
+    const lost = twoB.map((id) => order(id, { origin: "robot", status: "lost", safety: true }));
+    expect(selectAlerts({ ...busy(), maintenance: lost, safety }).some((alert) => alert.id === "wet-floor:corridor-2b")).toBe(false);
+  });
+  it("adds the night clerk's own entries as Overlevering's Med robot does: her lobby floor (sign out) and her door are Haster too", () => {
+    const lines = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
+    const door = hazardLine("door", "stairwell-2", "", { by: "Kjersti Lund", now: new Date("2026-11-08T01:40:00Z") }); // 02:40 Oslo
+    const safety = nightSafety(lines, [...CLERK_SAMPLE, door]);
+    const alerts = selectAlerts({ ...busy(), safety });
+    // The robot's floors and hers in the night's order, as the safety row lists them; then the stranger and her door.
+    expect(alerts.slice(0, 6).map((alert) => alert.id)).toEqual([
+      "wet-floor:corridor-2b",
+      "wet-floor:lobby",
+      "wet-floor:corridor-3d",
+      "wet-floor:corridor-1c",
+      "stranger",
+      `staff-${String(door.type === "decision" ? door.data?.id : "")}`,
+    ]);
+    // A floor with a sign out still needs mopping: said as it is, never "uten skilt".
+    expect(alerts[1]).toMatchObject({ priority: "hoy", title: "Vått gulv i lobbyen, skilt satt ut", detail: "Siden 02:15. Meldt av Kjersti Lund, skilt satt ut 02:16. Vaktmester, straks." });
+    expect(alerts[5]).toMatchObject({
+      priority: "hoy",
+      title: "Dør i trappen, 2. etasje: sjekk at den er lukket og låst",
+      detail: "Dør i trappen, 2. etasje, meldt av Kjersti Lund kl. 02:40. Sjekk at den er lukket og låst. Resepsjon, straks.",
+      action: { label: "Åpne Logg", href: "/natt" },
+    });
   });
 });

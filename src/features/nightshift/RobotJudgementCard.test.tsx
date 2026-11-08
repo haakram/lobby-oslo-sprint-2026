@@ -1,0 +1,267 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import {
+  blindChecks,
+  crossNightPrecision,
+  DISTINCT_OWN,
+  grouped,
+  hotelRulesCostRange,
+  intervalText,
+  percentText,
+  REHEARSAL,
+  ROOM_CHECKS_FINAL,
+  shiftOf,
+  wilson,
+} from "./ledger";
+import { joinNo, RobotJudgementCard } from "./RobotJudgementCard";
+import { parseRunLog } from "./runlog";
+
+const DEMO = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
+
+describe("RobotJudgementCard on the demo night", () => {
+  it("leads with the stranger, as one incident with its times, in Norwegian", () => {
+    render(<RobotJudgementCard lines={DEMO} />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    expect(within(card).getByText("Sikkerhet · én hendelse")).toBeInTheDocument();
+    expect(card).toHaveTextContent("Sa nei 7 ganger til en ukjent person");
+    expect(card).toHaveTextContent("ba roboten slippe ham inn i 7 ulike rom mellom 01:17 og 05:11");
+    expect(card).toHaveTextContent("ga ikke fra seg nøkkelkort og fulgte ikke etter");
+    expect(card).toHaveTextContent("To ganger ventet den med å låse opp rom 209 og rom 304 til han var borte");
+    expect(card).toHaveTextContent("Roboten svarte (engelsk): I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID.");
+    const times = within(card).getByRole("list", { name: "Når og hvor" });
+    expect(within(times).getAllByRole("listitem")).toHaveLength(7);
+    expect(within(times).getAllByRole("listitem")[0]).toHaveTextContent("01:17 · rom 308");
+  });
+
+  it("checks the robot's own judgement against its own log (209: 8 of 9), says the real-hotel rule, and keeps the referee out of the main read", () => {
+    render(<RobotJudgementCard lines={DEMO} />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    const disclosure = card.querySelector("details")!;
+    expect(card).toHaveTextContent("8 av 9«Ferdig» på egen vurdering som holder mot robotens egen logg");
+    expect(card).toHaveTextContent("5 romsjekker og 4 søl: roboten meldte ferdig ut fra det den selv så.");
+    expect(card).toHaveTextContent(
+      "Rom 209: roboten satte inn bagasje kl. 01:29, så rommet tomt kl. 03:47 og meldte det tomt (R-049). Robotens blikk og dens egen oppgavelogg er uenige, så Fettero regner den ikke som holdt.",
+    );
+    // The simulator has no camera (round 6): the card never says "kameraet", and says what robotens blikk is behind Slik vet vi det.
+    expect(card).not.toHaveTextContent(/kamera(et)? og/i);
+    expect(disclosure).toHaveTextContent("«Robotens blikk» er simulatorens tekstsvar når roboten ser seg om: simulatoren har ikke kamera.");
+    // The fault test leads with its catch rate (data/fault-bed.json types, from hamad/faults temp/faults/real.md), then the precision.
+    expect(card).toHaveTextContent(
+      "Feiltest uten nett: robotens sjekk fanget 79 % av feilene vi la inn (88 % uten gjesten som sover i et «sjekket» rom). Når den sa «ferdig», holdt 98,5 % ved 5 % feil.",
+    );
+    expect(disclosure).toHaveTextContent(
+      "Av feilene roboten ikke rettet selv, fanget sjekken 251 av 317 (79 %) / 740 av 942 (79 %) / 1 499 av 1 858 (81 %) ved 5 / 15 / 30 % feil; uten gjesten som sover 88 % / 87 % / 90 %.",
+    );
+    expect(disclosure).toHaveTextContent(
+      "Den bommer på en gjest som sover i et «sjekket» rom (322 av 322), et høflig svar som ikke handler om saken (119 av 119), musikk som starter igjen (108 av 116) og en hittegjenstand som ligner (53 av 184).",
+    );
+    expect(disclosure).toHaveTextContent("Fasiten er simulatorens, så feiltesten ser ikke bagasjen simulatoren fjerner (rom 209).");
+    expect(card).toHaveTextContent("De andre 64 ble meldt etter at arbeidet var bekreftet utenfra (73 av 73 i alt).");
+    expect(card).toHaveTextContent("I et ekte hotell er «ferdig» bekreftet først når minst ett signal kommer utenfra roboten: låsloggen, gjesten, personalet eller PMS-en.");
+    // The answer to "hide the score": the score-blind runs in the ledger (kind=experiment), computed, honest about what they show.
+    const { blind } = crossNightPrecision(shiftOf(DEMO));
+    const checks = blindChecks()!;
+    expect(blind!.nights).toBeGreaterThan(0);
+    expect(checks.saidNo).toBe(0);
+    expect(disclosure).toHaveTextContent(`tok roboten ${blind!.reported} «ferdig»-avgjørelser, og ${blind!.credited} ble godkjent.`);
+    expect(disclosure).toHaveTextContent(
+      `Robotens egen sjekk sa aldri nei på disse nettene (0 av ${checks.checks} sjekker): det viser at poengsummen ikke trengtes der, ikke hvor godt roboten oppdager en feil.`,
+    );
+    expect(disclosure).toHaveTextContent("Det måler feiltesten: uten nett, i 20 gjenoppbygde ekte netter × 5 trekninger med 13 slags innlagte feil");
+    expect(disclosure).toHaveTextContent("Uten poengsummen holdt 98,5 % / 95,5 % / 91 % av «ferdig» ved 5 / 15 / 30 % feil, og sjekken fant 99,8 % / 99,7 % / 99,7 % av det som virkelig var gjort");
+    expect(disclosure).toHaveTextContent("Feilformuleringene er skrevet av oss: de viser hva slags svar som lurer sjekken, ikke hvor ofte det skjer.");
+    // What the hotel's rules cost (data/hotel-rules.json, hamad/hotelrules 70d5be4): live on four seeds, the knocks, the replay bed.
+    expect(disclosure).toHaveTextContent(
+      "Live på seed 10, 16, 23 og 5 (kl. 05:55): 2 605 / 2 584 / 2 393 / 2 453 mot finalebyggets 2 760 / 2 748 / 2 298 / 2 559 på de samme seedene, snitt 2 509 mot 2 591, −82 poeng natten.",
+    );
+    expect(disclosure).toHaveTextContent("Den banket på før 59 av 59 innganger med nøkkelkort (finalebygget 26 av 61 de samme nettene).");
+    // Rules 5 and 6 and all six (round 6, hamad/hotelrules 41b10f4, the replay bed's frozen 202 nights).
+    expect(disclosure).toHaveTextContent(
+      "Gjenspilt på 202 ekte netter (30 seeds, 41b10f4, aldri i finalebygget): alle seks reglene koster −207,3 poeng natten (−172,1 vektet per seed), de fire første −123,7 poeng natten (−93,7 vektet per seed); det meste er skiltene, for lageret har bare 3. Roboten ble aldri stående fast.",
+    );
+    expect(disclosure).toHaveTextContent("Den slo til 368 ganger på 190 netter, alltid robotens egen bagasje, aldri en person, og koster 0 poeng; live takket simulatoren for 389 av 390 slike sjekker (ca. 38 poeng hver), så å melde dem som feilet ville koste ca. 70 poeng natten.");
+    expect(disclosure).toHaveTextContent("Regel seks, hjemme innen 05:45 (hovednøkkelkortet levert, på lader): −90,4 poeng natten (−84,3 vektet per seed); kortet ble levert alle 202 nettene, og roboten sto på lader median 3,5 min etter 05:45.");
+    // The cost line is for the hotel-rules night; the demo night's main read stays free of the simulator.
+    expect(card).not.toHaveTextContent("Hotellregler koster");
+    expect(disclosure).toHaveTextContent("I natt godkjente simulatoren 9 av 9 på egen vurdering (få tilfeller: 95 %-intervall 70–100 %); én av dem motsies av robotens egen logg (rom 209).");
+    // The simulator, the referee, the score, the ledger path and the commit hash only inside "Slik vet vi det" (design review, round 5).
+    const main = card.cloneNode(true) as HTMLElement;
+    main.querySelector("details")?.remove();
+    expect(main).not.toHaveTextContent(/dommer|simulator|poengsum|Wybe|ledger\.csv|cb72845|falsk|290 av 291/i);
+    expect(within(disclosure).getByText("Slik vet vi det").tagName).toBe("SUMMARY");
+    expect(disclosure).toHaveTextContent("«Bekreftet utenfra» og «godkjent» betyr her at Wybe Night Shift-simulatoren svarte «Noted. Thanks.»");
+  });
+
+  it("puts the robot's faults in amber with their words and its wins in ink, never green (round 6)", () => {
+    render(<RobotJudgementCard lines={DEMO} />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    expect(card.querySelector(".text-success")).toBeNull();
+    // 209 (8 of 9), the doors (10 of 15 without a knock) and the end of the shift are the robot's faults: amber, each
+    // with "Robotens feil".
+    const rows = within(card).getAllByRole("listitem").filter((item) => within(item).queryByText("Robotens feil"));
+    expect(rows.map((row) => row.querySelector(".font-mono")?.textContent ?? row.querySelector(".font-semibold")?.textContent)).toEqual([
+      "8 av 9",
+      "10 av 15",
+      "Ved skiftslutt",
+    ]);
+    for (const row of rows.slice(0, 2)) expect(row.querySelector(".font-mono")).toHaveClass("text-warning");
+    // The demo night ends at the lift, off the charger, with the master keycard in hand.
+    expect(rows[2]).toHaveTextContent("Står ved heis 1, ikke på lader, 20 % batteri.Har fortsatt hovednøkkelkortet. I et hotell leveres det tilbake før vakten slutter.");
+    // The slip and the moved sign carry the words too; the signs set and the refusals stay ink.
+    expect(card.textContent!.match(/Robotens feil\.Skled|Robotens feil\.Flyttet/g)).toHaveLength(2);
+    const signs = within(card).getAllByRole("listitem").find((item) => item.textContent!.includes("Skilt for vått gulv satt ut"))!;
+    expect(signs.querySelector(".font-mono")).toHaveClass("text-text");
+  });
+
+  it("shows the refusals in a manager's words, the signs, the slip, the moved sign, the master key and the doors", () => {
+    render(<RobotJudgementCard lines={DEMO} />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    expect(card).toHaveTextContent("7 av 8Avvisninger som holdt");
+    expect(card).toHaveTextContent("6 meldinger uten bestilling og 1 alt levert · 1 ikke godkjent.");
+    expect(card).toHaveTextContent("Ikke godkjent: R-036 (roboten fant ikke noe nytt søl).");
+    expect(card).toHaveTextContent("Seks gjester sa at noe aldri kom. Roboten fant ingen bestilling og leverte ikke. Gi det likevel? Det avgjør resepsjonen i Forespørsler.");
+    expect(within(card).getByRole("link", { name: "Forespørsler" })).toHaveAttribute("href", "/foresporsler?filter=robot");
+    // No virtue badge: the refusals are a decision for a person, not proof the robot did well.
+    expect(card).not.toHaveTextContent("gjorde ikke noe unødvendig");
+    expect(card).toHaveTextContent("4Skilt for vått gulv satt ut");
+    expect(card).toHaveTextContent("Korridor 3D, 3A, 2A og 3C.Vått uten skilt ved slutten: korridor 1C, 2B og 3D.");
+    expect(card).toHaveTextContent("Skled i korridor 2B kl. 23:51 og krysset det samme våte gulvet 27 ganger til uten å sette skilt der.");
+    expect(card).toHaveTextContent("Flyttet skiltet fra korridor 3D kl. 04:38 til korridor 3C mens gulvet der fortsatt var vått.");
+    expect(card).toHaveTextContent("10 av 15Innganger med nøkkelkort uten å banke på");
+    expect(card).toHaveTextContent("Roboten låste seg inn 15 ganger og banket på først 5 av dem. Uten banking: rom 212 (3), 304 (2), 209 (3), 313 og 301.");
+    expect(card).toHaveTextContent("Ingen dører hadde Ikke forstyrr-skilt i natt.");
+    // The person's English plea is not shown; only the robot's own reply, as a quote.
+    expect(card).not.toHaveTextContent(/bathrobe|locked out/i);
+  });
+
+  it("puts the night beside every live night in the ledger and the demo build's own nights, computed, behind Slik vet vi det", () => {
+    render(<RobotJudgementCard lines={DEMO} />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    const disclosure = card.querySelector("details")!;
+    const { all, build, allOwn } = crossNightPrecision(shiftOf(DEMO));
+    expect(all!.credited).toBeLessThan(all!.reported);
+    // The card groups thousands with a no-break space; the matcher reads it as a plain one.
+    const text = (value: string) => value.replace(/\u00a0/g, " ");
+    expect(disclosure).toHaveTextContent(
+      text(
+        `Alle ${all!.nights} live-netter med logg, gjentakelser av samme seed medregnet: ${grouped(all!.credited)} av ${grouped(all!.reported)} godkjent (${percentText(all!.percent)}); ` +
+          `på egen vurdering ${grouped(allOwn!.credited)} av ${grouped(allOwn!.reported)} (${percentText(allOwn!.percent)}), ` +
+          `romsjekker ${grouped(allOwn!.roomChecks.credited)} av ${grouped(allOwn!.roomChecks.reported)}.`,
+      ),
+    );
+    // The demo build's own "290 av 291" read like a copy of the score-blind line (domain reviews): it is gone.
+    expect(build).toMatchObject({ commit: "cb72845", nights: 4, credited: 290, reported: 291 });
+    expect(disclosure).not.toHaveTextContent("Samme versjon som i natt");
+    expect(disclosure.textContent!.match(/290 av 291/g) ?? []).toHaveLength(0);
+    // Distinct claims: the final branch's own judgement once per (seed, request), with its interval, from scripts/ledger.py;
+    // round 6: both figures, credited by the simulator and holding against the robot's own log (the 209 rule over every night).
+    const distinct = DISTINCT_OWN!;
+    expect(distinct).toMatchObject({ claims: 65, credited: 64, reports: 189, holds_log: 54 });
+    expect(intervalText(distinct.ci95, distinct.credited, distinct.claims)).toBe("92–99,7 %");
+    expect(intervalText(distinct.ci95_log!, 54, 65)).toBe("72–90 %");
+    expect(disclosure).toHaveTextContent(
+      text(
+        "Sluttgrenens 18 netter, talt som ulike påstander (samme seed og forespørsel spilt på nytt teller én gang): 64 av 65 på egen vurdering godkjent av simulatoren (95 %-intervall 92–99,7 %), men 54 av 65 holder mot robotens egen logg (95 %-intervall 72–90 %); 189 meldinger med gjentakelsene.",
+      ),
+    );
+    expect(ROOM_CHECKS_FINAL).toMatchObject({ distinct: 40, distinct_contradicted: 10, reports: 117, contradicted: 34, contradicted_credited: 34 });
+    expect(disclosure).toHaveTextContent(
+      "10 av 40 romsjekker ble meldt tomme i et rom roboten selv hadde satt bagasje inn i, og simulatoren godkjente alle: den fjerner levert bagasje fra rommet, så dens romsjekk ser den ikke.",
+    );
+    // The dress rehearsal (the 12:00 build on ten never-played seeds) by the same rule.
+    expect(REHEARSAL).toMatchObject({ build: "8de9ffc", nights: 10, own: 101, own_credited: 101, own_holds_log: 88 });
+    expect(REHEARSAL!.room_checks).toMatchObject({ reports: 64, contradicted: 13, contradicted_credited: 13, nights_firing: 8, nights: 10 });
+    expect(disclosure).toHaveTextContent(
+      "Generalprøven (bygget som spiller finalen, 8de9ffc, 10 netter på seeds ingen bygg hadde spilt): 101 av 101 på egen vurdering godkjent av simulatoren, 88 av 101 holder mot egen logg (95 %-intervall 79–92 %). 13 av 64 romsjekker motsagt, på 8 av 10 netter, og simulatoren godkjente alle 13.",
+    );
+    // Two forecasts committed before 12:00 (scripts/forecast.py) and the final's slot, filled in after 13:05.
+    expect(disclosure).toHaveTextContent(
+      text(
+        "Prognose for finalen (snitt av de 9 beste av 10 netter), begge låst før kl. 12: modellen 2 050 (80 %: 1 759–2 393), generalprøven alene 2 170 (80 %: 2 055–2 301). Finalen: fylles inn etter kl. 13:05.",
+      ),
+    );
+    expect(disclosure).toHaveTextContent(/Kilde: docs\/runs\/ledger\.csv \(\d+ live-starter, siste \d\d\.11 \d\d:\d\d\), regnet ut av scripts\/ledger\.py/);
+  });
+
+  it("has a compact variant for Overlevering: three figures with plain labels, the full card instead of them behind Vis alt", () => {
+    render(<RobotJudgementCard lines={DEMO} compact />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    const figures = within(card).getAllByRole("list")[0];
+    const items = within(figures).getAllByRole("listitem");
+    expect(items).toHaveLength(3);
+    // The robot's faults amber with their word ("Obs:" for a screen reader, "Robotens feil." on screen); the refusals ink.
+    // Task state apart from the result (round 7): every check made, one answer disagrees with the robot's own log.
+    expect(items[0]).toHaveTextContent(
+      "Obs: 8av 9«ferdig» på egen vurdering holder mot robotens egen loggRobotens feil.5 romsjekker og 4 søl gjort · 1 svar uenig med egen logg: rom 209, bagasje inn 01:29, meldt tomt 03:47.",
+    );
+    expect(items[1]).toHaveTextContent("7ganger sa nei til en ukjent person01:17–05:11, 7 rom · holdt nøkkelkortet ved 209 og 304.");
+    expect(items[1]).not.toHaveTextContent(/Obs|Robotens feil/);
+    expect(items[2]).toHaveTextContent("Obs: 10av 15nøkkelkortinnganger uten å banke påRobotens feil.Også: skled i korridor 2B 23:51, krysset 27 ganger til uten skilt.");
+    expect(card.querySelector(".text-success")).toBeNull();
+    expect(card).toHaveTextContent("I et ekte hotell er «ferdig» bekreftet først når minst ett signal kommer utenfra roboten");
+    // The fault test is a lab figure: on the full card and behind Slik vet vi det, not on the manager's compact read (round 6).
+    expect(card).not.toHaveTextContent(/Feiltest|innlagte feil/);
+    // No jury words on the manager's read, and no second "290 av 291".
+    expect(card).not.toHaveTextContent(/simulator|dommer|poengsum|290 av 291|cb72845/i);
+    // "Vis alt" replaces the figures with the full card; it never shows both (design review).
+    const toggle = within(card).getByRole("button", { name: "Vis alt og slik vet vi det" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(card).not.toHaveTextContent("Sa nei 7 ganger til en ukjent person");
+    fireEvent.click(toggle);
+    expect(within(card).getByRole("button", { name: "Vis mindre" })).toHaveAttribute("aria-expanded", "true");
+    expect(card).toHaveTextContent("Sa nei 7 ganger til en ukjent person");
+    expect(card).not.toHaveTextContent("1 svar uenig med egen logg: rom 209");
+    expect(card.textContent!.match(/I et ekte hotell/g)).toHaveLength(1);
+  });
+
+  it("computes the night's interval the way scripts/ledger.py does (Wilson, 95 %)", () => {
+    expect(intervalText(wilson(9, 9), 9, 9)).toBe("70–100 %");
+    expect(intervalText(wilson(8, 9), 8, 9)).toBe("57–98 %");
+    expect(wilson(0, 0)).toEqual([0, 1]);
+  });
+
+  it("says how far into the night it counts while the replay runs", () => {
+    render(<RobotJudgementCard lines={DEMO} until={4 * 3600} asOf="02:00:00" />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    expect(card).toHaveTextContent("Fra robotens logg, fram til 02:00");
+    expect(card).toHaveTextContent("Sa nei 3 ganger");
+    // By 02:00: five master-key entries (212 00:31, 304, 314 knocked, 209 01:29, 212 01:58), not the night's 15.
+    expect(card).toHaveTextContent("Roboten låste seg inn 5 ganger og banket på først 1 av dem.");
+  });
+
+  it("leaves the incident out when nobody asked, and says nothing is done yet on an empty log", () => {
+    render(<RobotJudgementCard lines={[]} />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    expect(within(card).queryByText("Sikkerhet · én hendelse")).not.toBeInTheDocument();
+    expect(card).toHaveTextContent("Roboten har ikke meldt noe ferdig ennå.");
+  });
+});
+
+describe("joinNo", () => {
+  it("joins like Norwegian", () => {
+    expect(joinNo([])).toBe("");
+    expect(joinNo(["a"])).toBe("a");
+    expect(joinNo(["a", "b", "c"])).toBe("a, b og c");
+  });
+});
+
+describe("RobotJudgementCard on the hotel-rules night (round 6: a second real log)", () => {
+  const RULES = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/hotel-rules-seed16.jsonl"), "utf8")).lines;
+
+  it("computes itself: every keycard entry knocked, no sign moved off a wet floor, and what is still wrong", () => {
+    render(<RobotJudgementCard lines={RULES} />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    expect(card).toHaveTextContent("0 av 14Innganger med nøkkelkort uten å banke på");
+    expect(card).toHaveTextContent("Roboten banket på før alle 14 innganger med nøkkelkort.");
+    expect(card).not.toHaveTextContent("mens gulvet der fortsatt var vått");
+    // Still wrong: on the charger, but the master keycard still in hand at 06:00; and 209, the same contradiction.
+    expect(card).toHaveTextContent("Ved skiftslutt");
+    expect(card).toHaveTextContent("På lader, 16 % batteri.Har fortsatt hovednøkkelkortet.");
+    expect(card).toHaveTextContent("Rom 209: roboten satte inn bagasje kl. 01:29");
+    // One plain line on what the rules cost (four rules to all six, to the nearest ten), the rest behind Slik vet vi det.
+    expect(hotelRulesCostRange()).toEqual([120, 210]);
+    expect(card).toHaveTextContent("Hotellregler koster ca. 120–210 poeng per natt i simulatoren; Fettero viser hva roboten gjorde i stedet.");
+  });
+});

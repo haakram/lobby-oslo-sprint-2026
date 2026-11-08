@@ -136,7 +136,8 @@ export function FloorMap({ matrix, legs, order }: { matrix: RouteMatrix; legs: T
               onClick={() => setFloor(f)}
               onKeyDown={onTabKey}
               className={cx(
-                "inline-flex min-h-12 items-center gap-2 rounded-md border px-4 text-base font-semibold",
+                // No wrap at 360 px: "1. etasje" stays on one line (domain review).
+                "inline-flex min-h-12 items-center gap-2 rounded-md border px-3 text-base font-semibold whitespace-nowrap sm:px-4",
                 "transition-colors duration-[120ms] ease-standard",
                 selected ? "border-line bg-surface text-text" : "border-transparent text-muted hover:text-text",
               )}

@@ -4,7 +4,8 @@ import { LAST_COUNT, storeName } from "@/features/inventory/testData";
 import type { WorkOrderView } from "@/features/maintenance/select";
 import { type ModuleId, moduleById } from "@/features/modules/registry";
 import { SourceNote } from "@/features/modules/SourceNote";
-import { type RequestView, SOURCE_WORD, waiting } from "@/features/requests/select";
+import { type RequestView, requestTotals, SOURCE_WORD } from "@/features/requests/select";
+import { moneyLines } from "@/features/rooms/money";
 import { SHIFTS } from "@/features/staff/testData";
 import type { RunStatus } from "@/features/nightshift/useRun";
 import { Badge, Card, cx, Monogram, RegenIcon, Skeleton } from "@/ui";
@@ -13,7 +14,7 @@ import { percent } from "./format";
 import { placeLabel, type RoomStatus, STATUS_LOOK } from "./labels";
 import type { DashboardData } from "./data";
 import { ReceptionPanelView } from "./ReceptionPanel";
-import { countRooms, floorsOfRooms } from "./selectors";
+import { countRooms, floorsOfRooms, HELD_WORD, PENDING_WORD } from "./selectors";
 import { batteryLow, robotDoing } from "./TopBar";
 
 /**
@@ -120,17 +121,40 @@ function NightMissing({ status }: { status: RunStatus }) {
   );
 }
 
-/** Rom og renhold: the key rack in small, every room a tile with its status icon (the word is in its name). */
+/**
+ * Rom og renhold: the room check's money first (round 2, design review: the hallway test starts here and
+ * the money line was missing), then the key rack in small, every room a tile with its status icon.
+ */
 function RoomsWidget({ data, className }: WidgetProps) {
   const rooms = data.rooms;
   const counts = rooms ? countRooms(rooms) : null;
   const floorsDown = rooms ? [...floorsOfRooms(rooms)].reverse() : [];
+  // The one money story (round 7): 210's certain cost first, 213's kroner said as conditional, each line naming its room.
+  const money = data.money ? moneyLines(data.money) : [];
   return (
     <Frame module="rom" className={className}>
       {!rooms || !counts ? (
         <NightMissing status={data.nightStatus} />
       ) : (
         <>
+          {money.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 rounded-md bg-sunken px-3 py-1">
+              <div aria-live="polite" className="flex items-start gap-1.5 py-1 text-base font-semibold">
+                {/* Sent to reception is pending, not done: neutral until the booking system confirms it (round 5, owner A). */}
+                <RegenIcon name="key" size={18} strokeWidth={2} className="mt-0.5 shrink-0 text-muted" />
+                <ul className="flex flex-col gap-0.5">
+                  {money.map((line, index) => (
+                    <li key={line} className={index > 0 ? "text-sm font-medium" : undefined}>
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <Link href="/rom" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
+                Se romsjekken
+              </Link>
+            </div>
+          )}
           <ul aria-label="Rom per status" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {LEGEND_ORDER.map((status) => (
               <li key={status} className="flex items-center gap-1.5">
@@ -143,7 +167,8 @@ function RoomsWidget({ data, className }: WidgetProps) {
             <li className="flex items-center gap-1.5">
               {/* Quiet here: what an avvik needs is on Vedlikehold and in the bell, not in red on Oversikt. */}
               <RegenIcon name={AVVIK.icon} size={14} strokeWidth={2} className="shrink-0 text-muted" />
-              <span className="text-muted">Avvik</span>
+              {/* Rooms with an open work order, not the work orders themselves (Vedlikehold counts those): round 5, design review. */}
+              <span className="text-muted">Rom med avvik</span>
               <span className="font-semibold tabular-nums">{counts.avvik}</span>
             </li>
           </ul>
@@ -151,26 +176,29 @@ function RoomsWidget({ data, className }: WidgetProps) {
             {floorsDown.map((floor) => (
               <div key={floor} className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-2">
                 <span className="pt-1.5 font-mono text-sm font-medium text-muted tabular-nums">{floor}</span>
-                <ul className="grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-1">
+                {/* 40 px tiles with a mouse, so a 14-room floor fits one row at 1440 (no orphan 314); 44 px for a finger. */}
+                <ul className="grid grid-cols-[repeat(auto-fill,minmax(40px,1fr))] gap-1 pointer-coarse:grid-cols-[repeat(auto-fill,minmax(44px,1fr))]">
                   {rooms
                     .filter((room) => room.floor === floor)
                     .map((room) => {
                       const look = STATUS_LOOK[room.status];
                       const avvik = room.openOrders > 0;
+                      // Closed today: the bell's "Rom 137 er stengt i dag" and the tile say the same.
+                      const word = room.closed ? "Ute av drift" : room.held ? HELD_WORD : room.toConfirm ? "Bekreft først" : room.pending ? PENDING_WORD : look.word;
                       return (
                         <li key={room.id}>
                           <Link
                             href={`/rom?rom=${room.id}`}
-                            title={`Rom ${room.number}: ${look.word}${avvik ? ", avvik" : ""}`}
-                            aria-label={`Rom ${room.number}: ${look.word}${avvik ? ", avvik" : ""}`}
+                            title={`Rom ${room.number}: ${word}${avvik ? ", avvik" : ""}`}
+                            aria-label={`Rom ${room.number}: ${word}${avvik ? ", avvik" : ""}`}
                             className={cx(
                               "flex h-11 flex-col justify-between rounded-sm p-1 transition-[filter] duration-[120ms] ease-standard hover:brightness-110 focus-visible:outline-offset-[-2px]",
-                              look.tile,
+                              room.closed ? "bg-sunken" : look.tile,
                             )}
                           >
                             {/* The status as a shape too, not only a colour (WCAG 1.4.1): the legend above maps each icon. */}
                             <span aria-hidden="true" className="flex items-center gap-0.5">
-                              <RegenIcon name={ROOM_STATUS[room.status].icon} size={12} strokeWidth={2} className={look.word_class} />
+                              <RegenIcon name={room.closed ? "key" : ROOM_STATUS[room.status].icon} size={12} strokeWidth={2} className={room.closed ? "text-muted" : look.word_class} />
                               {avvik && <RegenIcon name={AVVIK.icon} size={12} strokeWidth={2} className="text-muted" />}
                             </span>
                             <span className={cx("font-mono text-xs leading-none tabular-nums", look.loud && "font-semibold")}>{room.number}</span>
@@ -216,9 +244,11 @@ function GuestsWidget({ data, className }: WidgetProps) {
   );
 }
 
-/** Requests: what got done first, the latest of it, and how many wait (those are in the bell). */
+/** Requests: what got done first, the latest of it, and how many wait (those are in the bell). Counted as on Forespørsler. */
 function RequestsWidget({ data, className }: WidgetProps) {
-  const waits = waiting(data.requests);
+  const totals = requestTotals(data.requests);
+  // The robot's share named, so "79 av 87" here and Oversikt's "Robotens oppdrag 73 av 77" read as one night (round 5).
+  const robot = requestTotals(data.requests.filter((request) => request.source === "robot"));
   const done = data.requests.filter((request) => request.status === "fullfort");
   const latest = [...done].sort((a, b) => sinceNoon(b.at) - sinceNoon(a.at)).slice(0, SHOWN);
   return (
@@ -230,8 +260,9 @@ function RequestsWidget({ data, className }: WidgetProps) {
       ) : (
         <>
           <GoodLine>
-            <Good>{done.length}</Good> av {data.requests.length} fullført
-            {waits.length > 0 && ` · ${waits.length} ${waits.length === 1 ? "venter" : "venter"} på en person`}
+            <Good>{totals.done}</Good> av {totals.total} forespørsler fullført
+            {robot.total > 0 && totals.total > robot.total && ` (roboten ${robot.done} av ${robot.total}, telefon og personale ${totals.done - robot.done} av ${totals.total - robot.total})`}
+            {totals.waiting > 0 && ` · ${totals.waiting} venter på en person`}
           </GoodLine>
           {latest.length > 0 && (
             <ol aria-label="Sist fullført" className="mt-2 divide-y divide-line">
@@ -383,7 +414,7 @@ function StaffWidget({ data, className }: WidgetProps) {
 function RobotWidget({ data, className }: WidgetProps) {
   const robot = data.robot;
   const low = batteryLow(robot);
-  const robotTotal = data.night ? Math.max(data.night.tasks.size, data.night.tasksDone + data.night.tasksFailed) : 0;
+  const tally = data.night?.tally ?? null;
   const state = !robot
     ? null
     : robot.ended
@@ -418,9 +449,17 @@ function RobotWidget({ data, className }: WidgetProps) {
             </dd>
             <dt className="text-muted">I natt</dt>
             <dd className="tabular-nums">
-              <span className="font-semibold text-success">{data.night?.tasksDone ?? 0}</span>
-              {robotTotal > 0 && ` av ${robotTotal}`} oppgaver fullført
+              <span className="font-semibold text-success">{tally?.done ?? 0}</span>
+              {tally && tally.total > 0 && ` av ${tally.total}`} oppdrag fullført
             </dd>
+            {tally && tally.reported > 0 && (
+              <>
+                <dt className="text-muted">Bekreftet</dt>
+                <dd className="tabular-nums">
+                  {tally.done} av {tally.reported} «ferdig»
+                </dd>
+              </>
+            )}
           </dl>
         )}
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold">

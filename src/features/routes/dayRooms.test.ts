@@ -1,0 +1,52 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import { hotelForRun } from "@/features/hotel";
+import { parseRunLog } from "@/features/nightshift/runlog";
+import { planCleaning } from "./cleaningPlan";
+import { dayRooms } from "./dayRooms";
+import { roomStatusAt } from "./nightRooms";
+import { cleaningSavings } from "./SavingBand";
+
+// Today's departures as the booking system's test data has them for the demo hotel.
+vi.mock("@/features/guests/testData", () => ({
+  selectGuestDay: () => ({
+    departures: ["room-201", "room-203", "room-206", "room-214", "room-305", "room-313"].map((room) => ({
+      room,
+      notes: room === "room-203" ? ["Sen utsjekk 14:00"] : [],
+    })),
+  }),
+}));
+
+const DEMO = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
+
+describe("dayRooms on the demo night", () => {
+  const day = dayRooms(roomStatusAt(DEMO));
+
+  it("leads with the room the robot found dirty, then the departures by checkout time, the late one last", () => {
+    expect(day.map((entry) => entry.room)).toEqual(["room-135", "room-206", "room-313", "room-201", "room-305", "room-214", "room-203"]);
+    expect(day[0]).toEqual({ room: "room-135", why: "natt", at: "05:02" });
+    expect(day.at(-1)).toEqual({ room: "room-203", why: "utsjekk", at: "14:00" });
+  });
+
+  it("compares metres only: as short as room-number order, 9 % shorter and 3 lift rides fewer than as they come free", () => {
+    const plan = planCleaning(hotelForRun(DEMO), { start: "laundry", rooms: day.map((entry) => entry.room), cart: true });
+    if (!plan || "error" in plan) throw new Error("expected a plan");
+    expect(plan.elevatorRides).toBe(3);
+    expect(plan.givenRides).toBe(6);
+    const win = cleaningSavings(plan);
+    // Room-number order is the baseline the optimiser plays by too; on this night it is just as short, so the round leads.
+    expect(win).toMatchObject({ lead: "none", comparable: true, rides: 3, onNumbers: { metres: 0, percent: 0 } });
+    expect(win.onGiven).toEqual({ metres: 26, percent: 9 });
+    expect(Math.round(plan.givenMetres)).toBe(286);
+    expect(Math.round(plan.tour.metres)).toBe(260);
+  });
+
+  it("leaves out a departure behind a Do-Not-Disturb sign, and never lists a room twice", () => {
+    const statuses = new Map([
+      ["room-206", { room: "room-206", status: "ikke_forstyrr" as const, clock: "03:00:00", note: null }],
+      ["room-201", { room: "room-201", status: "ma_vaskes" as const, clock: "02:00:00", note: null }],
+    ]);
+    expect(dayRooms(statuses).map((entry) => entry.room)).toEqual(["room-201", "room-313", "room-305", "room-214", "room-203"]);
+  });
+});

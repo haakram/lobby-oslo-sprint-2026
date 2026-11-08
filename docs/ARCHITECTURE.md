@@ -193,6 +193,64 @@ from the loop's last `status` before the task to the flow's verifying `status` a
 `place`/`say`. It **excludes the report's own +5**, which shows on the next `state` line. Sum
 `state.score`/the `end` line for totals, not `points`.
 
+**Optional run-log fields (jury branch, additive; contract change).** Older logs stay valid and readers
+ignore fields they do not know. Schema for every line type: `docs/runlog.schema.json` (JSON Schema 2020-12).
+
+- `start.build`: `{"commit": "e1e95bdff0c3", "dirty": false}`, the agent checkout's commit at launch and
+  whether tracked files differed from it (`null` where git cannot say). `scripts/ledger.py` takes the
+  commit from here before replay codes or `git log --before` (`commit_source=start_line`); `dirty: true`
+  makes a build night a board test.
+- `start.flags`: `{"score_blind": true, "experiments": ["spill_done", "sign_move"], "price_switches":
+  ["wet"], "env": {"NS_SCORE_BLIND": "1"}}`, what was switched on at the start: `score_blind` (the agent
+  never read the score), the score experiments, the price switches that were on, and every `NS_*`
+  variable (no secrets). A score-blind night is `kind=experiment` in the ledger: kept out of the build
+  and final figures, and every "done" in it counts as the robot's own judgement. The judgement card reads
+  the same flag.
+- `start.source`: who wrote the log. It is absent for the Night Shift agent and `"open-rmf"` for the adapter.
+- `task_done.evidence`: `[{"signal": "lock" | "photo" | "guest_ack" | "compartment" | "sign_placed" |
+  "referee" | "door_answered" | "item_placed" | "door_lock" | "energy_slot" | "staff_check" | "pms", "at",
+  "detail", "origin"?}]`. The evidence rule (review round 5, `evidenceVerdict` in
+  `src/features/nightshift/conduct.ts`): a "done" or room fact is "bekreftet" only with two different
+  signals, at least one from outside the robot; two robot signals read "robotens egen observasjon"; one
+  signal alone reads "ikke bekreftet". Optional `origin`: `robot | building | guest | staff | pms |
+  referee`; when absent it is read from the signal (and a lock opened with the robot's own credential, per
+  its `detail`, is the robot's).
+- A non-Wybe source: `src/features/nightshift/openRmf.ts` turns an Open-RMF `task_state` + `fleet_state`
+  sample (`src/features/nightshift/fixtures/open-rmf-night.json`, test data the team wrote) into v1 lines.
+  Natteskift's *Kilde* switch shows it.
+- Two producers without a robot (review round 5, owner B; Overlevering's *Uten robot* builds the page from them
+  and the booking system only, `src/features/nightsource/compose.ts`):
+  - the night clerk (`src/features/staffinput/entries.ts`, Nattevaktens logg on `/natt`): `room_status`
+    (`source: "staff"`, status `klar` | `opptatt` | `ma_vaskes`), `hazard` (`wet`, with `signed` and
+    `signedAt`: *Skilt satt ut?* is a required yes or no, round 6), `sign_placed` (`{"target": id}`: a sign
+    put out later), `acknowledged` (`{"target", "hazard": "wet" | "person", "place", "robotAt"}`: *Kvitter*
+    on a robot hazard in *Fra roboten*; the target is `robotHazardKey` in `staffinput/robotHazards.ts`),
+    `security_event` (`door_open` | `unknown_person`), `note` and `retracted` (`{"target": id}`: Angre adds a
+    line, it never deletes one); every line carries `source: "staff"`, `id`, `by`, `at` (Oslo clock) and
+    `stamp` (ISO), and `sample: true` on the test night. Kept on the device in the pilot (localStorage
+    `lobby:nattevakt-logg`, per handover day; from 21:00 an entry belongs to the next morning), 30 days
+    (`RETENTION_DAYS`, `staffinput/retention.ts`), pruned on load; `TODO(phase-3)` a server store;
+  - the door lock (`src/features/doorlock/feed.ts`, test data): one `room_signal` per room,
+    `{"room", "signal": "no_card" | "card_in", "source": "door_lock"}` plus `"since": null` on `no_card`
+    (the window from 18:00), never who and never when: `card_in` carries no clock (a time sent there is
+    dropped on read).
+
+**Read by the app (Lobby), additive, jury branch.** Rom og renhold compares the last `room_status` per
+room with the booking system's test snapshot (`src/features/rooms/pms.ts`, `TODO(phase-3)`):
+`klar` from `room_check` at or after 01:00 on a booked room is *Kan selges i dag*; `opptatt` or
+`ikke_forstyrr` on a room the system has as vacant is *Gjest uten booking* (`src/features/rooms/reconcile.ts`).
+The person at the door is read from the `note` (`"Ms Bakke opens the door of room-328."`).
+
+**The AI receptionist's records feed Forespørsler.** A `message` record (`record_message`, not topic
+`booking`) or a call-log note that names a room (`rom 214`, `room 214`) is an in-stay request: a row with
+source *Telefon (AI)*, a link to the call, and a one-tap *Send roboten* (things the robot can carry) or
+*Gi til …* (the person on shift) (`src/features/requests/phoneTasks.ts`). The receptionist's tools and
+prompt are unchanged.
+
+**Kept in the browser** (`localStorage`, `TODO(phase-3)`: a shared store): `lobby:room-check-marks`
+(per day, per room: released for sale or a task for reception), `lobby:phone-task-assignments` (who
+took a phone task), `lobby:handover-signoff` (per day: who signed *Kvitter mottatt* and when).
+
 ### 4.4 Environment variables
 
 Every variable in `.env.example`, with what reads it. Keys reach teammates only through `scripts/secrets.sh` (OPERATIONS § 4), never GitHub. Added (blank) to `.env.example` and here in the
@@ -203,7 +261,7 @@ same PR that first reads it.
 | `WYBE_NIGHTSHIFT_URL` | Track A agent | no (default in `.env.example`) | `.env.example` |
 | `WYBE_NIGHTSHIFT_KEY` | Track A agent | **yes**: one team, one key | Hamad's `.env`, sent privately |
 | `ANTHROPIC_API_KEY` | Track A agent, Track B server | **yes** | Hamad's `.env`, sent privately |
-| `ANTHROPIC_BUDGET_USD` | everything that calls Claude | no (default 30) | `.env.example` |
+| `ANTHROPIC_BUDGET_USD` | Track A agent (`agent/config.py`, the event's USD 30 cap); the Next app reads `APP_CLAUDE_BUDGET_USD` instead | no (default 30) | `.env.example` |
 | `NIGHTSHIFT_MAX_RPS` | Track A agent client | no (default 16) | `.env.example` |
 | `SECRETS_CLEAR_AFTER` | `scripts/secrets.sh` | no (default 60) | `.env.example` |
 | `VIEWER_ALLOWED_ORIGINS` | Track A viewer server (CORS on `/api/*`) | no (default `http://localhost:3000,http://127.0.0.1:3000`) | `.env.example` |
@@ -216,7 +274,7 @@ same PR that first reads it.
 | `RECEPTION_PUBLIC_URL` | `src/features/reception/setup-agent.ts` (webhook mode; `https://` only) | no (blank in `.env.example`) | `.env` when setting up the phone agent |
 | `RECEPTION_TOOL_SECRET` | Track B server (`/api/reception/tools/[tool]`), `src/features/reception/setup-agent.ts` | **yes**: at least 24 characters, also stored at ElevenLabs as a workspace secret | `.env` and Vercel project settings |
 | `LOBBY_AUTH_SECRET` | Lobby app: `src/proxy.ts`, `/api/auth/*`, `getSession()` (HMAC key of the session cookie) | **yes**: at least 32 random bytes (`node scripts/lobby-hash.mjs --secret`); rotating it logs everyone out; missing = nobody logs in | `.env` and Vercel project settings |
-| `LOBBY_USERS` | Lobby app: `src/proxy.ts`, `/api/auth/*`, `getSession()` (accounts, roles, scrypt hashes) | **yes** (hashes, never passwords; keep private): `node scripts/lobby-hash.mjs --users <password>` (five accounts: hamad, shiraz, resepsjon, robot, and `vert` with role `host`; regenerate when an account is added); missing = nobody logs in | `.env` and Vercel project settings |
+| `LOBBY_USERS` | Lobby app: `src/proxy.ts`, `/api/auth/*`, `getSession()` (accounts, roles, scrypt hashes) | **yes** (hashes, never passwords; keep private): `node scripts/lobby-hash.mjs --users <password>` (six accounts: hamad, shiraz, resepsjon, robot, `vert` with role `host`, and `siri`, *Siri Haugen*, admin, the demo's morning manager; `--add-missing <env file>` adds a new team account to a running setup in place, with the team's password, leaving every other entry and the secret as they are); missing = nobody logs in | `.env` and Vercel project settings |
 
 ## 5. External services
 

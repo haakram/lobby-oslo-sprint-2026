@@ -37,15 +37,24 @@ const PLACE_NAMES: Record<string, string> = {
   "kitchen-pass": "Kjøkkenluke",
 };
 
-/** The place as the screen says it: "Rom 319", "Korridor 3a", "Heis 2", "Kjøkkenluke". */
+/**
+ * The place as the screen says it: "Rom 319", "Korridor 3A", "Heis 2", "Kjøkkenluke". Corridors are "2B"
+ * here as on every other screen (Overlevering, the robot card, Forespørsler: round 5, one spelling).
+ */
 export function placeName(id: string | null | undefined): string {
   if (!id) return "–";
   if (PLACE_NAMES[id]) return PLACE_NAMES[id];
   if (id.startsWith("room-")) return `Rom ${id.slice(5)}`;
-  if (id.startsWith("corridor-")) return `Korridor ${id.slice(9)}`;
+  if (id.startsWith("corridor-")) return `Korridor ${id.slice(9).toUpperCase()}`;
   if (id.startsWith("elevator-")) return `Heis ${id.slice(9)}`;
   if (id.startsWith("stairwell-")) return `Trapp ${id.slice(10)}`;
   return id;
+}
+
+/** The place inside a sentence: "korridor 2B", "rom 319", "heis 2" (only the first letter lowered, never "2b"). */
+export function placeInSentence(id: string | null | undefined): string {
+  const name = placeName(id);
+  return name.charAt(0).toLocaleLowerCase("nb-NO") + name.slice(1);
 }
 
 const ITEM_NAMES: Record<string, string> = {
@@ -62,12 +71,14 @@ const ITEM_NAMES: Record<string, string> = {
   cart: "tralle",
 };
 
-/** "water-bottle" → "vannflaske", "tray-323" → "brett (323)". */
+/** "water-bottle" → "vannflaske", "tray-323" → "brett (323)", "toy-3" → "leke" (a numbered lost item). */
 export function itemName(item: string | null | undefined): string {
   if (!item) return "";
   if (ITEM_NAMES[item]) return ITEM_NAMES[item];
   if (item.startsWith("tray-")) return `brett (${item.slice(5)})`;
   if (item.startsWith("luggage-")) return `bagasje (${item.slice(8)})`;
+  const base = item.replace(/(?:-\d+)+$/, "");
+  if (ITEM_NAMES[base]) return ITEM_NAMES[base];
   return item.replace(/-/g, " ");
 }
 

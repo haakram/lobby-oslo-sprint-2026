@@ -39,24 +39,24 @@ describe("MaintenanceScreen (Vedlikehold)", () => {
   it("resolves a pre-assigned order with the first click on Marker løst", async () => {
     render(<MaintenanceScreen />);
     await screen.findByText(/Nobody is here/);
-    // One room is closed today (the shower in 107); the thermostat in 213 was fixed this morning.
+    // One room is closed today (the shower in 137); the thermostat in 213 was fixed this morning.
     expect(figure("Rom ute av drift")).toBe("1");
-    // Rom 107 came in from staff with a name on it: it shows Tildelt, so the button is Marker løst.
-    fireEvent.click(screen.getByRole("button", { name: "Marker løst: Teknisk, Rom 107" }));
-    expect(screen.queryByRole("button", { name: "Marker løst: Teknisk, Rom 107" })).not.toBeInTheDocument();
+    // Rom 137 came in from staff with a name on it: it shows Tildelt, so the button is Marker løst.
+    fireEvent.click(screen.getByRole("button", { name: "Marker løst: Teknisk, Rom 137" }));
+    expect(screen.queryByRole("button", { name: "Marker løst: Teknisk, Rom 137" })).not.toBeInTheDocument();
     expect(figure("Rom ute av drift")).toBe("0");
   });
 
   it("says the order is resolved and gives Angre the focus, which reopens it", async () => {
     render(<MaintenanceScreen />);
     await screen.findByText(/Nobody is here/);
-    fireEvent.click(screen.getByRole("button", { name: "Marker løst: Teknisk, Rom 107" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marker løst: Teknisk, Rom 137" }));
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("Rom 107 er markert løst og ligger under Løst.");
-    const undo = within(status).getByRole("button", { name: "Angre: Rom 107" });
+    expect(status).toHaveTextContent("Rom 137 er markert løst og ligger under Løst.");
+    const undo = within(status).getByRole("button", { name: "Angre: Rom 137" });
     expect(undo).toHaveFocus();
     fireEvent.click(undo);
-    const back = screen.getByRole("button", { name: "Marker løst: Teknisk, Rom 107" });
+    const back = screen.getByRole("button", { name: "Marker løst: Teknisk, Rom 137" });
     expect(back).toHaveFocus();
     expect(figure("Rom ute av drift")).toBe("1");
   });

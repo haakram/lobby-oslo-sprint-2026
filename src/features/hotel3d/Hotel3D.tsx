@@ -4,10 +4,11 @@ import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { BASE_HOTEL, floorsOf } from "@/features/hotel/mapFromRun";
 import { type HotelReplay, placeName, ROOM_STATUS_LABEL, type RoomStatus } from "@/features/replay";
-import { cx, RegenIcon, Skeleton } from "@/ui";
+import { AVVIK, cx, RegenIcon, Skeleton } from "@/ui";
 import { HotelPlan2D } from "./HotelPlan2D";
 import type { HotelScene } from "./scene";
 import { readTokens, STATUS_CSS_VAR } from "./tokens";
+import { useHeldReplay } from "./useHeldReplay";
 import "./hotel3d.css";
 
 /**
@@ -32,9 +33,12 @@ export type Hotel3DProps = {
   onSelectPlace?: (nodeId: string) => void;
 };
 
-const LEGEND: RoomStatus[] = ["klar", "ma_vaskes", "opptatt", "ikke_forstyrr", "avvik", "ukjent"];
+const LEGEND: RoomStatus[] = ["klar", "ma_vaskes", "opptatt", "ikke_forstyrr", "ukjent"];
 
-/** The room colours with their words. Inside the 3D view from 640 px; under it on phones. */
+/**
+ * The room colours with their words, from the one room-status map (src/ui/roomStatus.ts); avvik is an
+ * ink frame over the room's own colour, never red. Inside the 3D view from 640 px; under it on phones.
+ */
 export function StatusLegend({ className }: { className?: string }) {
   return (
     <ul aria-label="Romstatus" className={cx("flex flex-wrap gap-x-3 gap-y-1", className)}>
@@ -44,6 +48,10 @@ export function StatusLegend({ className }: { className?: string }) {
           {ROOM_STATUS_LABEL[status]}
         </li>
       ))}
+      <li className="flex items-center gap-1.5 text-sm font-medium text-muted sm:text-xs">
+        <span aria-hidden="true" className="inline-block size-2.5 rounded-[2px] ring-[1.5px] ring-text" />
+        {AVVIK.word}
+      </li>
     </ul>
   );
 }
@@ -69,7 +77,9 @@ function hasWebGL(): boolean {
 const noSubscribe = () => () => {};
 const serverWebGL = () => null;
 
-export function Hotel3D({ replay, variant = "full", className, selectedRoom, onSelectRoom, onSelectPlace }: Hotel3DProps) {
+export function Hotel3D({ replay: played, variant = "full", className, selectedRoom, onSelectRoom, onSelectPlace }: Hotel3DProps) {
+  // The room check holds what the robot found tidy but carried an arrival's bags into: taken, never a green Klar.
+  const replay = useHeldReplay(played);
   const reduced = useReducedMotion();
   const rootRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -149,11 +159,18 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
     scene?.setExploded(floorMode === "exploded");
   }, [scene, floorMode]);
 
-  // Names on one floor at a time when floors are stacked; on every floor once they are spread.
-  const labelFloor = floorMode === "exploded" ? null : floorMode === "all" ? robotFloor : focusFloor;
+  // Place names on one floor at a time (the robot's, or the one chosen), never on every floor at once:
+  // over stacked or spread floors they collide (review round 1).
+  const labelFloor = floorMode === "exploded" || floorMode === "all" ? robotFloor : focusFloor;
   useEffect(() => {
     scene?.setLabelFloor(labelFloor);
   }, [scene, labelFloor]);
+  // Every room number only on the floor in view (Følg or one floor); over all floors only the robot's
+  // room and the chosen room keep theirs.
+  const numbersFloor = floorMode === "auto" ? robotFloor : typeof floorMode === "number" ? floorMode : null;
+  useEffect(() => {
+    scene?.setRoomNumbers(numbersFloor);
+  }, [scene, numbersFloor]);
 
   const chooseMode = (mode: FloorMode) => {
     setFloorMode(mode);
@@ -289,7 +306,8 @@ export function Hotel3D({ replay, variant = "full", className, selectedRoom, onS
           </div>
 
           <div className="flex flex-wrap items-end justify-between gap-2">
-            <div className="flex flex-col gap-1">
+            {/* A quiet panel under the legend, as under the robot's place: map labels pass beneath it, never through it (round 6). */}
+            <div className="flex flex-col gap-1 rounded-md bg-surface/90 px-2.5 py-1.5 backdrop-blur-sm max-sm:hidden">
               <StatusLegend className="max-sm:hidden" />
               {webgl && !compact && (
                 <p className="text-xs text-muted max-sm:hidden">Dra for å snu · rull for å zoome · piltaster flytter · klikk et rom</p>

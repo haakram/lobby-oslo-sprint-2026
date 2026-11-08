@@ -1,4 +1,5 @@
 import type { RoomStatus } from "@/features/replay";
+import type { RoomToken } from "@/ui/roomStatus";
 
 /** The design tokens the 3D scene paints with, read from the surface it is mounted on. */
 export type SceneTokens = {
@@ -54,16 +55,23 @@ export function readTokens(element: Element): SceneTokens {
   return tokens;
 }
 
+/** A shared room token (src/ui/roomStatus.ts) as the scene's own key. */
+export function tokenKey(token: RoomToken): keyof SceneTokens {
+  return token === "line-strong" ? "lineStrong" : token;
+}
+
 /**
- * Which token paints a room in each status. The word is always shown next to the colour
- * (legend, labels), so colour is never the only signal.
+ * Which token paints a room in each status, from the one room-status map every screen shares. The
+ * word is always shown next to the colour (legend, labels), so colour is never the only signal.
+ * "avvik" is not a status (it is an ink frame over the room's own colour), so it paints like a room
+ * not checked; never red (DESIGN.md, room states).
  */
 export const STATUS_TOKEN: Record<RoomStatus, keyof SceneTokens> = {
   klar: "success",
   ma_vaskes: "warning",
   opptatt: "lineStrong",
   ikke_forstyrr: "text",
-  avvik: "danger",
+  avvik: "line",
   ukjent: "line",
 };
 
@@ -73,6 +81,6 @@ export const STATUS_CSS_VAR: Record<RoomStatus, string> = {
   ma_vaskes: "var(--warning)",
   opptatt: "var(--line-strong)",
   ikke_forstyrr: "var(--text)",
-  avvik: "var(--danger)",
+  avvik: "var(--line)",
   ukjent: "var(--line)",
 };

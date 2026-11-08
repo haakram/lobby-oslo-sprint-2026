@@ -542,6 +542,46 @@ def test_a_delivery_knock_issues_no_door_look(tmp_path):
         assert not [e for e in calls(fake, "look") if (e["args"] or {}).get("at")], rid
 
 
+def _room_323_off_3a(data):
+    """Another night's floor 3: room-323 hangs off corridor-3a, not 3d as on the seed-1 map."""
+    for e in data["edges"]:
+        if {e["a"], e["b"]} == {"corridor-3d", "room-323"}:
+            e["a"], e["b"] = "corridor-3a", "room-323"
+
+
+@pytest.mark.parametrize("refusal", [None, "No door to room-323 here."])
+def test_a_knock_refused_at_a_stale_corridor_relinks_the_room_and_knocks_again(tmp_path, monkeypatch, refusal):
+    """Live seeds 5 and 16 (the final build): with no door look before a knock, the stale seed-1 link
+    showed as the knock's "No door to room-311 here." and the request failed. The knock now relinks the
+    room (as the door look did), walks to the corridor it hangs off and knocks once more."""
+    fake, session, ex, task = solo(tmp_path, "323 wants a water bottle.",
+                                   hotel_path=map_file(tmp_path, _room_323_off_3a))
+    if refusal:  # the live wording; the fake's own is "There's no door called room-323 here."
+        real = fake._cmd_knock
+
+        def knock(args):
+            ok, text = real(args)
+            return (ok, text) if ok else (False, refusal)
+
+        monkeypatch.setattr(fake, "_cmd_knock", knock)
+    out = ex.run(task)
+    assert out.status == "done", out
+    knocks = calls(fake, "knock")
+    assert len(knocks) == 2 and not knocks[0]["ok"] and knocks[1]["ok"]
+    assert decisions(session, "stale_room_link") == [{"room": "room-323", "corridor": "corridor-3d"}]
+    assert ex.hotel.room_corridor("room-323") == "corridor-3a"
+    assert fake.reports == {"R-001": "done"} and not fake.false_done
+
+
+def test_a_knock_refused_twice_fails_without_a_third_try(tmp_path, monkeypatch):
+    fake, _session, ex, task = solo(tmp_path, "323 wants a water bottle.",
+                                    hotel_path=map_file(tmp_path, _room_323_off_3a))
+    monkeypatch.setattr(fake, "_cmd_knock", lambda args: (False, "No door to room-323 here."))
+    out = ex.run(task)
+    assert out.status == "failed" and "No door to room-323" in out.note, out
+    assert len(calls(fake, "knock")) == 2
+
+
 def test_a_room_check_still_looks_at_the_door_before_its_knock(tmp_path):
     fake, _, _, out = run_one(tmp_path, "R-004", absent_rooms={"room-103"})
     assert out.status == "done", out

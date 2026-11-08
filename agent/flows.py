@@ -159,15 +159,29 @@ def _door_sign(ex: Executor, room: str, *, retry: bool = True) -> bool:
         ex.room_status(room, "ikke_forstyrr", "door_sign", "Do Not Disturb sign")
         return True
     if not door.ok:
-        floor = room_floor(room)
-        if retry and "nothing called" in text.lower() and floor is not None:
-            ex.hotel.forget_edge(room, ex.state.location)
-            ex.log("stale_room_link", room=room, corridor=ex.state.location)
-            if ex.explore_floor(floor, room):
-                ex.go(_corridor_on_map(ex, room))
-                return _door_sign(ex, room, retry=False)
+        if retry and _relink(ex, room, text):
+            return _door_sign(ex, room, retry=False)
         raise ActionFailed(f"could not see the door of {room}: {text}")
     return False
+
+
+NO_DOOR_HERE = ("nothing called", "no door")  # live: the look "Nothing called 'room-322' in sight.",
+# the knock "No door to room-311 here." (seeds 5 and 16, the final build: R-002 lost to it twice)
+
+
+def _relink(ex: Executor, room: str, text: str) -> bool:
+    """The server says the room's door is not at this corridor (a door look or a knock refused with
+    NO_DOOR_HERE): the map's link is another night's. It is dropped, the floor explored and the robot
+    walked to the corridor the room hangs off. True when it stands there, ready to try once more."""
+    floor = room_floor(room)
+    if floor is None or not any(p in text.lower() for p in NO_DOOR_HERE):
+        return False
+    ex.hotel.forget_edge(room, ex.state.location)
+    ex.log("stale_room_link", room=room, corridor=ex.state.location)
+    if not ex.explore_floor(floor, room):
+        return False
+    ex.go(_corridor_on_map(ex, room))
+    return True
 
 
 STAFF_WHO = ("clerk", "maintenance", "housekeeping")
@@ -212,10 +226,12 @@ def _open_with_keycard(ex: Executor, room: str):
 LOOK_BEFORE_KNOCK = False  # True: every knock is preceded by a door look (5 s); switch back in one line
 
 
-def _knock(ex: Executor, room: str, *, look: bool | None = None) -> str:
+def _knock(ex: Executor, room: str, *, look: bool | None = None, retry: bool = True) -> str:
     """'dnd' | 'no_answer' | 'open'. A plain knock does not look at the door first: the reply itself
     names a DND sign (0 points in 5 of 5 live cases) and a known-DND room is refused before the trip.
-    `look=True` (room checks, where a keycard may follow) or LOOK_BEFORE_KNOCK looks first."""
+    `look=True` (room checks, where a keycard may follow) or LOOK_BEFORE_KNOCK looks first. A knock
+    refused because the door is not at this corridor relinks the room like the door look did (the
+    look used to catch the stale link) and knocks once more at the right corridor."""
     if (LOOK_BEFORE_KNOCK if look is None else look) and _door_sign(ex, room):
         return "dnd"
     reply = ex.cmd("knock", door=room)
@@ -225,6 +241,8 @@ def _knock(ex: Executor, room: str, *, look: bool | None = None) -> str:
         ex.room_status(room, "ikke_forstyrr", "knock", text)
         return "dnd"
     if not reply.ok:
+        if retry and _relink(ex, room, text):
+            return _knock(ex, room, look=look, retry=False)
         raise ActionFailed(f"could not knock at {room}: {text}")
     if "no answer" in text.lower():
         return "no_answer"

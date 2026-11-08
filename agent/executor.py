@@ -1791,7 +1791,9 @@ class Executor:
                 self.verified.add(task.request)
             if self._exp_pending and outcome == "done":
                 verified = reply.ok and "thanks" in text.lower()
-                self.experiments[self._exp_pending] = verified
+                # Proven once this shift, a rule stays proven: a later "Noted." is that report's own
+                # miss (a spill sign on another request's patch), not the server's rule changing.
+                self.experiments[self._exp_pending] = verified or self.experiments.get(self._exp_pending) is True
                 self.log("experiment", name=self._exp_pending, request=task.request,
                          verified=verified, reply=text[:120], score=self.state.score)
         self._exp_pending = None

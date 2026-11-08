@@ -646,9 +646,16 @@ source's evidence with owners, and the robot's own evidence at night.
 Proposals the team presents as hypotheses, not facts. Every outside number links to its source.
 
 **One wedge (decided Sun 8 Nov): independent and chain hotels of 60–200 rooms, software first, the
-robot optional.** Hotel number one needs no robot: Fettero reads its booking system (read-only), the
-door-lock audit trail and the night staff's notes, and the 06:00 page comes out. When a hotel has a
-robot, its log is one more source of evidence on the same page. **The reason, in one sentence:** the
+robot optional.** Hotel number one needs no robot: Fettero reads its booking system (**read-only: the
+pilot never writes to the PMS**; a room goes to reception, and reception changes the booking), one
+signal per room from the door lock and the energy slot (never who: `docs/PRIVACY.md` § 10) and the
+night clerk's own entries on her phone, and the 06:00 page comes out. On screen: Overlevering's switch
+*Med robot | Uten robot* builds the same page without a single robot line (§ 2). When a hotel has a
+robot, its log is one more source of evidence on the same page. **Where the lock can't help:** many
+hotels run offline locks, whose audit trail is read at the door with a handheld, and no networked room
+control; there the night clerk's room check is the evidence, and the robot is the automated version of
+it. How many target hotels have online locks is a phone-round question (§ 8.1 Q7); until then we
+don't claim the lock signal for every hotel. **The reason, in one sentence:** the
 06:00 handover exists in every hotel tonight, robot or not, so a pilot needs no hardware, and the
 60–200 band is the typical Norwegian hotel (about 86 rooms on average: 92,678 rooms in 1,079 hotels,
 SSB table 14164, Sep 2026). Robot makers are the later channel and the next price lever, not the first
@@ -669,19 +676,31 @@ operations add-ons charge per room per month: HelloShift USD 1.25–4
 ([SoftwareFinder](https://softwarefinder.com/hotel-management/sweeply)); a mid-market cloud PMS is USD
 5–12 ([Roommaster](https://www.roommaster.com/blog/hotel-software-pricing-guide)).
 
-The arithmetic, against what the room check found on the demo night: one room to sell after the desk
-confirms (213: the guest was due out yesterday and the check-out was never recorded, so the booking
-system still held the room tonight; NOK 1,467, last night's average rate in the test PMS) and one held
-back (209, where the robot had delivered an arriving guest's bags). It's gross room revenue, and it is
-extra money only on a night the rest of the hotel sells (2025: 57 % of Norway's hotel rooms sold, 72 %
-of Oslo's; SSB table 14169), so the price must also pay on rooms ready earlier and early check-ins sold.
-Room prices below are SSB's 2025 averages per room sold (table 14169): Norway NOK 1,471, Oslo NOK 1,631.
+**What Fettero buys is hours, not a room-night (the founder juror, the Wybe engineer).** Every hotel already has two nets
+for a sleeper: the end-of-day routine and housekeeping's morning round, which finds an empty room with
+no bags by late morning. So the money line on screen says what is true: the room was *found free hours
+earlier*, worth about NOK 1,500 **if the night sells out**, with tonight's bookings beside it (the demo
+hotel is not full: 31 of 36 sold on Oversikt). On the demo night that is one room to send to reception
+after the desk confirms (213: the guest was due out yesterday and the check-out was never recorded, so
+the booking system still held the room; NOK 1,467, last night's average rate in the test PMS) and one
+held back (209: the robot's own log contradicts its "empty" report). It's gross room revenue, and it
+is extra money only on a night the hotel sells out (2025: 57 % of Norway's hotel rooms sold, 72 % of
+Oslo's; SSB table 14169), so the price must also pay on early check-ins and an earlier clean. How many
+nights a month a hotel sells out, and when its housekeeping finds a sleeper today, are phone-round
+questions (§ 8.1 Q3, Q3b). Room prices below are SSB's 2025 averages per room sold (table 14169):
+Norway NOK 1,471, Oslo NOK 1,631.
 
 | Hotel | Price a month | Equals | Pays for itself when |
 |---|---|---|---|
-| 60 rooms | NOK 1,800 | 1.2 room-nights at Norway's NOK 1,471 (1.1 in Oslo) | the room check releases about one sleeper a month that then sells |
-| 100 rooms | NOK 3,000 (NOK 36,000 a year) | 2.0 room-nights at NOK 1,471 (1.8 in Oslo); about two rooms like 213 on the demo night (2 × NOK 1,467) | two sleepers a month, sold |
-| 200 rooms | NOK 6,000 | 4.1 room-nights at NOK 1,471 (3.7 in Oslo) | four sleepers a month |
+| 60 rooms | NOK 1,800 | 1.2 room-nights at Norway's NOK 1,471 (1.1 in Oslo) | about one sleeper a month found before housekeeping, on a night that then sells out (or an early check-in sold) |
+| 100 rooms | NOK 3,000 (NOK 36,000 a year) | 2.0 room-nights at NOK 1,471 (1.8 in Oslo); about two rooms like 213 on the demo night (2 × NOK 1,467) | two such rooms a month |
+| 200 rooms | NOK 6,000 | 4.1 room-nights at NOK 1,471 (3.7 in Oslo) | four such rooms a month |
+
+**The pilot's conversion rule (proposal, team to confirm; the founder juror):** the free four-week pilot converts
+at NOK 30 a room a month if Fettero finds **at least two rooms ready before the housekeeping round**
+in those four weeks, or moves the first room release earlier by a number of minutes agreed with the
+hotel on day one. Offered beside it: *paid from day one, money back if we miss it*. A free pilot with
+no exit rule is how founders lose a quarter.
 
 **How big, honestly (the founder juror, the marketing juror).** Norway has 92,678 hotel rooms (SSB 14164, Sep 2026). At NOK 30
 a room a month, NOK 360 a year, that is **about NOK 33 M a year if every hotel room in Norway paid**: a
@@ -707,11 +726,22 @@ Flexkeeping, Optii. Room discrepancies in the PMS, fed by housekeeping: OPERA Cl
 ([Oracle](https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.1/ocsuh/t_housekeeping_viewing_room_discrepancies.htm)),
 protel. And one fleet dashboard per robot vendor.
 
-**Why we win.** The only handover that merges the robot's night, the AI phone and the staff into one
-signed page; "done" means confirmed, and refusals and misses are shown; the robot's room checks put
-kroner on the page; and the run log is vendor-neutral, so any robot that writes it gets the same
-screen. Every competitor says "operating system" or "AI platform" and claims hours saved without the
-arithmetic; nobody positions on trust in autonomous work.
+**Why we win.** The only handover that merges the night staff, the AI phone and the robot into one
+signed page; "confirmed" needs a signal from outside the robot (the door lock, the guest, the staff,
+the PMS), and refusals and misses are shown; and the run log is vendor-neutral, so any robot that
+writes it gets the same screen. Every competitor says "operating system" or "AI platform" and claims
+hours saved without the arithmetic; nobody positions on trust in autonomous work. The defensible piece
+is cross-vendor evidence in one signed record: a PMS or a lock vendor sees only its own silo (and Mews
+bought Flexkeeping, so the page alone is a feature they could ship).
+
+**Two lines for the slide and the staff (the creative juror).**
+- ***Fettero signerer for nattevakten, ikke på henne.*** (Fettero signs for the night clerk, not on
+  her.) The page counts the robot's faults, never a person's; staff cards never reach us
+  (`docs/PRIVACY.md` § 10.3). It is the sentence a hotel's *tillitsvalgt* needs before the first pilot.
+- **The tagline image:** the night clerk's note on the page reads ***«Rolig natt.»***; beside it the
+  log has three wet floors without a sign and a man in a bathrobe at seven doors. Said kindly: "From the
+  desk it *was* a calm night. The robot saw the rest." That is *Natten, ærlig overlevert.* in one
+  picture (Overlevering, *Dette skjedde i natt*).
 
 **The commitment and the stop rule.** Both of us work on this full-time for four weeks from Monday
 9 November. If fewer than 2 of 10 hotels take a free four-week pilot by 8 December 2026, we stop the
@@ -737,48 +767,74 @@ hotel wedge and test selling through robot makers instead.
    ([NAF](https://www.naf.no/medlemskap/medlemsfordeler/kortferie-med-de-historiske-hotel-and-spisesteder)).
 
 **Next step if we win tonight.** Monday morning: call back every hotel that said yes or maybe on
-Sunday. Offer a free four-week pilot, software only: Fettero reads the hotel's PMS (read-only, Apaleo
-or Mews first) and the door-lock audit trail and energy slot for occupancy, so nobody opens an occupied
-room, and puts the rooms, the kroner and the open items with owners on the 06:00 handover. The robot is
-phase 2. A night staffer's own room check on a phone is not built yet; it's the first pilot task. The
-number that decides it: rooms found in the wrong state and then sold or used for an early check-in
-within four weeks, in kroner, against the price. The second number:
-minutes from 06:00 to the first room released. The prize money pays for the PMS integration and two
-more pilots.
+Sunday, with a printed Overlevering and the one-page data processing agreement (`docs/DPA.md`, a draft
+on the Commission's Art. 28 clauses; Fettero must be registered as a company before it is signed).
+Offer a free four-week pilot, software only: Fettero reads the hotel's PMS (read-only, Apaleo or Mews
+first), one signal per room from the door lock and the energy slot where the locks are online, and the
+night clerk's own room check and notes (the *Uten robot* input, built Sunday: stored on her device in
+the pilot build, a server store is pilot work), and puts the rooms, the open items with owners and the
+sign-off on the 06:00 handover. The robot is phase 2. The number that decides it: rooms ready before the
+housekeeping round, and the minutes from 06:00 to the first room sent to reception, against a week of
+their own logbook before the pilot. The prize money (NOK 50,000) buys four weeks of one person's runway
+and the first PMS listing work, not "two more pilots".
 
-**The first 100 users.** A user is **a manager who taps *Kvitter mottatt* at least three times a
-week**; the activation metric is already a button in the product. How we'll count it: today the
-sign-off lives in one browser; in the pilot every *Kvitter mottatt* is an append-only event on our
-server (hotel, role, date; no guest data), and that count is the user number from day one (not built
-yet; PRD § 6). About ten people per hotel sign a
-handover (night managers, receptionists, the housekeeping lead: our assumption, probably high; a
-60–200-room hotel may have 3–6 people on that shift, so ask it in the phone round, § 8.1 Q5), so **100
-users ≈ 10 hotels**, or 20–30 if the phone round says 3–6.
+**The first 100 users: the slide (the marketing juror).** Every number is either measured on Sunday morning
+(§ 8.1, **PENDING** until the phone round runs) or labelled as an assumption. Counts, never
+percentages from a handful of calls.
 
-| Order | Hotels | Users | Channel | Gate |
+- **Who counts.** A **user** is a person who signs *Kvitter mottatt* on every shift they work (a
+  per-shift rule, so the part-timers, about 40 % of the stable workforce, SSB, count too). A hotel is
+  **active** when its 06:00 handover is signed in Fettero on **at least 5 of 7 mornings**. Both come
+  from one append-only server event per sign-off (hotel, role, date; no guest data). Not built: today
+  the sign-off is kept on one device, and the screen says so (`TODO(phase-3)`, PRD § 6).
+- **100 users = H hotels × S signers per hotel.** S comes from § 8.1 Q5 (**PENDING**). The old
+  assumption of about ten per hotel was probably high: S = 3 gives H = 34, S = 4 gives H = 25, S = 6
+  gives H = 17.
+- **Conversations needed = H ÷ (y × p),** where y is the share of conversations that take a free pilot
+  (Sunday's Q2 tally, **PENDING**) and p the share of pilots that convert (**assumption: 1 in 2**). At
+  the stop rule's floor, y = 2 in 10, and H = 25: 25 ÷ (0.2 × 0.5) = **250 conversations**; at y = 4
+  in 10, 125. Two people at about 25 calls a week each (assumption) make 250 in five weeks.
+- **Dates** (the stop rule is decided; the rest is a proposal, team to confirm): Mon 9 Nov, call back
+  every yes and maybe with the printed page and `docs/DPA.md` · **Mon 16 Nov, hotel 1 live** (read-only,
+  software only) · **Tue 8 Dec, the stop-rule check:** fewer than 2 of 10 hotels in a pilot, and we stop
+  the hotel wedge and test robot makers · Mon 14 Dec, hotel 1's four weeks end, the conversion rule
+  above decides · **10 hotels by the end of February 2027** (proposal).
+
+| Order | Hotels | Users (at S = 4, assumption) | Channel | Gate |
 |---|---|---|---|---|
-| 1 | 1 | ≈ 10 | direct, from the Sunday phone round | one yes to a free pilot |
-| 2 | 2–3 | ≈ 20 | independents through VisBook, and one robot maker's existing hotel customer | hotel 1 has a kroner number |
-| 3 | 4–10 | ≈ 70 | one independent group (7 of De Historiske's ~70 hotels) and a PMS marketplace listing | three pilots with a number |
+| 1 | 1 | ≈ 4 | direct, from the Sunday phone round | one yes to a free pilot, the DPA signed |
+| 2 | 2–3 | ≈ 12 | independents through VisBook, and one robot maker's existing hotel customer | hotel 1 meets the conversion rule |
+| 3 | 4–10 | ≈ 40 | one independent group (7 of De Historiske's ~70 hotels) and a PMS marketplace listing | three pilots that converted |
+| 4 | 11–25 | ≈ 100 | the marketplaces, and staff who move: a night manager who has signed the page takes it to her next hotel | 5 of 7 mornings signed at every active hotel |
 
-No paid ads: the segment is too small for them. The Monday e-mail to user number one (Norwegian):
+No paid ads: the segment is too small for them. Two cheap channels to test, no more: a blank A4
+*Overlevering 06:00* template (the print view with no data) as a lead magnet, since hotels search for a
+*vaktbok* template, and the staff who move between hotels. The Monday e-mail to user number one
+(Norwegian):
 
 > *Emne: Natten deres, på én side.* Hei [navn], takk for praten søndag. Her er hvordan Fettero ville
-> vist natten deres: hva som ble gjort, hva som er åpent med eier og frist, og hvilke rom som kan
-> selges i dag. Vi tilbyr fire uker gratis, uten robot: vi leser PMS-en og dørlåsloggen, og vi måler én
-> ting, kroner i rom funnet og solgt samme dag. Passer det med 20 minutter denne uken?
+> vist natten deres: hva som er åpent med eier og frist, hvilke rom som kan sendes til resepsjonen
+> før husøkonomens runde, og hva som faktisk ble gjort. Vi tilbyr fire uker gratis, uten robot: vi
+> leser PMS-en (bare lesing), ett signal per rom fra dørlåsen, aldri hvem, og nattevaktens egne
+> notater. Vi måler hvor tidlig rommene blir klare. Databehandleravtalen ligger ved. Passer det med 20
+> minutter denne uken?
 
 ## 8. Brukertest (Sunday 8 Nov, run by the team)
 
 **Status: PENDING. No results yet. Nothing in this section may be quoted until a teammate has run it
 and filled the tables with real answers.** It can't be faked, and a juror will ask for the raw notes.
 
-### 8.1 Phone round: 10 Oslo hotel receptions, 09:00–11:00
+### 8.1 Phone round: 10 Oslo hotel receptions, two windows
 
 Who calls: **[fill]** (not the person running the Wybe final at 12:00). Pick 10 Oslo hotels of about
-60–200 rooms from public listings, a mix of independent and chain, never two from one chain. Ask for
-the duty manager or front office manager; if busy, ask when to call back. Don't write hotel or person
-names in the repo unless they agreed; never write phone numbers.
+60–200 rooms from public listings, a mix of independent and chain, never two from one chain. **Two
+windows (the marketing juror, the founder juror):** the night desk **before 06:45**, when the person who writes the 06:00
+handover is on shift and the hour is quiet (the user: Q1, Q3, Q3b, Q6, Q7); then the duty or front
+office manager **08:00–09:30**, before the Sunday check-out peak (the buyer: Q2, Q4, Q5, and ask for a
+written "yes, send me the pilot" by e-mail). A walk-in at a hotel near the venue at 06:30 with the
+printed page ("Hvordan ser overleveringen deres ut?") beats a call; photograph only a blank form, never
+a filled one. Don't write hotel or person names in the repo unless they agreed; never write phone
+numbers.
 
 Script (four questions, about three minutes; Q5 only if they have time):
 
@@ -788,36 +844,42 @@ Script (four questions, about three minutes; Q5 only if they have time):
 2. **Q1:** "Hvordan gjør dere overleveringen fra nattevakt til morgenvakt i dag: papirbok, notater i
    PMS-en, e-post, Teams, eller noe annet?"
 3. **Q2:** "Kunne dere tenkt dere å teste en skjerm for den overleveringen i fire uker, gratis?"
-4. **Q3:** "Står det rom som opptatt i systemet om morgenen der gjesten egentlig reiste i går, uten at
-   utsjekken ble registrert? Hvor mange i uka?" (the real sleeper rate the price depends on: a guest
-   due out *today* doesn't count, the PMS already sells that room; write the number they say)
+4. **Q3 (the counterfactual, the founder juror):** "Når finner dere i dag et rom som står opptatt, men der
+   gjesten har reist: i nattrevisjonen, på husøkonomens runde (hvilket klokkeslett?), eller når neste
+   gjest står i resepsjonen? Hvor mange i uka?" (what Fettero buys is hours: write the time and the
+   number they say; a guest due out *today* doesn't count, the PMS already sells that room)
+   **Q3b:** "Hvor mange netter i måneden er dere utsolgt?" (when an earlier room is real money)
 5. **Q4:** "Hvis en skjerm fant de rommene før kl. 07, ville 30 kr per rom i måneden vært verdt det?"
    (the first price signal: yes / maybe / no, and why)
-6. **Q5 (if time):** "Hvor mange personer tar morgenvakten i løpet av en uke?" (tests "about ten users
-   per hotel" in § 7)
+6. **Q5 (if time):** "Hvor mange ulike personer tar over vakten kl. 06 i løpet av en uke?" (S, the
+   signers per hotel, in the first-100 arithmetic, § 7)
    **Q6 (if time, the message test, the marketing juror):** "Hvis du bare fikk se én ting kl. 06:00, hva ville det
    vært: (a) rom som kan selges, (b) hva som er åpent og hvem som eier det, eller (c) hva
    roboten eller nattevakten faktisk gjorde?" Write their exact words: the phrase used most becomes the
-   hook line.
+   hook line. And: "Hva tenker du når du hører navnet Fettero?"
+   **Q7 (the lock, the Wybe engineer):** "Hvilket låssystem har dere, og er låsene online, eller leses loggen av
+   ved døra? Er energibryteren koblet til et system?" (whether the lock signal exists at night for this
+   hotel, `docs/PRIVACY.md` § 10.1)
 7. *Close:* "Får vi sitere svaret ditt uten navn i pitchen i dag, med hotelltype og omtrent antall
    rom? Og kan vi sende deg en e-post på mandag?"
 
-| # | Time | Hotel type and size (no name unless agreed) | Reached? | Q1: how they hand over today | Q2: yes / maybe / no | Q3: rooms a week in the wrong state | Q4: NOK 30 worth it? | Q5: people on the shift | Quote (with permission) | E-mail Monday? |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | | | | | | | | | | |
-| 2 | | | | | | | | | | |
-| 3 | | | | | | | | | | |
-| 4 | | | | | | | | | | |
-| 5 | | | | | | | | | | |
-| 6 | | | | | | | | | | |
-| 7 | | | | | | | | | | |
-| 8 | | | | | | | | | | |
-| 9 | | | | | | | | | | |
-| 10 | | | | | | | | | | |
+| # | Time | Hotel type and size (no name unless agreed) | Reached? | Q1: how they hand over today | Q2: yes / maybe / no | Q3: when and how many a week | Q3b: sold-out nights a month | Q4: NOK 30 worth it? | Q5: people who sign | Q7: lock online? | Quote (with permission) | E-mail Monday? |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | | | | | | | | | | | | |
+| 2 | | | | | | | | | | | | |
+| 3 | | | | | | | | | | | | |
+| 4 | | | | | | | | | | | | |
+| 5 | | | | | | | | | | | | |
+| 6 | | | | | | | | | | | | |
+| 7 | | | | | | | | | | | | |
+| 8 | | | | | | | | | | | | |
+| 9 | | | | | | | | | | | | |
+| 10 | | | | | | | | | | | | |
 
-Tally, to paste into § 3 and § 6: "Sun 8 Nov, 09:00–11:00: 10 hotels called, __ reached; __ hand over
-on paper, __ in the PMS, __ by e-mail or chat; __ yes, __ maybe to a free pilot; rooms in the wrong
-state: __–__ a week; NOK 30 a room a month: __ yes, __ maybe, __ no."
+Tally, to paste into § 3, § 6 and § 7: "Sun 8 Nov, [times]: 10 hotels called, __ reached; __ hand over
+on paper, __ in the PMS, __ by e-mail or chat; __ yes, __ maybe to a free pilot; a sleeper found at
+__ (night audit / housekeeping round at __:__ / next guest), __ a week; sold out __ nights a month;
+NOK 30 a room a month: __ yes, __ maybe, __ no; locks online at __ of __; __ people sign a week."
 
 **Also before 14:00, at the Wybe stand:** ask the Wybe juror or the Wybe engineer whether Wybe would
 introduce one of its hotel customers to a Fettero pilot. Write down the answer as given, yes or "not

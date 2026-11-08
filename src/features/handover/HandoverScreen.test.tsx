@@ -53,12 +53,17 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(screen.getByText("Robotens oppdrag")).toBeInTheDocument();
     expect(
       screen.getByText(
-        `Godkjent av Wybe-serveren: 1 av 1 · nattevakten ${STAFF_DONE} · AI tok 3 samtaler`,
+        `Godkjent av dommeren (Wybe-simulatoren): 1 av 1 · nattevakten ${STAFF_DONE} · AI tok 3 samtaler`,
       ),
     ).toBeInTheDocument();
-    // The room the system thought occupied, with what it is worth today.
-    expect(screen.getByText(/^1 rom kan selges i dag · ca\. [\d\s\u00a0]+ kr \(systemet trodde de var opptatt\)$/)).toBeInTheDocument();
+    // The money is the first figure: the room the system thought occupied, sold after a confirmation.
+    const figures = screen.getByRole("region", { name: "Natten i tall" });
+    expect(within(figures).getByText("Kan selges etter bekreftelse")).toBeInTheDocument();
+    expect(within(figures).getByText("Rom 311")).toBeInTheDocument();
+    expect(within(figures).getByText("Frigitt i dag: ingen ennå")).toBeInTheDocument();
     expect(screen.getByText("Losjiinntekt i natt")).toBeInTheDocument();
+    // One factual line, green only for what is done.
+    expect(screen.getByText("1 oppgave bekreftet")).toBeInTheDocument();
 
     const open = screen.getByRole("region", { name: /^Åpent nå/ });
     expect(
@@ -72,7 +77,7 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     const night = screen.getByRole("region", { name: "Dette skjedde i natt" });
     expect(
       within(night).getByText(
-        /^Roboten fant rom 311 tomt og ryddig, men systemet sa opptatt\. Det kan selges i dag, ca\. [\d\s\u00a0]+ kr\.$/,
+        /^Roboten fant rom 311 tomt og ryddig, men systemet sa opptatt\. Det kan selges etter bekreftelse, ca\. [\d\s\u00a0]+ kr\.$/,
       ),
     ).toBeInTheDocument();
     expect(within(night).getByText("Kjersti Lund")).toBeInTheDocument();
@@ -85,8 +90,11 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Kvitter mottatt" }),
     );
-    expect(screen.getByText(/Signert av Ana Pereira/)).toBeInTheDocument();
-    expect(screen.getByText(/^Kvittert \d\d:\d\d$/)).toBeInTheDocument();
+    // Who and how long ago, never a wall-clock time; and it says where it is kept.
+    expect(screen.getByText("Kvittert av Ana Pereira · nå")).toBeInTheDocument();
+    expect(screen.getByText("Kvittert nå")).toBeInTheDocument();
+    expect(screen.getByText(/er overlevert, med \d+ åpne? saker?\. Kvitteringen er lagret på denne enheten\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/Nattevakten ser/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Angre kvitteringen" }),
     ).toHaveFocus();
@@ -94,12 +102,12 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
       localStorage.getItem("lobby:handover-signoff") ?? "{}",
     );
     expect(stored[TODAY]).toMatchObject({ name: "Ana Pereira" });
-    expect(stored[TODAY].at).toMatch(/^\d\d:\d\d$/);
+    expect(stored[TODAY].stamp).toMatch(/^\d{4}-\d\d-\d\dT/);
     unmount();
 
     show();
     expect(
-      await screen.findByText(/Signert av Ana Pereira/),
+      await screen.findByText(/Kvittert av Ana Pereira/),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Angre kvitteringen" }));
     expect(
@@ -108,6 +116,22 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(
       JSON.parse(localStorage.getItem("lobby:handover-signoff") ?? "{}"),
     ).toEqual({});
+  });
+
+  it("sells the room right in the open list, in two steps, and the money figure moves with it", async () => {
+    serve(() => new Response(TEST_NIGHT_JSONL, { status: 200 }));
+    show();
+    const open = await screen.findByRole("region", { name: /^Åpent nå/ });
+    expect(within(open).queryByRole("button", { name: "Merk rom 311 som ledig for salg" })).not.toBeInTheDocument();
+    fireEvent.click(within(open).getByRole("button", { name: "Bekreft med resepsjonen: rom 311" }));
+    fireEvent.click(within(open).getByRole("button", { name: "Merk rom 311 som ledig for salg" }));
+    expect(within(open).getByText("Ledig for salg")).toBeInTheDocument();
+    expect(within(open).getByText("Gjort i dag")).toBeInTheDocument();
+    const figures = screen.getByRole("region", { name: "Natten i tall" });
+    expect(within(figures).getByText("Frigitt for salg i dag")).toBeInTheDocument();
+    expect(within(figures).getByText(/^Frigitt i dag: 1 rom · ca\. [\d\s\u00a0]+ kr$/)).toBeInTheDocument();
+    // The print carries the name, the line and where it came from.
+    expect(screen.getByText(/^Fettero · Natten, ærlig overlevert\. · Laget fra robotens kjøringslogg og bookingsystemet/)).toBeInTheDocument();
   });
 
   it("says when there is no night yet, and when the night failed to load, with Prøv igjen", async () => {

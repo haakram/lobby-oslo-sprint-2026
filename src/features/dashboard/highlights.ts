@@ -157,6 +157,25 @@ export function nightVerdict(data: Pick<DashboardData, "nightStatus" | "robot">,
   return { text: "Natten er over.", good: false };
 }
 
+export type NightFacts = {
+  /** What is done, said in green: "73 oppgaver bekreftet". */
+  done: string;
+  /** What can hurt a guest and needs a person, said plainly: "3 våte gulv og 1 ukjent person trenger en eier". */
+  attention: string | null;
+};
+
+/**
+ * The night in one factual line instead of a verdict (jury round 2: "Natten gikk fint." in green beside
+ * three unsigned wet floors and a stranger at seven doors). Green only for what is truly done: the
+ * robot's "done" the referee confirmed. What needs a person is named, calmly, with its count.
+ */
+export function nightFacts({ confirmed, wetFloors, stranger }: { confirmed: number; wetFloors: number; stranger: boolean }): NightFacts {
+  const done = `${confirmed} ${confirmed === 1 ? "oppgave" : "oppgaver"} bekreftet`;
+  const needs = [wetFloors > 0 ? `${wetFloors} ${wetFloors === 1 ? "vått gulv" : "våte gulv"}` : null, stranger ? "1 ukjent person" : null].filter((part): part is string => part !== null);
+  if (needs.length === 0) return { done, attention: null };
+  return { done, attention: `${needs.join(" og ")} trenger en eier` };
+}
+
 /** The line after the verdict: the night's work, then what the day starts with. */
 export function nightSummary(data: Pick<DashboardData, "rooms" | "role">, totals: NightTotals | null): string | null {
   if (!totals) return null;

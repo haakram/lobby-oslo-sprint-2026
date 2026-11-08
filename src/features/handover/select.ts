@@ -5,9 +5,12 @@ import type { Night, RoomView } from "@/features/dashboard/selectors";
 import type { Tally } from "@/features/nightshift/outcomes";
 import type { PhoneTask } from "@/features/requests/phoneTasks";
 import type { RequestView } from "@/features/requests/select";
-import { type RoomRevenue, sellableValue } from "@/features/rooms/pms";
+import { type RoomMoney, roomMoney, shortDate } from "@/features/rooms/money";
+import { type PmsRoom, pmsLastNight, type RoomRevenue } from "@/features/rooms/pms";
 import type { Reconciliation, RoomCheckMark } from "@/features/rooms/reconcile";
+import { osloToday } from "@/features/reception/dates";
 import { byRole, cleanersToday } from "@/features/staff/testData";
+import { corridorName, type NightSafety, openWetFloors, type WetFloor } from "./safety";
 
 /**
  * Overlevering 06:00: the night on one page for the morning manager, composed from what the other
@@ -16,12 +19,11 @@ import { byRole, cleanersToday } from "@/features/staff/testData";
  */
 
 export type Figures = {
+  /** Klare til salg: ready, free in the booking system or released today (the one figure Rom and Oversikt show). */
   roomsReady: number;
   roomsTotal: number;
-  /** Ready rooms the booking system had as occupied (the robot's room check found them empty). */
-  sellable: number;
-  /** What those rooms are worth today, NOK: sellable × last night's average rate, to the hundred. */
-  sellableValue: number;
+  /** The room check's money: to sell after confirmation, released today, held back (rooms/money.ts). */
+  money: RoomMoney;
   /** The robot's night: the one tally every screen counts with (src/features/nightshift/outcomes.ts). */
   robot: Tally;
   /** Requests the night staff finished themselves (staff and in-room voice, 22:00–06:00), and the calls the AI receptionist took. */
@@ -30,6 +32,8 @@ export type Figures = {
   /** Guest matters the robot settled: noise, lost things found, spills made safe. */
   guestIssues: { noise: number; lost: number; spill: number };
   revenue: RoomRevenue;
+  /** What can hurt a guest and has no owner yet: unsigned wet floors, the stranger. */
+  safety: { wetFloors: number; stranger: boolean };
 };
 
 export type Highlight = { at: string; text: string; by: "robot" | "ai" | "staff" };
@@ -40,10 +44,17 @@ export type OpenItem = {
   owner: string;
   /** Due, wall clock HH:MM. */
   due: string;
-  href: string;
+  /** Null when the reader's role can't open the screen it belongs to. */
+  href: string | null;
   linkLabel: string;
   /** A guest is waiting on it: said with a word as well as the colour. */
   urgent: boolean;
+  /** Can hurt a guest (a wet floor, a stranger at the doors): first on the page, said with a word. */
+  safety?: boolean;
+  /** Rooms to sell right here, in two steps (rooms/SellSteps.tsx). */
+  sell?: string[];
+  /** Done today but kept in place, so its result (and Angre) stays where it was taken: not counted as open. */
+  done?: boolean;
 };
 
 export type NightNote = { author: string; role: string; text: string };
@@ -76,6 +87,35 @@ function joinNb(items: readonly string[]): string {
 
 export const MAX_HIGHLIGHTS = 7;
 
+/** Who owns what can hurt a guest (jury round 3): a role, so the page holds whoever is on. */
+export const WET_FLOOR_OWNER = "Vaktmester / renhold";
+export const STRANGER_OWNER = "Sikkerhet / resepsjon";
+/** Before the breakfast traffic: the first guests are in the corridors from 06:30. */
+export const SAFETY_DUE = "06:30";
+
+/** "Vått gulv uten skilt i korridor 2B siden 23:51. Roboten skled der." */
+export function wetFloorText(floor: WetFloor): string {
+  const where = corridorName(floor.place);
+  const since = floor.since ? ` siden ${hhmm(floor.since)}` : "";
+  const why = floor.signMoved
+    ? ` Roboten flyttet skiltet herfra til ${floor.signMoved.to ? corridorName(floor.signMoved.to) : "et nytt søl"}.`
+    : floor.slippedAt
+      ? " Roboten skled der."
+      : "";
+  return `Vått gulv uten skilt i ${where}${since}.${why} Sett ut skilt eller tørk opp før gjestene står opp.`;
+}
+
+/** "En person i badekåpe ba roboten slippe ham inn på 7 rom mellom 01:17 og 05:11 …" (neutral: who he is, nobody knows). */
+export function strangerText(stranger: NonNullable<NightSafety["stranger"]>): string {
+  const count = stranger.refusals.length;
+  const rooms = stranger.rooms.length || count;
+  const doors = stranger.rooms.length > 0 ? ` (${joinNb(stranger.rooms)})` : "";
+  const span = count > 1 ? ` mellom ${hhmm(stranger.first)} og ${hhmm(stranger.last)}` : ` kl. ${hhmm(stranger.first)}`;
+  const said = count > 1 ? "Roboten sa nei hver gang" : "Roboten sa nei";
+  const waits = stranger.keycardWaits.length > 0 ? ` og ventet med å åpne ${joinNb(stranger.keycardWaits.map(number))} til han var gått` : "";
+  return `En person i badekåpe ba roboten slippe ham inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}${span}${doors}. ${said}${waits}. Ingen har sjekket hvem han er: se på kamera og skriv en avviksmelding.`;
+}
+
 export function composeHandover({
   night,
   rooms,
@@ -84,45 +124,71 @@ export function composeHandover({
   requests,
   phone,
   revenue,
+  today = osloToday(),
+  pms = pmsLastNight(today),
+  safety = { wetFloors: [], stranger: null },
+  resolved = () => false,
+  canOpen = () => true,
 }: {
   night: Night;
   rooms: readonly RoomView[];
   reconciliation: Reconciliation;
-  /** Today's room-check marks (released for sale, task for reception). */
+  /** Today's room-check marks (confirmed, released for sale, task for reception). */
   marks: Readonly<Record<string, RoomCheckMark>>;
   requests: readonly RequestView[];
   phone: readonly PhoneTask[];
   revenue: RoomRevenue;
+  /** Today (YYYY-MM-DD, Oslo): a booking that ends today is a guest due out. */
+  today?: string;
+  /** The booking system last night (which rooms were booked), for the one Klare til salg figure. */
+  pms?: ReadonlyMap<string, PmsRoom>;
+  /** What can hurt a guest, from the run log (safety.ts). */
+  safety?: NightSafety;
+  /** A work order staff marked Løst on Vedlikehold. */
+  resolved?: (orderId: string) => boolean;
+  /** Whether the reader's role may open a screen: a link to a screen they can't open is left out. */
+  canOpen?: (route: string) => boolean;
 }): Handover {
   const tasks = [...night.tasks.values()];
   const doneOf = (kind: string) => tasks.filter((task) => task.kind === kind && task.verdict === "done").length;
   const staffDone = requests.filter(
     (request) => (request.source === "personale" || request.source === "stemme") && request.status === "fullfort" && atNight(request.at),
   ).length;
-  const value = sellableValue(reconciliation.sellable.length, revenue);
+  const money = roomMoney({ reconciliation, marks, revenue, rooms, pms });
+  const wetFloors = openWetFloors(safety.wetFloors, resolved).sort((a, b) => NIGHT_ORDER(a.since ?? "00:00") - NIGHT_ORDER(b.since ?? "00:00"));
 
   const figures: Figures = {
-    roomsReady: rooms.filter((room) => room.status === "klar" && !room.closed).length,
+    roomsReady: money.readyToSell ?? 0,
     roomsTotal: rooms.length,
-    sellable: reconciliation.sellable.length,
-    sellableValue: value,
+    money,
     robot: night.tally,
     staffDone,
     calls: phone.length,
     guestIssues: { noise: doneOf("noise"), lost: doneOf("lost_item"), spill: doneOf("spill") },
     revenue,
+    safety: { wetFloors: wetFloors.length, stranger: safety.stranger !== null },
   };
 
   // What happened: a few lines, most telling first, then shown in the night's order.
   const ranked: Highlight[] = [];
   const end = night.clock && night.ended ? night.clock : null;
-  if (end) ranked.push({ at: hhmm(end), text: `Roboten avsluttet natten med ${night.tally.done} av ${night.tally.total} oppdrag fullført. Wybe-serveren godkjente ${night.tally.done} av ${night.tally.reported} ferdigmeldinger.`, by: "robot" });
+  if (end) ranked.push({ at: hhmm(end), text: `Roboten avsluttet natten med ${night.tally.done} av ${night.tally.total} oppdrag fullført. Dommeren i Wybe-simulatoren godkjente ${night.tally.done} av ${night.tally.reported} ferdigmeldinger.`, by: "robot" });
   const sellable = [...reconciliation.sellable].sort((a, b) => NIGHT_ORDER(a.at ?? "00:00") - NIGHT_ORDER(b.at ?? "00:00"));
   if (sellable[0]?.at) {
     const many = sellable.length > 1;
     ranked.push({
       at: hhmm(sellable[0].at),
-      text: `Roboten fant ${joinNb(sellable.map((row) => `rom ${number(row.room)}`))} ${many ? "tomme og ryddige" : "tomt og ryddig"}, men systemet sa opptatt. ${many ? "De" : "Det"} kan selges i dag, ca. ${formatKroner(value)} kr.`,
+      text: `Roboten fant ${joinNb(sellable.map((row) => `rom ${number(row.room)}`))} ${many ? "tomme og ryddige" : "tomt og ryddig"}, men systemet sa opptatt. ${many ? "De" : "Det"} kan selges etter bekreftelse, ca. ${formatKroner(money.toSellValue + money.releasedValue)} kr.`,
+      by: "robot",
+    });
+  }
+  const held = reconciliation.held[0];
+  if (held?.deliveredAt) {
+    ranked.push({
+      at: hhmm(held.deliveredAt),
+      text: held.arrival
+        ? `Roboten bar bagasje for dagens ankomst inn på rom ${number(held.room)}, men systemet har ${held.guest ?? "en gjest"} der${held.departure ? ` til ${shortDate(held.departure)}` : ""}. Rommet ble holdt tilbake fra salg.`
+        : `Roboten leverte noe inn på rom ${number(held.room)} etter romsjekken. Rommet ble holdt tilbake fra salg.`,
       by: "robot",
     });
   }
@@ -142,7 +208,32 @@ export function composeHandover({
     .slice(0, MAX_HIGHLIGHTS)
     .sort((a, b) => NIGHT_ORDER(a.at) - NIGHT_ORDER(b.at));
 
-  // What is still open: few, each with someone who has it and a time.
+  // What can hurt a guest comes first, each with an owner and a time (jury round 2: the page that says
+  // "every item has an owner" left out the wet floors and the stranger), longest-standing first.
+  const first: OpenItem[] = wetFloors.map((floor) => ({
+    id: `wet-${floor.place}`,
+    text: wetFloorText(floor),
+    owner: WET_FLOOR_OWNER,
+    due: SAFETY_DUE,
+    href: canOpen("/vedlikehold") ? "/vedlikehold" : canOpen("/hotell") ? "/hotell" : null,
+    linkLabel: canOpen("/vedlikehold") ? "Åpne Vedlikehold" : "Vis i 3D-kartet",
+    urgent: false,
+    safety: true,
+  }));
+  if (safety.stranger) {
+    first.push({
+      id: "stranger",
+      text: strangerText(safety.stranger),
+      owner: STRANGER_OWNER,
+      due: SAFETY_DUE,
+      href: "#vurderinger-overlevering",
+      linkLabel: "Se robotens vurderinger",
+      urgent: false,
+      safety: true,
+    });
+  }
+
+  // The rest: few, each with someone who has it and a time.
   const desk = byRole("Resepsjon").find((member) => member.shift === "dag")?.name ?? "Resepsjonen";
   const cleaners = cleanersToday().map((member) => member.name.split(" ")[0]);
   const open: OpenItem[] = [];
@@ -171,15 +262,34 @@ export function composeHandover({
       urgent: false,
     });
   }
-  const unreleased = reconciliation.sellable.filter((row) => marks[row.room]?.action !== "released");
-  if (unreleased.length > 0) {
+  // Sold right here in two steps; the row stays once every room is released, so its result and Angre stay put.
+  if (reconciliation.sellable.length > 0) {
+    const toSell = money.toSell;
     open.push({
       id: "sellable",
-      text: `Merk ${joinNb(unreleased.map((row) => `rom ${number(row.room)}`))} som ledig for salg (ca. ${formatKroner(sellableValue(unreleased.length, revenue))} kr). Roboten fant ${unreleased.length === 1 ? "det tomt og ryddig" : "dem tomme og ryddige"}.`,
+      text:
+        toSell.length > 0
+          ? `${joinNb(toSell.map((row) => `Rom ${number(row.room)}`))} kan selges etter bekreftelse (ca. ${formatKroner(money.toSellValue)} kr). Roboten fant ${toSell.length === 1 ? `det tomt og ryddig kl. ${hhmm(toSell[0].at)}` : "dem tomme og ryddige"}${sellReason(toSell, today)}.`
+          : `${joinNb(money.released.map((row) => `Rom ${number(row.room)}`))} er lagt ut for salg i dag (ca. ${formatKroner(money.releasedValue)} kr).`,
       owner: desk,
       due: "09:00",
       href: "/rom",
       linkLabel: "Åpne Rom",
+      urgent: false,
+      sell: reconciliation.sellable.map((row) => row.room),
+      done: toSell.length === 0,
+    });
+  }
+  for (const row of reconciliation.held) {
+    open.push({
+      id: `held-${row.room}`,
+      text: row.arrival
+        ? `Rom ${number(row.room)}: dobbelt tildelt? Roboten bar inn bagasje for dagens ankomst (sist kl. ${hhmm(row.deliveredAt)}), men systemet har ${row.guest ?? "en gjest"} der${row.departure ? ` til ${shortDate(row.departure)}` : ""}. Flytt én av dem før innsjekk kl. 15:00.`
+        : `Rom ${number(row.room)}: roboten leverte noe inn etter romsjekken kl. ${hhmm(row.deliveredAt)}, så rommet er i bruk. Sjekk bookingen før det selges.`,
+      owner: desk,
+      due: "12:00",
+      href: canOpen("/gjester") ? "/gjester" : null,
+      linkLabel: "Åpne Gjester",
       urgent: false,
     });
   }
@@ -210,10 +320,31 @@ export function composeHandover({
   }
   open.sort((a, b) => a.due.localeCompare(b.due));
 
-  return { figures, timeline, open, note: NIGHT_NOTE };
+  return { figures, timeline, open: [...first, ...open], note: NIGHT_NOTE };
+}
+
+/** ". Ola Nygård skulle reise i dag og har ikke sjekket ut" for one room; the booking's end otherwise. */
+function sellReason(rows: readonly { guest: string | null; departure: string | null }[], today: string): string {
+  if (rows.length !== 1) return "";
+  const [row] = rows;
+  if (!row.guest || !row.departure) return "";
+  return row.departure <= today ? `. ${row.guest} skulle reise i dag og har ikke sjekket ut` : `. ${row.guest} står i systemet til ${shortDate(row.departure)}`;
+}
+
+/** How many open items still need someone (a sale done today stays in the list, but is not open). */
+export function openCount(open: readonly OpenItem[]): number {
+  return open.filter((item) => !item.done).length;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Kvitter mottatt: who took the handover, and when, per day.
 
-export type Signoff = { name: string; at: string };
+export type Signoff = {
+  name: string;
+  /** Wall clock HH:MM (older sign-offs); new ones carry `stamp` and show "nå" / "for 3 min siden". */
+  at: string;
+  /** ISO time of the sign-off (src/ui/stamp.ts). */
+  stamp?: string;
+  /** How many items were open when it was signed: what the morning took over. */
+  open?: number;
+};

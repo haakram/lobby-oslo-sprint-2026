@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
-import { useSession } from "@/features/auth";
+import { canAccess, useSession } from "@/features/auth";
 import { formatKroner, nightLabel } from "@/features/dashboard/format";
+import { nightFacts } from "@/features/dashboard/highlights";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
@@ -15,10 +16,15 @@ import { formatClock } from "@/features/reception/format";
 import { useStoredRecords } from "@/features/reception/useStoredRecords";
 import { PHONE_ASSIGNMENTS, phoneTasks } from "@/features/requests/phoneTasks";
 import { selectRequests } from "@/features/requests/select";
-import { pmsLastNight, revenueLastNight } from "@/features/rooms/pms";
-import { reconcileRooms, robotRoomChecks, ROOM_CHECK_MARKS } from "@/features/rooms/reconcile";
-import { Badge, Button, Card, cx, EmptyState, ErrorState, Monogram, RegenIcon, Skeleton, Stat } from "@/ui";
-import { composeHandover, type Highlight, type OpenItem } from "./select";
+import { moneyMethod, releasedLine } from "@/features/rooms/money";
+import type { RoomCheckMark } from "@/features/rooms/reconcile";
+import { SellSteps } from "@/features/rooms/SellSteps";
+import { useRoomCheck } from "@/features/rooms/useRoomCheck";
+import { APP_NAME, TAGLINE } from "@/ui/brand";
+import { actionStamp, relativeTime, stampNow, useNowMs } from "@/ui/stamp";
+import { Badge, Button, Card, cx, EmptyState, ErrorState, Figure as Digits, Monogram, RegenIcon, Skeleton, Stat } from "@/ui";
+import { nightSafety } from "./safety";
+import { composeHandover, type Figures, type Highlight, type OpenItem, openCount } from "./select";
 import { sign, SIGNOFFS } from "./signoff";
 
 const BY: Record<Highlight["by"], { word: string; tone: "accent" | "neutral" }> = {
@@ -36,22 +42,37 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   const today = day ?? osloToday();
   const { resolved, statusOf } = useOrderStatuses();
   const { run, night, rooms } = useNight(viewerUrl, resolved);
-  const { user } = useSession();
+  const { user, effectiveRole } = useSession();
   const { records } = useStoredRecords();
   const seeded = useMemo(() => demo ?? demoCalls(today), [demo, today]);
   const phone = useMemo(() => phoneTasks(records, seeded), [records, seeded]);
   const assignments = PHONE_ASSIGNMENTS.use();
-  const marks = ROOM_CHECK_MARKS.use()[today];
   const signoff = SIGNOFFS.use()[today] ?? null;
+  const now = useNowMs();
   const ready = run.status === "ready";
+  const lines = ready ? run.lines : null;
+  // The same room check, marks and money as Rom and Oversikt: a release here moves them too.
+  const { reconciliation, marks, revenue, pms } = useRoomCheck(lines, rooms, today);
+  const safety = useMemo(() => (lines ? nightSafety(lines) : null), [lines]);
 
   const handover = useMemo(() => {
-    if (!night || !rooms || !ready) return null;
-    const pms = pmsLastNight(today);
-    const reconciliation = reconcileRooms(robotRoomChecks(run.lines), pms);
+    if (!night || !rooms || !reconciliation || !safety) return null;
     const requests = selectRequests({ night, calls: null, statusOf, phone, assignments });
-    return composeHandover({ night, rooms, reconciliation, marks: marks ?? {}, requests, phone, revenue: revenueLastNight(rooms.length, pms) });
-  }, [night, rooms, ready, run.lines, statusOf, phone, assignments, marks, today]);
+    return composeHandover({
+      night,
+      rooms,
+      reconciliation,
+      marks,
+      requests,
+      phone,
+      revenue,
+      today,
+      pms,
+      safety,
+      resolved: (id) => statusOf(id) === "lost",
+      canOpen: (route) => effectiveRole === null || canAccess(effectiveRole, route),
+    });
+  }, [night, rooms, reconciliation, safety, statusOf, phone, assignments, marks, revenue, today, pms, effectiveRole]);
 
   const signButton = useRef<HTMLDivElement>(null);
   const refocus = useRef(false);
@@ -62,7 +83,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   }, [signoff]);
   const setSigned = (value: boolean) => {
     refocus.current = true;
-    sign(today, value ? { name: user?.name ?? "Morgenvakten", at: formatClock(new Date().toISOString()) } : null);
+    sign(today, value ? { name: user?.name ?? "Morgenvakten", at: formatClock(new Date().toISOString()), stamp: stampNow(), open: handover ? openCount(handover.open) : undefined } : null);
   };
 
   if (run.status === "error" || run.status === "empty") {
@@ -90,32 +111,40 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   const label = night ? nightLabel(night.startedAt) : null;
   const figures = handover?.figures;
   const issues = figures ? figures.guestIssues.noise + figures.guestIssues.lost + figures.guestIssues.spill : undefined;
+  const facts = figures ? nightFacts({ confirmed: figures.robot.done, wetFloors: figures.safety.wetFloors, stranger: figures.safety.stranger }) : null;
+  const signedWhen = signoff ? relativeTime(signoff.stamp, now) : null;
 
   return (
     <ModulePage
       module="overlevering"
       ready={handover !== null}
       lede="Natten oppsummert for morgenvakten: det som gikk bra, det som er åpent, og kvitteringen."
-      meta={signoff ? <Badge tone="success">Kvittert {signoff.at}</Badge> : <Badge tone="neutral">Ikke kvittert ennå</Badge>}
+      meta={signoff ? <Badge tone="success">Kvittert{signedWhen ? ` ${signedWhen}` : ""}</Badge> : <Badge tone="neutral">Ikke kvittert ennå</Badge>}
       actions={
-        <Button variant="secondary" className="print:hidden" onClick={() => window.print()} disabled={!handover}>
+        <Button variant="secondary" className="print:hidden max-sm:hidden" onClick={() => window.print()} disabled={!handover}>
           <RegenIcon name="printer" size={20} />
           Skriv ut
         </Button>
       }
     >
-      <div className="-mt-2 text-sm text-muted lg:-mt-4">
-        {label ?? <Skeleton className="inline-block h-4 w-48 align-middle" />} · 22:00 til 06:00 · Vakt: roboten og {handover?.note.author ?? "nattevakten"}
+      <div className="-mt-2 flex flex-col gap-1 lg:-mt-4">
+        <p className="text-sm text-muted">
+          {label ?? <Skeleton className="inline-block h-4 w-48 align-middle" />} · 22:00 til 06:00 · Vakt: roboten og {handover?.note.author ?? "nattevakten"}
+        </p>
+        {/* The night in one factual line: green only for what is done, the rest says plainly what needs a person. */}
+        {facts && (
+          <p className="text-base sm:text-lg">
+            <span className="font-semibold text-success">
+              <RegenIcon name="circle-check" size={20} strokeWidth={2} className="mr-1.5 inline-block align-[-0.2em]" />
+              {facts.done}
+            </span>
+            {facts.attention && <span className="font-semibold"> · {facts.attention}</span>}
+          </p>
+        )}
       </div>
 
       <FigureRow label="Natten i tall">
-        <Figure
-          label="Klare til salg"
-          value={figures?.roomsReady}
-          unit={figures ? `av ${figures.roomsTotal}` : undefined}
-          tone="success"
-          detail={figures && figures.sellable > 0 ? `${figures.sellable} rom kan selges i dag · ca. ${formatKroner(figures.sellableValue)} kr (systemet trodde de var opptatt)` : undefined}
-        />
+        <MoneyFigure figures={figures} />
         <Figure
           label="Robotens oppdrag"
           value={figures?.robot.done}
@@ -141,7 +170,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
         {/* Phone order: what is open, then the night, then the sign-off; on a desk the night takes the left. */}
         <section aria-labelledby="open-heading" data-enter className="lg:col-start-2 lg:row-start-1">
           <Card className="sm:p-6">
-            <PanelHead id="open-heading" title="Åpent nå" count={handover?.open.length} note="Hver sak har en eier og en frist." />
+            <PanelHead id="open-heading" title="Åpent nå" count={handover ? openCount(handover.open) : undefined} note="Hver sak har en eier og en frist. Sikkerhet først." />
             {!handover ? (
               <Rows rows={3} />
             ) : handover.open.length === 0 ? (
@@ -152,7 +181,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
             ) : (
               <ul className="mt-2 divide-y divide-line">
                 {handover.open.map((item) => (
-                  <OpenRow key={item.id} item={item} />
+                  <OpenRow key={item.id} item={item} marks={marks} today={today} />
                 ))}
               </ul>
             )}
@@ -206,11 +235,12 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
                 <>
                   <p className="flex items-start gap-2 text-lg font-semibold tracking-[-0.01em]">
                     <RegenIcon name="circle-check" size={22} className="mt-0.5 shrink-0 text-success" />
-                    <span>
-                      Signert av {signoff.name} <span className="font-mono tabular-nums">{signoff.at}</span>
-                    </span>
+                    <span>Kvittert av {actionStamp(signoff.name, signoff.stamp, now)}</span>
                   </p>
-                  <p className="text-sm text-muted">{label ? `${label} er overlevert.` : "Natten er overlevert."} Nattevakten ser at den er lest.</p>
+                  <p className="text-sm text-muted">
+                    {label ? `${label} er overlevert` : "Natten er overlevert"}
+                    {signoff.open !== undefined ? `, med ${signoff.open} ${signoff.open === 1 ? "åpen sak" : "åpne saker"}` : ""}. Kvitteringen er lagret på denne enheten.
+                  </p>
                   <Button variant="ghost" size="sm" className="self-start print:hidden" onClick={() => setSigned(false)}>
                     Angre kvitteringen
                   </Button>
@@ -221,7 +251,8 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
                   <Button size="lg" className="w-full sm:w-auto sm:self-start print:hidden" onClick={() => setSigned(true)} disabled={!handover}>
                     Kvitter mottatt
                   </Button>
-                  <p className="text-xs text-muted">Du kvitterer som {user?.name ?? "morgenvakten"}, med klokkeslett.</p>
+                  {/* TODO(phase-3): the sign-off goes to the server with the user's id, so the night shift sees it was read. */}
+                  <p className="text-xs text-muted">Du kvitterer som {user?.name ?? "morgenvakten"}. Kvitteringen lagres på denne enheten.</p>
                 </>
               )}
             </div>
@@ -229,14 +260,19 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
           </Card>
         </section>
       </div>
+
+      {/* The printed page is the leave-behind a hotel keeps (jury round 2, the marketing juror): it carries the name and where it came from. */}
+      <footer className="hidden border-t border-line pt-3 text-xs text-muted print:block">
+        {APP_NAME} · {TAGLINE} · Laget fra robotens kjøringslogg og bookingsystemet{label ? ` · ${label}` : ""} · Kontakt: Team Fettero (Hamad og ShirazIQ), Oslo Sprint 2026
+      </footer>
     </ModulePage>
   );
 }
 
-/** "Godkjent av Wybe-serveren: 73 av 73 · 8 avvist uten bestilling · nattevakten 3 · AI tok 2 samtaler". */
+/** "Godkjent av dommeren (Wybe-simulatoren): 73 av 73 · 8 avvist uten bestilling · nattevakten 3 · AI tok 2 samtaler". */
 function robotLine({ robot, staffDone, calls }: { robot: { done: number; reported: number; declined: number; cancelled: number }; staffDone: number; calls: number }): string {
   return [
-    `Godkjent av Wybe-serveren: ${robot.done} av ${robot.reported}`,
+    `Godkjent av dommeren (Wybe-simulatoren): ${robot.done} av ${robot.reported}`,
     robot.declined > 0 ? `${robot.declined} avvist uten bestilling` : null,
     robot.cancelled > 0 ? `${robot.cancelled} avlyst` : null,
     staffDone > 0 ? `nattevakten ${staffDone}` : null,
@@ -273,27 +309,91 @@ function Figure({ label, value, unit, tone, detail }: { label: string; value: Re
   );
 }
 
-function OpenRow({ item }: { item: OpenItem }) {
+function OpenRow({ item, marks, today }: { item: OpenItem; marks: Readonly<Record<string, RoomCheckMark>>; today: string }) {
   return (
     <li className="flex flex-col gap-2 py-3">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-        <p className="min-w-0 flex-1 text-base">{item.text}</p>
-        {item.urgent && <Badge tone="warning">Gjest venter</Badge>}
+        <p className={cx("min-w-0 flex-1 text-base", item.done && "text-muted")}>
+          {item.safety && <RegenIcon name="alert-triangle" size={18} className="mr-1.5 inline-block align-[-0.2em]" />}
+          {item.text}
+        </p>
+        {item.safety ? <Badge>Sikkerhet</Badge> : item.urgent ? <Badge tone="warning">Gjest venter</Badge> : item.done ? <Badge tone="success">Gjort i dag</Badge> : null}
       </div>
+      {item.sell && (
+        <div className="flex flex-col gap-2 print:hidden">
+          {item.sell.map((room) => (
+            <div key={room} className="flex flex-wrap items-start gap-x-3 gap-y-1">
+              {item.sell && item.sell.length > 1 && <span className="mt-2 rounded-sm bg-sunken px-2 py-1 font-mono text-sm font-medium tabular-nums">{room.replace(/^room-/, "")}</span>}
+              <SellSteps room={room} mark={marks[room]} today={today} className="min-w-0 flex-1" />
+            </div>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
         <span className="flex min-w-0 items-center gap-2">
-          <Monogram name={item.owner.replace(/^Renhold: /, "")} size={24} />
+          <Monogram name={item.owner.replace(/^[^:]+: /, "")} size={24} />
           <span className="min-w-0">{item.owner}</span>
           <span className="text-muted">·</span>
           <span className="whitespace-nowrap text-muted">
             innen <span className="font-mono tabular-nums text-text">{item.due}</span>
           </span>
         </span>
-        <Link href={item.href} className="flex min-h-11 items-center font-semibold text-accent-text hover:underline print:hidden">
-          {item.linkLabel}
-        </Link>
+        {item.href && (
+          <Link href={item.href} className="flex min-h-11 items-center font-semibold text-accent-text hover:underline print:hidden">
+            {item.linkLabel}
+          </Link>
+        )}
       </div>
     </li>
+  );
+}
+
+/** The first figure is the money (jury round 2, the founder juror/the creative juror): what the room check can sell, held back, released today. */
+function MoneyFigure({ figures }: { figures: Figures | undefined }) {
+  if (!figures) {
+    return (
+      <div className="flex flex-col gap-1">
+        <Skeleton className="h-10 w-28" />
+        <span className="text-sm text-muted">Kan selges etter bekreftelse</span>
+      </div>
+    );
+  }
+  const { money } = figures;
+  const toSell = money.toSell.length;
+  const released = money.released.length;
+  if (toSell === 0 && released === 0 && money.held.length === 0) {
+    return <Figure label="Klare til salg" value={figures.roomsReady} unit={`av ${figures.roomsTotal}`} tone={figures.roomsReady ? "success" : undefined} />;
+  }
+  const value = toSell > 0 ? money.toSellValue : money.releasedValue;
+  const rooms = (toSell > 0 ? money.toSell : money.released).map((row) => row.room.replace(/^room-/, ""));
+  const held = money.held.map((row) => row.room.replace(/^room-/, ""));
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <Stat
+        size="lg"
+        label={toSell > 0 ? "Kan selges etter bekreftelse" : released > 0 ? "Frigitt for salg i dag" : "Rom å selge i dag"}
+        value={
+          toSell > 0 || released > 0 ? (
+            <>
+              <span className="mr-1.5 font-sans text-base font-medium text-muted">ca.</span>
+              <Digits value={formatKroner(value)} />
+            </>
+          ) : (
+            0
+          )
+        }
+        unit={toSell > 0 || released > 0 ? "kr" : undefined}
+        tone={toSell === 0 && released > 0 ? "success" : undefined}
+      />
+      <p aria-live="polite" className="text-xs text-muted">
+        {[rooms.length > 0 ? `Rom ${rooms.join(", ")}` : null, held.length > 0 ? `${held.length} holdt tilbake (rom ${held.join(", ")})` : null].filter(Boolean).join(" · ")}
+      </p>
+      <p className="text-xs text-muted">{releasedLine(money)}</p>
+      <details className="text-xs text-muted print:hidden">
+        <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-accent-text hover:underline pointer-fine:min-h-8">Slik regner vi</summary>
+        <p className="max-w-[40ch] pb-1">{moneyMethod(money)}</p>
+      </details>
+    </div>
   );
 }
 

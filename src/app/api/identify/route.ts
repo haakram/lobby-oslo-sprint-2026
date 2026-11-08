@@ -1,12 +1,16 @@
 import { BudgetExceeded, identifyProduct } from "@/features/eyes/identify";
 import { readImageBody } from "@/features/eyes/imageBody";
 import { limitPaidRoute } from "@/app/api/_lib/paidRouteLimit";
+import { refuseCrossSite } from "@/app/api/_lib/sameOrigin";
 
 export const runtime = "nodejs";
 
 const json = (body: unknown, status: number) => Response.json(body, { status });
 
 export async function POST(request: Request) {
+  // Another site is refused before the limit counts or the image is read.
+  const crossSite = refuseCrossSite(request);
+  if (crossSite) return crossSite;
   const limited = limitPaidRoute("identify", request);
   if (limited) return limited;
   const body = await readImageBody(request);

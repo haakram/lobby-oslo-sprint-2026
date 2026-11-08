@@ -1,6 +1,7 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { receptionEnv, type ReceptionEnv } from "@/lib/env";
 import { limitPaidRoute } from "@/app/api/_lib/paidRouteLimit";
+import { refuseCrossSite } from "@/app/api/_lib/sameOrigin";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,9 @@ function fail(status: number, error: string) {
 
 /** A short-lived conversation token (WebRTC) for the receptionist agent; the key stays here. */
 export async function GET(request: Request): Promise<Response> {
+  // Another site is refused before the limit counts or a token is asked for.
+  const crossSite = refuseCrossSite(request);
+  if (crossSite) return crossSite;
   const limited = limitPaidRoute("reception-token", request);
   if (limited) return limited;
   let env: ReceptionEnv;

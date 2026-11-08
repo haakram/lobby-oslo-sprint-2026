@@ -70,4 +70,14 @@ describe("GET /api/reception/token", () => {
     expect(Number(response.headers.get("retry-after"))).toBeGreaterThan(0);
     expect(sdk.getWebrtcToken).toHaveBeenCalledTimes(max);
   });
+
+  it("refuses a request from another site with 403, before the limit counts or ElevenLabs is asked (jury round 4, the security juror)", async () => {
+    sdk.getWebrtcToken.mockResolvedValue({ token: "short-lived" });
+    const response = await GET(get({ "sec-fetch-site": "cross-site", origin: "https://evil.example" }));
+    expect(response.status).toBe(403);
+    expect(await response.text()).not.toContain("short-lived");
+    expect(sdk.getWebrtcToken).not.toHaveBeenCalled();
+    const max = PAID_ROUTE_LIMITS["reception-token"][0]!.max;
+    for (let i = 0; i < max; i++) expect((await GET(get())).status).toBe(200);
+  });
 });

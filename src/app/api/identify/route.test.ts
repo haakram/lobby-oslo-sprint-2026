@@ -87,4 +87,17 @@ describe("POST /api/identify", () => {
     expect((await res.json()).code).toBe("rate_limited");
     expect(identifyProduct).toHaveBeenCalledTimes(max);
   });
+
+  it("refuses a request from another site with 403, before the limit counts or the model is called (jury round 4, the security juror)", async () => {
+    identifyProduct.mockResolvedValue(result);
+    const crossSite = () =>
+      POST(new Request("http://localhost/api/identify", { method: "POST", headers: { "sec-fetch-site": "cross-site", origin: "https://evil.example" }, body: JSON.stringify({ image: jpeg() }) }));
+    const res = await crossSite();
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("cross_site");
+    expect(identifyProduct).not.toHaveBeenCalled();
+    // A refused call is not counted: the caller's whole per-minute allowance is still there.
+    const max = PAID_ROUTE_LIMITS["identify"][0]!.max;
+    for (let i = 0; i < max; i++) expect((await call({ image: jpeg() })).status).toBe(200);
+  });
 });

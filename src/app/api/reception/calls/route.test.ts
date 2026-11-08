@@ -12,6 +12,8 @@ vi.mock("@elevenlabs/elevenlabs-js", () => ({
 
 import { GET } from "./route";
 
+const get = (headers: Record<string, string> = {}) => new Request("http://localhost/api/reception/calls", { headers });
+
 const AGENT = "agent_test_reception_1";
 
 describe("GET /api/reception/calls", () => {
@@ -29,13 +31,13 @@ describe("GET /api/reception/calls", () => {
 
   it("503 when env is missing", async () => {
     vi.stubEnv("ELEVENLABS_API_KEY", undefined);
-    expect((await GET()).status).toBe(503);
+    expect((await GET(get())).status).toBe(503);
     expect(sdk.list).not.toHaveBeenCalled();
   });
 
   it("502 when the SDK throws", async () => {
     sdk.list.mockRejectedValue(new Error("boom with caller name Kari"));
-    const response = await GET();
+    const response = await GET(get());
     expect(response.status).toBe(502);
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain("Kari");
   });
@@ -53,7 +55,7 @@ describe("GET /api/reception/calls", () => {
       ],
       hasMore: false,
     });
-    const response = await GET();
+    const response = await GET(get());
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("no-store");
     const body = (await response.json()) as { calls: { id: string; callerName: string }[] };
@@ -79,7 +81,7 @@ describe("GET /api/reception/calls", () => {
       conversations: [call("conv_demo", cutoff + 60, "Demo Gjest"), call("conv_test", cutoff - 86_400, "Ekte Testperson")],
       hasMore: false,
     });
-    const response = await GET();
+    const response = await GET(get());
     expect(response.status).toBe(200);
     expect(sdk.list).toHaveBeenCalledWith(expect.objectContaining({ callStartAfterUnix: cutoff }));
     const body = await response.text();
@@ -89,8 +91,21 @@ describe("GET /api/reception/calls", () => {
 
   it("fails closed (503, nothing read) when RECEPTION_CALLS_SINCE is not an ISO time with an offset", async () => {
     vi.stubEnv("RECEPTION_CALLS_SINCE", "8. november");
-    const response = await GET();
+    const response = await GET(get());
     expect(response.status).toBe(503);
     expect(sdk.list).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request from another site with 403, before ElevenLabs is asked (jury round 4, the security juror)", async () => {
+    const response = await GET(get({ "sec-fetch-site": "cross-site", origin: "https://evil.example" }));
+    expect(response.status).toBe(403);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(sdk.list).not.toHaveBeenCalled();
+  });
+
+  it("still answers a same-origin request from the app", async () => {
+    sdk.list.mockResolvedValue({ conversations: [], hasMore: false });
+    const response = await GET(get({ "sec-fetch-site": "same-origin" }));
+    expect(response.status).toBe(200);
   });
 });

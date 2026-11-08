@@ -3,6 +3,7 @@ import { RECEPTION_DATA_FIELDS } from "@/features/reception/agentConfig";
 import { toCallNotes } from "@/features/reception/callLog";
 import { receptionEnv, type ReceptionEnv } from "@/lib/env";
 import { parseCallsSince } from "../../_lib/callsSince";
+import { refuseCrossSite } from "../../_lib/sameOrigin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,12 @@ function fail(status: number, error: string) {
 /**
  * The latest calls to the receptionist, read from ElevenLabs; nothing is stored here. Only staff reach it:
  * src/proxy.ts lets the receptionist and the admin in and answers everyone else 401/403 before this runs
- * (roles.test.ts, proxy.test.ts). Calls before RECEPTION_CALLS_SINCE are left out, at ElevenLabs and again here, and a
+ * (roles.test.ts, proxy.test.ts), and a request from another site is refused here too (sameOrigin.ts). Calls before RECEPTION_CALLS_SINCE are left out, at ElevenLabs and again here, and a
  * value that isn't an ISO time with an offset fails closed (503) instead of showing every call.
  */
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
+  const crossSite = refuseCrossSite(request);
+  if (crossSite) return crossSite;
   let env: ReceptionEnv;
   try {
     env = receptionEnv();

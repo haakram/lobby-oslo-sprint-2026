@@ -1,6 +1,7 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { voiceEnv, type VoiceEnv } from "@/lib/env";
 import { limitPaidRoute } from "@/app/api/_lib/paidRouteLimit";
+import { refuseCrossSite } from "@/app/api/_lib/sameOrigin";
 
 // A fresh token per request; never cached, never prerendered.
 export const dynamic = "force-dynamic";
@@ -16,6 +17,9 @@ function fail(status: number, error: string) {
  * The API key stays here; the browser only ever sees the token.
  */
 export async function GET(request: Request): Promise<Response> {
+  // Another site is refused before the limit counts or a token is asked for.
+  const crossSite = refuseCrossSite(request);
+  if (crossSite) return crossSite;
   const limited = limitPaidRoute("voice-token", request);
   if (limited) return limited;
   let env: VoiceEnv;

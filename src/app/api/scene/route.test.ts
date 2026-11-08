@@ -80,4 +80,17 @@ describe("POST /api/scene", () => {
     expect((await res.json()).code).toBe("rate_limited");
     expect(describeScene).toHaveBeenCalledTimes(max);
   });
+
+  it("refuses a request from another site with 403, before the limit counts or the model is called (jury round 4, the security juror)", async () => {
+    describeScene.mockResolvedValue([]);
+    const crossSite = () =>
+      POST(new Request("http://localhost/api/scene", { method: "POST", headers: { "sec-fetch-site": "cross-site", origin: "https://evil.example" }, body: JSON.stringify({ image: jpeg() }) }));
+    const res = await crossSite();
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("cross_site");
+    expect(describeScene).not.toHaveBeenCalled();
+    // A refused call is not counted: the caller's whole per-minute allowance is still there.
+    const max = PAID_ROUTE_LIMITS["scene"][0]!.max;
+    for (let i = 0; i < max; i++) expect((await call({ image: jpeg() })).status).toBe(200);
+  });
 });

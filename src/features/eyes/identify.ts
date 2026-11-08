@@ -22,6 +22,8 @@ const catalogue = PRODUCTS.map((p) => `${p.sku} | ${p.name} | ${p.category} | ${
 
 // Stable and first, so it can be cached.
 const SYSTEM = `You identify retail and hotel supply products from a photo. Read any visible text on the packaging. Then pick the matching SKU from the catalogue below, or null when nothing matches. Never invent an SKU. Always give a short name and category for what you see, even when sku is null.
+Write the name in Norwegian bokmål, at most four words, for the main thing in the middle of the photo (for example "Pute", "Håndkle", "Sjampoflaske", "Rød krakk").
+Category: linen for textiles (pillows, cushions, towels, bedding, blankets), hygiene for toiletries (soap, shampoo, toothpaste, lotion), food for food and drink, other for anything else, unknown when you cannot tell.
 
 Catalogue (sku | name | category | description):
 ${catalogue}`;

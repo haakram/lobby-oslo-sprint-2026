@@ -1,4 +1,4 @@
-import { isProductClass } from "./cocoLabels";
+import { isSentToClaude } from "./cocoLabels";
 import type { IdentifyResult } from "./schema";
 import { MIN_IOU, iou, type Box } from "./smoothBoxes";
 
@@ -8,7 +8,7 @@ import { MIN_IOU, iou, type Box } from "./smoothBoxes";
 export const STABLE_MS = 800;
 /** At least this long between two automatic requests. */
 export const MIN_SPACING_MS = 2000;
-/** A catalogue match this recent is reused for a new box in the same place. */
+/** A confident answer this recent is reused for a new box in the same place (the cache per spot). */
 export const REUSE_WINDOW_MS = 10_000;
 
 export type RecentResult = { box: Box; result: IdentifyResult; at: number };
@@ -41,14 +41,15 @@ export function trackFirstSeen(prev: ReadonlyMap<string, number>, boxes: Box[], 
 }
 
 /**
- * Which box to recognise now, if any: only product-like classes qualify; reuse a recent nearby
- * match for free, else one request.
+ * Which box to recognise now, if any. The detector only finds boxes: every box except a person
+ * qualifies, whatever class the detector guessed. A recent confident answer in the same place is
+ * reused for free (a box that lost tracking and came back); otherwise one request.
  */
 export function nextAutoIdentify(input: AutoInput): AutoDecision {
   if (input.paused) return null;
 
   const candidates = input.boxes
-    .filter((box) => isProductClass(box.label))
+    .filter((box) => isSentToClaude(box.label))
     .filter((box) => !input.attempted.has(box.id))
     .filter((box) => input.now - (input.firstSeen.get(box.id) ?? input.now) >= STABLE_MS)
     .sort((a, b) => b.w * b.h - a.w * a.h);
@@ -57,7 +58,7 @@ export function nextAutoIdentify(input: AutoInput): AutoDecision {
   for (const box of candidates) {
     const match = input.recent.find(
       (entry) =>
-        entry.result.product !== null &&
+        entry.result.confidence !== "low" &&
         input.now - entry.at <= REUSE_WINDOW_MS &&
         iou(entry.box, box) >= MIN_IOU,
     );

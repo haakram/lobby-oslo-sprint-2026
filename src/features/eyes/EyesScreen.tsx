@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, EmptyState, ErrorState, RegenIcon, Sheet, Skeleton, cx } from "@/ui";
 import { BoxOverlay, type BoxLabel } from "./BoxOverlay";
-import { cocoLabel, isProductClass } from "./cocoLabels";
+import { boxCategory } from "./boxCategory";
+import { cocoLabel, isSentToClaude, liveLabel } from "./cocoLabels";
 import { cropFrame } from "./cropFrame";
 import { PermissionState } from "./PermissionState";
 import { ProductCard } from "./ProductCard";
@@ -63,11 +64,14 @@ export function EyesScreen() {
     const next: Record<string, BoxLabel> = {};
     for (const box of detector.boxes) {
       const result = results[box.id];
-      if (busy[box.id]) next[box.id] = { text: "Gjenkjenner …", state: "busy" };
-      else if (result?.product) next[box.id] = { text: result.product.name, state: "known" };
-      // Not in the catalogue: Claude's own name for it ("Kaffekopp"); the tag and the card say "ikke i katalogen".
-      else if (result) next[box.id] = { text: result.name || cocoLabel(box.label), state: "missing" };
-      else next[box.id] = { text: cocoLabel(box.label), state: isProductClass(box.label) ? "product" : "object" };
+      // The detector only finds the box; the name comes from Claude, or the detector's when it is sure.
+      const category = boxCategory(box.label, box.score, result);
+      const free = liveLabel(box.label, box.score);
+      if (busy[box.id]) next[box.id] = { text: "Gjenkjenner …", state: "busy", category };
+      else if (result?.product) next[box.id] = { text: result.product.name, state: "known", category };
+      // Not in the catalogue: Claude's own name for it ("Pute"); the tag and the card say "ikke i katalogen".
+      else if (result) next[box.id] = { text: result.name || free, state: "missing", category };
+      else next[box.id] = { text: free, state: isSentToClaude(box.label) ? "product" : "object", category };
     }
     return next;
   }, [detector.boxes, results, busy]);
@@ -97,8 +101,8 @@ export function EyesScreen() {
 
   const select = useCallback(
     (box: Box) => {
-      if (!isProductClass(box.label) && !results[box.id]) {
-        // People, furniture and the like are never sent: a small card with the class name, for free.
+      if (!isSentToClaude(box.label)) {
+        // People are never sent: a small card with the class name, for free.
         setSheet({ boxId: null, image: null, objectLabel: cocoLabel(box.label) });
         setSheetOpen(true);
       } else if (results[box.id] || busy[box.id]) {
@@ -283,14 +287,14 @@ function CameraStart({ onStart }: { onStart: () => void }) {
   );
 }
 
-/** A thing the detector names for free, which never goes to Claude. */
+/** A person: the detector names them for free, and they never go to Claude. */
 function ObjectCard({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-start gap-3">
       <Badge>Ikke en vare</Badge>
       <p className="text-2xl font-bold tracking-[-0.02em]">{label}</p>
       <p className="text-base text-muted">
-        Fettero kjenner igjen dette selv. Bare varer sendes til gjenkjenning, så dette kostet ingenting.
+        Fettero kjenner igjen dette selv. Personer sendes aldri til gjenkjenning, så dette kostet ingenting.
       </p>
     </div>
   );

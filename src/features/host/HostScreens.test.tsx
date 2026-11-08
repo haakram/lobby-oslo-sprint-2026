@@ -42,9 +42,11 @@ describe("Mine boliger (the host's start page)", () => {
     expect(tiles.getByText("Kode sendt i går 18:00")).toBeInTheDocument();
 
     const figures = within(screen.getByRole("region", { name: "Måneden i tall" }));
-    for (const label of ["Bookinger i november", "Belegg i november", "Inntekt hittil i november", "Snittvurdering", "Timer spart", "Oppgaver gjort for deg"]) {
+    for (const label of ["Bookinger i november", "Belegg i november", "Inntekt hittil i november", "Snittvurdering", "Netter booket i november", "Opphold fulgt opp"]) {
       expect(figures.getByText(label)).toBeInTheDocument();
     }
+    // Only what the data proves: no hours saved, no per-stay task estimate shown as a fact.
+    expect(figures.queryByText(/Timer spart|Oppgaver gjort/)).not.toBeInTheDocument();
     expect(figures.getByText("4,92")).toBeInTheDocument();
     // Good news, no alarms: nothing on the page is in a warning or danger figure.
     expect(screen.queryByText(/Obs:|Kritisk:/)).not.toBeInTheDocument();
@@ -84,7 +86,7 @@ describe("Mine boliger (the host's start page)", () => {
       </SessionProvider>,
     );
     expect(html).toContain("Henter boligene");
-    expect(html).toContain("Timer spart");
+    expect(html).toContain("Opphold fulgt opp");
     expect(html).not.toContain("Grünerløkka-leiligheten");
   });
 

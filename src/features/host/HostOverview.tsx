@@ -21,7 +21,11 @@ import {
 import { HostFigures, HostPage, longDate } from "./HostPage";
 import { type HostReady, useHost } from "./HostProvider";
 
-export const OVERVIEW_FIGURES = ["Bookinger i november", "Belegg i november", "Inntekt hittil i november", "Snittvurdering", "Timer spart", "Oppgaver gjort for deg"];
+/**
+ * Only figures the host's own data proves (jury round 3, the marketing juror/the founder juror): no "Timer spart" or "Oppgaver
+ * gjort for deg", which were per-stay assumptions shown as facts, unlike the hotel side's "ca." and method.
+ */
+export const OVERVIEW_FIGURES = ["Bookinger i november", "Belegg i november", "Inntekt hittil i november", "Snittvurdering", "Netter booket i november", "Opphold fulgt opp"];
 
 const STATUS_TONE: Record<ApartmentStatus, BadgeTone> = { klar: "success", "ny-gjest": "success", "gjest-inne": "neutral", rengjores: "neutral" };
 
@@ -73,8 +77,8 @@ function Overview({ host }: { host: HostReady }) {
         <Stat label={`Belegg i ${month.month}`} value={percent(month.occupancy)} tone="success" />
         <Stat label={`Inntekt hittil i ${month.month}`} value={kr(month.earned)} unit="kr" />
         <Stat label="Snittvurdering" value={decimal(month.rating)} unit="av 5" tone="success" />
-        <Stat label="Timer spart" value={month.hoursSaved} unit="t" tone="success" />
-        <Stat label="Oppgaver gjort for deg" value={month.tasksDone} tone="success" />
+        <Stat label={`Netter booket i ${month.month}`} value={month.nights} />
+        <Stat label="Opphold fulgt opp" value={month.staysSoFar} tone="success" />
       </HostFigures>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:items-start lg:gap-8">

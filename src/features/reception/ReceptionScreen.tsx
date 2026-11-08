@@ -10,6 +10,7 @@ import { CallLogPanel } from "./CallLogPanel";
 import { HOTEL, RECEPTIONIST_NAME } from "./hotel";
 import { PhoneCall } from "./PhoneCall";
 import { RecordCard } from "./RecordCard";
+import { RETENTION_DAYS } from "./retention";
 import type { BookingRecord, ReceptionRecord } from "./records";
 import { useReceptionVoice } from "./useReceptionVoice";
 import { useStaffMarks, type StaffMark } from "./useStaffMarks";
@@ -86,6 +87,11 @@ function ReceptionSession() {
               Bookinger og beskjeder
             </h2>
             <Records records={records} marks={marks} onMark={mark} />
+            <p className="text-sm text-muted">
+              Personvern: bare ansatte ser dette. Beskjeder slettes {RETENTION_DAYS} dager etter samtalen, bookinger{" "}
+              {RETENTION_DAYS} dager etter avreise, og samtaleteksten slettes etter {RETENTION_DAYS} dager. Ingen
+              lydopptak. Gjesten kan be om innsyn, retting eller sletting på {HOTEL.privacy.email}.
+            </p>
           </section>
           <CallLogPanel callActive={voice.connected} />
         </div>

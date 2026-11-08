@@ -113,7 +113,10 @@ describe("reception agent settings", () => {
     const greeting = client.conversationConfig.agent.firstMessage;
     expect(greeting).toContain("Jeg heter Maria");
     expect(greeting).toContain("virtuelle assistent, en KI");
-    expect(greeting).toContain("skrevet ned");
+    expect(greeting).toContain("uten lydopptak");
+    expect(greeting).toContain("slettes etter 30 dager");
+    expect(greeting).toMatch(/personvern/i);
+    expect(greeting).toContain("skrives ned");
     expect(prompt).toMatch(/opening notice once in the new language/);
   });
 
@@ -154,5 +157,31 @@ describe("reception agent settings", () => {
     expect(fields.needs_callback.type).toBe("boolean");
     expect(fields.request_type.enum).toEqual(["booking", "question", "message", "complaint", "other"]);
     for (const field of Object.values(fields)) expect(field.description).toBeTruthy();
+  });
+});
+
+describe("privacy in the call", () => {
+  const prompt = receptionAgentConfig({ kind: "client" }).conversationConfig?.agent?.prompt?.prompt ?? "";
+
+  it("says what is noted, why and for how long before taking a name", () => {
+    expect(prompt).toMatch(/before you take their name and number/i);
+    expect(prompt).toContain("deleted after 30 days");
+  });
+
+  it("knows the controller, legal basis, retention, processor and the guest's rights", () => {
+    expect(prompt).toContain("Lobby Hotell AS");
+    expect(prompt).toMatch(/legal basis is the agreement/i);
+    expect(prompt).toMatch(/legitimate interest/i);
+    expect(prompt).toContain("no sound recording");
+    expect(prompt).toContain("deleted 30 days after departure");
+    expect(prompt).toMatch(/kept for 5 years.*bokføringsloven/s);
+    expect(prompt).toContain("ElevenLabs");
+    expect(prompt).toMatch(/see their data, correct it, have it deleted, limit its use, object, and get a copy/);
+    expect(prompt).toContain("personvern@lobby.example");
+    expect(prompt).toContain("Datatilsynet");
+  });
+
+  it("never refuses a deletion request and passes it to staff", () => {
+    expect(prompt).toMatch(/never refuse a privacy request/i);
   });
 });

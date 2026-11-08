@@ -5,6 +5,7 @@ import { Badge, type BadgeTone, Button, Card } from "@/ui";
 import { formatClock, formatDate } from "./format";
 import { PERKS, RECEPTIONIST_NAME, ROOM_TYPES } from "./hotel";
 import type { BookingRecord, MessageRecord, MessageTopic, ReceptionRecord } from "./records";
+import { deleteOn } from "./retention";
 import type { StaffMark } from "./useStaffMarks";
 
 const TOPIC: Record<MessageTopic, string> = {
@@ -62,6 +63,7 @@ function Shell({
   title,
   badge,
   createdAt,
+  deletedOn,
   children,
   actions,
   actionsRef,
@@ -70,6 +72,8 @@ function Shell({
   title: ReactNode;
   badge: { tone: BadgeTone; label: string };
   createdAt: string;
+  /** The day the record is deleted (GDPR storage limitation), YYYY-MM-DD. */
+  deletedOn: string;
   children: ReactNode;
   actions: ReactNode;
   actionsRef: RefObject<HTMLDivElement | null>;
@@ -83,11 +87,14 @@ function Shell({
           <h3 id={headingId} className="text-xl font-bold tracking-[-0.02em] break-words">
             {title}
           </h3>
-          {clock && (
-            <p className="mt-0.5 text-sm text-muted">
-              Mottatt <span className="font-mono tabular-nums">{clock}</span>
-            </p>
-          )}
+          <p className="mt-0.5 text-sm text-muted">
+            {clock && (
+              <>
+                Mottatt <span className="font-mono tabular-nums">{clock}</span> ·{" "}
+              </>
+            )}
+            Slettes <span className="font-mono tabular-nums">{formatDate(deletedOn)}</span>
+          </p>
         </div>
         {/* Announced when a tick changes it. */}
         <span aria-live="polite">
@@ -128,6 +135,7 @@ function BookingCard({ record, mark, onMark, actionsRef }: CardProps<BookingReco
       title={confirmed ? "Booking" : "Bookingforespørsel"}
       badge={badge}
       createdAt={record.createdAt}
+      deletedOn={deleteOn(record)}
       actionsRef={actionsRef}
       actions={
         mark === "bekreftet" || mark === "avvist" ? (
@@ -194,6 +202,7 @@ function MessageCard({ record, mark, onMark, actionsRef }: CardProps<MessageReco
       }
       badge={badge}
       createdAt={record.createdAt}
+      deletedOn={deleteOn(record)}
       actionsRef={actionsRef}
       actions={
         mark ? (

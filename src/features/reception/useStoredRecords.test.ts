@@ -87,6 +87,18 @@ describe("useStoredRecords", () => {
     expect(record).toMatchObject({ kind: "booking", confirmed: false });
   });
 
+  it("deletes records past their deletion day and rewrites the browser's copy", () => {
+    vi.useFakeTimers({ now: new Date("2027-01-15T12:00:00Z") });
+    try {
+      localStorage.setItem(RECORDS_STORAGE, JSON.stringify([BOOKING, MESSAGE]));
+      // The message is 30+ days old; the booking's stay ended 2026-11-22, so it goes on 2026-12-22.
+      expect(renderHook(() => useStoredRecords()).result.current.records).toEqual([]);
+      expect(JSON.parse(localStorage.getItem(RECORDS_STORAGE) ?? "null")).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("treats broken JSON or a stored object as none", () => {
     localStorage.setItem(RECORDS_STORAGE, "{bad");
     const broken = renderHook(() => useStoredRecords());

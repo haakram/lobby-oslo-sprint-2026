@@ -114,6 +114,11 @@ export function PhoneCall({
         <p className="mt-1 text-sm text-muted">
           {connected ? `${RECEPTIONIST_NAME} · virtuell assistent (KI)` : `Hotell · ${HOTEL.city}`}
         </p>
+        {connected && (
+          <p className="mt-2 rounded-full bg-sunken px-3 py-1 text-xs text-muted">
+            Skrives ned · ingen lydopptak · slettes etter {HOTEL.privacy.retentionDays} dager
+          </p>
+        )}
         <p aria-live="polite" className="mt-3 min-h-6 text-base font-medium">
           {seconds !== null ? (
             <>

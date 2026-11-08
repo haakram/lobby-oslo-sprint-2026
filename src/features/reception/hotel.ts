@@ -81,6 +81,9 @@ export const HOTEL = {
     controller: "Lobby Hotell AS",
     email: "personvern@lobby.example",
     retentionDays: 30,
+    // Bokføringsloven § 13: an invoice or receipt for a stay is kept for 5 years after the financial year.
+    accountingYears: 5,
+    processor: "ElevenLabs",
   },
 } as const satisfies {
   name: "Lobby";
@@ -90,7 +93,7 @@ export const HOTEL = {
   checkOut: "11:00";
   facts: readonly string[];
   /** Who answers for the callers' personal data, where to ask, and how long call records are kept. */
-  privacy: { controller: string; email: string; retentionDays: number };
+  privacy: { controller: string; email: string; retentionDays: number; accountingYears: number; processor: string };
 };
 
 export const DIRECT_DISCOUNT = 0.1;

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { crossNightPrecision, grouped, LEDGER_NIGHTS, type LedgerNight, percentText, precision, shiftOf } from "./ledger";
+import { doneBasis } from "./conduct";
+import { crossNightPrecision, grouped, LEDGER_META, LEDGER_NIGHTS, type LedgerNight, ownPrecision, percentText, precision, shiftOf } from "./ledger";
 import { parseRunLog } from "./runlog";
 
 const DEMO = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
@@ -61,12 +62,47 @@ describe("the evidence ledger the app reads", () => {
     expect(demo).toMatchObject({ seed: 16, score: 2680, done_reports: 73, done_credited: 73, declines_credited: 7, declines_not_credited: 1, commit: "cb72845" });
   });
 
+  it("splits the demo night's done as the app's doneBasis does: 64 after the rise, 9 on its own judgement (5 room checks, 4 spills)", () => {
+    const demo = LEDGER_NIGHTS.find((entry) => entry.shift === shiftOf(DEMO));
+    const basis = doneBasis(DEMO);
+    expect(demo).toMatchObject({
+      done_after_rise: basis.afterRise.reported,
+      done_own: basis.own.reported,
+      done_own_credited: basis.own.confirmed,
+      done_room_check: basis.own.roomChecks.reported,
+      done_spill: basis.own.spills.reported,
+    });
+    expect([basis.afterRise.reported, basis.own.reported, basis.own.confirmed]).toEqual([64, 9, 9]);
+  });
+
+  it("holds the live-start count and the newest start for the card's source line", () => {
+    expect(LEDGER_META.liveStarts).toBeGreaterThanOrEqual(LEDGER_NIGHTS.length);
+    expect(LEDGER_META.latestStart).toMatch(/^2026-11-0\dT\d\d:\d\d:\d\d\+01:00$/);
+  });
+
   it("computes the cross-night precision and the demo build's from the rows, not from a typed-in figure", () => {
     const { all, build } = crossNightPrecision(shiftOf(DEMO));
     const reported = LEDGER_NIGHTS.reduce((sum, entry) => sum + (entry.done_reports ?? 0), 0);
     expect(all?.reported).toBe(reported);
     expect(all!.credited).toBeLessThan(all!.reported);
     expect(build).toMatchObject({ commit: "cb72845", nights: 4, reported: 291, credited: 290, percent: 99.7 });
+  });
+
+  it("computes the own-judgement precision across all nights and for the demo build", () => {
+    const { allOwn, buildOwn } = crossNightPrecision(shiftOf(DEMO));
+    const own = LEDGER_NIGHTS.reduce((sum, entry) => sum + (entry.done_own ?? 0), 0);
+    expect(allOwn?.reported).toBe(own);
+    expect(allOwn!.roomChecks.reported).toBeLessThanOrEqual(allOwn!.reported);
+    expect(buildOwn).toMatchObject({ nights: 4, reported: 43, credited: 42 });
+  });
+});
+
+describe("ownPrecision", () => {
+  it("counts only the done said on the robot's own judgement, room checks among them", () => {
+    const a = { ...night("a", "x", 70, 70), done_own: 9, done_own_credited: 9, done_room_check: 5, done_room_check_credited: 5 };
+    const b = { ...night("b", "x", 70, 69), done_own: 10, done_own_credited: 9, done_room_check: 4, done_room_check_credited: 4 };
+    expect(ownPrecision([a, b, night("c", "x", 3, 3)])).toEqual({ nights: 2, reported: 19, credited: 18, percent: 94.7, roomChecks: { reported: 9, credited: 9 } });
+    expect(ownPrecision([night("c", "x", 3, 3)])).toBeNull();
   });
 });
 
@@ -80,7 +116,7 @@ describe("precision", () => {
   it("leaves board tests out of a build's figure though they carry its commit, and counts them across all nights", () => {
     const board = { ...night("b", "8eac151", 70, 70), kind: "board-test" as const };
     const nights = [{ ...night("a", "8eac151", 72, 71), kind: "build" as const }, board, { ...night("c", "8eac151", 73, 73), kind: "build" as const }];
-    expect(crossNightPrecision("a", nights)).toEqual({
+    expect(crossNightPrecision("a", nights)).toMatchObject({
       all: { nights: 3, reported: 215, credited: 214, percent: 99.5 },
       build: { commit: "8eac151", nights: 2, reported: 145, credited: 144, percent: 99.3 },
     });
@@ -88,7 +124,12 @@ describe("precision", () => {
   });
 
   it("knows no build for a shift the ledger has not seen", () => {
-    expect(crossNightPrecision("w2-unknown", [night("a", "x", 3, 3)])).toEqual({ all: { nights: 1, reported: 3, credited: 3, percent: 100 }, build: null });
+    expect(crossNightPrecision("w2-unknown", [night("a", "x", 3, 3)])).toEqual({
+      all: { nights: 1, reported: 3, credited: 3, percent: 100 },
+      build: null,
+      allOwn: null,
+      buildOwn: null,
+    });
   });
 
   it("writes figures the Norwegian way", () => {

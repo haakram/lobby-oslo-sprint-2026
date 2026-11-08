@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { clockToSim } from "@/features/replay/timeline";
-import { declineKind, declineSplit, declineSplitText } from "./declines";
+import { declineKind, declineSplit, declineSplitPlain, declineSplitText } from "./declines";
 import { nightOutcomes } from "./outcomes";
 import { parseRunLog, type RunLine } from "./runlog";
 
@@ -43,6 +43,12 @@ describe("declineSplit on the demo night (seed 16)", () => {
 
   it("says it in one line for the card and the request list", () => {
     expect(declineSplitText(split)).toBe("7 falske klager avvist (godkjent av dommeren) · 1 ikke godkjent");
+  });
+
+  it("says it in a manager's words for the judgement card: by kind, no referee, no \"falske klager\"", () => {
+    expect(declineSplitPlain(split)).toBe("6 meldinger uten bestilling og 1 alt levert · 1 ikke godkjent");
+    expect(declineSplitPlain(declineSplit(DEMO, clockToSim("03:00:00")))).toBe("3 meldinger uten bestilling · 1 ikke godkjent");
+    expect(declineSplitPlain(declineSplit([]))).toBe("Ingen meldinger avvist.");
   });
 
   it("follows the replay: by 03:00 only the first four refusals have happened", () => {

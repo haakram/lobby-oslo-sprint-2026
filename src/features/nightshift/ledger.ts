@@ -23,9 +23,23 @@ export type LedgerNight = {
   done_credited: number | null;
   declines_credited: number | null;
   declines_not_credited: number | null;
+  /** What each "done" rested on (scripts/ledger.py, the same rule as `doneBasis` in conduct.ts); absent in older files. */
+  done_after_rise?: number | null;
+  done_own?: number | null;
+  done_own_credited?: number | null;
+  done_room_check?: number | null;
+  done_room_check_credited?: number | null;
+  done_spill?: number | null;
+  done_spill_credited?: number | null;
 };
 
 export const LEDGER_NIGHTS: readonly LedgerNight[] = data.nights as LedgerNight[];
+
+/** Every live start the ledger read (nights with no log included), and the newest start time, ISO. */
+export const LEDGER_META: { liveStarts: number | null; latestStart: string | null } = {
+  liveStarts: typeof (data as { live_starts?: unknown }).live_starts === "number" ? (data as { live_starts: number }).live_starts : null,
+  latestStart: typeof (data as { latest_start?: unknown }).latest_start === "string" ? (data as { latest_start: string }).latest_start : null,
+};
 
 export type Precision = {
   nights: number;
@@ -46,6 +60,26 @@ export function precision(nights: readonly LedgerNight[]): Precision | null {
   return { nights: counted.length, reported, credited, percent };
 }
 
+export type OwnPrecision = Precision & { roomChecks: { reported: number; credited: number } };
+
+/**
+ * The "done" the robot said on its own judgement (no score rise during the task) over `nights`: credited
+ * over reported, and the room checks among them; null when no night has the split or none was said.
+ */
+export function ownPrecision(nights: readonly LedgerNight[]): OwnPrecision | null {
+  const counted = nights.filter((night) => (night.done_own ?? 0) > 0);
+  const reported = counted.reduce((sum, night) => sum + (night.done_own ?? 0), 0);
+  const credited = counted.reduce((sum, night) => sum + (night.done_own_credited ?? 0), 0);
+  if (reported === 0) return null;
+  let percent = Math.round((credited / reported) * 1000) / 10;
+  if (credited < reported) percent = Math.min(percent, 99.9);
+  const roomChecks = {
+    reported: counted.reduce((sum, night) => sum + (night.done_room_check ?? 0), 0),
+    credited: counted.reduce((sum, night) => sum + (night.done_room_check_credited ?? 0), 0),
+  };
+  return { nights: counted.length, reported, credited, percent, roomChecks };
+}
+
 /** The shift id on the log's `start` line. */
 export function shiftOf(lines: readonly RunLine[]): string | null {
   const start = lines.find((line) => line.type === "start");
@@ -57,6 +91,9 @@ export type CrossNight = {
   all: Precision | null;
   /** The build nights played by the same commit as the night on screen (board tests left out); null when the ledger does not know it. */
   build: (Precision & { commit: string }) | null;
+  /** The same two, counting only the "done" said on the robot's own judgement. */
+  allOwn?: OwnPrecision | null;
+  buildOwn?: OwnPrecision | null;
 };
 
 /** The whole ledger, and the build that played `shift`. */
@@ -64,8 +101,14 @@ export function crossNightPrecision(shift: string | null, nights: readonly Ledge
   const all = precision(nights);
   const builds = nights.filter((night) => night.kind !== "board-test");
   const commit = shift ? builds.find((night) => night.shift === shift)?.commit : undefined;
-  const same = commit ? precision(builds.filter((night) => night.commit === commit)) : null;
-  return { all, build: same && commit ? { ...same, commit } : null };
+  const sameNights = commit ? builds.filter((night) => night.commit === commit) : [];
+  const same = commit ? precision(sameNights) : null;
+  return {
+    all,
+    build: same && commit ? { ...same, commit } : null,
+    allOwn: ownPrecision(nights),
+    buildOwn: commit ? ownPrecision(sameNights) : null,
+  };
 }
 
 /** "4 340" (a thin non-breaking space, as Norwegian figures are grouped). */

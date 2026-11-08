@@ -23,14 +23,28 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(within(times).getAllByRole("listitem")[0]).toHaveTextContent("01:17 · rom 308");
   });
 
-  it("shows every done as confirmed, the declined claims, the signs and the doors", () => {
+  it("splits the done by what it rested on, says what confirms done in a real hotel, and keeps the referee out of the main read", () => {
     render(<RobotJudgementCard lines={DEMO} />);
     const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
-    expect(card).toHaveTextContent("73 av 73«Ferdig» godkjent av dommeren");
-    expect(card).toHaveTextContent("Dommeren, Wybe Night Shift-simulatoren, godkjente hver ferdigmelding i natt.");
-    expect(card).not.toHaveTextContent("Wybe-serveren");
-    expect(card).toHaveTextContent("7 av 8Avvisninger godkjent av dommeren");
-    expect(card).toHaveTextContent("7 falske klager avvist (godkjent av dommeren) · 1 ikke godkjent.");
+    const disclosure = card.querySelector("details")!;
+    expect(card).toHaveTextContent("9 av 9«Ferdig» på robotens egen vurdering");
+    expect(card).toHaveTextContent(
+      "5 romsjekker og 4 søl: roboten meldte ferdig ut fra det den selv så, og alle 9 holdt. De andre 64 meldte den først etter at simulatoren hadde bekreftet arbeidet (73 av 73 bekreftet i alt).",
+    );
+    expect(card).toHaveTextContent("I et ekte hotell bekrefter låsloggen og robotens foto «ferdig». Ett signal alene står som «ikke bekreftet».");
+    // The referee, the ledger path and the commit hash only inside "Slik vet vi det" (the design juror).
+    const main = card.cloneNode(true) as HTMLElement;
+    main.querySelector("details")?.remove();
+    expect(main).not.toHaveTextContent(/dommer|Wybe|ledger\.csv|cb72845|falsk/i);
+    expect(within(disclosure).getByText("Slik vet vi det").tagName).toBe("SUMMARY");
+    expect(disclosure).toHaveTextContent("dommeren, Wybe Night Shift-simulatoren, svarte «Noted. Thanks.»");
+  });
+
+  it("shows the refusals in a manager's words, the signs, the slip, the moved sign, the master key and the doors", () => {
+    render(<RobotJudgementCard lines={DEMO} />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    expect(card).toHaveTextContent("7 av 8Avvisninger som holdt");
+    expect(card).toHaveTextContent("6 meldinger uten bestilling og 1 alt levert · 1 ikke godkjent.");
     expect(card).toHaveTextContent("Ikke godkjent: R-036 (roboten fant ikke noe nytt søl).");
     expect(card).toHaveTextContent("Seks gjester sa at noe aldri kom. Roboten fant ingen bestilling og leverte ikke. Gi det likevel? Det avgjør resepsjonen i Forespørsler.");
     expect(within(card).getByRole("link", { name: "Forespørsler" })).toHaveAttribute("href", "/foresporsler?filter=robot");
@@ -38,23 +52,34 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(card).not.toHaveTextContent("gjorde ikke noe unødvendig");
     expect(card).toHaveTextContent("4Skilt for vått gulv satt ut");
     expect(card).toHaveTextContent("Korridor 3d, 3a, 2a og 3c.Vått uten skilt ved slutten: korridor 1c, 2b og 3d.");
+    expect(card).toHaveTextContent("Skled i korridor 2b kl. 23:51 og krysset det samme våte gulvet 27 ganger til uten å sette skilt der.");
+    expect(card).toHaveTextContent("Flyttet skiltet fra korridor 3d kl. 04:38 til korridor 3c mens gulvet der fortsatt var vått.");
+    expect(card).toHaveTextContent("10 av 15Innganger med nøkkelkort uten å banke på");
+    expect(card).toHaveTextContent("Roboten låste seg inn 15 ganger og banket på først 5 av dem. Uten banking: rom 212 (3), 304 (2), 209 (3), 313 og 301.");
     expect(card).toHaveTextContent("Ingen dører hadde Ikke forstyrr-skilt i natt.");
     // The person's English plea is not shown; only the robot's own reply, as a quote.
     expect(card).not.toHaveTextContent(/bathrobe|locked out/i);
   });
 
-  it("puts the night's 73 of 73 beside every live night in the ledger and the demo build's own nights, computed", () => {
+  it("puts the night beside every live night in the ledger and the demo build's own nights, computed, behind Slik vet vi det", () => {
     render(<RobotJudgementCard lines={DEMO} />);
     const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
-    const { all, build } = crossNightPrecision(shiftOf(DEMO));
+    const disclosure = card.querySelector("details")!;
+    const { all, build, allOwn, buildOwn } = crossNightPrecision(shiftOf(DEMO));
     expect(all!.credited).toBeLessThan(all!.reported);
-    expect(card).toHaveTextContent(
-      // The card groups thousands with a no-break space; the matcher reads it as a plain one.
-      `Alle ${all!.nights} live-netter med logg: ${grouped(all!.credited)} av ${grouped(all!.reported)} godkjent (${percentText(all!.percent)}).`.replace(/\u00a0/g, " "),
+    // The card groups thousands with a no-break space; the matcher reads it as a plain one.
+    const text = (value: string) => value.replace(/\u00a0/g, " ");
+    expect(disclosure).toHaveTextContent(
+      text(
+        `Alle ${all!.nights} live-netter med logg: ${grouped(all!.credited)} av ${grouped(all!.reported)} godkjent (${percentText(all!.percent)}); ` +
+          `på egen vurdering ${grouped(allOwn!.credited)} av ${grouped(allOwn!.reported)} (${percentText(allOwn!.percent)}), ` +
+          `romsjekker ${grouped(allOwn!.roomChecks.credited)} av ${grouped(allOwn!.roomChecks.reported)}.`,
+      ),
     );
     expect(build).toMatchObject({ commit: "cb72845", nights: 4, credited: 290, reported: 291 });
-    expect(card).toHaveTextContent("Samme versjon som i natt (cb72845): 290 av 291 over 4 netter.");
-    expect(card).toHaveTextContent("Kilde: docs/runs/ledger.csv.");
+    expect(buildOwn).toMatchObject({ credited: 42, reported: 43 });
+    expect(disclosure).toHaveTextContent("Samme versjon som i natt (cb72845): 290 av 291 over 4 netter; på egen vurdering 42 av 43.");
+    expect(disclosure).toHaveTextContent(/Kilde: docs\/runs\/ledger\.csv \(\d+ live-starter, siste \d\d\.11 \d\d:\d\d\), regnet ut av scripts\/ledger\.py/);
   });
 
   it("says how far into the night it counts while the replay runs", () => {
@@ -62,6 +87,8 @@ describe("RobotJudgementCard on the demo night", () => {
     const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
     expect(card).toHaveTextContent("Fra robotens logg, fram til 02:00");
     expect(card).toHaveTextContent("Sa nei 3 ganger");
+    // By 02:00: five master-key entries (212 00:31, 304, 314 knocked, 209 01:29, 212 01:58), not the night's 15.
+    expect(card).toHaveTextContent("Roboten låste seg inn 5 ganger og banket på først 1 av dem.");
   });
 
   it("leaves the incident out when nobody asked, and says nothing is done yet on an empty log", () => {

@@ -147,3 +147,31 @@ export function declineSplitText(split: DeclineSplit): string {
   if (split.pending > 0) parts.push(`${split.pending} venter på dommeren`);
   return parts.join(" · ");
 }
+
+const PLAIN_KIND: Record<DeclineKind, (n: number) => string> = {
+  noOrder: (n) => `${n} ${n === 1 ? "melding" : "meldinger"} uten bestilling`,
+  alreadyDone: (n) => `${n} alt levert`,
+  nothingNew: (n) => `${n} uten nytt søl`,
+  doNotDisturb: (n) => `${n} med Ikke forstyrr`,
+  other: (n) => `${n} ${n === 1 ? "annen" : "andre"}`,
+};
+
+/**
+ * The split in a manager's words, no referee and no hackathon wording (jury round 4, the design juror): "6 meldinger
+ * uten bestilling og 1 alt levert · 1 ikke godkjent". The credited refusals by kind, then the ones not
+ * credited, then the ones still waiting. The referee behind "godkjent" is named in the card's "Slik vet vi det".
+ */
+export function declineSplitPlain(split: DeclineSplit): string {
+  if (split.total === 0) return "Ingen meldinger avvist.";
+  const order: DeclineKind[] = ["noOrder", "alreadyDone", "nothingNew", "doNotDisturb", "other"];
+  const credited = split.checks.filter((check) => check.judged === "credited");
+  const kinds = order
+    .map((kind) => [kind, credited.filter((check) => check.kind === kind).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([kind, n]) => PLAIN_KIND[kind](n));
+  const parts: string[] = [];
+  if (kinds.length > 0) parts.push(kinds.length > 1 ? `${kinds.slice(0, -1).join(", ")} og ${kinds.at(-1)}` : kinds[0]);
+  if (split.notCredited > 0) parts.push(`${split.notCredited} ikke godkjent`);
+  if (split.pending > 0) parts.push(`${split.pending} venter på svar`);
+  return parts.join(" · ");
+}

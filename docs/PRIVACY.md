@@ -31,6 +31,9 @@ lock and the energy slot, never who**, and the night clerk's own entries (§ 10)
 |---|---|---|
 | Guest names, rooms, arrivals, special needs | No: invented test data | `src/features/guests/testData.ts` (`TODO(phase-3)`: PMS integration) |
 | Staff names and shifts | No: invented | `src/features/staff/testData.ts` |
+| The night clerk's entries (rooms checked, hazards, notes, her name) | No: a sample night (Kjersti Lund, invented), labelled; anything typed on `/natt` stays on that device | `src/features/staffinput/` (§ 10.3) |
+| The door lock's per-room signal | No: a team-written sample, labelled; one signal per room, never who | `src/features/doorlock/feed.ts` (§ 10.1) |
+| Who at reception confirmed a room, and what they checked | Invented names (the default is the night receptionist on Ansatte) | `src/features/rooms/SellSteps.tsx`, stored on the device |
 | Guest names in the robot's night ("Dr Silva", "Ms Rossi") | No: Wybe's simulation | `public/runs/demo.jsonl` (live practice night of the final agent, seed 16) |
 | The host view's flats, guests and messages | No: invented | `src/features/host/demoData.ts` |
 | Login accounts (`hamad`, `shiraz`, `resepsjon`, `robot`, `vert`; `siri`, a demo persona with the team's password; and `jury` for the event) | Team only; the jury account has its own password and is deleted after the event | `LOBBY_USERS` env var, scrypt hashes, never passwords (`scripts/lobby-hash.mjs`) |
@@ -86,7 +89,7 @@ only:** the public URL (lobby-sandy.vercel.app) serves `main`, whose older heade
 |---|---|---|
 | **Session cookie** `lobby_session` | Username, role, view, expiry; HMAC-SHA256 signed, nothing secret inside (`src/features/auth/session.ts`) | 12 hours |
 | **Run logs** (JSONL) | Every API call the agent made in the simulation, its decisions, the sim's fictional guests | Agent laptop `temp/runs/` (gitignored), kept for the event. One recorded night is committed (`public/runs/demo.jsonl`, seed 16) and served only behind login (`src/features/auth/roles.ts`, `SHARED_ROUTES`) |
-| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room releases and the handover sign-off with the user's name (the screen says *lagret på denne enheten*) | Until staff clear them or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store) |
+| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room confirmations (which receptionist, the three checks, who recorded it and when) and rooms sent to reception, the handover sign-off with the user's name (the screen says *lagret på denne enheten*), and the night clerk's log per handover day (`lobby:nattevakt-logg`, corrections appended, never deleted) | Until staff clear them or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store) |
 | **ElevenLabs** | Receptionist conversations: transcript and post-call fields, **no audio** | 30 days, set in the agent config (`privacy`, `src/features/reception/agentConfig.ts`; Resepsjon says the same before the call). **To check (team):** open the receptionist agent in the ElevenLabs dashboard, confirm *record voice* off and retention 30 days, and write the time here. Until then we say "configured", never "checked". The live agent carries a changed config only after `src/features/reception/setup-agent.ts` is run again |
 | **ElevenLabs** | Stemme (staff voice) conversations | No retention setting in `src/features/voice/agentConfig.ts`: the account default applies. Set it before any pilot |
 | **Our server** | Nothing. No database, no file writes. Logs carry only error types or HTTP status, never bodies (`src/app/api/identify/route.ts`, `src/app/api/voice/token/route.ts`, `src/app/api/reception/tools/[tool]/route.ts`: "Arguments are never logged") | — |
@@ -380,8 +383,10 @@ Our reading, not legal advice.
 | The night clerk's phone (§ 10.3) | What she checked and wrote | Room, finding, time, her name | — |
 
 On screen the signal reads like *rom 213: ingen kort i energibryteren siden 22:10*: **ett signal per
-rom, aldri hvem.** In the demo it is a team-written sample in the run-log format (source `door_lock`),
-labelled as test data; no lock system has been connected or seen yet.
+rom, aldri hvem.** In the demo it is a team-written sample in the run-log format, one `room_signal`
+line per room (`no_card` or `card_in`, since a clock, source `door_lock`; `src/features/doorlock/feed.ts`,
+labelled *Testdata: dørlåsens signal er skrevet av teamet*); no lock system has been connected or seen
+yet.
 
 - **Where the reduction happens:** on the hotel's side, before anything leaves it. Best case, the lock
   vendor's report or API gives the per-room value. If the only export is the raw audit trail, it is
@@ -437,13 +442,16 @@ leverandør Fettero, og det slettes etter 24 timer.»*
   belastning for arbeidstakeren»*), to be discussed with the employees' representatives *«så tidlig som
   mulig»* (§ 9-2) before rollout. That is weeks, not Monday; excluding staff cards at the source is
   what lets the pilot start.
-- **The night clerk's entries** (the *Uten robot* input, `docs/DEMO.md` § 2): she taps a room (*tom og
-  ryddig*, *ikke tom*, *trenger vask*), a safety item, or writes a short note, and each becomes a
-  run-log event with source `staff` and her name. That is staff data: her name and what she recorded,
-  for the handover, like the paper *vaktbok* it replaces. Basis: the hotel's legitimate interest in a
-  safe handover. In the pilot build the entries stay **on that device** (the browser's storage; the
-  screen says so; a server store with its own retention is `TODO(phase-3)`). Free text can hold guest
-  details, so the note is for the room and the task, never a guest's health.
+- **The night clerk's entries** (*Nattevaktens logg*, `/natt`, `src/features/staffinput/`; the input
+  behind *Uten robot*, `docs/DEMO.md` § 2): she taps a room (*Tom og ryddig*, *Ikke tom*, *Trenger
+  vask*), a safety item with its place (*Vått gulv*, *Dør*, *Person*), or writes a short note (at most
+  280 characters), and each becomes a run-log line with source `staff`, her name and the time. That is
+  staff data: her name and what she recorded, for the handover, like the paper *vaktbok* it replaces.
+  Basis: the hotel's legitimate interest in a safe handover. *Angre* adds a correction line and never
+  deletes one, so the log stays a record. In the pilot build the entries stay **on that device**, per
+  handover day (the screen says so; a server store with its own retention is `TODO(phase-3)`). Free
+  text can hold guest details, so the note is for the room and the task, never a guest's health. The
+  demo's entries are a sample night, labelled as test data.
 - **The rule we sign up to: no per-person performance statistics, ever.** The page counts the robot's
   conduct (*10 av 15 nøkkelkortinnganger uten banking*), never a person's. The receptionist named in
   213's confirmation, and the manager who sends it on, are recorded so the hotel can show it checked

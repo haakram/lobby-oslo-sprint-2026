@@ -119,7 +119,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     // One line a manager reads; the referee one tap away, behind "Slik vet vi det".
     // What holds (round 7): the "done" the simulator credited that the robot's own log does not contradict.
     const contradicted = ownAgainstLog(doneBasis(LINES), selfContradictions(LINES)).contradicted;
-    expect(figures().getByText(robotShort(NIGHT.tally, contradicted))).toHaveTextContent(new RegExp(`^${NIGHT.tally.done - contradicted.length} av ${NIGHT.tally.reported} holder`));
+    expect(figures().getByText(robotShort(NIGHT.tally, contradicted).replace(/\s/g, " "))).toHaveTextContent(new RegExp(`^${NIGHT.tally.done - contradicted.length} av ${NIGHT.tally.reported} holder`));
     expect(figures().getByText("Slik vet vi det")).toBeInTheDocument();
     expect(figures().getByText(new RegExp(`^Bekreftet av Wybe Night Shift-simulatoren, som ikke finnes i et ekte hotell: ${NIGHT.tally.done} av ${NIGHT.tally.reported} «ferdig»`))).toBeInTheDocument();
     // No referee anywhere on the pilot's Oversikt, and no cleaning route (Ruter is outside the pilot).

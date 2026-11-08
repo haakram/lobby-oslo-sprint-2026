@@ -72,7 +72,7 @@ describe("NightShiftScreen, replay", () => {
     expect(stats).not.toHaveTextContent(/bekreftet/);
     expect(stats.querySelector(".text-success")).toBeNull();
     expect(notHoldingLine({ done: 73, reported: 73 }, [])).toBeNull();
-    expect(notHoldingLine({ done: 70, reported: 73 }, [{ room: "209" }, { room: "310" }])).toBe("2 motsagt av egen logg (rom 209 og 310) · 3 ikke godkjent av simulatoren");
+    expect(notHoldingLine({ done: 70, reported: 73 }, [{ room: "209" }, { room: "310" }])).toBe("2 motsagt av egen logg (rom\u00a0209 og 310) · 3 ikke godkjent av simulatoren");
   });
 
   it("lets the Robotlogg switch drive the whole page: the hotel-rules night loads its own log, Open-RMF its own figures (round 6)", async () => {

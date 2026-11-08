@@ -387,13 +387,13 @@ export function declineShort(split: DeclineSplit | null | undefined, declined: n
  */
 export function robotShort(robot: { done: number; reported: number; handedBack: number }, contradicted: readonly { room: string }[] = []): string {
   const parts = [robot.reported > 0 ? `${robot.done - contradicted.length} av ${robot.reported} holder` : "Ingen «ferdig» meldt"];
-  if (contradicted.length > 0) parts.push(`${contradicted.length} motsagt av egen logg (rom ${joinRooms(contradicted.map((entry) => entry.room))})`);
+  if (contradicted.length > 0) parts.push(`${contradicted.length} motsagt av egen logg (rom\u00a0${joinRooms(contradicted.map((entry) => entry.room))})`);
   if (robot.reported > robot.done) parts.push(`${robot.reported - robot.done} ikke godkjent av simulatoren`);
   if (robot.handedBack > 0) parts.push(`${robot.handedBack} til en person`);
   return parts.join(" · ");
 }
 
-/** "209", "209 og 310", "209, 310 og 412". */
+/** "209", "209 og 310", "209, 310 og 412" (after "rom" and a no-break space, so "rom 209" never splits over two lines). */
 function joinRooms(rooms: readonly string[]): string {
   return rooms.length < 2 ? rooms.join("") : `${rooms.slice(0, -1).join(", ")} og ${rooms.at(-1)}`;
 }

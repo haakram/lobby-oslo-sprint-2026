@@ -212,7 +212,7 @@ describe("the robot figure's refusals, split by the referee (the judgement card'
     expect(detail).not.toMatch(/8 avvist uten bestilling|falsk/);
     // Round 7: what holds, not "Alle 73 «ferdig» bekreftet" above the card's 209.
     const contradicted = ownAgainstLog(doneBasis(lines), selfContradictions(lines)).contradicted;
-    expect(robotShort(night.tally, contradicted)).toBe(`72 av 73 holder · 1 motsagt av egen logg (rom 209) · ${night.tally.handedBack} til en person`);
+    expect(robotShort(night.tally, contradicted)).toBe(`72 av 73 holder · 1 motsagt av egen logg (rom\u00a0209) · ${night.tally.handedBack} til en person`);
     expect(robotShort({ done: 70, reported: 73, handedBack: 0 })).toBe("70 av 73 holder · 3 ikke godkjent av simulatoren");
     expect(robotShort({ done: 0, reported: 0, handedBack: 2 })).toBe("Ingen «ferdig» meldt · 2 til en person");
     // Without the split, the plain count.

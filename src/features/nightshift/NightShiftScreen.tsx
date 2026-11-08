@@ -385,7 +385,7 @@ function RmfStatRow({ lines }: { lines: readonly RunLine[] }) {
 export function notHoldingLine(tally: { done: number; reported: number }, contradicted: readonly Pick<SelfContradiction, "room">[]): string | null {
   const rooms = contradicted.map((entry) => entry.room);
   const parts = [
-    rooms.length > 0 ? `${rooms.length} motsagt av egen logg (rom ${rooms.length < 2 ? rooms.join("") : `${rooms.slice(0, -1).join(", ")} og ${rooms.at(-1)}`})` : null,
+    rooms.length > 0 ? `${rooms.length} motsagt av egen logg (rom\u00a0${rooms.length < 2 ? rooms.join("") : `${rooms.slice(0, -1).join(", ")} og ${rooms.at(-1)}`})` : null,
     tally.reported > tally.done ? `${tally.reported - tally.done} ikke godkjent av simulatoren` : null,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : null;

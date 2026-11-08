@@ -395,7 +395,8 @@ def rehearsal_check(path: Path, target: str) -> list[str]:
     mean_night = statistics.fmean(played)
     if night_after:
         without = f"; {pct(math.log(mean_night / night_before))} against the forecast without the penalty" if night_before else ""
-        out.append(f"  mean night so far {thousands(mean_night)} against {thousands(night_after)} forecast "
+        so_far = "" if len(played) == len(REHEARSAL_SEEDS) else " so far"
+        out.append(f"  mean night{so_far} {thousands(mean_night)} against {thousands(night_after)} forecast "
                    f"({pct(math.log(mean_night / night_after))}{without})")
     if len(played) == len(REHEARSAL_SEEDS):
         actual = best_mean(played)

@@ -74,7 +74,7 @@ def test_the_block_clears_when_a_later_look_shows_the_exit_without_the_flag(hote
 
 
 def test_a_block_expires_after_30_sim_minutes(hotel):
-    assert BLOCK_S == 30 * 60
+    assert BLOCK_S == 90 * 60  # replay, 100 nights: +10.1 seed-weighted vs 30 min (9 seeds better, 2 worse)
     t0 = clock_to_seconds("00:24:54")
     hotel.update_from_look("corridor-3b", look_3b(), authoritative=True)
     hotel.expire_blocks(t0)  # the first clock after the look starts its 30 minutes

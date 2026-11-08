@@ -118,21 +118,28 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 - **Login with roles** (admin, resepsjonist, robotansvarlig, host), enforced on the server
   (`src/proxy.ts`, `src/features/auth/`), plus a separate `jury` account for the event.
 - **Overlevering 06:00**, where the pilot accounts land after login, read as *act → evidence → sign*:
-  one quiet demo band says what is test data; four figures, each a link to its row (209 held back, the
-  money: *Funnet ledig 5 timer tidligere · ca. 1 500 kr hvis natten blir utsolgt · 31 av 36 booket i
-  kveld* with *Slik regner vi*, safety *straks*, the robot's tasks); *Åpent nå* in the wide column,
-  safety first with *straks* and who was told (or *varsle nå*), then everything by deadline, each with
-  an owner by role (Vaktmester, Resepsjon, Renhold, Nattevakt): the robot itself at 06:00 (not docked,
-  20 %, still holding the master keycard and the cart, *før 06:15*), 213 with its two steps inline, 209
-  led by the robot's own contradiction, the rooms with bags for several arrivals; *Dette skjedde i
+  one quiet demo band says what is test data; four figures, each a link to its row (*209 · Holdt
+  tilbake fra salg* drawn as two points, *01:29 bagasje inn · 03:47 meldt tomt*; the money led by 210,
+  *ca. 1 500 kr · Rom 210 i bruk uten booking · En natt ingen fakturerer · kan selges igjen i dag*,
+  with 213 *funnet ledig 5 timer tidligere* as its own link and *Slik regner vi*; safety *straks* with
+  how many were told to nobody; the robot's tasks); *Åpent nå* in the wide column, safety first, each
+  hazard with how long it waited for a person and a *Varsle …* button that records who was told, by
+  whom and when (it sends nothing yet), then everything by deadline, each with an owner by role
+  (Vaktmester, Resepsjon, Renhold, Nattevakt): the robot itself at 06:00 (not docked, 20 %, still
+  holding the master keycard, *før 06:15*), 210 and 213 with their sources as chips (*Dørlåsen*,
+  *Nattevakt*, *Roboten*) and the verdict (*Bekreftet av tre kilder*), 213 with its two steps inline,
+  209 as *bagasje levert i et rom roboten senere meldte tomt* with reception deciding, the rooms with
+  bags for several arrivals, an Øyne avvik by its deadline; *Med robot* adds the night clerk's
+  entries, never replaces them; *Dette skjedde i
   natt* beside it on a wide screen (below it, folded, at 125 %); the judgement card as three figures
   (*8 av 9* against its own log, *7* refusals of a stranger, *10 av 15* keycard entries without a
   knock); *Kvitter mottatt* last (*Kvittert av …*, saved on this device); the proof behind *Slik vet vi
   det*; a print view. The switch ***Natten fra: Med robot | Uten robot*** builds the same page from the
   booking system, the door lock's one signal per room and the night clerk's entries only, with no robot
   line (`src/features/handover/`, `src/features/nightsource/`).
-- **The money step obeys the product's rule:** step 1 records *which* receptionist confirmed (default
-  the night receptionist) and three checks (folio settled, no bags in the room, key card blocked), and
+- **The money step obeys the product's rule:** step 1 records *which* receptionist confirmed (the
+  field starts empty, with reception's names as suggestions: a prefilled name would be a claim nobody
+  made) and three checks (folio settled, no bags in the room, key card blocked), and
   opens only with all three; step 2 is *Send til resepsjonen*, after which the row reads *Venter på
   PMS-en*, never "sold" or "done", because the pilot is read-only and reception makes the change in the
   PMS (`src/features/rooms/SellSteps.tsx`).
@@ -261,8 +268,9 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
     a pilot it does not open occupied rooms: occupancy comes from the door-lock audit trail and the
     keycard energy slot, the robot only knocks or checks rooms the PMS already shows as vacant, and keys
     ride in a locked compartment. Already in the build: a room is offered for sale only after the desk
-    confirms the check-out (two steps, never one tap), and a room the robot delivered to later in the
-    night (an arriving guest's bags in 209) is held back as a likely double allocation, never offered.
+    confirms the check-out (two steps, never one tap), and a room the robot delivered to and later
+    reported empty (an arriving guest's bags in 209) is held back, never offered, and reception decides;
+    the page says what the log shows, not "double booked".
   - The simulation's score pays for habits a hotel wouldn't want: declining a guest's "it never came"
     when there is no order (the guest still has no water), running the battery to 8.6 % before 06:00,
     and moving a wet-floor sign to a newer spill when the robot is out of signs (`sign_move`, still on in

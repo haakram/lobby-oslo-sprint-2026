@@ -89,7 +89,7 @@ only:** the public URL (lobby-sandy.vercel.app) serves `main`, whose older heade
 |---|---|---|
 | **Session cookie** `lobby_session` | Username, role, view, expiry; HMAC-SHA256 signed, nothing secret inside (`src/features/auth/session.ts`) | 12 hours |
 | **Run logs** (JSONL) | Every API call the agent made in the simulation, its decisions, the sim's fictional guests | Agent laptop `temp/runs/` (gitignored), kept for the event. One recorded night is committed (`public/runs/demo.jsonl`, seed 16) and served only behind login (`src/features/auth/roles.ts`, `SHARED_ROUTES`) |
-| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room confirmations (which receptionist, the three checks, who recorded it and when) and rooms sent to reception, the handover sign-off with the user's name (the screen says *lagret på denne enheten*), the night clerk's log per handover day (`lobby:nattevakt-logg`, corrections appended, never deleted), and Øyne's avvik log per handover day (`lobby:oyne-avvik`) | **The night clerk's log: 30 days**, as code (`RETENTION_DAYS` in `src/features/staffinput/retention.ts`; days older than that are dropped on load and on every write, tested; `/natt` says *Lagres på denne enheten i 30 dager*); Øyne's avvik log: 30 days, dropped when read (`src/features/eyes/deviations.ts`). The rest (the room confirmations with the receptionist's name, the sign-off, the requests) until staff clear them or the browser data is cleared: not pruned yet (`TODO(phase-3)`). On the staff device only; no server copy (`TODO(phase-3)`: a shared store with the same 30 days) |
+| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room confirmations (which receptionist, the three checks, who recorded it and when) and rooms sent to reception, the handover sign-off with the user's name (the screen says *lagret på denne enheten*), the night clerk's log per handover day (`lobby:nattevakt-logg`, corrections appended, never deleted), and Øyne's avvik log per handover day (`lobby:oyne-avvik`) | **The night clerk's log: 30 days**, as code (`RETENTION_DAYS` in `src/features/staffinput/retention.ts`; days older than that are dropped on load and on every write, tested; `/natt` says *Lagres på denne enheten i 30 dager*); Øyne's avvik log: 30 days, dropped when read (`src/features/eyes/deviations.ts`); the room confirmations with the receptionist's name (`lobby:room-check-marks`, pruned to the same `RETENTION_DAYS` on load and on write, `src/features/rooms/reconcile.ts`), who was told about a safety item (`lobby:handover-varslet`) and the sign-off: 30 days. The receptionist's requests and messages until staff settle them (newest 50) or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store with the same 30 days) |
 | **ElevenLabs** | Receptionist conversations: transcript and post-call fields, **no audio** | 30 days, set in the agent config (`privacy`, `src/features/reception/agentConfig.ts`; Resepsjon says the same before the call). **To check (team):** open the receptionist agent in the ElevenLabs dashboard, confirm *record voice* off and retention 30 days, and write the time here. Until then we say "configured", never "checked". The live agent carries a changed config only after `src/features/reception/setup-agent.ts` is run again |
 | **ElevenLabs** | Stemme (staff voice) conversations | No retention setting in `src/features/voice/agentConfig.ts`: the account default applies. Set it before any pilot |
 | **Our server** | Nothing. No database, no file writes. Logs carry only error types or HTTP status, never bodies (`src/app/api/identify/route.ts`, `src/app/api/voice/token/route.ts`, `src/app/api/reception/tools/[tool]/route.ts`: "Arguments are never logged") | — |
@@ -278,7 +278,12 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   (`src/features/staffinput/entries.ts`). **The robot's hazards reach her as they happen:** *Fra
   roboten* on `/natt` lists them at the robot's clock, each with a *Kvitter* tap that records who saw it
   and when (`src/features/staffinput/robotHazards.ts`), so the time from the robot's report to a
-  person's acknowledgement is computed, not guessed. The pilot rule beyond that: a push
+  person's acknowledgement is computed, not guessed: Overlevering says per hazard how long it waited
+  (*6 t 9 min uten at noen ble varslet*, or *Kjersti Lund kvitterte kl. 23:53, etter 2 min*), and
+  *Varsle Trond Eikeland* / *Varsle resepsjonen* records who was told, by whom and when
+  (`lobby:handover-varslet`, 30 days; it sends nothing yet, `TODO(phase-3)`); *Kvitter mottatt* says in
+  one line when a safety item was told to nobody, and the receipt keeps the count
+  (`src/features/handover/`). The pilot rule beyond that: a push
   to the night staffer's phone the moment the robot sees a wet floor it can't sign, escalated if nobody
   acknowledges within 10 minutes (pilot design, not built: today she sees it when she opens the
   screen).
@@ -300,8 +305,9 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
     the receptionist's price claims: a company is held to what its agent tells a customer (Moffatt v.
     Air Canada, BC Civil Resolution Tribunal, 2024), so any "cheaper than the booking sites" needs
     substantiation or goes.
-- **The print-out:** *Skriv ut* puts guest names and the stranger incident on paper. A pilot's print
-  footer says it holds personal data and is shredded after the shift.
+- **The print-out:** *Skriv ut* puts guest names and the stranger incident on paper. On a real night
+  the print footer says it holds personal data and is shredded after the shift; on the demo's test
+  night it reads *Testdata: ingen ekte gjester.* instead, because there is nothing real to shred.
 - **The safety lines are the exception to shredding (legal review; proposal, not built).** A slip claim
   runs three years from when the injured person learned of the harm and who is liable
   ([foreldelsesloven § 9](https://lovdata.no/dokument/NL/lov/1979-05-18-18)), and the safety lines

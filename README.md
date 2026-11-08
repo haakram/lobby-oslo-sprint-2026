@@ -37,27 +37,35 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
    submission, not in this repo, and the account is deleted after the event.
 3. You land on **Overlevering 06:00**. Every move is a tap; it reads in the order the manager works:
    act, then evidence, then sign.
-   1. **The top:** four figures, each a link to its row: *1 rom · Holdt tilbake fra salg* (209: the
-      robot reported it empty at 03:47, but its own log says it carried bags in at 01:29), *ca. 1 500 kr
-      · Funnet ledig 5 timer tidligere* (213, *hvis natten blir utsolgt · 31 av 36 booket i kveld*,
-      with *Slik regner vi*), *4 saker · Sikkerhet, straks*, and the robot's *73 av 77*. One quiet band
-      says what is test data.
+   1. **The top:** four figures, each a link to its row: ***209** · Holdt tilbake fra salg*, drawn as
+      two points, *01:29 bagasje inn · 03:47 meldt tomt* (the robot reported it empty, but its own log
+      says it carried bags in); *ca. 1 500 kr · Rom 210 i bruk uten booking* (a night nobody bills, and
+      a room the booking system could sell again today), with *Rom 213: funnet ledig 5 timer tidligere*
+      as its own link and *Slik regner vi*; *5 saker · Sikkerhet, straks*, with how many were told to
+      nobody; and the robot's *73 av 77*. One quiet band says what is test data.
    2. **The switch *Natten fra: Med robot | Uten robot*.** *Uten robot* builds the same page from the
       booking system, one signal per room from the door lock (never who) and the night clerk's own
       entries (*Nattevaktens logg*, `/natt`), with no robot line: the product hotel number one buys.
-   3. **213, the money step:** due out yesterday, the check-out never recorded; without the robot the
-      lock shows no guest card since 18:00 and the night clerk saw it empty at 04:24 (*Bekreftet av to
-      kilder*). Reception confirms who checked and three facts (folio, bags, key card), then *Send til
-      resepsjonen*; the row reads *Venter på PMS-en*, because the pilot never writes to the booking
-      system. Nothing says "sold".
-   4. ***Åpent nå*, safety first:** three wet floors without a sign and a stranger who asked the robot
-      to open seven doors, *straks*, with who was told; the robot itself at 06:00, not docked and still
-      holding the master keycard; then everything by deadline, each with an owner.
+   3. **Where the lock and the booking system disagree, shown as sources:** 210 is in use with no
+      booking (*Dørlåsen · kort i rommet*, *Nattevakt · ikke tomt 23:24*); 213 was due out yesterday,
+      the check-out never recorded (*Dørlåsen · ingen kort siden kl. 18*, *Nattevakt · tomt 04:24*):
+      *Bekreftet av to kilder* without the robot, three with it. The money step on 213: reception's
+      name is typed (the field starts empty), three facts (folio, bags, key card), *Bekreft med
+      resepsjonen*, then *Send til resepsjonen*; the row reads *Venter på PMS-en*, because the pilot
+      never writes to the booking system. Nothing says "sold".
+   4. ***Åpent nå*, safety first:** four wet floors (the robot's three and the night clerk's lobby,
+      signed at 02:16) and a stranger who asked the robot to open seven doors, *straks*, each with how
+      long it waited for a person (*6 t 9 min uten at noen ble varslet*) and a *Varsle …* button that
+      records who was told; the robot itself at 06:00, not docked and still holding the master keycard;
+      then everything by deadline, each with an owner. *Med robot* adds the night clerk's entries, it
+      never replaces them.
    5. ***Robotens vurderinger i natt*:** three figures, *8 av 9* "done" on its own judgement hold
       against its own log, *7* refusals of the stranger, *10 av 15* keycard entries without a knock;
-      beside the night clerk's note, *«Rolig natt.»* The referee, the ledger, the score-blind run and
-      the fault test sit behind *Slik vet vi det*.
-   6. ***Kvitter mottatt*,** last.
+      the robot's faults in amber (*Robotens feil*), its wins in ink; beside the night clerk's note,
+      *«Rolig natt.»* The referee, both cross-night figures (64 and 54 of 65), the score-blind run and
+      the fault test's catch rate sit behind *Slik vet vi det*.
+   6. ***Kvitter mottatt*,** last. It says in one line when a safety item was told to nobody, and the
+      receipt keeps the count.
 
    Then, if you like: **Forespørsler** (what the robot handed back is pinned first, with the reason)
    and **3D-kart → *Spill av*** (the robot's real night, replayed from its log).

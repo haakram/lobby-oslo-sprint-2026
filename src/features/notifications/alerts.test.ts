@@ -83,7 +83,8 @@ describe("selectAlerts (the bell)", () => {
       action: { label: "Åpne Vedlikehold", href: "/vedlikehold" },
     });
     expect(alerts.find((alert) => alert.id === "stock")).toMatchObject({ title: "Badehåndklær er under minimum", detail: "38 av 120 igjen i vaskeri.", action: { href: "/lager" } });
-    expect(alerts.find((alert) => alert.id === "battery")).toMatchObject({ title: "Roboten bør settes på lading", detail: "Batteriet står på 13 % etter natten.", action: { href: "/hotell" } });
+    // The robot docks itself: the morning needs to know it did not get there in time.
+    expect(alerts.find((alert) => alert.id === "battery")).toMatchObject({ title: "Roboten rakk ikke å lade før 06:00", detail: "Batteriet står på 13 % etter natten.", action: { href: "/hotell" } });
     // More than the bell lists: the selector keeps them all, the bell names the rest.
     expect(alerts.length).toBeGreaterThan(MAX_ALERTS);
   });
@@ -99,6 +100,26 @@ describe("selectAlerts (the bell)", () => {
     const [alert] = selectAlerts(data({ maintenance: [urgent, order("wo-8", { priority: "hoy", status: "lost" })] }));
     expect(alert).toMatchObject({ id: "urgent", priority: "hoy", title: "Haster: resepsjon", detail: "Døren til resepsjonen går ikke i lås." });
     expect(selectAlerts(data({ maintenance: [order("wo-8", { priority: "hoy", status: "lost" })] }))).toEqual([]);
+  });
+
+  it("puts an unsigned wet floor first, before every other Haster", () => {
+    const wet = order("wo-12", { origin: "robot", type: "sol", text: "Vått gulv ved corridor-1c, uten skilt", room: null, place: "corridor-1c", priority: "hoy", status: "ny", assignee: null, at: "05:35", safety: true });
+    const alerts = selectAlerts({ ...busy(), maintenance: [order("wo-m1", { outOfOrder: true }), wet] });
+    expect(alerts[0]).toMatchObject({
+      id: "wet-floor",
+      priority: "hoy",
+      title: "Vått gulv uten skilt i korridor 1C",
+      detail: "Siden 05:35. Sett ut et varselskilt eller tørk opp før gjestene står opp.",
+      action: { href: "/vedlikehold" },
+    });
+    expect(alerts[1].id).toBe("handover");
+    // Once someone marks it Løst, it leaves the bell.
+    expect(selectAlerts({ ...busy(), maintenance: [{ ...wet, status: "lost" }] }).some((alert) => alert.id === "wet-floor")).toBe(false);
+  });
+
+  it("never lists what the robot refused on good grounds or what the night manager called off", () => {
+    const quiet = selectAlerts(data({ requests: [request("r1", "avvist"), request("r2", "avlyst")] }));
+    expect(quiet).toEqual([]);
   });
 
   it("counts in its level, so a seen alert only comes back when there is more of it", () => {

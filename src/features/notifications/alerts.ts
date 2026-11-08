@@ -56,7 +56,28 @@ export function selectAlerts(data: AlertData): Alert[] {
   const alerts: Alert[] = [];
   const may = (route: string) => canAccess(data.role, route);
 
-  // The robot gave these back: it failed them, or the night ended before it got there.
+  // Safety first: a wet floor the robot found that nobody has signed yet goes to the top.
+  const wet = data.maintenance.filter((order) => order.safety && order.status !== "lost");
+  if (wet.length > 0) {
+    const places = wet.map((order) => {
+      const label = placeLabel(order.place ?? order.room);
+      return label.charAt(0).toLowerCase() + label.slice(1);
+    });
+    const screen: ModuleId = may("/vedlikehold") ? "vedlikehold" : "hotell3d";
+    alerts.push({
+      id: "wet-floor",
+      level: wet.length,
+      module: screen,
+      priority: "hoy",
+      icon: "alert-triangle",
+      title: wet.length === 1 ? `Vått gulv uten skilt i ${places[0]}` : `${wet.length} våte gulv uten skilt`,
+      detail: `${wet.length === 1 ? `Siden ${wet[0].at ?? "i natt"}` : `I ${list(places)}`}. Sett ut et varselskilt eller tørk opp før gjestene står opp.`,
+      action: screen === "vedlikehold" ? open("vedlikehold") : { label: "Vis i 3D-kartet", href: "/hotell" },
+    });
+  }
+
+  // The robot gave these back: it failed them, or the night ended before it got there. Not what it
+  // refused on good grounds (no order on record) or what the night manager called off: those are done with.
   const handed = data.requests.filter((request) => request.source === "robot" && (request.status === "feilet" || request.status === "venter"));
   if (handed.length > 0) {
     const rooms = [...new Set(handed.flatMap((request) => (request.room ? [roomNumber(request.room)] : [])))];
@@ -159,7 +180,8 @@ export function selectAlerts(data: AlertData): Alert[] {
       module: "hotell3d",
       priority: "obs",
       icon: "battery-low",
-      title: "Roboten bør settes på lading",
+      // The robot docks itself; what the morning needs to know is that it did not get there in time.
+      title: data.robot.ended ? "Roboten rakk ikke å lade før 06:00" : "Roboten må lade snart",
       detail: `Batteriet står på ${percent(data.robot.battery)}${data.robot.ended ? " etter natten" : ""}.`,
       action: { label: "Vis i 3D-kartet", href: "/hotell" },
     });

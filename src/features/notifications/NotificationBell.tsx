@@ -59,6 +59,9 @@ export function NotificationBellView({
   const rest = alerts.slice(MAX_ALERTS);
   const fresh = shown.filter((alert) => isNew(alert, seen));
   const old = shown.filter((alert) => !isNew(alert, seen));
+  // The badge counts every new alert, also the ones named in "og N til" (jury round 1: it said 5 with 6 in the sheet).
+  const freshAll = alerts.filter((alert) => isNew(alert, seen));
+  const freshCount = freshAll.length;
   const waiting = loading && alerts.length === 0;
 
   // After Marker som sett the button is gone: put the focus on the next new alert, or on the one
@@ -79,8 +82,8 @@ export function NotificationBellView({
   }
 
   function markAll() {
-    mark(fresh);
-    setSaid(fresh.length === 1 ? "Varselet er markert som sett." : `Alle ${fresh.length} varsler er markert som sett.`);
+    mark(freshAll);
+    setSaid(freshAll.length === 1 ? "Varselet er markert som sett." : `Alle ${freshAll.length} varsler er markert som sett.`);
     if (fresh[0]) setFocusNext(fresh[0].id);
   }
 
@@ -113,8 +116,8 @@ export function NotificationBellView({
         ) : (
           <>
             <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-1">
-              <p className="text-sm text-muted">{fresh.length > 0 ? `${fresh.length} ${fresh.length === 1 ? "ny" : "nye"}, trenger en person` : "Alt her er sett."}</p>
-              {fresh.length > 0 && (
+              <p className="text-sm text-muted">{freshCount > 0 ? `${freshCount} ${freshCount === 1 ? "ny" : "nye"}, trenger en person` : "Alt her er sett."}</p>
+              {freshCount > 0 && (
                 <Button variant="ghost" size="sm" onClick={markAll}>
                   Merk alle som sett
                 </Button>
@@ -172,7 +175,7 @@ export function NotificationBellView({
     <>
       <button
         type="button"
-        aria-label={bellLabel(fresh.length, waiting)}
+        aria-label={bellLabel(freshCount, waiting)}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => {
@@ -183,16 +186,16 @@ export function NotificationBellView({
           "relative flex size-11 shrink-0 items-center justify-center rounded-md text-muted",
           "transition-[background-color,color,transform] duration-[120ms] ease-standard hover:bg-sunken hover:text-text active:scale-[0.97]",
           "focus-visible:outline-offset-[-2px]",
-          fresh.length > 0 && "text-text",
+          freshCount > 0 && "text-text",
         )}
       >
         <RegenIcon name="bell" size={22} />
-        {fresh.length > 0 && (
+        {freshCount > 0 && (
           <span
             aria-hidden="true"
             className="absolute top-1 right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-text px-1 font-mono text-xs leading-none font-medium text-bg tabular-nums animate-fade"
           >
-            {fresh.length}
+            {freshCount}
           </span>
         )}
       </button>

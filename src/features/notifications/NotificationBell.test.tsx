@@ -114,14 +114,19 @@ describe("NotificationBellView", () => {
     expect(openBell().getByText(/Natten er ikke lastet, så robotens varsler mangler her/)).toBeInTheDocument();
   });
 
-  it("lists five and names the rest, so nothing is dropped without a word", () => {
+  it("lists five and names the rest, so nothing is dropped without a word; the badge counts all six", () => {
     const many = Array.from({ length: 6 }, (_, index) => alert(`a${index}`, `Varsel ${index + 1}`));
     render(<NotificationBellView alerts={many} loading={false} user="hamad" />);
-    expect(bell()).toHaveAccessibleName("Varsler, 5 nye");
+    // Every new alert counts, also the one named in "og 1 til" (jury round 1: the badge said 5 with 6 in the sheet).
+    expect(bell()).toHaveAccessibleName("Varsler, 6 nye");
     const sheet = openBell();
+    expect(sheet.getByText("6 nye, trenger en person")).toBeInTheDocument();
     expect(within(sheet.getByRole("list", { name: "Nye varsler" })).getAllByRole("listitem")).toHaveLength(5);
     expect(sheet.getByText("og 1 til:")).toBeInTheDocument();
     expect(sheet.getByRole("link", { name: "Varsel 6" })).toHaveAttribute("href", "/foresporsler");
+    // Merk alle som sett means all six.
+    fireEvent.click(sheet.getByRole("button", { name: "Merk alle som sett" }));
+    expect(bell()).toHaveAccessibleName("Varsler, ingen nye");
   });
 
   it("still marks as seen for this tab when the browser refuses storage", () => {

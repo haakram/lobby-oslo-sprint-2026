@@ -37,26 +37,35 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
    submission, not in this repo, and the account is deleted after the event.
 3. You land on **Overlevering 06:00**. Every move is a tap; it reads in the order the manager works:
    act, then evidence, then sign.
-   1. **The top:** four figures, each a link to its row: ***209** · Holdt tilbake fra salg*, drawn as
-      two points, *01:29 bagasje inn · 03:47 meldt tomt* (the robot reported it empty, but its own log
-      says it carried bags in); *ca. 1 500 kr · Rom 210 i bruk uten booking* (a night nobody bills, and
-      a room the booking system could sell again today), with *Rom 213: funnet ledig 5 timer tidligere*
-      as its own link and *Slik regner vi*; *5 saker · Sikkerhet, straks*, with how many were told to
-      nobody; and the robot's *73 av 77*. One quiet band says what is test data.
+   1. **The top:** four figures, each a link to its row: ***Rom 209** · Robotens minne og øyne er
+      uenige*, drawn as two points, *01:29 bagasje levert · 03:47 meldt tomt*, and *Sjekk rommet før
+      innsjekk* (the robot reported it empty, but its own log says it carried bags in; a guest is booked
+      there, so the room is checked, never "held back"); *ca. 1 500 kr · Rom 210 i bruk uten booking ·
+      En natt ingen fakturerer · PMS-en kan selge rommet til en ny gjest i dag* (the risk, said as one),
+      with *Rom 213: funnet ledig 5 timer tidligere · ca. 1 500 kr hvis utsolgt* as its own link and
+      *Slik regner vi*; *5 saker · Sikkerhet, straks*, with how many were told to nobody; and the
+      robot's *73 av 77* with *72 av 73 holder · 1 motsagt av egen logg (rom 209)* in ink. Oversikt and
+      Rom tell the money the same way, 210 first. One quiet band says what is test data, and that the
+      night clerk's entries are samples, marked *Eksempel*.
    2. **The switch *Natten fra: Med robot | Uten robot*.** *Uten robot* builds the same page from the
       booking system, one signal per room from the door lock (no card id, no clock) and the night clerk's own
       entries (*Nattevaktens logg*, `/natt`), with no robot line: the product hotel number one buys.
    3. **Where the lock and the booking system disagree, shown as sources:** 210 is in use with no
       booking (*Dørlåsen · kort i rommet*, *Nattevakt · ikke tomt 23:24*); 213 was due out yesterday,
       the check-out never recorded (*Dørlåsen · ingen kort siden kl. 18*, *Nattevakt · tomt 04:24*):
-      *Bekreftet av to kilder* without the robot, three with it. The money step on 213: reception's
-      name is typed (the field starts empty), three facts (folio, bags, key card), *Bekreft med
-      resepsjonen*, then *Send til resepsjonen*; the row reads *Venter på PMS-en*, because the pilot
-      never writes to the booking system. Nothing says "sold".
+      *Bekreftet av to kilder* without the robot, three with it; on *Åpent nå* the two stand together
+      under *Bookingsystemet og dørlåsen er uenige · 2 rom*. The night clerk's note found 210 first
+      (*«Støy fra rom 210 rundt 23:20 …»*), and the row gives it an owner and a deadline. The money
+      step on 213: reception's name is typed (the field starts empty), three facts (folio, bags, key
+      card), *Bekreft med resepsjonen*, then *Send til resepsjonen*; the row reads *Venter på PMS-en*
+      and *Bekreftet av Hanne Vold (resepsjon) · registrert av Siri Haugen*, because the pilot never
+      writes to the booking system and the manager typed the receptionist's name. Nothing says "sold".
    4. ***Åpent nå*, safety first:** four wet floors (the robot's three and the night clerk's lobby,
       signed at 02:16) and a stranger who asked the robot to open seven doors, *straks*, each with how
       long it waited for a person (*6 t 9 min uten at noen ble varslet*) and a *Varsle …* button that
-      records who was told; the robot itself at 06:00, not docked and still holding the master keycard;
+      records who was told, kept per hazard so it holds across *Med robot* and *Uten robot*; *Angre*
+      adds a correction line and never deletes, and so does *Angre kvitteringen*; the robot itself at
+      06:00, not docked and still holding the master keycard;
       then everything by deadline, each with an owner. *Med robot* adds the night clerk's entries, it
       never replaces them.
    5. ***Robotens vurderinger i natt*:** three figures, *8 av 9* "done" on its own judgement hold

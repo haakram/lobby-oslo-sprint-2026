@@ -97,23 +97,27 @@ all 9 credited by the referee (95 % interval 70–100 %); but one of them, 209 r
 Same as `docs/DEMO.md` § 2 (2:00, one user, one story, one page: Siri takes over from Kjersti and the
 robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 
-1. **The top** (0:00–0:16): 209 held back because the robot's own log contradicts its report, drawn as
-   two points (*01:29 bagasje inn · 03:47 meldt tomt*).
-2. **Act first** (0:16–0:28): the safety figure lands on the wet floor the robot slipped on at 23:51,
-   *6 t 9 min uten at noen ble varslet*; *Varsle Trond Eikeland* records who was told and when.
-3. ***Uten robot*** (0:28–0:40): hotel number one has no robot; the same page from the booking system,
+1. **The top** (0:00–0:15): *Rom 209 · Robotens minne og øyne er uenige*, drawn as two points (*01:29
+   bagasje inn · 03:47 meldt tomt*), *Sjekk rommet før innsjekk*: the robot's own log contradicts its
+   report, and a guest is booked there, so the room is checked, never "held back".
+2. **Act first** (0:15–0:30): the safety figure lands on the wet floor the robot slipped on at 23:51,
+   *6 t 9 min uten at noen ble varslet*; in a pilot this alerts the night clerk at 23:51 (design, not
+   built); *Varsle Trond Eikeland* records who was told and when.
+3. ***Uten robot*** (0:30–0:44): hotel number one has no robot; the same page from the booking system,
    one signal per room from the door lock (no card id, no clock) and the night clerk's entries.
-4. **Where the lock and the booking system disagree** (0:40–0:57): 210 in use with no booking (a night
-   nobody bills, about 1,500 kroner) and 213 booked but empty (five hours before housekeeping), each
-   with its sources as chips, *Bekreftet av to kilder*, no robot.
-5. **The money step** (0:57–1:14): reception's name typed (the field starts empty), folio, bags, key
+4. **Where the lock and the booking system disagree** (0:44–1:07): the 210 figure lands *Bookingsystemet
+   og dørlåsen er uenige · 2 rom*: 210 in use with no booking, found by the night clerk's note and made a
+   billed night with an owner (about 1,500 kroner), and 213 booked but empty (five hours before
+   housekeeping), each with its sources as chips, *Bekreftet av to kilder*, no robot.
+5. **The money step** (1:07–1:24): reception's name typed (the field starts empty), folio, bags, key
    card, *Bekreft med resepsjonen*, *Send til resepsjonen*; the row waits for the booking system
-   (*Venter på PMS-en*): the button never says sold.
-6. **The robot's card** (1:14–1:37): back to *Med robot*, the robot figure lands on the card (*8 av 9*
+   (*Venter på PMS-en*) and records both people (*Bekreftet av Hanne Vold (resepsjon) · registrert av
+   Siri Haugen*): the button never says sold.
+6. **The robot's card** (1:24–1:44): back to *Med robot*, the robot figure lands on the card (*8 av 9*
    against its own log and *10 av 15* entries without a knock in amber as *Robotens feil*, *7* refusals
    of a stranger in ink) beside the night clerk's *«Rolig natt.»*; the referee, both cross-night figures
    and the fault test sit behind *Slik vet vi det*.
-7. **Kvitter mottatt** (1:37–1:47), last on the page: it says the one safety item still told to nobody,
+7. **Kvitter mottatt** (1:44–1:55), last on the page: it says the one safety item still told to nobody,
    then *Kvittert av Siri Haugen*, saved on this device.
 
 ## 5. Scope (as built)
@@ -123,22 +127,29 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 - **Login with roles** (admin, resepsjonist, robotansvarlig, host), enforced on the server
   (`src/proxy.ts`, `src/features/auth/`), plus a separate `jury` account for the event.
 - **Overlevering 06:00**, where the pilot accounts land after login, read as *act → evidence → sign*:
-  one quiet demo band says what is test data; four figures, each a link to its row (*209 · Holdt
-  tilbake fra salg* drawn as two points, *01:29 bagasje inn · 03:47 meldt tomt*; the money led by 210,
-  *ca. 1 500 kr · Rom 210 i bruk uten booking · En natt ingen fakturerer · kan selges igjen i dag*,
-  with 213 *funnet ledig 5 timer tidligere* as its own link and *Slik regner vi*; safety *straks* with
-  how many were told to nobody; the robot's tasks); *Åpent nå* in the wide column, safety first, each
-  hazard with how long it waited for a person and a *Varsle …* button that records who was told, by
-  whom and when (it sends nothing yet), then everything by deadline, each with an owner by role
+  one quiet demo band says what is test data (and that the night clerk's entries are samples, marked
+  *Eksempel*); four figures, each a link to its row (*Rom 209 · Robotens minne og øyne er uenige* drawn
+  as two points, *01:29 bagasje inn · 03:47 meldt tomt*, *Sjekk rommet før innsjekk*; the money led by
+  210, *ca. 1 500 kr · Rom 210 i bruk uten booking · En natt ingen fakturerer · PMS-en kan selge rommet
+  til en ny gjest i dag*, with *Rom 213: funnet ledig 5 timer tidligere · ca. 1 500 kr hvis utsolgt* as
+  its own link and *Slik regner vi*; safety *straks* with how many were told to nobody; the robot's
+  tasks, *73 av 77*, with *72 av 73 holder · 1 motsagt av egen logg (rom 209)* in ink); *Åpent nå* in
+  the wide column, safety first, each hazard with how long it waited for a person and a *Varsle …*
+  button that records who was told, by whom and when (it sends nothing yet; kept per hazard, so it
+  holds across the switch; *Angre* appends a correction, never deletes), then the rooms the booking
+  system and the door lock disagree about together (*Bookingsystemet og dørlåsen er uenige · 2 rom*),
+  then everything by deadline, each with an owner by role
   (Vaktmester, Resepsjon, Renhold, Nattevakt): the robot itself at 06:00 (not docked, 20 %, still
   holding the master keycard, *før 06:15*), 210 and 213 with their sources as chips (*Dørlåsen*,
   *Nattevakt*, *Roboten*) and the verdict (*Bekreftet av tre kilder*), 213 with its two steps inline,
-  209 as *bagasje levert i et rom roboten senere meldte tomt* with reception deciding, the rooms with
+  209 as *Robotens minne og øyne er uenige: bagasje levert 01:29, meldt tomt 03:47* with reception
+  deciding, the rooms with
   bags for several arrivals, an Øyne avvik by its deadline; *Med robot* adds the night clerk's
   entries, never replaces them; *Dette skjedde i
   natt* beside it on a wide screen (below it, folded, at 125 %); the judgement card as three figures
   (*8 av 9* against its own log, *7* refusals of a stranger, *10 av 15* keycard entries without a
-  knock); *Kvitter mottatt* last (*Kvittert av …*, saved on this device); the proof behind *Slik vet vi
+  knock); *Kvitter mottatt* last (*Kvittert av …*, saved on this device; *Angre kvitteringen* appends
+  *Kvittering trukket tilbake av …*, never deletes); the proof behind *Slik vet vi
   det*; a print view. The switch ***Natten fra: Med robot | Uten robot*** builds the same page from the
   booking system, the door lock's one signal per room and the night clerk's entries only, with no robot
   line (`src/features/handover/`, `src/features/nightsource/`).
@@ -185,9 +196,12 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 
 - **Oversikt**, one tap from Overlevering: a greeting by the shift clock of the night shown, one
   factual line that says what "done" rested on (*73 oppgaver ferdig (64 bekreftet av simulatoren, 9 på
-  robotens egen vurdering: 8 holder mot egen logg)*), *Se overleveringen 06:00* as the one primary
-  action, the pilot's figures only, with *Rom klare til salg* naming its rooms (*Klar nå: rom 314 ·
-  etter bekreftelse: rom 213 · holdt tilbake: rom 209*), and for the pilot accounts only the pilot's
+  robotens egen vurdering: 8 holder mot egen logg)*) and the page's own count (*Overlevering 06:00: 5
+  straks av 13 åpne*, the same number as the bell's badge), *Se overleveringen 06:00* as the one primary
+  action, the pilot's figures only (the robot's *72 av 73 holder · 1 motsagt av egen logg (rom 209)*),
+  with *Rom klare til salg* naming its rooms (*Klar nå: rom 314 · rom 213 funnet ledig 5 timer
+  tidligere, ca. 1 500 kr hvis utsolgt · sjekk rom 209*) and the money told as on Overlevering and Rom
+  (*Rom 210 i bruk uten booking · ca. 1 500 kr* first), and for the pilot accounts only the pilot's
   widgets (`src/features/dashboard/`). *Timer spart* and *Gjester fornøyd* are gone (round 4), and so
   are the widgets for modules outside the pilot (round 5).
 - **The menu is the pilot** for the admin, `siri` and `jury`: Overlevering as the landing page, then
@@ -274,8 +288,9 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
     keycard energy slot, the robot only knocks or checks rooms the PMS already shows as vacant, and keys
     ride in a locked compartment. Already in the build: a room is offered for sale only after the desk
     confirms the check-out (two steps, never one tap), and a room the robot delivered to and later
-    reported empty (an arriving guest's bags in 209) is held back, never offered, and reception decides;
-    the page says what the log shows, not "double booked".
+    reported empty (an arriving guest's bags in 209) is never offered: it reads *Sjekk rommet*, and
+    reception decides; the page says what the log shows (*Robotens minne og øyne er uenige*), not
+    "double booked" and not "held back" (a guest is booked there).
   - The simulation's score pays for habits a hotel wouldn't want: declining a guest's "it never came"
     when there is no order (the guest still has no water), running the battery to 8.6 % before 06:00,
     and moving a wet-floor sign to a newer spill when the robot is out of signs (`sign_move`, still on in

@@ -91,7 +91,7 @@ only:** the public URL (lobby-sandy.vercel.app) serves `main`, whose older heade
 |---|---|---|
 | **Session cookie** `lobby_session` | Username, role, view, expiry; HMAC-SHA256 signed, nothing secret inside (`src/features/auth/session.ts`) | 12 hours |
 | **Run logs** (JSONL) | Every API call the agent made in the simulation, its decisions, the sim's fictional guests | Agent laptop `temp/runs/` (gitignored), kept for the event. One recorded night is committed (`public/runs/demo.jsonl`, seed 16) and served only behind login (`src/features/auth/roles.ts`, `SHARED_ROUTES`) |
-| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room confirmations (which receptionist, the three checks, who recorded it and when) and rooms sent to reception, the handover sign-off with the user's name (the screen says *lagret på denne enheten*), the night clerk's log per handover day (`lobby:nattevakt-logg`, corrections appended, never deleted), and Øyne's avvik log per handover day (`lobby:oyne-avvik`) | **The night clerk's log: 30 days**, as code (`RETENTION_DAYS` in `src/features/staffinput/retention.ts`; days older than that are dropped on load and on every write, tested; `/natt` says *Lagres på denne enheten i 30 dager*); Øyne's avvik log: 30 days, dropped when read (`src/features/eyes/deviations.ts`); the room confirmations with the receptionist's name (`lobby:room-check-marks`, pruned to the same `RETENTION_DAYS` on load and on write, `src/features/rooms/reconcile.ts`), who was told about a safety item (`lobby:handover-varslet`) and the sign-off: 30 days. The receptionist's requests and messages until staff settle them (newest 50) or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store with the same 30 days) |
+| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room confirmations (which receptionist, the three checks, who recorded it and when) and rooms sent to reception, the handover sign-off with the user's name (the screen says *lagret på denne enheten*), the night clerk's log per handover day (`lobby:nattevakt-logg`, corrections appended, never deleted), and Øyne's avvik log per handover day (`lobby:oyne-avvik`) | **The night clerk's log: 30 days**, as code (`RETENTION_DAYS` in `src/features/staffinput/retention.ts`; days older than that are dropped on load and on every write, tested; `/natt` says *Lagres på denne enheten i 30 dager*); Øyne's avvik log: 30 days, dropped when read (`src/features/eyes/deviations.ts`); the room confirmations with the receptionist's name (`lobby:room-check-marks`, pruned to the same `RETENTION_DAYS` on load and on write, `src/features/rooms/reconcile.ts`), who was told about a safety item (`lobby:handover-varslet`, kept per hazard) and the sign-off (`lobby:handover-signoff`): 30 days, and since round 7 both are append-only: *Angre* on *Varsle* adds a correction line, *Angre kvitteringen* adds *Kvittering trukket tilbake av …*, neither deletes (`src/features/handover/told.ts`, `signoff.ts`). The receptionist's requests and messages until staff settle them (newest 50) or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store with the same 30 days) |
 | **ElevenLabs** | Receptionist conversations: transcript and post-call fields, **no audio** | 30 days, set in the agent config (`privacy`, `src/features/reception/agentConfig.ts`; Resepsjon says the same before the call). **To check (team):** open the receptionist agent in the ElevenLabs dashboard, confirm *record voice* off and retention 30 days, and write the time here. Until then we say "configured", never "checked". The live agent carries a changed config only after `src/features/reception/setup-agent.ts` is run again |
 | **ElevenLabs** | Stemme (staff voice) conversations | No retention setting in `src/features/voice/agentConfig.ts`: the account default applies. Set it before any pilot |
 | **Our server** | Nothing. No database, no file writes. Logs carry only error types or HTTP status, never bodies (`src/app/api/identify/route.ts`, `src/app/api/voice/token/route.ts`, `src/app/api/reception/tools/[tool]/route.ts`: "Arguments are never logged") | — |
@@ -292,7 +292,7 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   person's acknowledgement is computed, not guessed: Overlevering says per hazard how long it waited
   (*6 t 9 min uten at noen ble varslet*, or *Kjersti Lund kvitterte kl. 23:53, etter 2 min*), and
   *Varsle Trond Eikeland* / *Varsle resepsjonen* records who was told, by whom and when
-  (`lobby:handover-varslet`, 30 days; it sends nothing yet, `TODO(phase-3)`); *Kvitter mottatt* says in
+  (`lobby:handover-varslet`, 30 days, per hazard and append-only; it sends nothing yet, `TODO(phase-3)`); *Kvitter mottatt* says in
   one line when a safety item was told to nobody, and the receipt keeps the count
   (`src/features/handover/`). The pilot rule beyond that: a push
   to the night staffer's phone the moment the robot sees a wet floor it can't sign, escalated if nobody
@@ -425,9 +425,10 @@ On screen the signal reads *rom 213: ingen kort i energibryteren siden kl. 18:00
 guest's time) or *kort i energibryteren* (a yes): **ett signal per rom, aldri kort-id, aldri
 klokkeslett.** We no longer say *aldri hvem* (legal review): next to the booking, *no guest card in 213
 since 18:00* is information about the guest booked there, Ola Nygård, so it is personal data
-(Art. 4(1)) even with no card id and no clock. (Two screens still carry the old phrase, *aldri hvem
-eller når* on `/natt`, `src/features/staffinput/NightClerkScreen.tsx`, and *aldri hvem* in the line
-under the switch, `src/features/nightsource/SourceSwitch.tsx`: to change, not done.) In the
+(Art. 4(1)) even with no card id and no clock. (Three screens still carry the old phrase, *aldri hvem
+eller når* on `/natt`, `src/features/staffinput/NightClerkScreen.tsx`, *aldri hvem* in the line under
+the switch, `src/features/nightsource/SourceSwitch.tsx`, and on Rom, `PILOT_EVIDENCE` in
+`src/features/rooms/pms.ts`: to change, not done.) In the
 demo it is a team-written sample in the run-log format, one `room_signal` line per room (`no_card` with
 only the window, or `card_in` with no clock, source `door_lock`; `src/features/doorlock/feed.ts`,
 labelled *Testdata: dørlåsens signal er skrevet av teamet*). A time a feed sends on `card_in` anyway is
@@ -545,5 +546,7 @@ booking the signal is about the booked guest, and a notice must not tell a guest
 - **The rule we sign up to: no per-person performance statistics, ever.** The page counts the robot's
   conduct (*10 av 15 nøkkelkortinnganger uten banking*), never a person's. The receptionist named in
   213's confirmation, and the manager who sends it on, are recorded so the hotel can show it checked
-  before reselling, not to score them. In one line for the staff and their representatives:
+  before reselling, not to score them. The record says what happened, both names once: *Bekreftet av
+  Hanne Vold (resepsjon) · registrert av Siri Haugen*, because the receptionist does not log in herself
+  in the pilot build; the manager types her name. In one line for the staff and their representatives:
   **Fettero signerer for nattevakten, ikke på henne.**

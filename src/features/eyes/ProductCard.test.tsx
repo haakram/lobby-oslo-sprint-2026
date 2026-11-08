@@ -68,10 +68,22 @@ describe("ProductCard", () => {
     expect(screen.queryByRole("button", { name: "Legg i plukkliste" })).not.toBeInTheDocument();
     expect(screen.queryByText("FT-1001")).not.toBeInTheDocument();
     expect(screen.getByText("Sjekkes mot etiketten")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Vis vei" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Bekreft med etiketten"), { target: { value: "1001" } });
     fireEvent.click(screen.getByRole("button", { name: "Bekreft og legg i plukkliste" }));
     expect(add).toHaveBeenCalledWith("FT-1001");
+  });
+
+  it("offers no way round the label while unsure: no Vis vei, so the guessed SKU never reaches /ruter (jury round 4, the Holio juror)", () => {
+    for (const confidence of ["medium", "low"] as const) {
+      const { unmount } = render(<ProductCard result={{ ...match, confidence }} />);
+      expect(screen.queryByRole("button", { name: "Vis vei" })).not.toBeInTheDocument();
+      // Every button on the card, pressed: none navigates and none adds without the label.
+      for (const button of screen.getAllByRole("button")) fireEvent.click(button);
+      expect(push).not.toHaveBeenCalled();
+      expect(add).not.toHaveBeenCalled();
+      expect(document.body.textContent).not.toContain("FT-1001");
+      unmount();
+    }
   });
 
   it("opens the route to the product", () => {

@@ -1,5 +1,5 @@
 // The Ruter screen's URL: /ruter?modus=renhold&rom=room-201,room-214&start=laundry&vogn=1
-// (the dashboard's "Send renholderne" sends ?rom=), and ?sku= from Øyne opens the pick list.
+// (the dashboard's "Send renholderne" sends ?rom=), and ?sku= from Øyne opens the pick list on the way to that one shelf (it never adds to the list).
 // Every value is checked against a fixed list or the hotel map before it is used.
 
 export type RouteMode = "renhold" | "robot" | "plukk";

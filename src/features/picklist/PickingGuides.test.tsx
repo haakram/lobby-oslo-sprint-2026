@@ -16,6 +16,21 @@ describe("the work guides in four languages", () => {
     }
     expect(guidesIn("nb")[1].guide).toBe(GUIDES.picking);
   });
+
+  it("names only controls that exist on the screen, in every language (jury round 4, the Holio juror)", () => {
+    // Ruter's tab, the Øyne card's field and the Øyne card's button: every «…» a guide names is one of these.
+    const onScreen = new Set(["Plukkliste", "Plassering", "Vis vei"]);
+    // A stat label that is not a button, a tick-off that does not exist, and the hotel's words.
+    const gone = [/Beste rute/, /\bhak\b/i, /odhacz/i, /tick it off/i, /\brom eller\b/i, /lager 2/i, /storeroom 2/i, /magazynie 2/i, /складі 2/i];
+    for (const { code } of GUIDE_LANGUAGES) {
+      for (const { step, guide } of guidesIn(code)) {
+        for (const text of guide.steps) {
+          for (const [, name] of text.matchAll(/«([^»]+)»/g)) expect(onScreen, `${code} ${step}: «${name}»`).toContain(name);
+          for (const pattern of gone) expect(text, `${code} ${step}`).not.toMatch(pattern);
+        }
+      }
+    }
+  });
 });
 
 describe("PickingGuides", () => {

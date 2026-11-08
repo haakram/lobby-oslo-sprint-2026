@@ -267,6 +267,7 @@ describe("RoutesScreen, Plukkliste", () => {
 
   it("never puts the example on a list that is filled while the screen is open", () => {
     renderAdding(THREE, <RoutesScreen params={{ sku: "FT-1001" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Se plukklisten" }));
     expect(screen.queryByText(/Eksempelordre/)).not.toBeInTheDocument();
     expect(within(screen.getByRole("list", { name: "Plukkrekkefølge" })).getAllByRole("listitem")).toHaveLength(3);
   });
@@ -298,10 +299,24 @@ describe("RoutesScreen, Plukkliste", () => {
     expect(within(screen.getByRole("region", { name: "Rutetall" })).getByText("120")).toBeInTheDocument();
   });
 
-  it("opens the pick list and adds the SKU from ?sku= on load", () => {
+  it("shows the way to the shelf from ?sku= and never adds it to the pick list (jury round 4, the Holio juror)", () => {
     renderWith([], <RoutesScreen params={{ sku: "FT-1007" }} />);
     expect(screen.getByRole("tab", { name: /Plukkliste/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: /^Veien til / })).toBeInTheDocument();
     expect(screen.getByText("Knekkebrød 520 g")).toBeInTheDocument();
+    expect(screen.getByText("Bare veien: varen er ikke lagt i plukklisten.")).toBeInTheDocument();
+    // The address carries a SKU; the screen does not repeat it.
+    expect(screen.queryByText("FT-1007")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Se plukklisten" }));
+    expect(screen.queryByText("Knekkebrød 520 g")).not.toBeInTheDocument();
+    expect(screen.getByText(/Eksempelordre/)).toBeInTheDocument();
+  });
+
+  it("says when the product on the way is already on the list", () => {
+    renderWith(["FT-1001"], <RoutesScreen params={{ sku: "FT-1001" }} />);
+    expect(screen.getByText("Står i plukklisten.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Se plukklisten" }));
+    expect(within(screen.getByRole("list", { name: "Plukkrekkefølge" })).getAllByRole("listitem")).toHaveLength(1);
   });
 
   it("ignores a ?sku= that is not in the catalogue", () => {

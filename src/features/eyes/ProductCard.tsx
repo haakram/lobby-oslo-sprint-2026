@@ -61,10 +61,13 @@ export function ProductCard({ result }: { result: IdentifyResult }) {
       {product ? (
         // One column on a narrow phone: "Legg i plukkliste" needs more than half of 390 px.
         <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
-          <Button variant="secondary" onClick={() => router.push("/ruter?sku=" + encodeURIComponent(product.sku))}>
-            <RouteIcon />
-            Vis vei
-          </Button>
+          {/* While unsure there is no way round the label: no Vis vei until it agrees (jury round 4, the Holio juror). */}
+          {(!unsure || added) && (
+            <Button variant="secondary" onClick={() => router.push("/ruter?sku=" + encodeURIComponent(product.sku))}>
+              <RouteIcon />
+              Vis vei
+            </Button>
+          )}
           {added ? (
             <Button disabled>I plukklisten</Button>
           ) : unsure ? null : (

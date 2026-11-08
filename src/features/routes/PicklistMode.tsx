@@ -10,8 +10,9 @@ import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, RouteIcon }
 import { FloorMap } from "./FloorMap";
 import { loadRoutes, type LoadedRoutes } from "./loadRoutes";
 import { RouteStats } from "./RouteStats";
-import { ProductRow, StopList } from "./StopList";
+import { ProductRow, StopList, via } from "./StopList";
 import { bestTour, listOrderMetres, savings, tourLegs } from "./tour";
+import { replaceQuery } from "./urlState";
 import type { RouteMatrix } from "./types";
 
 /** Shelf ids in location-code order: "shelf-1a" < "shelf-1b" < "shelf-2a" < "shelf-10a". */
@@ -48,8 +49,16 @@ function plan(m: RouteMatrix, products: Product[]) {
 export const EXAMPLE_ORDER: readonly string[] = ["FT-1010", "FT-1004", "FT-1008", "FT-1001", "FT-1012"];
 
 /** Plukkliste: the shortest walk to every product on the pick list (Øyne and Stemme fill it). */
-export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: RouteMatrix }) {
+export function PicklistMode({ showSku, matrix }: { showSku?: string; matrix?: RouteMatrix }) {
   const { skus, add, remove, clear, seedOnce } = usePicklist();
+  // ?sku= (Øyne's "Vis vei") shows the way to that one shelf until "Se plukklisten" (jury round 4, the Holio juror).
+  const [previewClosed, setPreviewClosed] = useState(false);
+  const preview = showSku && !previewClosed ? productBySku(showSku) : undefined;
+  const closePreview = () => {
+    setPreviewClosed(true);
+    replaceQuery({ sku: null });
+    seedOnce(EXAMPLE_ORDER);
+  };
   const example = skus.length === EXAMPLE_ORDER.length && skus.every((sku, index) => sku === EXAMPLE_ORDER[index]);
   // The scanned list can't be rebuilt from anywhere else: Tøm keeps it for Angre.
   const [cleared, setCleared] = useState<string[] | null>(null);
@@ -63,13 +72,12 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
     setCleared(null);
   };
 
-  // ?sku= from Øyne's "Vis vei". Layout effect: the route includes it before the first paint.
-  // Without one, an empty list gets the example order, once per session.
+  // An address never puts anything on the pick list: only "Legg i plukkliste", the label check or the
+  // voice agent do (a guessed SKU in ?sku= once went straight on the list; jury round 4, the Holio juror).
+  // Without ?sku=, an empty list gets the example order, once per session, before the first paint.
   useLayoutEffect(() => {
-    if (addSku) {
-      if (productBySku(addSku)) add(addSku);
-    } else seedOnce(EXAMPLE_ORDER);
-  }, [addSku, add, seedOnce]);
+    if (!showSku) seedOnce(EXAMPLE_ORDER);
+  }, [showSku, seedOnce]);
 
   const loaded: LoadedRoutes = useMemo(() => (matrix ? { ok: true, matrix } : loadRoutes()), [matrix]);
   const products = useMemo(() => skus.map(productBySku).filter((p): p is Product => p !== undefined), [skus]);
@@ -97,6 +105,15 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
           </Button>
         }
       />
+    );
+  }
+
+  if (preview) {
+    return (
+      <div>
+        {badge}
+        <ShelfPreview matrix={loaded.matrix} product={preview} inList={skus.includes(preview.sku)} onClose={closePreview} />
+      </div>
     );
   }
 
@@ -194,6 +211,57 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
         </Card>
       </div>
       <PickingGuides className="mt-6" />
+    </div>
+  );
+}
+
+/**
+ * Øyne's *Vis vei*: the way from the start to one product's shelf and back, nothing else. The product's
+ * name and shelf only, never its SKU (the shelf label carries it), and the pick list is left as it is.
+ */
+function ShelfPreview({
+  matrix,
+  product,
+  inList,
+  onClose,
+}: {
+  matrix: RouteMatrix;
+  product: Product;
+  inList: boolean;
+  onClose: () => void;
+}) {
+  const tour = bestTour(matrix, [product.location]);
+  const back = (
+    <Button variant="secondary" onClick={onClose}>
+      Se plukklisten
+    </Button>
+  );
+  if ("error" in tour) {
+    return <ErrorState title="Ingen rute funnet" body={`Kartet har ingen vei til ${product.locationLabel}.`} action={back} />;
+  }
+  const legs = tourLegs(matrix, tour.order);
+  const there = legs[0];
+  const start = matrix.nodes[matrix.start].label ?? matrix.start;
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-6">
+      <Card className="p-4 sm:p-5 animate-rise">
+        <FloorMap matrix={matrix} legs={legs} order={tour.order} />
+      </Card>
+      <Card className="flex flex-col gap-4 animate-rise [animation-delay:60ms]">
+        <div>
+          <h2 className="text-lg font-semibold tracking-[-0.01em]">Veien til {product.locationLabel}</h2>
+          <p className="mt-1 text-sm text-muted">
+            {matrix.nodes[product.location].floor}. etasje ·{" "}
+            <span className="font-mono whitespace-nowrap text-text tabular-nums">{Math.round(there.metres)} m</span> fra {start}
+            {via(matrix, there)}
+          </p>
+        </div>
+        <p className="border-t border-line pt-4 text-base font-medium">{product.name}</p>
+        <p className="text-sm text-muted">
+          {inList ? "Står i plukklisten." : "Bare veien: varen er ikke lagt i plukklisten."}
+        </p>
+        <div>{back}</div>
+      </Card>
     </div>
   );
 }

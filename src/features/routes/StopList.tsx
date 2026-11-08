@@ -2,7 +2,8 @@ import type { Product } from "@/features/catalog/products";
 import { Button } from "@/ui";
 import type { RouteMatrix, TourLeg } from "./types";
 
-function via(m: RouteMatrix, leg: TourLeg): string {
+/** " via heis" / " via trapp" when a leg changes floor, else nothing. */
+export function via(m: RouteMatrix, leg: TourLeg): string {
   const kinds = new Set(leg.path.map((id) => m.nodes[id].kind));
   if (kinds.has("elevator")) return " via heis";
   if (kinds.has("stairwell")) return " via trapp";

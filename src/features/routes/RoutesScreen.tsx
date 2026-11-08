@@ -34,7 +34,7 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
     return { rooms, unknown, start: parseStart(params.start), cart: parseCart(params.vogn) };
   }, [params.rom, params.start, params.vogn]);
 
-  // An explicit ?modus= wins; ?sku= (Øyne's "Vis vei") or a pick list in progress opens the pick list.
+  // An explicit ?modus= wins; ?sku= (Øyne's "Vis vei": the way to one shelf) or a pick list in progress opens the pick list.
   const [mode, setMode] = useState<RouteMode>(
     () => parseMode(params.modus) ?? (sku || (skus.length > 0 && initial.rooms.length === 0) ? "plukk" : "renhold"),
   );
@@ -112,7 +112,7 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
             >
               {m.id === "renhold" && <CleaningMode map={map} log={log} initial={initial} />}
               {m.id === "robot" && <RobotMode map={map} log={log} />}
-              {m.id === "plukk" && <PicklistMode addSku={sku} matrix={matrix} />}
+              {m.id === "plukk" && <PicklistMode showSku={sku} matrix={matrix} />}
             </div>
           ) : null,
         )}

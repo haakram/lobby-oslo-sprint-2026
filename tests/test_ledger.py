@@ -106,3 +106,54 @@ def test_fidelity_table_becomes_csv_rows_joined_to_the_ledger() -> None:
                        "replay_score": "1512", "delta": "-22", "delta_pct": "-1.4", "replayed_by": "eb4a440", "note": ""}
     assert rows[1]["note"] == "STRANDED" and rows[1]["shift"] == "w2-28db193c7"
     assert rows[2]["replay_score"] == "" and rows[2]["note"] == "no commit known for this night (x.json)"
+
+
+def test_board_test_checkouts_stay_in_the_ledger_but_out_of_builds_and_count_only_complete(tmp_path: Path) -> None:
+    build_night, board_night, board_cut = "w2-" + "d" * 32, "w2-" + "e" * 32, "w2-" + "f" * 32
+    final = tmp_path / "final"
+    write_jsonl(final / "temp" / "live_runs.jsonl", [{"t": 1794096422.7, "shift": build_night, "seed": 16}])
+    write_jsonl(final / "temp" / "runs" / f"{build_night}.jsonl", NIGHT)
+    lottery = tmp_path / "lottery"  # a named board checkout: seed-specific, not a build
+    write_jsonl(lottery / "temp" / "live_runs.jsonl", [
+        {"t": 1794096500.0, "shift": board_night, "seed": 10},
+        {"t": 1794096600.0, "shift": board_cut, "seed": 10},
+    ])
+    write_jsonl(lottery / "temp" / "runs" / f"{board_night}.jsonl", NIGHT)
+    write_jsonl(lottery / "temp" / "runs" / f"{board_cut}.jsonl", NIGHT[:6])  # stopped early: no end line
+    for root in (final, lottery):
+        (root / "agent" / "data").mkdir(parents=True)
+    (final / "agent" / "data" / "replay_codes.json").write_text(json.dumps({
+        build_night[:12]: {"commit": "8eac151"}, board_night[:12]: {"commit": "8eac151"}, board_cut[:12]: {"commit": "8eac151"},
+    }))
+
+    nights = ledger.collect([final, lottery])
+    assert {n.shift: n.kind for n in nights} == {build_night: "build", board_night: "board-test", board_cut: "board-test"}
+    rows = {r["shift"]: r for r in csv.DictReader(io.StringIO(ledger.ledger_csv(nights)))}
+    assert rows[board_night]["kind"] == "board-test" and rows[build_night]["kind"] == "build"
+    # builds.csv: the commit's row holds only the build night, though the board tests carry the same commit.
+    builds = list(csv.DictReader(io.StringIO(ledger.builds_csv(nights))))
+    assert [(b["commit"], b["nights"]) for b in builds] == [("8eac151", "1")]
+    # The card's nights: the build night and the complete board test; the cut-off board test is left out.
+    counted = json.loads(ledger.ledger_json(nights))["nights"]
+    assert [(n["shift"], n["kind"]) for n in counted] == [(build_night, "build"), (board_night, "board-test")]
+    assert ledger.precision(ledger.counted(nights)) == (2, 2, 4)
+
+
+def test_a_checkout_whose_tracked_files_differ_from_its_commit_is_a_board_test(tmp_path: Path) -> None:
+    import subprocess
+
+    repo = tmp_path / "wave"
+    repo.mkdir()
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.invalid"]
+    subprocess.run([*git, "init", "-q"], check=True)
+    (repo / "price.py").write_text("WET = True\n")
+    subprocess.run([*git, "add", "price.py"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "build"], check=True)
+    (repo / "notes.txt").write_text("untracked is not code that ran\n")
+    assert ledger.kind_of(repo) == "build"
+    (repo / "price.py").write_text("WET = False\n")
+    assert ledger.kind_of(repo) == "board-test"
+    assert ledger.kind_of(tmp_path / "lafinal") == "board-test"  # named, whatever its tree
+    (repo / "price.py").write_text("WET = True\n")
+    subprocess.run([*git, "switch", "-q", "-c", "hamad/board-lottery2"], check=True)
+    assert ledger.kind_of(repo) == "board-test"  # a board branch, under any checkout name

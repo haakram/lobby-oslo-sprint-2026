@@ -5,10 +5,12 @@ file anyone can regenerate, not from hand-assembled tables. This script reads ev
 agent logged (``temp/live_runs.jsonl`` in each checkout) and every run log it can find
 (``temp/runs/*.jsonl``), and writes:
 
-- ``docs/runs/ledger.csv``: one row per live start (logged or not), sorted by wall time;
-- ``docs/runs/builds.csv``: one row per commit that played complete live nights (mean, best, seeds);
-- ``src/features/nightshift/data/ledger.json``: the same nights, the fields the app's judgement card
-  needs for its cross-night precision line;
+- ``docs/runs/ledger.csv``: one row per live start (logged or not), sorted by wall time, each with its
+  ``kind`` (``build`` or ``board-test``, below);
+- ``docs/runs/builds.csv``: one row per commit that played complete live nights as a build (mean, best,
+  seeds); board tests are left out;
+- ``src/features/nightshift/data/ledger.json``: the nights the app's judgement card counts, the fields
+  it needs for its cross-night precision line;
 - with ``--fidelity-from FILE``: ``docs/runs/replay-fidelity.csv`` and ``docs/runs/replay-fidelity.txt``
   from the replay bed's printed fidelity table (``python -m agent replaybench --fidelity`` on
   ``hamad/replaybed``: each live night replayed offline by the commit that played it). The bed's
@@ -17,6 +19,24 @@ agent logged (``temp/live_runs.jsonl`` in each checkout) and every run log it ca
 
 Only shifts listed in a ``live_runs.jsonl`` count as live; logs from the offline fake server are left
 out. Read-only on the logs; it never calls the Wybe server.
+
+Builds and board tests (``kind``). A night is a ``board-test`` when it was started from a checkout that
+is a seed-specific board experiment, not a build of the agent:
+- the named board checkouts under ~/oslo-wt: ``lottery``, ``lawet``, ``wetoff``, ``lafinal``,
+  ``boardtune`` (``BOARD_CHECKOUTS``); or
+- any checkout on a board branch (``…/board-…``, e.g. ``hamad/board-lottery2``), so a new board
+  checkout is caught without a new name here; or
+- any checkout whose working tree differs from its commit (tracked files changed against HEAD, by
+  ``git status --untracked-files=no``, read when the ledger runs), so the commit is not what played.
+Every other night is a ``build`` night. Board tests:
+- stay in ledger.csv, marked ``kind=board-test`` (the best live score anywhere is one of them);
+- are left out of builds.csv's per-commit rows, out of the judgement card's same-build figure and out
+  of every "final build" figure: their commit, inferred from the checkout's HEAD, is not a build;
+- count in the all-nights credited-"done" figure only when they are complete nights (the server ended
+  them at 06:00): ledger.json holds complete board tests and leaves the rest out. Build nights count
+  there when their log was found, complete or not.
+The all-nights figure (the card's "Alle N live-netter med logg"): credited over reported "done", over
+the ledger.json nights that reported at least one "done"; printed by this script.
 
 How each column is computed (the same rules as the app, src/features/nightshift):
 - ``done_reports``: ``report`` calls with outcome ``done`` that the server accepted (ok).
@@ -44,6 +64,7 @@ import argparse
 import csv
 import io
 import json
+import re
 import subprocess
 import sys
 from collections import defaultdict
@@ -60,6 +81,11 @@ LEDGER_JSON = REPO / "src" / "features" / "nightshift" / "data" / "ledger.json"
 FIDELITY_CSV = REPO / "docs" / "runs" / "replay-fidelity.csv"
 FIDELITY_TXT = REPO / "docs" / "runs" / "replay-fidelity.txt"
 
+# Seed-specific board experiments, not builds (see the docstring): their nights are kind=board-test.
+BOARD_CHECKOUTS = frozenset({"lottery", "lawet", "wetoff", "lafinal", "boardtune"})
+BOARD_BRANCH = re.compile(r"(^|/)board-")
+BUILD, BOARD_TEST = "build", "board-test"
+
 
 def default_roots() -> list[Path]:
     home = Path.home()
@@ -74,6 +100,7 @@ class Night:
     started: str  # ISO 8601, Europe/Oslo
     seed: int | None
     checkout: str
+    kind: str = BUILD  # build | board-test
     note: str = ""
     commit: str = ""
     commit_source: str = ""
@@ -244,6 +271,34 @@ def head_at(checkout: Path, t: float) -> str:
     return out.stdout.strip()[:7]
 
 
+def tree_differs(checkout: Path) -> bool:
+    """True when tracked files in the checkout differ from its HEAD (untracked files are not code that ran)."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=no"],
+            capture_output=True, text=True, timeout=20, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0 and bool(out.stdout.strip())
+
+
+def branch_of(checkout: Path) -> str:
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(checkout), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=20, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
+def kind_of(checkout: Path) -> str:
+    board = checkout.name in BOARD_CHECKOUTS or BOARD_BRANCH.search(branch_of(checkout)) or tree_differs(checkout)
+    return BOARD_TEST if board else BUILD
+
+
 def collect(roots: list[Path]) -> list[Night]:
     home = Path.home()
     starts: dict[str, tuple[float, dict, Path]] = {}
@@ -267,6 +322,7 @@ def collect(roots: list[Path]) -> list[Night]:
                 logs[shift] = path
 
     codes = commit_map(roots)
+    kinds = {root: kind_of(root) for root in {root for _, _, root in starts.values()}}
     nights: list[Night] = []
     for shift, (t, entry, root) in starts.items():
         night = Night(
@@ -274,6 +330,7 @@ def collect(roots: list[Path]) -> list[Night]:
             started=datetime.fromtimestamp(t, OSLO).isoformat(timespec="seconds"),
             seed=entry.get("seed") if isinstance(entry.get("seed"), int) else None,
             checkout=root.name,
+            kind=kinds[root],
             note=str(entry.get("note") or ""),
             t=t,
         )
@@ -315,7 +372,7 @@ def ledger_csv(nights: list[Night]) -> str:
 def builds_csv(nights: list[Night]) -> str:
     by_commit: dict[str, list[Night]] = defaultdict(list)
     for night in nights:
-        if night.complete and night.commit and night.score is not None:
+        if night.kind == BUILD and night.complete and night.commit and night.score is not None:
             by_commit[night.commit].append(night)
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
@@ -342,13 +399,25 @@ def builds_csv(nights: list[Night]) -> str:
     return out.getvalue()
 
 
+def counted(nights: list[Night]) -> list[Night]:
+    """The nights the all-nights figure counts: logged build nights, and board tests only when complete."""
+    return [n for n in nights if n.log and (n.kind == BUILD or n.complete)]
+
+
+def precision(nights: list[Night]) -> tuple[int, int, int]:
+    """(nights, credited, reported) "done" over the nights that reported at least one, as the card counts."""
+    with_done = [n for n in nights if (n.done_reports or 0) > 0]
+    return len(with_done), sum(n.done_credited or 0 for n in with_done), sum(n.done_reports or 0 for n in with_done)
+
+
 def ledger_json(nights: list[Night]) -> str:
-    keep = ["shift", "started", "seed", "commit", "complete", "score", "done_reports", "done_credited",
+    keep = ["shift", "started", "seed", "commit", "kind", "complete", "score", "done_reports", "done_credited",
             "declines_credited", "declines_not_credited"]
-    rows = [{k: asdict(n)[k] for k in keep} for n in nights if n.log]
+    rows = [{k: asdict(n)[k] for k in keep} for n in counted(nights)]
     doc = {
         "_doc": "Generated by scripts/ledger.py from the live run logs; do not edit. One row per live "
-                "practice shift whose log was found (docs/runs/ledger.csv has every live start).",
+                "practice shift whose log was found, board tests (kind=board-test) only when complete "
+                "(docs/runs/ledger.csv has every live start).",
         "nights": rows,
     }
     return json.dumps(doc, ensure_ascii=False, indent=1) + "\n"
@@ -402,11 +471,20 @@ def main(argv: list[str] | None = None) -> int:
         path.write_text(text, encoding="utf-8")
     logged = [n for n in nights if n.log]
     complete = [n for n in logged if n.complete]
-    reports = sum(n.done_reports or 0 for n in complete)
-    credited = sum(n.done_credited or 0 for n in complete)
-    print(f"{len(nights)} live starts, {len(logged)} with a log, {len(complete)} complete nights")
+    board = [n for n in nights if n.kind == BOARD_TEST]
+    print(f"{len(nights)} live starts, {len(logged)} with a log, {len(complete)} complete nights; "
+          f"{len(board)} board tests ({sum(1 for n in board if n.complete)} complete)")
+    count, credited, reports = precision(counted(nights))
     if reports:
-        print(f"complete nights: {credited} of {reports} 'done' credited ({100 * credited / reports:.1f} %)")
+        print(f"all nights (the card's figure): {credited} of {reports} 'done' credited over {count} nights "
+              f"({100 * credited / reports:.1f} %)")
+    builds = [n for n in complete if n.kind == BUILD and n.score is not None]
+    if builds:
+        best = max(builds, key=lambda n: n.score or 0)
+        print(f"best build night: {best.score} (seed {best.seed}, {best.commit or 'commit unknown'})")
+    best_any = max((n for n in complete if n.score is not None), key=lambda n: n.score or 0, default=None)
+    if best_any:
+        print(f"best live night anywhere: {best_any.score} (seed {best_any.seed}, {best_any.kind}, {best_any.checkout})")
     for path in outputs:
         print(f"wrote {path.relative_to(REPO)}")
     return 0

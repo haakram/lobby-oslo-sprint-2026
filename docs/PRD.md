@@ -64,12 +64,13 @@ is still waiting; safety events and faults surface late.
 **What our agent shows, honestly:** it ran Wybe's live simulation on its own with rule-based flows per
 request type (found by probing an undocumented API), safety rules in code, "done" reported only after
 the server's score rose, and Claude only as a guarded fallback (about USD 0.001 spent all weekend).
-Numbers per build, pinned to commits on `hamad/final`, not a best night: the final build's agent code
-(`8eac151`) averaged 2,560 on its four tuned seeds (best 2,760, seed 10). The only build that played
-seeds it was never tuned on (`d4e445c`) scored 1,940 on seeds 9 and 11 against 2,504 on its tuned
-seeds, so we forecast **about 2,000 (1,900–2,100)** for the final's unseen nights. Over the 14 live
-nights of the last three builds the referee credited 973 of 976 "done" reports (99.7 %). Best practice
-score on the board: 2,798, #9 of 20 at 02:47 Sun, from a test branch that is not the final build. On
+Numbers per build, pinned to commits on `hamad/final`, not a best night: the branch head at 03:30
+(`c3801e0`) averaged 2,591 on its four tuned seeds (best 2,760, seed 10; `8eac151` before it, 2,560).
+The only build that played seeds it was never tuned on (`d4e445c`) scored 1,940 on seeds 9 and 11
+against 2,504 on its tuned seeds, so we forecast **about 2,000 (1,900–2,100)** for the final's unseen nights. Over the 18 live
+nights of the last four builds the referee credited 1,263 of 1,267 "done" reports (99.7 %). Best
+practice score on the board: 2,798, #9 of 20 at 02:47 Sun, from a board test (a seed-specific test
+branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build. On
 the night in the app (seed 16, 2,680, `cb72845`) it reported "done" 73 times and the referee credited
 all 73. Full table and the replay bed's limits: `docs/DEMO.md` § 1.1.
 
@@ -86,7 +87,7 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
    at 04:24); *Bekreft med resepsjonen*, then *Merk som ledig for salg*. 209 is held back: the robot
    carried an arriving guest's bags in while the booking runs to 9.11, a double allocation caught.
 3. **Robotens vurderinger i natt** (1:00–1:35): seven refusals to let a stranger into a room, one
-   incident; 73 of 73 "done" credited by the simulator's referee, 99.4 % over every live night with a log (recomputed from
+   incident; 73 of 73 "done" credited by the simulator's referee, 99.5 % over every live night with a log (board tests only when complete; recomputed from
    `docs/runs/ledger.csv`, so it moves); 7 of 8
    declines credited, the eighth named.
 4. **Kvitter mottatt** (1:35–1:50): *Kvittert av Siri Haugen*, saved on this device.

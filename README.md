@@ -5,7 +5,7 @@ over a hotel at 06:00 the night on one page: which rooms can be sold today and f
 still open and who owns it, and what the night robot did and refused to do. Nothing on it says "done"
 unless it was confirmed. The robot is our AI agent, which played Wybe's live hotel simulation on its
 own; on the night in the app it reported "done" 73 times and the referee in Wybe's simulation
-credited all 73 (973 of 976 over the final builds' 14 live nights).
+credited all 73 (1,263 of 1,267 over the final branch's 18 live nights).
 
 Built in 48 hours at **Oslo Sprint 2026** by **Team Fettero** (Hamad, ShirazIQ), for the main prize,
 Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is the demo hotel.
@@ -49,27 +49,29 @@ test data, and every list says so.
   (room checks and spills are credited on the report itself, and it may try a "done" once to learn an
   unproven rule), and refuses unsafe moves in code. The work is done by rule-based flows per request type, found by probing an
   undocumented API; Claude is only a guarded fallback (about USD 0.001 spent all weekend).
-- **Every live night of the last three builds, pinned to the commit** (Wybe practice shifts, Sun 8 Nov;
+- **Every live night of the last four builds, pinned to the commit** (Wybe practice shifts, Sun 8 Nov;
   Wybe's final ranks the mean of ten unseen nights with the worst dropped):
 
   | Build on `hamad/final` | Played | Score per seed | Mean |
   |---|---|---|---|
   | `d4e445c` | 00:23–00:39 | 10: 2,707 · 16: 2,564 · 23: 2,254 · 5: 2,492 · **9: 1,965 · 11: 1,914** | 2,316 (tuned seeds 2,504; seeds 9 and 11: 1,940) |
   | `cb72845` | 01:07–01:14 | 10: 2,707 · **16: 2,680** (the night in the app) · 23: 2,334 · 5: 2,584 | 2,576 |
-  | `8eac151`: the agent code of the final build (`hamad/final` head 2056404 adds only a rehearse command) | 01:50–01:58 | **10: 2,760** · 16: 2,679 · 23: 2,240 · 5: 2,559 | 2,560 (not played on 9 or 11) |
+  | `8eac151` | 01:50–01:58 | **10: 2,760** · 16: 2,679 · 23: 2,240 · 5: 2,559 | 2,560 |
+  | `c3801e0`: the head of `hamad/final` at 03:30 (`8eac151`'s agent plus the end-of-night battery guard and a spill look) | 03:26 | **10: 2,760** · 16: 2,748 · 23: 2,298 · 5: 2,559 | 2,591 (not played on 9 or 11) |
 
 - **What we expect in the final: about 2,000 (1,900–2,100), not 2,760.** Seeds 9 and 11 are the only
   nights a build played without being tuned on them: 1,940 there against 2,504 on its tuned seeds, 22 %
-  lower. The final build averages 2,560 on tuned seeds; 2,560 × 1,940 / 2,504 ≈ 1,980.
-- **"Done" is checked:** over those 14 nights the agent said "done" 976 times and the referee (Wybe's
-  server) credited 973, **99.7 %**; the 3 it didn't credit were all on seed 23. Over every live night
-  with a log, every version, it is 5,334 of 5,368 (99.4 %, 95 nights at 03:10; the app's judgement card
-  recomputes it from the ledger, so it grows as nights are logged). It declined 88 requests
-  as false or impossible; the referee credited 73 of those declines and gave 15 nothing.
+  lower. The branch head averages 2,591 on tuned seeds; 2,591 × 1,940 / 2,504 ≈ 2,010.
+- **"Done" is checked:** over those 18 nights the agent said "done" 1,267 times and the referee (Wybe's
+  server) credited 1,263, **99.7 %**; the 4 it didn't credit were all on seed 23, one per build. Over
+  every live night with a log, every version, it is 6,338 of 6,373 (99.5 %, 106 nights at 03:33; board
+  tests count only when they ran the full night; the app's judgement card recomputes it from the
+  ledger, so it moves as nights are logged). It declined 112 requests as false or impossible; the
+  referee credited 93 of those declines and gave 19 nothing.
 - **Board:** best practice score **2,798**, **#9 of 20** on Wybe's practice board at 02:47 Sun (top 3,448;
-  we played 188 practice shifts, the leader 1,556). That night came from a test branch (`cdc67f1`,
-  lookahead planner) that stranded on seed 23 in the same batch, so it is not in the final; the final
-  build's best, 2,760, would sit at #10.
+  we played 188 practice shifts, the leader 1,556). That night came from a board test (`cdc67f1`,
+  lookahead planner, a seed-specific test branch) that stranded on seed 23 in the same batch, so it is
+  not in the final; the final branch's best, 2,760 (`8eac151` and `c3801e0`), would sit at #10.
 - **The night in the app** (`public/runs/demo.jsonl`, seed 16, 2,680, `cb72845`): 85 requests, 73
   "done", **all 73 credited**; 8 declined, of which the referee credited 7 (6 orders that never existed,
   1 already delivered) and not 1 (a spill report on floor 3); 4 still open at 06:00; one penalty (−15,
@@ -88,7 +90,8 @@ test data, and every list says so.
   `docs/DEMO.md` § 1.1.
 - **Where the numbers come from:** [`docs/runs/ledger.csv`](./docs/runs/ledger.csv) (one row per live
   start) and [`docs/runs/builds.csv`](./docs/runs/builds.csv) (one row per commit), rebuilt from the run
-  logs by `python3 scripts/ledger.py`.
+  logs by `python3 scripts/ledger.py`. Board tests (30 seed-specific nights from test checkouts, 28
+  of them on seeds 10 and 16, best 2,798) are marked `kind=board-test` in the ledger and kept out of the build rows.
 - **What it learned about the undocumented API:** [`docs/research/wybe-api.md`](./docs/research/wybe-api.md).
 - **Run it:** the commands are in [`CLAUDE.md`](./CLAUDE.md) § How to run / test
   (`.venv/bin/python -m agent run --seed 1` plays offline against a fake server by default).

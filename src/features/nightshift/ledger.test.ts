@@ -47,6 +47,9 @@ describe("the evidence ledger the app reads", () => {
       const row = byShift.get(entry.shift);
       expect(row, entry.shift).toBeDefined();
       expect(row!.commit).toBe(entry.commit);
+      expect(row!.kind).toBe(entry.kind);
+      // A board test is in the app's file only as a complete night.
+      if (entry.kind === "board-test") expect(entry.complete).toBe(true);
       expect(Number(row!.done_reports)).toBe(entry.done_reports);
       expect(Number(row!.done_credited)).toBe(entry.done_credited);
       expect(row!.score === "" ? null : Number(row!.score)).toBe(entry.score);
@@ -72,6 +75,16 @@ describe("precision", () => {
     expect(precision([night("a", "x", 2000, 1999), night("b", "x", 0, 0)])).toEqual({ nights: 1, reported: 2000, credited: 1999, percent: 99.9 });
     expect(precision([night("a", "x", 10, 10)])?.percent).toBe(100);
     expect(precision([])).toBeNull();
+  });
+
+  it("leaves board tests out of a build's figure though they carry its commit, and counts them across all nights", () => {
+    const board = { ...night("b", "8eac151", 70, 70), kind: "board-test" as const };
+    const nights = [{ ...night("a", "8eac151", 72, 71), kind: "build" as const }, board, { ...night("c", "8eac151", 73, 73), kind: "build" as const }];
+    expect(crossNightPrecision("a", nights)).toEqual({
+      all: { nights: 3, reported: 215, credited: 214, percent: 99.5 },
+      build: { commit: "8eac151", nights: 2, reported: 145, credited: 144, percent: 99.3 },
+    });
+    expect(crossNightPrecision("b", nights).build).toBeNull();
   });
 
   it("knows no build for a shift the ledger has not seen", () => {

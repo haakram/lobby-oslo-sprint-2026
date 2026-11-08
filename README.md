@@ -18,14 +18,15 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
    works once the team has set the new `LOBBY_USERS` there.)
 3. Click three things:
    1. **Overlevering 06:00** (from Oversikt: *Se overleveringen* in the top bar): the night on one
-      page, every open item with an owner and a deadline, the robot's judgement card (*Robotens
-      vurderinger i natt*: it refused seven times to let a stranger into a room), and *Kvitter mottatt*.
+      page, every open item with an owner and a deadline, *Godkjent av Wybe-serveren: 73 av 73*, and
+      *Kvitter mottatt*.
    2. **Åpne Rom → *Robotens romsjekk mot bookingsystemet*:** the robot found two rooms empty that the
       booking system has as occupied, *2 rom kan selges i dag · ca. 2 900 kr*; *Merk som ledig for
       salg* is one tap.
    3. **Forespørsler → the robot's open request → *Ta saken*:** what the robot didn't finish, it hands
-      over with the reason; a person takes it in one tap. Then **3D-kart → *Spill av*:** the robot's
-      real night.
+      over with the reason; a person takes it in one tap. Then **Natteskift → *Robotens vurderinger i
+      natt*** (it refused seven times to let a stranger into a room) and **3D-kart → *Spill av*:** the
+      robot's real night.
 
 Also worth a look: **Robotens øyne** on a phone (camera boxes; tap a product and Claude names it
 without a barcode), **Resepsjon** (allow the microphone, then *Ring resepsjonen*: the ElevenLabs AI

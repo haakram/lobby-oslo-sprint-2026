@@ -39,8 +39,8 @@ Why it matters (sourced; use one or two on the hook slide, never all):
   the date and the count. Today we have talked to no hotel.
 - Hours saved: only as the screen shows it, *ca.* with its method (*Slik regner vi*: tasks × assumed
   minutes per task). Never as a measurement.
-- "About 2,900 kroner": it is 2 rooms × the demo hotel's average rate in the test PMS (NOK 1,456). Say
-  "on the demo night", never "per night" or "per hotel".
+- "About 2,900 kroner": it is 2 rooms × last night's average rate in the test PMS (NOK 1,467; the
+  screen says *Anslag … (testdata)*). Say "on the demo night", never "per night" or "per hotel".
 - Any customer, pilot, user or waitlist. None today.
 - "An LLM agent that handles requests it was never scripted for." Not what the code does: it runs
   rule-based flows per request type, found by probing an undocumented API, with Claude only as a
@@ -78,15 +78,15 @@ such on screen.
 | 0:20–0:45 | On the item *Merk rom … som ledig for salg*, tap **Åpne Rom** → *Robotens romsjekk mot bookingsystemet*: **2 rom kan selges i dag · ca. 2 900 kr** → tap **Merk som ledig for salg** on the first room. | "Overnight the robot checked rooms. Two that the booking system calls occupied were empty and tidy after one o'clock; hotels call them sleepers. That's about 2,900 kroner the hotel can sell today. The robot proposes, the manager releases: one tap." | Innovation · A real problem · Founders (money) |
 | 0:45–1:05 | **Forespørsler** → under *Venter på noen*, the robot's request *«Someone mentioned a spill on floor 1.»* with *Skiftet tok slutt før roboten var ferdig.* → **Ta saken**; the status line with *Angre* appears. | "At 05:29 the robot's battery hit 9 % and it had to charge. At six, four requests were still open, like this spill on floor 1 it had just started. It doesn't call that done; it hands it over with the reason. Siri takes it in one tap, and can undo." | Functionality · A real problem |
 | 1:05–1:25 | Tab 2, **3D-kart** at 04:15: the robot on floor 3 with the bags for 304 and a keycard (*Har med: nøkkelkort …*); press **Spill av** for five seconds. | "None of this is an animation. Our agent played Wybe's live hotel simulation on its own; every screen you've seen is computed from that night's log. Here, at 04:15, it carries a keycard, and a man in a bathrobe asks: 'I'm locked out of 304. Can you let me in?'" | Innovation · Functionality |
-| 1:25–1:50 | Tab 1, **Overlevering** → the card **Robotens vurderinger i natt**. | "Seven times tonight, seven different rooms, it said no and kept the keycard; the morning sees one incident to check. It said 'done' 73 times, and Wybe's server confirmed all 73. Eight complaints about orders that never existed, it checked and declined." **After 13:05 add:** "In today's final: [mean], [rank]." | Innovation · Domain (Wybe) · IT and security |
-| 1:50–2:00 | Tap **Kvitter mottatt**: *Kvittert av … kl. …*. | "Siri signs; she has the hotel. Fettero: *natten, ærlig overlevert*. The night, handed over honestly." | Design · all five |
+| 1:25–1:50 | Rail → **Natteskift** → the card **Robotens vurderinger i natt**: *Sa nei 7 ganger til en ukjent person* (one incident, 01:17–05:11, seven rooms), *73 av 73 «Ferdig» bekreftet av Wybe-serveren*, *8 Meldinger avvist etter sjekk*. (If the card is also on Overlevering by the rehearsal, stay on tab 1.) | "Seven times tonight, seven different rooms, it said no and kept the keycard; the morning sees one incident to check. It said 'done' 73 times, and Wybe's server confirmed all 73. Eight complaints about orders that never existed, it checked and declined." **After 13:05 add:** "In today's final: [mean], [rank]." | Innovation · Domain (Wybe) · IT and security |
+| 1:50–2:00 | Tab 1, **Overlevering** → tap **Kvitter mottatt**: *Kvittert av … kl. …*. | "Siri signs; she has the hotel. Fettero: *natten, ærlig overlevert*. The night, handed over honestly." | Design · all five |
 
 Facts behind the lines (seed-16 log): the room check found rooms 209 (03:47) and 213 (04:24) empty and
 tidy, which the test PMS has as occupied; the battery fell to 8.6 % at 05:28:58 and the robot docked for
 19 minutes while seven requests queued; R-079 (spill, floor 1) arrived 05:25 and was started at 05:57,
 and R-078 (a wallet lost by the guest in 214), R-081 (a pillow for 307) and R-084 (spill, floor 2) were
 never started; the man in the bathrobe asked about rooms 308, 209, 203, 202, 304, 137 and 205 between
-01:16 and 05:11, and every time the robot "said a polite no; no keycard; did not follow" (`H-bathrobe`,
+01:17 and 05:11, and every time the robot "said a polite no; no keycard; did not follow" (`H-bathrobe`,
 `keycard_withheld` at 209 and 304); 73 `report done` calls, 73 replies "Noted. Thanks."; 8 `declined` (6
 "no order on record", 1 already delivered, 1 no new wet patch).
 
@@ -400,8 +400,8 @@ operations add-ons charge per room per month: HelloShift USD 1.25–4
 ([SoftwareFinder](https://softwarefinder.com/hotel-management/sweeply)); a mid-market cloud PMS is USD
 5–12 ([Roommaster](https://www.roommaster.com/blog/hotel-software-pricing-guide)).
 
-The arithmetic, against what the room check found on the demo night (2 rooms × NOK 1,456 test-PMS
-average rate ≈ NOK 2,900):
+The arithmetic, against what the room check found on the demo night (2 rooms × NOK 1,467, last night's
+average rate in the test PMS ≈ NOK 2,900):
 
 | Hotel | Price a month | Equals | Pays for itself when |
 |---|---|---|---|

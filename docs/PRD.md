@@ -83,7 +83,7 @@ Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kje
    with *Angre*.
 4. **3D-kart at 04:15** (1:05–1:25): the robot's real night replayed from its run log; a man in a
    bathrobe asks it to open room 304.
-5. **Robotens vurderinger i natt** on Overlevering (1:25–1:50): seven refusals to let a stranger into a
+5. **Robotens vurderinger i natt** on Natteskift (1:25–1:50): seven refusals to let a stranger into a
    room, grouped as one incident; 73 of 73 "done" confirmed by Wybe's server; eight false claims
    declined.
 6. **Kvitter mottatt** (1:50–2:00): the morning manager signs.
@@ -95,7 +95,7 @@ Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kje
 - **Login with roles** (admin, resepsjonist, robotansvarlig, host), enforced on the server
   (`src/proxy.ts`, `src/features/auth/`), plus a separate `jury` account for the event.
 - **Overlevering 06:00**: what happened, *Åpent nå* with an owner and a deadline per item, rooms ready
-  to sell with their value, the night receptionist's note, the robot's judgement card and *Kvitter
+  to sell with their value, *Godkjent av Wybe-serveren*, the night receptionist's note and *Kvitter
   mottatt* (`src/features/handover/`).
 - **Rom og renhold** with **Robotens romsjekk mot bookingsystemet**: the robot's room checks
   reconciled with the (test) PMS; a room must be empty after 01:00 before it is suggested for sale
@@ -106,7 +106,9 @@ Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kje
 - **One selector for the night**: every screen reads task totals and occupancy from the same run log
   and the same test data, so the numbers agree across screens.
 - **3D-kart** (three.js replay of the night) and **Natteskift** (the night step by step, outcomes with
-  reasons, *Godkjent av Wybe-serveren*) (`src/features/hotel3d/`, `src/features/nightshift/`).
+  reasons, *Godkjent av Wybe-serveren*, and the card *Robotens vurderinger i natt*: refusals of a
+  stranger grouped as one incident, confirmed "done", claims declined after a check, wet-floor signs,
+  Do-Not-Disturb doors) (`src/features/hotel3d/`, `src/features/nightshift/`).
 - **The run log** of a real live practice night of the final agent (`public/runs/demo.jsonl`, seed 16).
 - **The Night Shift agent** (`agent/` on `hamad/final`): plays Wybe's simulation on its own, scored by
   Wybe's server.

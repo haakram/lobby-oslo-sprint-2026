@@ -1,44 +1,58 @@
 # Fettero
 
 **Natten, ærlig overlevert.** *(The night, handed over honestly.)* Fettero gives the manager who takes
-over a hotel at 06:00 the night on one page: which rooms can be sold today and for how much, what is
-still open and who owns it, and what the night robot did and refused to do. Nothing on it says "done"
-unless it was confirmed. The robot is our AI agent, which played Wybe's live hotel simulation on its
-own; on the night in the app it reported "done" 73 times and the referee in Wybe's simulation
-credited all 73 (1,263 of 1,267 over the final branch's 18 live nights).
+over a hotel at 06:00 the night on one page: what needs a person now and who owns it, which rooms can be
+sold today and for how much, and what the night robot did and refused to do. Nothing on it says "done"
+unless it was confirmed. For independent and chain hotels of 60–200 rooms, software first: hotel
+number one needs no robot, because Fettero reads the booking system and the door-lock log. The robot in
+the demo is our AI agent, which played Wybe's live hotel simulation on its own. On the night in the app
+it said "done" 73 times: 64 after it had seen the simulator's score rise, and 9 on its own judgement (5
+room checks, 4 spills), all 9 credited. Over the final branch's 18 live nights, 185 of its 189
+own-judgement claims were credited (97.9 %).
 
 Built in 48 hours at **Oslo Sprint 2026** by **Team Fettero** (Hamad, ShirazIQ), for the main prize,
 Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is the demo hotel.
 
 ## See it in 60 seconds
 
-1. **Run it locally** (below) or ask us for the laptop. The screens below are on `hamad/jury-loop`,
-   which is not deployed (team lead's rule: it is not merged to `main`). The public URL,
-   **https://lobby-sandy.vercel.app**, serves `main`: the older build, still under the old name
-   *Lobby*, with an older security header (no `connect-src`; checked with curl Sun 02:50).
+1. **Run it locally** (below) or ask us for the laptop: the demo runs live from our laptop. The
+   screens below are on `hamad/jury-loop`, which is not deployed (team lead's rule: it is not merged to
+   `main`). A note on production, so nobody judges the wrong build: the only public deployment
+   (`lobby-sandy.vercel.app`) serves `main`, the older build, still under the old name *Lobby*, with an
+   older security header (no `connect-src`; checked with curl Sun 02:50).
 2. Log in as **`jury`**: the jury's own account (admin view). Its password is in our `/lever`
    submission, not in this repo, and the account is deleted after the event.
-3. Click **Se overleveringen 06:00** on Oversikt, then scroll the one page from top to bottom:
-   1. **The top:** the money first (*ca. 1 500 kr · Kan selges etter bekreftelse*), and one factual
-      line: *73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en eier*.
+3. Click **Se overleveringen 06:00** on Oversikt, then scroll the one page from top to bottom. It reads
+   in the order the manager works: act, then evidence, then sign.
+   1. **The top:** one factual line (*73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en
+      eier*) and four figures: *1 rom holdt tilbake fra salg* (209), *ca. 1 500 kr · Kan selges etter
+      bekreftelse* (213), *4 saker · Sikkerhet, innen 06:30*, and the robot's *73 av 77*.
    2. ***Åpent nå*, safety first:** three wet floors without a sign and a stranger who asked the robot
-      to open seven doors, each with an owner and *innen 06:30*.
-   3. **The room check:** 213 was empty and tidy and its guest never checked out: *Bekreft med
-      resepsjonen*, then *Merk som ledig for salg* (two steps, never one tap). 209 is held back: the
-      robot carried an arriving guest's bags in while the booking still has a guest there, a double
-      allocation caught.
-   4. ***Robotens vurderinger i natt*:** it refused the stranger seven times; 73 of 73 "done" credited
-      by the simulator's referee; 7 of 8 declines credited, and the one that wasn't is named. Then
-      ***Kvitter mottatt***.
+      to open seven doors, each with an owner and *innen 06:30*. Then the room check: **209 is held
+      back** (the robot carried bags for an arriving guest into a room the booking system still has
+      booked until 9.11: *Fettero holdt rommet tilbake*), and **213 can be sold**: its guest was due out
+      yesterday and the check-out was never recorded, so the system still holds the room tonight; the
+      robot found it empty and tidy. *Bekreft med resepsjonen*, then *Merk som ledig for salg* (two
+      steps, never one tap). Both rows say *Testdata: bookingen er lagt inn av teamet*: we wrote those
+      bookings after the night to show the join, and in a pilot the evidence is the door-lock log and the
+      energy slot, never a robot in a booked room.
+   3. ***Robotens vurderinger i natt*:** it refused the stranger seven times; *9 av 9 «Ferdig» på
+      robotens egen vurdering* (the other 64 came after the simulator confirmed the work); 7 of 8
+      declines held; and its own faults, counted from its log (10 of 15 master-key entries without a
+      knock, a wet floor it slipped on and never signed). The referee and the ledger sit behind *Slik vet
+      vi det*.
+   4. ***Kvitter mottatt*,** last.
 
    Then, if you like: **Forespørsler** (what the robot handed back is pinned first, with the reason)
    and **3D-kart → *Spill av*** (the robot's real night, replayed from its log).
 
-Also worth a look: **Robotens øyne** on a phone (camera boxes; tap a product and Claude names it
-without a barcode), **Resepsjon** (allow the microphone, then *Ring resepsjonen*: the ElevenLabs AI
-receptionist; please give a made-up name) and the **host view**: log in as **`vert`** to see `/vert`,
-an Airbnb host's four flats in Oslo on the same engine. Bookings, guests, staff, stock and prices are
-test data, and every list says so.
+The menu shows the pilot: **Overlevering, Rom og renhold, Forespørsler, Natteskift** (with Oversikt as
+the start page). Everything else we built sits under the folded **Utenfor piloten**: **Robotens øyne**
+on a phone (camera boxes; tap a product and Claude names it without a barcode; built for Holio),
+**Resepsjon** (allow the microphone, then *Ring resepsjonen*: the ElevenLabs AI receptionist; the screen
+says where the call goes; please give a made-up name), and more. The host view for short-let hosts
+(`/vert`, its own login) was a test that the engine generalises; it is not part of the pilot.
+Bookings, guests, staff, stock and prices are test data, and every list says so.
 
 ## The Night Shift agent
 
@@ -59,21 +73,30 @@ test data, and every list says so.
   | `8eac151` | 01:50–01:58 | **10: 2,760** · 16: 2,679 · 23: 2,240 · 5: 2,559 | 2,560 |
   | `c3801e0`: the head of `hamad/final` at 03:30 (`8eac151`'s agent plus the end-of-night battery guard and a spill look) | 03:26 | **10: 2,760** · 16: 2,748 · 23: 2,298 · 5: 2,559 | 2,591 (not played on 9 or 11) |
 
-- **What we expect in the final: about 2,000 (1,900–2,100), not 2,760.** Seeds 9 and 11 are the only
-  nights a build played without being tuned on them: 1,940 there against 2,504 on its tuned seeds, 22 %
-  lower. The branch head averages 2,591 on tuned seeds; 2,591 × 1,940 / 2,504 ≈ 2,010.
-- **"Done" is checked:** over those 18 nights the agent said "done" 1,267 times and the referee (Wybe's
-  server) credited 1,263, **99.7 %**; the 4 it didn't credit were all on seed 23, one per build. Over
-  every live night with a log, every version, it is 6,338 of 6,373 (99.5 %, 106 nights at 03:33; board
-  tests count only when they ran the full night; the app's judgement card recomputes it from the
-  ledger, so it moves as nights are logged). It declined 112 requests as false or impossible; the
-  referee credited 93 of those declines and gave 19 nothing.
-- **Board:** best practice score **2,798**, **#9 of 20** on Wybe's practice board at 02:47 Sun (top 3,448;
-  we played 188 practice shifts, the leader 1,556). That night came from a board test (`cdc67f1`,
-  lookahead planner, a seed-specific test branch) that stranded on seed 23 in the same batch, so it is
-  not in the final; the final branch's best, 2,760 (`8eac151` and `c3801e0`), would sit at #10.
+- **What we expect in the final: a median of 2,035, 80 % between 1,898 and 2,186, not 2,760**
+  ([`docs/runs/forecast.txt`](./docs/runs/forecast.txt), from `python3 scripts/forecast.py`, committed
+  04:08 Sun, before the final). The model is log score = build + seed, fitted on every complete live
+  build night (63 build×seed cells), then 20,000 simulated finals of the best 9 of 10 unseen seeds. Why
+  lower than the 2,591 on tuned seeds: **mostly seed difficulty**. The four seeds the branch head
+  played are easy ones, which alone is −19 %; the tuning penalty we can measure is about −6 %, from two
+  nights (`d4e445c` on seeds 9 and 11), so it is rough. The replay bed screened changes on all 20 seeds,
+  so the final is the only true holdout.
+- **"Done" is checked, and we say what it rests on:** over those 18 nights the agent said "done" 1,267
+  times and the referee (Wybe's server) credited 1,263, 99.7 %. But **1,078** of them were sent after
+  the agent had already seen the score rise, so they are credited by construction. **On its own
+  judgement it made 189 claims and 185 were credited (97.9 %): room checks 117 of 117, spill reports 68
+  of 72**; the 4 misses are one probe on seed 23 repeated in every build. That is the figure that
+  carries over to a hotel, which has no score. Over every live night with a log, every version, the
+  app's judgement card recomputes the plain credited share from the ledger, so it moves as nights are
+  logged. It declined 112 requests as false or impossible; the referee credited 93 of those declines
+  and gave 19 nothing.
+- **Board:** best practice score **2,807**, **#8 of 20** on Wybe's practice board at 04:10 Sun (top 3,448;
+  we played 242 practice shifts, the leader 1,556). That night came from a board test (the `lottery`
+  checkout, seed 10), a seed-specific test branch, so it is not in the final; the final branch's best,
+  2,760 (`8eac151` and `c3801e0`), would sit at #11.
 - **The night in the app** (`public/runs/demo.jsonl`, seed 16, 2,680, `cb72845`): 85 requests, 73
-  "done", **all 73 credited**; 8 declined, of which the referee credited 7 (6 orders that never existed,
+  "done", **all 73 credited**, 64 of them after the score rose and **9 on its own judgement (5 room
+  checks, 4 spills), 9 of 9**; 8 declined, of which the referee credited 7 (6 orders that never existed,
   1 already delivered) and not 1 (a spill report on floor 3); 4 still open at 06:00; one penalty (−15,
   it slipped on a wet floor at 23:51).
 - **How we test a change before a live shift:** a replay bed (`agent/replaybed.py` on `hamad/final`)
@@ -90,8 +113,10 @@ test data, and every list says so.
   `docs/DEMO.md` § 1.1.
 - **Where the numbers come from:** [`docs/runs/ledger.csv`](./docs/runs/ledger.csv) (one row per live
   start) and [`docs/runs/builds.csv`](./docs/runs/builds.csv) (one row per commit), rebuilt from the run
-  logs by `python3 scripts/ledger.py`. Board tests (30 seed-specific nights from test checkouts, 28
-  of them on seeds 10 and 16, best 2,798) are marked `kind=board-test` in the ledger and kept out of the build rows.
+  logs by `python3 scripts/ledger.py`, with the "done" split in its own columns (`done_after_rise`,
+  `done_own`, `done_own_credited`). Board tests (53 seed-specific nights from test checkouts by 04:08,
+  52 of them on seeds 10 and 16, best 2,807) are marked `kind=board-test` in the ledger and kept out of
+  the build rows.
 - **What it learned about the undocumented API:** [`docs/research/wybe-api.md`](./docs/research/wybe-api.md).
 - **Run it:** the commands are in [`CLAUDE.md`](./CLAUDE.md) § How to run / test
   (`.venv/bin/python -m agent run --seed 1` plays offline against a fake server by default).
@@ -101,7 +126,8 @@ test data, and every list says so.
 The product traded as *Lobby* until Saturday. Lobby is also a funded Zurich hotel-AI company sold
 through Apaleo, the channel we plan to use, so on this branch the product is **Fettero**: our team's
 coined name. The team lead decides whether `main` follows. Code identifiers (`lobby:` storage keys,
-`LOBBY_USERS`) keep the old name.
+`LOBBY_USERS`) keep the old name. The name isn't cleared yet: the trademark searches (Patentstyret, EUIPO,
+WIPO, and whether FERRERO's reputation reaches a sound-alike) are still to do (`docs/PRIVACY.md` § 9).
 
 ## Docs for the jury
 

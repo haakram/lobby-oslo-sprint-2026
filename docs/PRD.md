@@ -3,7 +3,8 @@
 > **Draft for team review (Hamad, ShirazIQ), updated Sun 8 Nov morning from what is built on
 > `hamad/jury-loop` (app) and `hamad/final` (agent).** It describes the product as it stands, not a
 > wish list. Changes only by team agreement (AI_RULES R2); an AI that wants to add something not listed
-> here stops and asks. Lines marked **[decide]** need the team. The product trades as **Fettero** on this
+> here stops and asks. The team's open decisions were settled on Sun 8 Nov morning (jury round 4):
+> the wedge, its reason, the commitment and the stop rule (§ 8). The product trades as **Fettero** on this
 > branch (the team lead decides whether `main` follows); code identifiers keep the old `lobby` names.
 
 ## 1. One-line description
@@ -16,8 +17,9 @@ unless it was confirmed.** The one line: *Natten, ærlig overlevert.*
 ## 2. Who it's for
 
 **Primary user: the night manager or front-office lead who takes over the hotel at 06:00**, at a desk
-or on an iPad, in a hotel of 60–200 rooms **[decide: size band is our assumption]**. Often new in the
-job, sometimes working in a second language. Needs to know which rooms can be sold, which guest is
+or on an iPad, in an independent or chain hotel of 60–200 rooms: the typical Norwegian hotel, which has
+about 86 rooms (92,678 rooms in 1,079 hotels, SSB table 14164, Sep 2026). Software first; the robot is
+optional. Often new in the job, sometimes working in a second language. Needs to know which rooms can be sold, which guest is
 still waiting, what broke or went wrong overnight, and who does what next.
 
 **Buyer (signs the contract): the hotel's general or operations manager** of an independent or chain
@@ -29,15 +31,16 @@ Secondary users the app serves (shown only in Q&A, not in the 2-minute demo):
 - **Resepsjonist**: the receptionist's calls, booking requests and messages (role `receptionist`).
 - **Robotansvarlig**: the person who looks after the robot: 3D-kart, Natteskift, Øyne, Stemme (role `robot`).
 - **Short-let host or property manager** (role `host`, `/vert`): the same engine for 4 flats in Oslo,
-  on test data. A second, self-serve market we built to test that the product generalises; it has its
-  own login and is not in the hotel admin's menu.
+  on test data. Built to test that the product generalises; it has its own login, is not in the hotel
+  admin's menu and is not on the business slide (one wedge).
 
 ## 3. The problem and why now
 
 **The pain, as we read it (not yet confirmed by a hotel: see § 8 and `docs/DEMO.md` § 8):** at 06:00
 the night's events are spread over the robot, the phone, staff notes and the PMS. Rooms that are empty
-but marked occupied ("sleepers") can't be sold until someone finds them; a guest whose request failed
-is still waiting; safety events and faults surface late.
+but still marked occupied tonight ("sleepers": a guest due out yesterday whose check-out was never
+recorded) can't be sold until someone finds them; a room due out today is not one, since the PMS
+already sells it. A guest whose request failed is still waiting; safety events and faults surface late.
 
 **Evidence we can cite** (links in `docs/DEMO.md` § 1):
 
@@ -45,8 +48,9 @@ is still waiting; safety events and faults surface late.
   accommodation and food service every month from Nov 2018 to Feb 2019 had left the industry by June
   2019; about 40 % of the stable workforce is part-time (SSB analyse 2023/9). The handover reader is
   often new.
-- Every room counts: Norwegian hotels' average room rate was NOK 1,444 in 2025, occupancy 62.5 %,
-  RevPAR NOK 903, all records (Hotelloversikten 2025).
+- Every room counts: Norwegian hotels sold 18.5 million room-nights in 2025 at an average NOK 1,471 a
+  room, 57 % of rooms sold; in Oslo NOK 1,631 and 72 % (SSB statbank table 14169). Hotelloversikten's
+  sample gives NOK 1,444 and 62.5 % for the same year.
 - Guests in many languages: 26.7 million hotel guest nights in Norway in 2024, a record; foreign hotel
   nights up 14 % (SSB, 4 Feb 2025).
 - Linen: hotels can lose or discard 15–20 % of linen before the end of its useful life (TRSA research,
@@ -62,35 +66,37 @@ is still waiting; safety events and faults surface late.
 3. Modern PMSs automated the night audit; the human handover is still paper, PMS notes and chat.
 
 **What our agent shows, honestly:** it ran Wybe's live simulation on its own with rule-based flows per
-request type (found by probing an undocumented API), safety rules in code, "done" reported only after
-the server's score rose, and Claude only as a guarded fallback (about USD 0.001 spent all weekend).
-Numbers per build, pinned to commits on `hamad/final`, not a best night: the branch head at 03:30
-(`c3801e0`) averaged 2,591 on its four tuned seeds (best 2,760, seed 10; `8eac151` before it, 2,560).
-The only build that played seeds it was never tuned on (`d4e445c`) scored 1,940 on seeds 9 and 11
-against 2,504 on its tuned seeds, so we forecast **about 2,000 (1,900–2,100)** for the final's unseen nights. Over the 18 live
-nights of the last four builds the referee credited 1,263 of 1,267 "done" reports (99.7 %). Best
-practice score on the board: 2,798, #9 of 20 at 02:47 Sun, from a board test (a seed-specific test
-branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build. On
-the night in the app (seed 16, 2,680, `cb72845`) it reported "done" 73 times and the referee credited
-all 73. Full table and the replay bed's limits: `docs/DEMO.md` § 1.1.
+request type (found by probing an undocumented API), safety rules in code, and Claude only as a guarded
+fallback (about USD 0.001 spent all weekend). For deliveries it reports "done" only after it has seen
+the server's score rise, so those are credited by construction; room checks and spill reports rest on
+its own judgement. Numbers per build, pinned to commits on `hamad/final`, not a best night: the branch
+head at 03:30 (`c3801e0`) averaged 2,591 on its four tuned seeds (best 2,760, seed 10; `8eac151` before
+it, 2,560). Our forecast for the final's unseen seeds, from a build-plus-seed model fitted on every complete live build night (`scripts/forecast.py`, `docs/runs/forecast.txt`), is **a median of 2,035, 80 % between 1,898 and 2,186**: lower than the tuned nights mostly because those seeds are easier (about −19 %), plus a measured tuning penalty of about −6 % (from two nights). Over the 18 live nights of the last four builds the referee credited 1,263 of
+1,267 "done" reports (99.7 %); taking out the ones sent after the score rose, **185 of 189 claims on its
+own judgement were credited (97.9 %), room checks 117 of 117**. Best practice score anywhere: 2,807, **#8 of 20** on Wybe's board at 04:10 Sun, from a board test (a seed-specific test branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build; the final branch's best is 2,760. On the night in the app (seed
+16, 2,680, `cb72845`) it reported "done" 73 times: 64 after the score rose, 9 on its own judgement, 9 of
+9 credited. Full table and the replay bed's limits: `docs/DEMO.md` § 1.1.
 
 ## 4. The demo story
 
 Same as `docs/DEMO.md` § 2 (2:00, one user, one story, one page: Siri takes over from Kjersti and the
 robot, on Overlevering 06:00, scrolled from top to bottom):
 
-1. **The top and *Åpent nå*** (0:00–0:25): the money first (*ca. 1 500 kr · Kan selges etter
-   bekreftelse*), one factual line (*73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en
-   eier*), then safety first: three unsigned wet floors and the stranger, each with an owner and *innen
-   06:30*.
-2. **The room check** (0:25–1:00): 213 is a sleeper (due out today, never checked out, empty and tidy
-   at 04:24); *Bekreft med resepsjonen*, then *Merk som ledig for salg*. 209 is held back: the robot
-   carried an arriving guest's bags in while the booking runs to 9.11, a double allocation caught.
-3. **Robotens vurderinger i natt** (1:00–1:35): seven refusals to let a stranger into a room, one
-   incident; 73 of 73 "done" credited by the simulator's referee, 99.5 % over every live night with a log (board tests only when complete; recomputed from
-   `docs/runs/ledger.csv`, so it moves); 7 of 8
-   declines credited, the eighth named.
-4. **Kvitter mottatt** (1:35–1:50): *Kvittert av Siri Haugen*, saved on this device.
+1. **The top** (0:00–0:23): the story first: 209 held back (the robot carried an arriving guest's
+   bags into a room the test booking system still has booked to 9.11), then the money (*ca. 1 500 kr ·
+   Kan selges etter bekreftelse*, 213).
+2. ***Åpent nå*** (0:25–0:45): safety first, three unsigned wet floors and the stranger, each with an
+   owner and *innen 06:30*; then 209 (*Fettero holdt rommet tilbake*) and 213, each labelled *Testdata:
+   bookingen er lagt inn av teamet*, with where a pilot gets that evidence (the door-lock log and the
+   energy slot; the robot never enters a booked room).
+3. **The sale** (0:45–1:04): 213 is a real sleeper: the guest was due out yesterday (7.11) and the
+   check-out was never recorded, so the system still holds the room tonight; the robot found it empty
+   and tidy at 04:24. *Bekreft med resepsjonen*, then *Merk som ledig for salg*.
+4. **Robotens vurderinger i natt** (1:05–1:30): seven refusals to let a stranger into a room, one
+   incident; *9 av 9 «Ferdig» på robotens egen vurdering* (the other 64 sent after the simulator
+   confirmed the work); its own faults counted from the log (10 of 15 master-key entries without a
+   knock). The referee and the cross-night figures sit behind *Slik vet vi det*.
+5. **Kvitter mottatt** (1:31–1:38), last on the page: *Kvittert av Siri Haugen*, saved on this device.
 
 ## 5. Scope (as built)
 
@@ -98,11 +104,14 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
 
 - **Login with roles** (admin, resepsjonist, robotansvarlig, host), enforced on the server
   (`src/proxy.ts`, `src/features/auth/`), plus a separate `jury` account for the event.
-- **Overlevering 06:00**: the money first (rooms to sell after confirmation, held back, *Frigitt i
-  dag*), one factual line, what happened, *Åpent nå* with an owner and a deadline per item and safety
-  first (unsigned wet floors and the stranger, from the run log), the two-step release inline, the
-  robot's judgement card, the night receptionist's note and *Kvitter mottatt* (*Kvittert av …*, saved
-  on this device) with a branded print footer (`src/features/handover/`).
+- **Overlevering 06:00**, read as *act → evidence → sign*: four figures (held back, the money with
+  *Slik regner vi*, safety by 06:30, the robot's tasks), *Åpent nå* in the wide column with an owner and
+  a deadline per item and safety first (unsigned wet floors and the stranger, from the run log), the
+  room check's 209 held back and 213 with the two-step release inline, the robot's flags (bags for
+  several arrivals in one room), with *Dette skjedde i natt* in a narrow column beside it (below it,
+  folded, on smaller screens), then the robot's judgement card, then *Kvitter mottatt* last (*Kvittert
+  av …*, saved on this device); the proof text behind *Slik vet vi det*; a print view
+  (`src/features/handover/`).
 - **Rom og renhold** with **Robotens romsjekk mot bookingsystemet**: the robot's room checks
   reconciled with the (test) PMS; a room must be empty after 01:00 before it is suggested for sale, a
   later delivery into it holds it back, and selling takes two steps (*Bekreft med resepsjonen*, then
@@ -128,9 +137,15 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
 
 - **Oversikt**: a greeting by the shift clock of the night shown, one factual line instead of a verdict
   (*73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en eier*), *Se overleveringen 06:00*
-  as the one primary action, six figures with a source line (from the robot's log, test data or an
-  estimate; *Rom klare til salg* from the same selector as Rom and Overlevering); one widget per module
-  (`src/features/dashboard/`). *Timer spart* is shown as *ca.* with *Slik regner vi*.
+  as the one primary action, figures with a source line (from the robot's log or test data; *Rom klare
+  til salg* from the same selector as Rom and Overlevering); one widget per module
+  (`src/features/dashboard/`). *Timer spart* and *Gjester fornøyd* are gone from it (round 4: a first
+  screen carries only what the data proves).
+- **The menu is the pilot** for the admin, `siri` and `jury`: Oversikt as the start page, then
+  *Piloten* (Overlevering 06:00, Rom og renhold, Forespørsler, Natteskift); the eight other hotel
+  screens sit under one folded *Utenfor piloten* ("Bygget, men ikke med i piloten."), reachable but out
+  of the way (`src/features/modules/registry.ts`, `PILOT_MODULES`). The desk, the robot manager and the
+  host keep their own menus; access is unchanged.
 - **The bell** (*Varsler*): only what needs a person, safety first: each unsigned wet floor (since when,
   owner, *innen 06:30*) and the stranger at seven doors as *Haster*, computed by Fettero from the run
   log; red and amber appear only here.
@@ -173,9 +188,13 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
   yet. A pilot writes these as append-only events beside the robot's.
 - **Payments.** The receptionist records requests; staff confirm and take payment. No card data, ever.
 - **Real robot hardware, and the sim-to-real gaps** we name rather than hide:
-  - *Done* is gated by Wybe's score rising; a hotel has no score. A pilot needs evidence instead (lock
-    audit log, the guest's acknowledgement, a photo of the item, a cart slot going empty, the clerk's
-    confirmation); anything without evidence shows as not confirmed, for a person.
+  - For deliveries, *done* is gated by Wybe's score rising; a hotel has no score. So the card splits
+    them: on the demo night 64 "done" came after the score rose and 9 on the robot's own judgement (9
+    of 9 credited); over the final branch's 18 nights, 185 of 189 own-judgement claims. A pilot needs a
+    second, independent signal instead (lock audit log, the guest's acknowledgement, a photo of the
+    item, a cart slot going empty, the clerk's confirmation); one signal alone shows as *ikke
+    bekreftet*, for a person. A score-blind run of the agent is being measured (`docs/DEMO.md` § 6.1,
+    the Wybe juror: PENDING).
   - In the simulation the robot fetches a master keycard and checks rooms the PMS shows as occupied. In
     a pilot it does not open occupied rooms: occupancy comes from the door-lock audit trail and the
     keycard energy slot, the robot only knocks or checks rooms the PMS already shows as vacant, and keys
@@ -212,25 +231,33 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
 - **Innovation:** the agent's numbers are real and checkable in its run logs (the distribution in
   `docs/DEMO.md` § 1.1; 73 of 73 "done" confirmed on the night shown; one penalty on that night).
 - **Design:** a juror understands Overlevering without narration (the hallway test in `docs/DEMO.md`
-  § 8.2: three people, time to the first right tap) **[decide: who runs it]**.
+  § 8.2: three people, time to the first right tap), run by ShirazIQ (team to confirm).
 - **Team efficiency:** the cut list (§ 6) is said aloud when asked; the gate (`./scripts/check.sh`) is
   green on `main` at 14:00.
 - **Wybe:** all 10 final shifts started at 12:00, none scored 0 for not starting.
 
 ## 8. Open questions
 
-- **[decide]** The business slide (`docs/DEMO.md` § 7): buyer 60–200-room hotels, NOK 30 per room per
-  month, first channel. Proposals until the team agrees.
+- **Decided Sun 8 Nov (round 4):** one wedge, independent and chain hotels of 60–200 rooms, software
+  first, the robot optional. The reason: the 06:00 handover exists in every hotel tonight, robot or not,
+  so a pilot needs no hardware, and the band is the typical Norwegian hotel (about 86 rooms on average,
+  SSB 14164). Price NOK 30 per room per month; first channel direct, from the phone round. The
+  commitment and the stop rule: both of us full-time for four weeks from Monday 9 Nov; if fewer than 2
+  of 10 hotels take a free pilot by 8 December, we stop the hotel wedge and test selling through robot
+  makers. The ceiling: Norway's 92,678 hotel rooms ≈ NOK 33 M a year at full share; the four big Nordic
+  countries ≈ 359,000 rooms ≈ NOK 129 M (Eurostat); the next price lever is a robot connector per
+  robot per month (`docs/DEMO.md` § 7).
 - Have we any hotel person to quote? None so far. The phone round and hallway test (`docs/DEMO.md`
-  § 8) are planned for Sunday morning: who runs them?
+  § 8) are planned for Sunday morning, run by ShirazIQ while Hamad is at the Wybe final (team to
+  confirm at 09:00).
 - Does `main` trade as Fettero too? (Team lead.) The public URL, lobby-sandy.vercel.app, serves `main`
   under the old name and an older CSP; `hamad/jury-loop` isn't deployed (team lead's rule).
 - The name isn't cleared. A quick web check on Sun 8 Nov found FETTERO registered in the US for
   jewellery (class 14, no conflict with software) and FETUERO registered in the US in class 9
   (software), close enough to need a proper search: Patentstyret, EUIPO TMview and WIPO in classes 9,
-  42 and 43, plus fettero.no and fettero.com. Until then we don't say "clear".
-- **[decide]** One wedge for the business slide (hotels first, software only; or robot makers first),
-  and one line on commitment and a stop rule (`docs/DEMO.md` § 3 and § 7).
+  42 and 43, and whether FERRERO's reputation reaches a sound-alike (`docs/PRIVACY.md` § 9).
+  `fettero.no` is free at Norid; `fettero.com` is taken (registered 2020). Until the search is done we
+  don't say "clear".
 - Does Holio count three pains in one product for or against us? (CONTEXT § 6, still open; ask at the
   Holio stand before 14:00.)
 - Repo public, or jury access by invitation, before 14:00? (CONTEXT § 11.) The jury account's password

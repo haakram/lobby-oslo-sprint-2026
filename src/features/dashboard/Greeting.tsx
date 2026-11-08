@@ -75,7 +75,8 @@ export function Greeting({ data }: { data: DashboardData }) {
       <div className="flex flex-wrap items-center gap-3">
         {cleaning}
         {handover && (
-          <Link href="/overlevering" className={buttonClasses("primary")}>
+          // On a phone the primary action comes first, above the cleaning route.
+          <Link href="/overlevering" className={`${buttonClasses("primary")} max-sm:order-first`}>
             Se overleveringen 06:00
           </Link>
         )}

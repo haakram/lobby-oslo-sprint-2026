@@ -128,9 +128,10 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       }
     >
       <div className="-mt-2 flex flex-col gap-1 lg:-mt-4">
-        <p className="text-sm text-muted">
+        {/* A div, not a p: the label's skeleton is a div while the night loads. */}
+        <div className="text-sm text-muted">
           {label ?? <Skeleton className="inline-block h-4 w-48 align-middle" />} · 22:00 til 06:00 · Vakt: roboten og {handover?.note.author ?? "nattevakten"}
-        </p>
+        </div>
         {/* The night in one factual line: green only for what is done, the rest says plainly what needs a person. */}
         {facts && (
           <p className="text-base sm:text-lg">
@@ -256,7 +257,6 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
                 </>
               )}
             </div>
-            <SourceNote className="mt-3" sources="local" />
           </Card>
         </section>
       </div>
@@ -331,7 +331,8 @@ function OpenRow({ item, marks, today }: { item: OpenItem; marks: Readonly<Recor
       )}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
         <span className="flex min-w-0 items-center gap-2">
-          <Monogram name={item.owner.replace(/^[^:]+: /, "")} size={24} />
+          {/* A role ("Vaktmester / renhold") gets its initials, not "V/". */}
+          <Monogram name={item.owner.replace(/^[^:]+: /, "").replace(/\s*\/\s*/g, " ")} size={24} />
           <span className="min-w-0">{item.owner}</span>
           <span className="text-muted">·</span>
           <span className="whitespace-nowrap text-muted">

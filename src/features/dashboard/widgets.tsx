@@ -168,7 +168,8 @@ function RoomsWidget({ data, className }: WidgetProps) {
             {floorsDown.map((floor) => (
               <div key={floor} className="grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-x-2">
                 <span className="pt-1.5 font-mono text-sm font-medium text-muted tabular-nums">{floor}</span>
-                <ul className="grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] gap-1">
+                {/* 40 px tiles with a mouse, so a 14-room floor fits one row at 1440 (no orphan 314); 44 px for a finger. */}
+                <ul className="grid grid-cols-[repeat(auto-fill,minmax(40px,1fr))] gap-1 pointer-coarse:grid-cols-[repeat(auto-fill,minmax(44px,1fr))]">
                   {rooms
                     .filter((room) => room.floor === floor)
                     .map((room) => {

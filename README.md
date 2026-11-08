@@ -2,15 +2,21 @@
 
 **Natten, ærlig overlevert.** *(The night, handed over honestly.)* Fettero gives the manager who takes
 over a hotel at 06:00 the night on one page: what needs a person now and who owns it, which rooms can be
-sold today and for how much, and what the night robot did and refused to do. Nothing on it says "done"
-unless it was confirmed. For independent and chain hotels of 60–200 rooms, software first: hotel
-number one needs no robot, because Fettero reads the booking system (read-only), one signal per room
-from the door lock (never who) and the night clerk's own entries. The robot in the demo is our AI
-agent, which played Wybe's live hotel simulation on its own. On the night in the app it said "done" 73
-times: 64 after it had seen the simulator's score rise, and 9 on its own judgement (5 room checks, 4
-spills). The simulator credited all 9, but the robot's own log contradicts one (it reported 209 empty at
-03:47 after carrying bags in at 01:29), so the card says **8 of 9 hold against its own log**. On the
-final branch, 64 of its 65 distinct own-judgement claims were credited (95 % interval 92–99.7 %).
+sold today, and what the night robot did and refused to do. Nothing on it says "done" unless it was
+confirmed. ***Fettero finner rommene der bookingsystemet og dørlåsen er uenige — før renholdet gjør
+det.*** (It finds the rooms your booking system and your door locks disagree about, before
+housekeeping does.) For independent and chain hotels of 60–200 rooms, software first: hotel number one
+needs no robot, because Fettero reads the booking system (read-only), one signal per room from the door
+lock (never who, never when) and the night clerk's own entries.
+
+The robot in the demo is our AI agent, which played Wybe's live hotel simulation on its own, and we hold
+it to the same rule. On the night in the app it said "done" 73 times: 64 after it had seen the
+simulator's score rise, and 9 on its own judgement (5 room checks, 4 spills). The simulator credited all
+9, but the robot's own log contradicts one (it reported 209 empty at 03:47 after carrying bags in at
+01:29), so the card says **8 of 9 hold against its own log**. The same rule over every night: on the
+final branch the simulator credited 64 of 65 distinct own-judgement claims, but **54 of 65 hold against
+the robot's own log** (95 % interval 72–90 %), because the simulator's room check doesn't see what the
+robot itself delivered.
 
 **For** 60–200-room hotels, the manager who takes over at 06:00 · **Price** NOK 30 per room per month ·
 **First channel** direct, from the Sunday phone round (`docs/DEMO.md` § 8.1, not run yet) · **Ask** a
@@ -102,8 +108,8 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   unseen seeds. Why lower than the 2,591 on tuned seeds: **mostly seed difficulty**. The four seeds the
   build played are easy ones, which alone is −19 %; the tuning penalty we can measure is about −5 %,
   from two nights (`d4e445c` on seeds 9 and 11), so it is rough, and the band now carries its
-  uncertainty (drawn per simulated final) and the leave-one-cell-out error (the data juror; round 4's
-  narrower method gave 1,903–2,196). **Out of sample:** the forecast committed at 04:08, before the
+  uncertainty (drawn per simulated final) and the leave-one-cell-out error (the data review's
+  correction; the earlier, narrower method gave 1,903–2,196). **Out of sample:** the forecast committed at 04:08, before the
   dress rehearsal, gave a final median of 2,035 (80 % 1,898–2,186) and a mean night of 1,989 on unseen
   seeds; the rehearsal's best 9 of 10 came in at **2,176, inside that committed interval**, and its mean
   night, 2,137, was 7 % above the forecast (2 % above it without the tuning penalty). Practice
@@ -116,7 +122,13 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   judgement it made 189 claims and 185 were credited (97.9 %): room checks 117 of 117, spill reports 68
   of 72**; the 4 misses are one probe on seed 23 repeated in every build. Those 189 are the same
   claims replayed: counted once per (seed, request), **64 of 65 distinct claims were credited (95 %
-  interval 92–99.7 %)**. That is the figure that carries over to a hotel, which has no score.
+  interval 92–99.7 %)**. That is what the simulator credited, and a hotel has no simulator. **Held
+  against the robot's own log, 54 of 65 hold (95 % interval 72–90 %)**: the other ten are rooms it
+  reported empty after it had placed something inside them itself that night (the card's 209 rule,
+  `selfContradictions`, now run over every night by `scripts/ledger.py`), and the simulator credited
+  all ten; its look drops what the robot delivered. On the dress rehearsal's ten never-played seeds:
+  101 of 101 own-judgement "done" credited, **88 of 101 hold against its own log**; 13 of 64 room checks
+  contradicted, on 8 of 10 nights. The printed figures: [`docs/runs/summary.txt`](./docs/runs/summary.txt).
   **With the score hidden:** four live practice nights on a side branch (`hamad/blind`, Sun 04:26,
   seeds 10, 16, 23 and 5) where the agent never used the score or the referee's wording to decide
   "done", only what it saw (the place reply, the guest's answer, the sign over the spill). It made the
@@ -125,11 +137,16 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   credited 290. Its own check never said "not done" on those nights (0 of 265 checks), so this shows
   the score wasn't needed there, **not how well the robot catches a failure**. **That was measured
   separately, offline, with failures injected** (side branch `hamad/faults`, `4571de3`; 20 rebuilt real
-  nights × 5 draws, 13 kinds of fault, 640 nights): the score-blind check's precision and recall on
-  "done" were **98.5 % / 99.8 % with 5 % of actions failing**, 95.5 % / 99.7 % at 15 % and 91.0 % /
-  99.7 % at 30 % (the sighted build: 98.8 / 99.5, 96.4 / 99.0, 92.0 / 98.3). It said "not done" 256,
-  734 and 1,578 times, against once with no faults. What it misses: a guest asleep in a room it checked,
-  a polite reply that doesn't answer, music that starts again, a look-alike lost item. The fault
+  nights × 5 draws, 13 kinds of fault, 640 nights): **the score-blind check caught 251 of 317 injected
+  failures (79 %) with 5 % of actions failing**, 79 % at 15 % and 81 % at 30 %; 88 %, 87 % and 90 %
+  without the sleeping-guest type ([`docs/runs/fault-bed-real.md`](./docs/runs/fault-bed-real.md)). One
+  injected failure in five became a false "done". Precision over every "done" moves with how often
+  things fail, so it comes second: 98.5 % (recall 99.8 %) at 5 %, 95.5 / 99.7 % at 15 %, 91.0 / 99.7 %
+  at 30 % (the sighted build: 98.8 / 99.5, 96.4 / 99.0, 92.0 / 98.3). It said "not done" 256, 734 and
+  1,578 times, against once with no faults. What it misses every time: a guest asleep in a room it
+  checked (the look says so; the flow still reports the check done), a polite reply that doesn't
+  answer, music that starts again; and some look-alike lost items. The fault bed's ground truth is the
+  simulator's, so it can't see the 209 failure. The fault
   wordings are ours, so this measures the kinds of failure, not how often a real robot meets them. Over every
   live night with a log, every version, the app's judgement card recomputes the plain credited share
   from the ledger, so it moves as nights are logged. It declined 112 requests as false or impossible; the referee credited 93 of those declines
@@ -148,7 +165,7 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   report on floor 3); 4 still open at 06:00; one penalty (−15, it slipped on a wet floor at 23:51).
   At 06:00 it is not docked and still holds the master keycard (battery about 20 %): the handover lists
   that as an item with an owner.
-- **What hotel rules cost** (the Wybe juror, the Wybe engineer): a knock before every keycard entry, no sign moved off a
+- **What hotel rules cost** (asked for in the domain reviews): a knock before every keycard entry, no sign moved off a
   wet floor, known wet corridors avoided. The build that plays still does all three for Wybe's game
   (`sign_move` is on, the bags flow enters with the master key, a known wet corridor is priced at its
   sim cost); a pilot runs with them off. **The cost in Wybe's sim, measured in the replay bed** (164
@@ -197,9 +214,14 @@ WIPO, and whether FERRERO's reputation reaches a sound-alike) are still to do (`
 
 ## Docs for the jury
 
+Overnight the build was steered by our own structured reviews, AI-assisted, one per judging field
+(design, security, product, legal, domain, data, marketing, founders). They are internal reviews, not
+the jury, and the docs name the field, never a person. They are not user tests: those are in
+`docs/DEMO.md` § 8, still **PENDING**.
+
 | File | What's in it |
 |---|---|
-| [`docs/DEMO.md`](./docs/DEMO.md) | The pitch, the 2-minute script, the agent's numbers, the business slide, the jurors' questions with honest answers, the Sunday user test |
+| [`docs/DEMO.md`](./docs/DEMO.md) | The pitch, the 2-minute script, the agent's numbers, the business slide, each review's question with an honest answer, the Sunday user test |
 | [`docs/PRD.md`](./docs/PRD.md) | What we built, for whom, and what we cut (draft for team review) |
 | [`docs/HOLIO.md`](./docs/HOLIO.md) | Holio pains 3, 6 and 9: which screen, what works, what doesn't yet |
 | [`docs/PRIVACY.md`](./docs/PRIVACY.md) | Personal data, processors, retention, security controls with file paths |

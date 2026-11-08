@@ -81,7 +81,9 @@ it, 2,560). The build that plays at 12:00 is `8de9ffc` (the head of `hamad/final
 1,267 "done" reports (99.7 %); taking out the ones sent after the score rose, **185 of 189 claims on its
 own judgement were credited (97.9 %), room checks 117 of 117**; those 189 are 65 distinct claims
 (seed, request) replayed across near-identical builds, so the honest count is **64 of 65 (95 %
-interval 92–99.7 %)**. With the score hidden from its decisions (four live nights on a side branch,
+interval 92–99.7 %)** credited by the simulator, and **54 of 65 (72–90 %) holding against the robot's
+own log** (the card's 209 rule run over every night by `scripts/ledger.py`: the simulator's room check
+doesn't see what the robot delivered; on the dress rehearsal's never-played seeds, 88 of 101 hold). With the score hidden from its decisions (four live nights on a side branch,
 Sun 04:26), it made the same 291 decisions and the referee credited 290; its own check never said "not
 done" on those nights (0 of 265), so that shows the score wasn't needed there, not how well the robot
 catches a failure. Best practice score anywhere: 2,807, **#8 of 20** on Wybe's board at 04:10 Sun, from a board test (a seed-specific test branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build; the final branch's best is 2,760. On the night in the app (seed
@@ -231,7 +233,8 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
   - For deliveries, *done* is gated by Wybe's score rising; a hotel has no score. So the card splits
     them: on the demo night 64 "done" came after the score rose and 9 on the robot's own judgement (9
     of 9 credited, 8 of 9 holding against its own log); over the final branch's 18 nights, 64 of 65
-    distinct own-judgement claims (95 % interval 92–99.7 %). A pilot needs a
+    distinct own-judgement claims credited (95 % interval 92–99.7 %), 54 of 65 holding against its own
+    log (72–90 %). A pilot needs a
     second signal instead, and **at least one from outside the robot** (the lock's guest-card entry,
     the guest's acknowledgement or PIN, the clerk's check, the PMS); two signals from the robot alone
     (its own lock credential and its own photo) read *robotens egen observasjon*, one signal *ikke
@@ -241,8 +244,9 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
     decisions as the sighted build, 290 credited; its own check never said "not done" (0 of 265), so
     the run shows the score wasn't needed on those nights, not how well the robot catches a failure.
     That was measured offline with failures injected (`hamad/faults`, 640 nights, 13 kinds of fault):
-    precision 98.5 % and recall 99.8 % with 5 % of actions failing, 91.0 % and 99.7 % at 30 %; the
-    fault wordings are ours, so it measures kinds of failure, not their frequency (`docs/DEMO.md` § 1.1).
+    the check caught 79 % of the injected failures at a 5 % failure rate (81 % at 30 %; 88 % without
+    the sleeping-guest type, which it never catches), with precision 98.5 % at 5 %; the fault wordings
+    are ours, so it measures kinds of failure, not their frequency (`docs/DEMO.md` § 1.1).
   - **The simulator's room check is a text oracle, and 209 shows its limit:** at 01:29 the robot placed
     luggage-209 inside room 209; at 03:47 its look said "Nobody is here. The room is tidy." and the
     referee credited the report. A real occupancy check has false negatives (a guest under the duvet,

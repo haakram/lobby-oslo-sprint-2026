@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { useSession } from "@/features/auth/SessionProvider";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
@@ -32,10 +32,12 @@ function readDesktop() {
 /**
  * The navigation, grouped by job (Hotellet · Drift · Roboten · Resepsjon, from the module registry)
  * and filtered by what the effective role may open. Desktop: a rail on the Natt surface with the user plate bottom-left.
- * Phone: a bottom bar with the first screens and Meny, which opens the whole list as a sheet.
+ * Phone: a slim top bar (the name and the bell) and a bottom bar with the first screens and Meny,
+ * which opens the whole list as a sheet. `bell` (the notifications, from the layout) sits at the top
+ * of the rail on desktop and in the top bar on a phone: on every page, for every role.
  * Hidden on the login page.
  */
-export function AppNav() {
+export function AppNav({ bell }: { bell?: ReactNode }) {
   const pathname = usePathname();
   const { effectiveRole } = useSession();
   const desktop = useSyncExternalStore(subscribe, readDesktop, () => true);
@@ -43,20 +45,27 @@ export function AppNav() {
   // Nobody logged in (the login page, the no-access page): no navigation.
   if (!effectiveRole || pathname.startsWith("/login")) return null;
   const groups = groupsFor(effectiveRole);
-  return desktop ? <Rail groups={groups} pathname={pathname} /> : <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} />;
+  return desktop ? (
+    <Rail groups={groups} pathname={pathname} bell={bell} />
+  ) : (
+    <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} bell={bell} />
+  );
 }
 
-function Rail({ groups, pathname }: { groups: NavGroup[]; pathname: string }) {
+function Rail({ groups, pathname, bell }: { groups: NavGroup[]; pathname: string; bell?: ReactNode }) {
   return (
     <nav
       aria-label="Hovedmeny"
       data-surface="dark"
       className="sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-surface text-text lg:flex"
     >
-      <Link href="/" className="flex flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
-        <span className="text-xl font-bold leading-none tracking-[-0.02em]">Lobby</span>
-        <span className="mt-1.5 text-xs text-muted">{HOTEL_NAME}</span>
-      </Link>
+      <div className="flex items-start justify-between gap-1 pr-3">
+        <Link href="/" className="flex min-w-0 flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
+          <span className="text-xl font-bold leading-none tracking-[-0.02em]">Lobby</span>
+          <span className="mt-1.5 text-xs text-muted">{HOTEL_NAME}</span>
+        </Link>
+        {bell && <div className="pt-5">{bell}</div>}
+      </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-4">
         {groups.map((group) => (
@@ -99,13 +108,23 @@ function RailLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-function Bar({ groups, shown, pathname }: { groups: NavGroup[]; shown: NavItem[]; pathname: string }) {
+function Bar({ groups, shown, pathname, bell }: { groups: NavGroup[]; shown: NavItem[]; pathname: string; bell?: ReactNode }) {
   const [menu, setMenu] = useState(false);
   const rest = groups.flatMap((group) => group.items).filter((item) => !shown.includes(item));
   const restActive = rest.some((item) => isActive(item.href, pathname));
 
   return (
     <>
+      {/* The phone's top edge: the name, and the bell where people look for it. */}
+      <header data-surface="dark" className="bg-bg pt-[env(safe-area-inset-top)] text-text lg:hidden">
+        <div className="flex min-h-14 items-center justify-between gap-3 pr-2 pl-4">
+          <Link href="/" className="flex min-h-11 min-w-0 items-baseline gap-2 focus-visible:outline-offset-[-2px]">
+            <span className="text-lg font-bold tracking-[-0.02em]">Lobby</span>
+            <span className="truncate text-xs text-muted">{HOTEL_NAME}</span>
+          </Link>
+          {bell}
+        </div>
+      </header>
       <nav
         aria-label="Hovedmeny"
         data-surface="dark"

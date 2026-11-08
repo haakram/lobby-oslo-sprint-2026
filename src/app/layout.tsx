@@ -3,6 +3,7 @@ import { Martian_Mono, Schibsted_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 import { SessionProvider, ViewAsBanner } from "@/features/auth";
 import { getSession } from "@/features/auth/server";
+import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { PicklistProvider } from "@/features/picklist/PicklistProvider";
 import { AppNav, cx } from "@/ui";
 import "./globals.css";
@@ -49,7 +50,8 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <SessionProvider session={session}>
           <PicklistProvider>
             <div className="min-h-dvh lg:flex">
-              {session && <AppNav />}
+              {/* Not secret: the local viewer server's URL; the bell reads the same night as the pages. */}
+              {session && <AppNav bell={<NotificationBell viewerUrl={process.env.NEXT_PUBLIC_VIEWER_URL} />} />}
               {/* Room under the phone's bottom bar only when there is one (not on login or no-access). */}
               <div
                 id="innhold"

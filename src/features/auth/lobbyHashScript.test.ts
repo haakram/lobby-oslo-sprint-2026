@@ -17,7 +17,7 @@ describe("scripts/lobby-hash.mjs", () => {
     expect(await verifyPassword("wrong", hash)).toBe(false);
   });
 
-  it("--users prints a LOBBY_USERS line with the four accounts, each salted on its own", async () => {
+  it("--users prints a LOBBY_USERS line with the five accounts, each salted on its own", async () => {
     const line = run("--users", "test-password");
     expect(line).toMatch(/^LOBBY_USERS=[A-Za-z0-9_-]+$/);
     const config = authConfig({ LOBBY_AUTH_SECRET: "x".repeat(43), LOBBY_USERS: line.slice("LOBBY_USERS=".length) });
@@ -28,9 +28,10 @@ describe("scripts/lobby-hash.mjs", () => {
       { u: "shiraz", name: "Shiraz", role: "admin" },
       { u: "resepsjon", name: "Resepsjonist", role: "receptionist" },
       { u: "robot", name: "Robotansvarlig", role: "robot" },
+      { u: "vert", name: "Ingrid Berge", role: "host" },
     ]);
     const hashes = [...config.users.values()].map((user) => user.hash);
-    expect(new Set(hashes).size).toBe(4);
+    expect(new Set(hashes).size).toBe(5);
     expect(await verifyPassword("test-password", hashes[2]!)).toBe(true);
   }, 20_000);
 

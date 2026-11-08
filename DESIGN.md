@@ -52,7 +52,9 @@ code has. Everything below is read from `globals.css`, `layout.tsx` and `src/ui/
   subtree switches surface with the attribute; every token flips with it.
 - **Roles** (`src/features/auth/roles.ts`, built from the module registry): admin sees everything
   and can view as another role; resepsjonist and robotansvarlig see only their modules, on Oversikt
-  and in the navigation. The server enforces it (`src/proxy.ts`); the navigation only hides.
+  and in the navigation. The server enforces it (`src/proxy.ts`); the navigation only hides. The
+  vert (an Airbnb host with 2–5 short-let apartments) has its own app under `/vert`, lands there, sees
+  none of the hotel, and is not in the admin's view switcher.
 
 ## Modules
 
@@ -76,6 +78,10 @@ One registry, `src/features/modules/registry.ts`, lists the hotel's modules. The
 | Robotens øyne | `/oyne` | Roboten | robotansvarlig | — | Live camera with boxes, products recognised without a barcode |
 | Snakk gjennom roboten | `/stemme` | Roboten | robotansvarlig | — | Voice: the robot translates between staff and guest |
 | Resepsjon | `/resepsjon` | Resepsjon | resepsjonist | reception | The AI receptionist's calls, bookings and messages |
+| Mine boliger | `/vert` | Utleie | vert (only) | test | The Airbnb host's start page: the month's good numbers, each apartment's status, today's turnovers step by step, newest messages, what the automation did |
+| Gjestemeldinger | `/vert/meldinger` | Utleie | vert (only) | test | Guest messages in Norwegian (original a tap away), the auto-replies sent, the one that needs the host on top |
+| Bookinger og inntekt | `/vert/bookinger` | Utleie | vert (only) | test | The next 14 nights per apartment, arrivals with payout, the month per apartment |
+| Forsyninger og vedlikehold | `/vert/drift` | Utleie | vert (only) | test | Towels, paper, coffee per apartment against par; maintenance; *Bestill påfyll* |
 
 Test data is marked twice: `TODO(phase-3)` in the data file, and a `SourceNote` line under every list
 that shows it ("Testdata til integrasjonen er på plass."), so nobody on the projector takes it for the
@@ -91,6 +97,9 @@ sees only the modules it may open, and a group with nothing left in it is droppe
 - **Drift:** Forespørsler · Vedlikehold · Lager og lin · Ansatte og vakter
 - **Roboten:** 3D-kart · Natteskift · Robotens øyne · Snakk gjennom roboten
 - **Resepsjon:** Resepsjon
+- **Utleie** (the host only): Mine boliger · Gjestemeldinger · Bookinger og inntekt · Forsyninger og vedlikehold.
+  Every host screen opens with a 64 px dark bar (the host, the date, the clock, the *Varsler* bell). What
+  needs the host sits in the bell; amber and red appear only there, on the items that need action.
 
 The bell (`NotificationBell`) is part of the navigation, so it is on every page for every role: at
 the top of the rail beside the name on desktop, and on a phone in a slim dark top bar (*Lobby*, the

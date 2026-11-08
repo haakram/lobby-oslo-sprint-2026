@@ -8,8 +8,8 @@ import { MODULE_GROUPS, MODULES, moduleById, moduleRoutesFor } from "./registry"
 // The registry is the one list of the hotel's modules: the navigation, the route table and the
 // widgets on Oversikt all read it. These tests keep the three in step with it.
 describe("the module registry", () => {
-  it("lists every module once, with its own route, in the four groups", () => {
-    expect(MODULE_GROUPS.map((group) => group.label)).toEqual(["Hotellet", "Drift", "Roboten", "Resepsjon"]);
+  it("lists every module once, with its own route, in the five groups", () => {
+    expect(MODULE_GROUPS.map((group) => group.label)).toEqual(["Hotellet", "Drift", "Roboten", "Resepsjon", "Utleie"]);
     expect(new Set(MODULES.map((module) => module.id)).size).toBe(MODULES.length);
     expect(new Set(MODULES.map((module) => module.route)).size).toBe(MODULES.length);
     for (const group of MODULE_GROUPS) expect(MODULES.some((module) => module.group === group.id), group.id).toBe(true);
@@ -27,6 +27,10 @@ describe("the module registry", () => {
       "oyne",
       "stemme",
       "resepsjon",
+      "vert",
+      "vert-meldinger",
+      "vert-bookinger",
+      "vert-drift",
     ]);
   });
 
@@ -47,9 +51,13 @@ describe("the module registry", () => {
       expect(canAccess("admin", entry.route), entry.route).toBe(true);
       expect(canAccess("receptionist", entry.route), entry.route).toBe(entry.roles.includes("receptionist"));
       expect(canAccess("robot", entry.route), entry.route).toBe(entry.roles.includes("robot"));
+      expect(canAccess("host", entry.route), entry.route).toBe(entry.roles.includes("host"));
     }
     expect(moduleRoutesFor("receptionist")).toEqual(["/", "/rom", "/gjester", "/ruter", "/foresporsler", "/ansatte", "/resepsjon"]);
     expect(moduleRoutesFor("robot")).toEqual(["/", "/rom", "/ruter", "/foresporsler", "/vedlikehold", "/lager", "/hotell", "/natteskift", "/oyne", "/stemme"]);
+    // The host (an Airbnb host) has only the Utleie group, and no hotel role has any of it.
+    expect(moduleRoutesFor("host")).toEqual(["/vert", "/vert/meldinger", "/vert/bookinger", "/vert/drift"]);
+    for (const entry of MODULES.filter((module) => module.group === "utleie")) expect(entry.roles).toEqual(["host"]);
   });
 
   it("finds a module by id and refuses an unknown one", () => {
@@ -60,6 +68,6 @@ describe("the module registry", () => {
   it("says where every module's figures come from, so test data is never shown as real", () => {
     const sources = new Set(["run-log", "reception", "test", "mixed", "none"]);
     for (const entry of MODULES) expect(sources.has(entry.data), entry.id).toBe(true);
-    expect(MODULES.filter((module) => module.data === "test").map((module) => module.id)).toEqual(["lager", "ansatte"]);
+    expect(MODULES.filter((module) => module.data === "test").map((module) => module.id)).toEqual(["lager", "ansatte", "vert", "vert-meldinger", "vert-bookinger", "vert-drift"]);
   });
 });

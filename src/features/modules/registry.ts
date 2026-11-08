@@ -12,13 +12,15 @@ import type { RegenName } from "@/ui/icons/regenPaths";
  * Plain data and pure functions only: the proxy imports this file on the server.
  */
 
-export type ModuleGroupId = "hotellet" | "drift" | "roboten" | "resepsjon";
+export type ModuleGroupId = "hotellet" | "drift" | "roboten" | "resepsjon" | "utleie";
 
 export const MODULE_GROUPS: readonly { id: ModuleGroupId; label: string }[] = [
   { id: "hotellet", label: "Hotellet" },
   { id: "drift", label: "Drift" },
   { id: "roboten", label: "Roboten" },
   { id: "resepsjon", label: "Resepsjon" },
+  // The Airbnb host's own app (role "host"): their apartments, not the hotel.
+  { id: "utleie", label: "Utleie" },
 ];
 
 export type ModuleId =
@@ -34,7 +36,11 @@ export type ModuleId =
   | "natteskift"
   | "oyne"
   | "stemme"
-  | "resepsjon";
+  | "resepsjon"
+  | "vert"
+  | "vert-meldinger"
+  | "vert-bookinger"
+  | "vert-drift";
 
 export type HotelModule = {
   id: ModuleId;
@@ -80,6 +86,11 @@ export const MODULES: readonly HotelModule[] = [
   { id: "stemme", name: "Snakk gjennom roboten", short: "Stemme", hint: "Snakk med roboten på ditt eget språk", icon: "mic", route: "/stemme", group: "roboten", roles: ["robot"], data: "none" },
   // Resepsjon
   { id: "resepsjon", name: "Resepsjon", hint: "Telefonen, bookinger og beskjeder", icon: "phone", route: "/resepsjon", group: "resepsjon", roles: ["receptionist"], widget: true, data: "reception" },
+  // Utleie (the host only; screens in src/features/host)
+  { id: "vert", name: "Mine boliger", short: "Boliger", hint: "Dagens bytter og status i hver bolig", icon: "home", route: "/vert", group: "utleie", roles: ["host"], pinned: true, data: "test" },
+  { id: "vert-meldinger", name: "Gjestemeldinger", short: "Meldinger", hint: "Meldinger fra gjestene og svarene som er sendt", icon: "message", route: "/vert/meldinger", group: "utleie", roles: ["host"], pinned: true, data: "test" },
+  { id: "vert-bookinger", name: "Bookinger og inntekt", short: "Bookinger", hint: "Kalenderen for de neste 14 dagene og månedens tall", icon: "calendar", route: "/vert/bookinger", group: "utleie", roles: ["host"], pinned: true, data: "test" },
+  { id: "vert-drift", name: "Forsyninger og vedlikehold", short: "Drift", hint: "Håndklær, papir og kaffe per bolig, og det som skal fikses", icon: "archive", route: "/vert/drift", group: "utleie", roles: ["host"], pinned: true, data: "test" },
 ];
 
 export function moduleById(id: ModuleId): HotelModule {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState, useSyncExternalStore } from "react";
+import { homeFor, type Role } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
@@ -11,6 +12,11 @@ import { Sheet } from "./Sheet";
 import { UserPlate } from "./UserPlate";
 
 export const HOTEL_NAME = "Hotell Nattskift";
+
+/** The line under "Lobby": the hotel, or for the host (an Airbnb host) their own apartments. */
+function placeFor(role: Role): string {
+  return role === "host" ? "Korttidsutleie i Oslo" : HOTEL_NAME;
+}
 
 /** How many of the role's screens fit on the phone bar before the rest go into Meny. */
 const BAR_ITEMS = 4;
@@ -45,14 +51,16 @@ export function AppNav({ bell }: { bell?: ReactNode }) {
   // Nobody logged in (the login page, the no-access page): no navigation.
   if (!effectiveRole || pathname.startsWith("/login")) return null;
   const groups = groupsFor(effectiveRole);
+  // The host's pages carry their own bell (the apartments' items), so the hotel's bell is not shown to a host.
+  const hotelBell = effectiveRole === "host" ? undefined : bell;
   return desktop ? (
-    <Rail groups={groups} pathname={pathname} bell={bell} />
+    <Rail groups={groups} pathname={pathname} bell={hotelBell} home={homeFor(effectiveRole)} place={placeFor(effectiveRole)} />
   ) : (
-    <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} bell={bell} />
+    <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} bell={hotelBell} place={placeFor(effectiveRole)} />
   );
 }
 
-function Rail({ groups, pathname, bell }: { groups: NavGroup[]; pathname: string; bell?: ReactNode }) {
+function Rail({ groups, pathname, bell, home, place }: { groups: NavGroup[]; pathname: string; bell?: ReactNode; home: string; place: string }) {
   return (
     <nav
       aria-label="Hovedmeny"
@@ -60,9 +68,9 @@ function Rail({ groups, pathname, bell }: { groups: NavGroup[]; pathname: string
       className="sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-surface text-text lg:flex"
     >
       <div className="flex items-start justify-between gap-1 pr-3">
-        <Link href="/" className="flex min-w-0 flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
+        <Link href={home} className="flex min-w-0 flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
           <span className="text-xl font-bold leading-none tracking-[-0.02em]">Lobby</span>
-          <span className="mt-1.5 text-xs text-muted">{HOTEL_NAME}</span>
+          <span className="mt-1.5 text-xs text-muted">{place}</span>
         </Link>
         {bell && <div className="pt-5">{bell}</div>}
       </div>
@@ -108,7 +116,7 @@ function RailLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-function Bar({ groups, shown, pathname, bell }: { groups: NavGroup[]; shown: NavItem[]; pathname: string; bell?: ReactNode }) {
+function Bar({ groups, shown, pathname, bell, place }: { groups: NavGroup[]; shown: NavItem[]; pathname: string; bell?: ReactNode; place: string }) {
   const [menu, setMenu] = useState(false);
   const rest = groups.flatMap((group) => group.items).filter((item) => !shown.includes(item));
   const restActive = rest.some((item) => isActive(item.href, pathname));
@@ -120,7 +128,7 @@ function Bar({ groups, shown, pathname, bell }: { groups: NavGroup[]; shown: Nav
         <div className="flex min-h-14 items-center justify-between gap-3 pr-2 pl-4">
           <Link href="/" className="flex min-h-11 min-w-0 items-baseline gap-2 focus-visible:outline-offset-[-2px]">
             <span className="text-lg font-bold tracking-[-0.02em]">Lobby</span>
-            <span className="truncate text-xs text-muted">{HOTEL_NAME}</span>
+            <span className="truncate text-xs text-muted">{place}</span>
           </Link>
           {bell}
         </div>

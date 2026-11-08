@@ -40,6 +40,12 @@ export function barItemsFor(role: Role, count: number): NavItem[] {
   return [...pinned, ...rest].slice(0, count);
 }
 
-export function isActive(href: string, pathname: string): boolean {
+function under(href: string, pathname: string): boolean {
   return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/** Is this screen the current one? A deeper screen owns its own path: /vert/meldinger is not also /vert. */
+export function isActive(href: string, pathname: string): boolean {
+  if (!under(href, pathname)) return false;
+  return !MODULES.some((module) => module.route.length > href.length && module.route.startsWith(`${href}/`) && under(module.route, pathname));
 }

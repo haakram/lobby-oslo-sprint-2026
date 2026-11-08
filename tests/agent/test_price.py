@@ -23,7 +23,7 @@ def hotel():
 
 @pytest.fixture
 def switch(monkeypatch):
-    """Turn one switch on for a test; the module default (all off) comes back afterwards."""
+    """Turn one switch on for a test; the module default comes back afterwards."""
     def turn(name: str) -> None:
         monkeypatch.setitem(price.SWITCHES, name, True)
     return turn
@@ -31,8 +31,8 @@ def switch(monkeypatch):
 
 # --- lambda ------------------------------------------------------------------------------------------------
 
-def test_switches_are_off_by_default_and_the_profile_is_measured():
-    assert price.SWITCHES == {"overload": False, "hunt": False, "wet": False, "charge": False}
+def test_only_wet_is_on_by_default_and_the_profile_is_measured():
+    assert price.SWITCHES == {"overload": False, "hunt": False, "wet": True, "charge": False}
     prof = price.profile()
     assert len(prof["arrivals_per_hour"]) == 8 and prof["arrivals_per_hour"][5] > 1.8 * prof["arrivals_per_hour"][0]
     assert 60 <= sum(prof["arrivals_per_hour"]) <= 85  # 55-85 requests a night live
@@ -170,7 +170,8 @@ def test_wet_look_rule_follows_the_patch_hazard_and_the_price():
     assert price.patch_rate(late, 11) > price.patch_rate(early, 11)  # spills are back-loaded
 
 
-def test_wet_switch_replaces_the_fixed_windows(tmp_path, switch):
+def test_wet_switch_replaces_the_fixed_windows(tmp_path, switch, monkeypatch):
+    monkeypatch.setitem(price.SWITCHES, "wet", False)  # start from the fixed windows, then turn the price on
     _fake, _session, ex = _at_clock(tmp_path, [], battery=90, clock="22:40:00")
     ex.go("lobby")
     now = S(ex.state.clock)
@@ -231,6 +232,8 @@ def test_charge_switch_interrupts_a_forced_block_when_the_queue_makes_time_dear(
 # --- all switches off: the final build, byte for byte ---------------------------------------------------------
 
 def test_all_switches_off_never_consult_the_price(tmp_path, monkeypatch):
+    for name in price.SWITCHES:
+        monkeypatch.setitem(price.SWITCHES, name, False)
     called = []
     for name in ("lam", "look_worth", "charge_target", "energy_worth", "hunt_worth"):
         real = getattr(price, name)

@@ -10,6 +10,7 @@ import json
 import httpx
 import pytest
 
+from agent import price
 from agent.agent import run_shift
 from agent.client import ShiftEnded, ShiftSession, WybeClient
 from agent.executor import ActionFailed, Executor
@@ -120,7 +121,8 @@ def test_first_flow_that_needs_stock_runs_the_survey(tmp_path):
 # --- requirement 3: look on the first visit to a place ------------------------------------------
 
 
-def test_looks_once_per_non_room_place_per_shift(tmp_path):
+def test_looks_once_per_non_room_place_per_shift(tmp_path, monkeypatch):
+    monkeypatch.setitem(price.SWITCHES, "wet", False)  # pins the old fixed-window wet look; wet on is covered in test_price.py
     fake, _, ex = setup(tmp_path, rids={"R-001"})
     ex.go("storage")
     ex.go("charging-dock")

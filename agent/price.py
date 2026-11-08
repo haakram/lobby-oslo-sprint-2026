@@ -27,7 +27,7 @@ from pathlib import Path
 from agent.world import clock_to_seconds
 
 PROFILE_FILE = Path(__file__).parent / "data" / "lambda_profile.json"
-SWITCHES: dict[str, bool] = {"overload": False, "hunt": False, "wet": False, "charge": False}
+SWITCHES: dict[str, bool] = {"overload": False, "hunt": False, "wet": True, "charge": False}  # wet on: replay +18.4 plain / +12.8 seed-weighted per night on 63 real nights (13 seeds better, 6 worse, 0 strands); the others lost or were too small
 SHIFT_START_S = clock_to_seconds("22:00:00")
 SHIFT_END_S = clock_to_seconds("06:00:00")
 EPS = 0.25  # points per robot-minute: a price above this is overload (the queue cannot all be served)

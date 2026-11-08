@@ -6,6 +6,7 @@ from dataclasses import replace
 import httpx
 import pytest
 
+from agent import price
 from agent.client import WybeClient
 from agent.config import Settings
 from agent.executor import Executor
@@ -1377,7 +1378,8 @@ def test_the_nav_env_override_wins_in_both_modes(tmp_path, monkeypatch):
     assert _pace(ex, session, clock="01:00:00", calls=3000) is None
 
 
-def test_the_wet_look_window_is_45_min_when_busy_and_10_min_when_not(tmp_path):
+def test_the_wet_look_window_is_45_min_when_busy_and_10_min_when_not(tmp_path, monkeypatch):
+    monkeypatch.setitem(price.SWITCHES, "wet", False)  # pins the old fixed-window wet look; wet on is covered in test_price.py
     from agent.executor import WET_LOOK_BUSY_S, WET_LOOK_S
     from agent.world import clock_to_seconds
 

@@ -11,6 +11,7 @@
 
 import httpx
 
+from agent import price
 from agent.client import Reply, WybeClient
 from agent.config import Settings
 from agent.executor import SCORE_TRUST_CALLS, WET_LOOK_S, Executor
@@ -183,7 +184,8 @@ def _jump(fake, ex, seconds):
     ex.cmd("status")  # the robot learns the clock
 
 
-def test_a_recent_look_from_another_neighbour_spares_the_wet_look(tmp_path):
+def test_a_recent_look_from_another_neighbour_spares_the_wet_look(tmp_path, monkeypatch):
+    monkeypatch.setitem(price.SWITCHES, "wet", False)  # pins the old fixed-window wet look; wet on is covered in test_price.py
     fake, _, ex = _setup(tmp_path)
     ex.go("corridor-1b")  # first visits: lobby, corridor-1a, corridor-1b are looked at
     _jump(fake, ex, WET_LOOK_S + 60)

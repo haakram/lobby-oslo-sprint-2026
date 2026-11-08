@@ -27,7 +27,25 @@
         "shift": { "type": "string", "pattern": "^w2-[0-9a-f]{8,64}$", "description": "The night's id (a hex id; a non-Wybe adapter derives one)." },
         "mode": { "type": "string", "description": "practice | final | live | sample, or the producer's own word." },
         "seed": { "type": ["integer", "null"] },
-        "source": { "type": "string", "description": "Who wrote the log: \"wybe-nightshift\", \"open-rmf\", …" }
+        "source": { "type": "string", "description": "Who wrote the log: \"wybe-nightshift\", \"open-rmf\", …" },
+        "build": {
+          "type": "object",
+          "description": "The code that played: the agent checkout's git commit and whether tracked files differed from it (null where git cannot say). The ledger dates a night by this commit; dirty: true makes a build night a board test.",
+          "properties": {
+            "commit": { "type": ["string", "null"] },
+            "dirty": { "type": ["boolean", "null"] }
+          }
+        },
+        "flags": {
+          "type": "object",
+          "description": "The switches in force at the start. score_blind: true means the agent never read the score (the ledger counts the night as an experiment, every \"done\" its own judgement).",
+          "properties": {
+            "score_blind": { "type": "boolean" },
+            "experiments": { "type": "array", "items": { "type": "string" } },
+            "price_switches": { "type": "array", "items": { "type": "string" } },
+            "env": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Every NS_* environment variable, no secrets." }
+          }
+        }
       }
     },
     "state": {

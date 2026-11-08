@@ -128,6 +128,27 @@ from the loop's last `status` before the task to the flow's verifying `status` a
 `place`/`say`. It **excludes the report's own +5**, which shows on the next `state` line. Sum
 `state.score`/the `end` line for totals, not `points`.
 
+**Optional run-log fields (jury branch, additive; contract change).** Older logs stay valid and readers
+ignore fields they do not know. Schema for every line type: `docs/runlog.schema.json` (JSON Schema 2020-12).
+
+- `start.build`: `{"commit": "e1e95bdff0c3", "dirty": false}`, the agent checkout's commit at launch and
+  whether tracked files differed from it (`null` where git cannot say). `scripts/ledger.py` takes the
+  commit from here before replay codes or `git log --before` (`commit_source=start_line`); `dirty: true`
+  makes a build night a board test.
+- `start.flags`: `{"score_blind": true, "experiments": ["spill_done", "sign_move"], "price_switches":
+  ["wet"], "env": {"NS_SCORE_BLIND": "1"}}`, what was switched on at the start: `score_blind` (the agent
+  never read the score), the score experiments, the price switches that were on, and every `NS_*`
+  variable (no secrets). A score-blind night is `kind=experiment` in the ledger: kept out of the build
+  and final figures, and every "done" in it counts as the robot's own judgement. The judgement card reads
+  the same flag.
+- `start.source`: who wrote the log. It is absent for the Night Shift agent and `"open-rmf"` for the adapter.
+- `task_done.evidence`: `[{"signal": "lock" | "photo" | "guest_ack" | "compartment" | "sign_placed" |
+  "referee" | "door_answered" | "item_placed", "at", "detail"}]`. Two different signals confirm a
+  "done". One signal alone reads "ikke bekreftet".
+- A non-Wybe source: `src/features/nightshift/openRmf.ts` turns an Open-RMF `task_state` + `fleet_state`
+  sample (`src/features/nightshift/fixtures/open-rmf-night.json`, test data the team wrote) into v1 lines.
+  Natteskift's *Kilde* switch shows it.
+
 **Read by the app (Lobby), additive, jury branch.** Rom og renhold compares the last `room_status` per
 room with the booking system's test snapshot (`src/features/rooms/pms.ts`, `TODO(phase-3)`):
 `klar` from `room_check` at or after 01:00 on a booked room is *Kan selges i dag*; `opptatt` or

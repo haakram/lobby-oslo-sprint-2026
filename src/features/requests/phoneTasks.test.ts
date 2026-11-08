@@ -67,7 +67,7 @@ describe("a phone call becomes a task", () => {
     expect(tasks.map((task) => [task.room, task.kind, task.at])).toEqual([
       ["room-214", "Utstyr", "01:47"],
       ["room-134", "Teknisk", "02:14"],
-      ["room-330", "Beskjed", "04:32"],
+      ["room-310", "Beskjed", "04:32"],
     ]);
   });
 });

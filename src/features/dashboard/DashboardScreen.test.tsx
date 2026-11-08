@@ -124,12 +124,12 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(screen.queryByText(/dommer/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^Lag / })).not.toBeInTheDocument();
     expect(screen.queryByText(/feilet/)).not.toBeInTheDocument();
-    // No vanity figure on screen one (jury round 3, the product juror): no hours saved, no test-data guest rating.
+    // No vanity figure on screen one (round 3, product review): no hours saved, no test-data guest rating.
     expect(figures().queryByText(/Timer spart|Gjester fornøyd/)).not.toBeInTheDocument();
     // Under the row: which figures are the robot's log and which are test data.
     expect(figures().getByText(/^Fra robotens natt \(kjøringsloggen\): Robotens oppdrag i natt, Rom klare til salg nå, Rom sjekket av roboten\. Testdata/)).not.toHaveTextContent(/Anslag/);
 
-    // The pilot's widgets only, in registry order (the rail's cut, the product juror): Rom og renhold and Forespørsler.
+    // The pilot's widgets only, in registry order (the rail's cut, product review): Rom og renhold and Forespørsler.
     const pilot = WIDGET_MODULES.filter((module) => PILOT_MODULES.includes(module.id));
     const widgets = pilot.map((module) => screen.getByRole("region", { name: widgetName(module.id) }));
     expect(pilot.map((module) => module.id)).toEqual(["rom", "foresporsler"]);

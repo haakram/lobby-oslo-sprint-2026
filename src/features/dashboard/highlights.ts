@@ -49,7 +49,7 @@ export type TimeSaved = {
 };
 
 /**
- * Staff time the robot's night stood for, an estimate (jury round 1: say how it is counted): each
+ * Staff time the robot's night stood for, an estimate (review round 1: say how it is counted): each
  * task done and credited by the server at MINUTES_PER_TASK, less MINUTES_PER_HANDBACK for each
  * request it handed to a person.
  */
@@ -154,21 +154,21 @@ export function nightVerdict(data: Pick<DashboardData, "nightStatus" | "robot">,
   if (data.nightStatus === "error") return { text: "Natten er ikke lastet ennå.", good: false };
   if (!totals || data.nightStatus === "empty") return { text: "Ingen natt å vise ennå.", good: false };
   if (data.robot && !data.robot.ended) return { text: "Natten er i gang.", good: true };
-  // No "Natten gikk fint." (jury round 2): a verdict can't weigh a wet floor; the facts line (nightFacts) says what happened.
+  // No "Natten gikk fint." (review round 2): a verdict can't weigh a wet floor; the facts line (nightFacts) says what happened.
   return { text: "Natten er over.", good: false };
 }
 
 export type NightFacts = {
   /** What is done, said in green: "73 oppgaver bekreftet" ("73 oppgaver ferdig" when the basis is known). */
   done: string;
-  /** What the done rested on, said plainly after it (round 5, the Wybe juror): "64 bekreftet av simulatoren, 9 på robotens egen vurdering: 8 holder mot egen logg". */
+  /** What the done rested on, said plainly after it (round 5, robot-domain review): "64 bekreftet av simulatoren, 9 på robotens egen vurdering: 8 holder mot egen logg". */
   basis?: string;
   /** What can hurt a guest and needs a person, said plainly: "3 våte gulv og 1 ukjent person trenger en eier". */
   attention: string | null;
 };
 
 /**
- * The night in one factual line instead of a verdict (jury round 2: "Natten gikk fint." in green beside
+ * The night in one factual line instead of a verdict (review round 2: "Natten gikk fint." in green beside
  * three unsigned wet floors and a stranger at seven doors). Green only for what is truly done: the
  * robot's "done" the referee confirmed. What needs a person is named, calmly, with its count.
  */
@@ -254,8 +254,8 @@ export const MAX_HIGHLIGHTS = 6;
 
 /**
  * The hotel's good news in figures, in the order a manager reads them: last night's rooms and money,
- * the robot's night, the rooms to sell, the guests. No estimate and no test-data rating among them (jury
- * round 3, the product juror: "Timer spart" and "Gjester fornøyd" were vanity figures on screen one; DEMO § 1: hours
+ * the robot's night, the rooms to sell, the guests. No estimate and no test-data rating among them (round
+ * 3, product review: "Timer spart" and "Gjester fornøyd" were vanity figures on screen one; DEMO § 1: hours
  * saved are never claimed as a measurement). Filtered by what the role may open, six at most,
  * so the receptionist and the robot manager each get a full row of their own. The robot's figures
  * are the one tally of its night (nightTotals); occupancy and money are the booking system's
@@ -335,7 +335,7 @@ export function selectHighlights(data: DashboardData): Highlight[] {
     },
   ];
 
-  // The pilot accounts (admin) see the pilot's figures only, the same cut as the rail (round 5, the product juror, the creative juror):
+  // The pilot accounts (admin) see the pilot's figures only, the same cut as the rail (round 5, product and marketing reviews):
   // the night's sales context, the robot's night, the rooms to sell and the rooms it checked.
   const shown = data.role === "admin" ? all.filter((figure) => PILOT_FIGURES.has(figure.id)) : all.filter((figure) => canAccess(data.role, figure.route));
   return shown.slice(0, MAX_HIGHLIGHTS);
@@ -348,7 +348,7 @@ export const PILOT_ROUTES: ReadonlySet<string> = new Set(["/", ...PILOT_MODULES.
 
 /**
  * The "Klare til salg" figure's line, naming the rooms so its "1" and the room check's "1" can't be read as
- * one room (round 5, the creative juror, the design juror): "Klar nå: rom 314 · etter bekreftelse: rom 213, ca. 1 500 kr hvis
+ * one room (round 5, marketing and design reviews): "Klar nå: rom 314 · etter bekreftelse: rom 213, ca. 1 500 kr hvis
  * utsolgt · holdt tilbake: rom 209". Null when the rack's ready rooms don't add up to the figure (then the
  * plain money line).
  */
@@ -370,7 +370,7 @@ export function readyDetail(data: Pick<DashboardData, "money" | "rooms">): strin
 /**
  * The robot's refusals in short, split by the referee's verdict (owner C's declineSplit, the judgement
  * card's count, in its plain words): "6 meldinger uten bestilling og 1 alt levert · 1 ikke godkjent".
- * Never "falske klager" on a page that is printed and filed (jury round 3, the design juror): a guest who said
+ * Never "falske klager" on a page that is printed and filed (round 3, design review): a guest who said
  * something never came is not called a liar. Without the run log's split, the plain count.
  */
 export function declineShort(split: DeclineSplit | null | undefined, declined: number): string | null {
@@ -378,7 +378,7 @@ export function declineShort(split: DeclineSplit | null | undefined, declined: n
   return declined > 0 ? `${declined} avvist etter sjekk` : null;
 }
 
-/** "Alle 73 «ferdig» bekreftet · 4 til en person": the robot figure's one line on a manager's page (jury round 3). */
+/** "Alle 73 «ferdig» bekreftet · 4 til en person": the robot figure's one line on a manager's page (review round 3). */
 export function robotShort(robot: { done: number; reported: number; handedBack: number }): string {
   const all = robot.reported > 0 && robot.done === robot.reported;
   const confirmed = all ? (robot.done === 1 ? "1 «ferdig» bekreftet" : `Alle ${robot.done} «ferdig» bekreftet`) : `${robot.done} av ${robot.reported} «ferdig» bekreftet`;

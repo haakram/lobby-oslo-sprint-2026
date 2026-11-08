@@ -3,7 +3,7 @@ import { classify, declinedReason, factsFromLines } from "./outcomes";
 import type { RunLine } from "./runlog";
 
 /**
- * The robot's refusals held to the same standard as its "done" (jury round 3, items B2 and C2): a
+ * The robot's refusals held to the same standard as its "done" (review round 3, items B2 and C2): a
  * refusal counts as approved only when the referee (the Wybe Night Shift simulator's server) raised
  * the score after the robot's `report … declined`, exactly as a "done" counts only when the server
  * credited it. On the demo night (seed 16) seven of the eight refusals were credited (+5 each) and
@@ -157,7 +157,7 @@ const PLAIN_KIND: Record<DeclineKind, (n: number) => string> = {
 };
 
 /**
- * The split in a manager's words, no referee and no hackathon wording (jury round 4, design review): "6 meldinger
+ * The split in a manager's words, no referee and no hackathon wording (round 4, design review): "6 meldinger
  * uten bestilling og 1 alt levert · 1 ikke godkjent". The credited refusals by kind, then the ones not
  * credited, then the ones still waiting. The referee behind "godkjent" is named in the card's "Slik vet vi det".
  */

@@ -23,7 +23,7 @@ export const COLUMNS: Readonly<Record<number, string>> = {
  * the robot manager, rooms checked and stock). Green where the figure is good, neutral otherwise;
  * nothing here is red or amber (what needs a person is in the bell). A role sees only figures of
  * screens it may open. One quiet line under the row says which figures are the robot's log, which
- * are test data and which are estimates (jury round 2); an estimate carries "ca." and its
+ * are test data and which are estimates (review round 2); an estimate carries "ca." and its
  * "Slik regner vi".
  */
 export function KpiStrip({ data }: { data: DashboardData }) {

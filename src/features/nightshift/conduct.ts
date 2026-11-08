@@ -2,7 +2,7 @@ import { linesUntil } from "./declines";
 import type { RunLine } from "./runlog";
 
 /**
- * What the robot's own run log says about how it worked (jury round 4, owner C): what each "done" rested
+ * What the robot's own run log says about how it worked (review round 4, owner C): what each "done" rested
  * on, and the honest lines a robot operator checks first. Pure selectors over the log
  * (docs/ARCHITECTURE.md § 4.3); every figure is counted, nothing is typed in for the demo night.
  *
@@ -74,7 +74,7 @@ function add(into: Tally, confirmed: boolean): void {
 }
 
 /**
- * Where a signal comes from (jury round 5, domain review; owner B's door lock and night clerk use the same rule).
+ * Where a signal comes from (round 5, domain review; owner B's door lock and night clerk use the same rule).
  * Only `robot` is the robot talking about itself; everything else is a signal from outside it.
  * - robot: what the robot's own sensors or actions say (its camera, its compartment, "placed inside", a
  *   knock it heard answered, a sign it put down, a lock opened with its own credential);
@@ -121,7 +121,7 @@ export function signalOrigin(entry: EvidenceSignal): SignalOrigin {
 }
 
 /**
- * The evidence rule (jury round 5, domain review; owner B): "bekreftet" needs two different signals, at least
+ * The evidence rule (round 5, domain review; owner B): "bekreftet" needs two different signals, at least
  * one of them from outside the robot (door lock, energy slot, guest, staff, the PMS). Two or more signals
  * that all come from the robot read "robotens egen observasjon", a tier below. Fewer than two read
  * "ikke bekreftet". Signals count once each, by name.
@@ -209,7 +209,7 @@ export function doneBasis(lines: readonly RunLine[], until?: number): DoneBasis 
 }
 
 /**
- * The robot's own-judgement "done" checked against its own log (jury round 5, domain review): of the ones the
+ * The robot's own-judgement "done" checked against its own log (round 5, domain review): of the ones the
  * referee confirmed, how many no `selfContradictions` line disputes. 209 makes the demo night 8 of 9.
  */
 export function ownAgainstLog(basis: DoneBasis, contradictions: readonly SelfContradiction[]): { reported: number; holds: number; contradicted: SelfContradiction[] } {
@@ -269,7 +269,7 @@ export function multiArrivalRooms(lines: readonly RunLine[], until?: number): Mu
 
 /**
  * A room check the robot reported "done" as empty while its own log says it had put something inside that
- * room earlier the same night (jury round 5, domain review): at 01:29 it placed luggage-209 inside room-209, at
+ * room earlier the same night (round 5, domain review): at 01:29 it placed luggage-209 inside room-209, at
  * 03:47 it looked in, saw "Nobody is here. The room is tidy." with no bags, and reported the room empty.
  * Two signals from the same robot that disagree: its look (the simulator's text reply, not a camera) against its
  * own task log. scripts/ledger.py runs the same rule over every night (round 6).

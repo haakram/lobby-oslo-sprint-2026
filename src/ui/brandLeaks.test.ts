@@ -4,7 +4,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Jury round 3 (the creative juror, the marketing juror): the old public URL still said *Lobby*. No link in the app may point at
+ * Review round 3 (marketing reviews): the old public URL still said *Lobby*. No link in the app may point at
  * it, and no page or icon may carry the old name as a title. Code identifiers (`lobby:` keys, `LOBBY_USERS`)
  * and the hotel's own lobby (a place) are fine; only what a person reads or opens is checked.
  */

@@ -109,7 +109,7 @@ describe("the night in facts, by its own clock", () => {
     expect(nightFacts({ confirmed: 40, wetFloors: 0, stranger: false })).toEqual({ done: "40 oppgaver bekreftet", attention: null });
   });
 
-  it("says what the done rested on when the basis is known (round 5, the Wybe juror): 64 confirmed by the simulator, 9 on the robot's own judgement, 8 holding", () => {
+  it("says what the done rested on when the basis is known (round 5, robot-domain review): 64 confirmed by the simulator, 9 on the robot's own judgement, 8 holding", () => {
     const demo = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
     const facts = nightFacts({ confirmed: 73, wetFloors: 3, stranger: true, basis: doneBasis(demo), contradictions: selfContradictions(demo) });
     expect(facts).toEqual({
@@ -132,9 +132,9 @@ describe("the night in facts, by its own clock", () => {
 describe("selectHighlights (the figures)", () => {
   it("gives the pilot admin the pilot's figures only, green where the figure is good, each with its source, and no vanity figure", () => {
     const figures = selectHighlights(data());
-    // Round 5 (the product juror, the creative juror): the pilot's cut on Oversikt too; no Losjiinntekt, no bookings of the day.
+    // Round 5 (product and marketing reviews): the pilot's cut on Oversikt too; no Losjiinntekt, no bookings of the day.
     expect(figures.map((figure) => figure.label)).toEqual(["Belegg i natt", "Robotens oppdrag i natt", "Rom klare til salg nå", "Rom sjekket av roboten"]);
-    // Jury round 3 (the product juror): no hours-saved estimate and no test-data guest rating on screen one.
+    // Review round 3 (product review): no hours-saved estimate and no test-data guest rating on screen one.
     expect(figures.some((figure) => figure.id === "spart" || figure.id === "fornoyd")).toBe(false);
     expect(figures.length).toBeLessThanOrEqual(MAX_HIGHLIGHTS);
     expect(PILOT_ROUTES.has("/overlevering") && PILOT_ROUTES.has("/rom") && !PILOT_ROUTES.has("/gjester")).toBe(true);
@@ -177,7 +177,7 @@ describe("selectHighlights (the figures)", () => {
     );
   });
 
-  it("names the rooms behind Klare til salg, so its 1 and the room check's 1 are never read as one room (round 5, the creative juror)", () => {
+  it("names the rooms behind Klare til salg, so its 1 and the room check's 1 are never read as one room (round 5, marketing review)", () => {
     const room = (id: string, status: "klar" | "opptatt", extra: { held?: boolean; toConfirm?: boolean } = {}) =>
       ({ ...selectRooms(NIGHT)[0], id, number: id.slice(5), status, closed: false, ...extra });
     const money = { ...MONEY, readyToSell: 1, toSell: [{ ...MONEY.toSell[0], room: "room-213" }], released: [], caught: ["room-209"], toSellValue: 1500 } as typeof MONEY;

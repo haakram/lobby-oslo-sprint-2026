@@ -1,7 +1,7 @@
 import { isSameOrigin } from "@/features/auth/handlers";
 
 /**
- * The second layer on the data and paid routes (jury round 4, the security juror): the proxy already turns away
+ * The second layer on the data and paid routes (round 4, security review): the proxy already turns away
  * anyone without a session, and the session cookie is `SameSite=Lax`, so a real cross-site request
  * never carries it. This checks the request itself too, with the same rule the auth POSTs use
  * (`isSameOrigin`): a browser on another site (`Sec-Fetch-Site: cross-site` or `same-site`, or an

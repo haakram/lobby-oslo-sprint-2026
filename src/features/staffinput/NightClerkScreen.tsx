@@ -81,7 +81,7 @@ function placesOf(map: HotelMap): { floor: number; places: { id: string; label: 
 }
 
 /**
- * Nattevaktens logg (jury round 5, the founder juror/the product juror/the marketing juror): the night clerk's own input, so a hotel with no
+ * Nattevaktens logg (round 5, founders, product and marketing reviews): the night clerk's own input, so a hotel with no
  * robot still gets its 06:00 handover. A room in two taps (the room, then what she saw), a safety item
  * with its place, a short note. Each becomes the same run-log line the robot writes, with her name, and
  * Overlevering reads it (*Uten robot*). The door lock's flags (a booked room with no card, a card in a

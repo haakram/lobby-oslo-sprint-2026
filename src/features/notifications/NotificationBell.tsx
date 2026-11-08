@@ -59,7 +59,7 @@ export function NotificationBellView({
   const rest = alerts.slice(MAX_ALERTS);
   const fresh = shown.filter((alert) => isNew(alert, seen));
   const old = shown.filter((alert) => !isNew(alert, seen));
-  // The badge counts every new alert, also the ones named in "og N til" (jury round 1: it said 5 with 6 in the sheet).
+  // The badge counts every new alert, also the ones named in "og N til" (review round 1: it said 5 with 6 in the sheet).
   const freshAll = alerts.filter((alert) => isNew(alert, seen));
   const freshCount = freshAll.length;
   const waiting = loading && alerts.length === 0;

@@ -18,7 +18,7 @@ function clerkCount(sources: WithoutRobot["sources"]): string {
 }
 
 /**
- * Which night Overlevering is built from (jury round 5, the product juror/the founder juror/the marketing juror: "hotel number one needs no
+ * Which night Overlevering is built from (round 5, product, founders and marketing reviews: "hotel number one needs no
  * robot", shown, not told): *Med robot* is the robot's run log; *Uten robot* is the same page from the
  * booking system, the door lock's one signal per room and the night clerk's own entries. The same
  * pressed-button pair as Natteskift's *Robotlogg*. Under *Uten robot*, one quiet line says what the page

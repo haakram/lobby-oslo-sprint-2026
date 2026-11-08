@@ -122,7 +122,7 @@ function NightMissing({ status }: { status: RunStatus }) {
 }
 
 /**
- * Rom og renhold: the room check's money first (jury round 2, the design juror: the hallway test starts here and
+ * Rom og renhold: the room check's money first (round 2, design review: the hallway test starts here and
  * the money line was missing), then the key rack in small, every room a tile with its status icon.
  */
 function RoomsWidget({ data, className }: WidgetProps) {
@@ -160,7 +160,7 @@ function RoomsWidget({ data, className }: WidgetProps) {
             <li className="flex items-center gap-1.5">
               {/* Quiet here: what an avvik needs is on Vedlikehold and in the bell, not in red on Oversikt. */}
               <RegenIcon name={AVVIK.icon} size={14} strokeWidth={2} className="shrink-0 text-muted" />
-              {/* Rooms with an open work order, not the work orders themselves (Vedlikehold counts those): round 5, the design juror. */}
+              {/* Rooms with an open work order, not the work orders themselves (Vedlikehold counts those): round 5, design review. */}
               <span className="text-muted">Rom med avvik</span>
               <span className="font-semibold tabular-nums">{counts.avvik}</span>
             </li>

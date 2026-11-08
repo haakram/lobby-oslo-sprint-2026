@@ -1,6 +1,6 @@
 // Four short work guides for a new worker. The agent explains them out loud in the worker's own
 // language; the screen shows them in bokmål. Test data, made up for the demo. A control a step names
-// («Plukkliste», «Plassering», «Vis vei») is one that exists on the screen (jury round 4, the Holio juror).
+// («Plukkliste», «Plassering», «Vis vei») is one that exists on the screen (round 4, warehouse-domain review).
 
 export const GUIDE_STEPS = ["receiving", "picking", "packing", "returns"] as const;
 

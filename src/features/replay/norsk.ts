@@ -1,7 +1,7 @@
 import { itemName, placeInSentence, roomNumber } from "./hotel";
 
 /**
- * The robot's own notes in the hotel's words (jury round 1: English agent strings inside a bokmål UI).
+ * The robot's own notes in the hotel's words (review round 1: English agent strings inside a bokmål UI).
  * The agent writes short templated English notes ("tray-205 x1 delivered to room-205", "No pillow
  * order from 308 on record tonight"); these become plain Norwegian. A note no rule knows is returned
  * as it was, so nothing is lost. Guests' and the robot's spoken words stay quotes in their language.

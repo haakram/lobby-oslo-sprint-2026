@@ -150,7 +150,7 @@ describe("doneBasis on a score-blind run", () => {
   });
 });
 
-describe("the evidence rule (jury round 5: at least one signal from outside the robot)", () => {
+describe("the evidence rule (review round 5: at least one signal from outside the robot)", () => {
   it("confirms two signals only when one comes from outside the robot", () => {
     expect(evidenceVerdict([{ signal: "compartment" }, { signal: "guest_ack" }])).toEqual({ verdict: "confirmed", signals: ["compartment", "guest_ack"], outside: ["guest_ack"] });
     expect(evidenceVerdict([{ signal: "door_lock", source: "door_lock" }, { signal: "staff_check", source: "staff" }]).verdict).toBe("confirmed");

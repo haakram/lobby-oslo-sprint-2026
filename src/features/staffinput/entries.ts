@@ -4,7 +4,7 @@ import { addDays, osloToday } from "@/features/reception/dates";
 import { hasExpiredDays, keepRecentDays } from "./retention";
 
 /**
- * The night clerk as a run-log producer (jury round 5, the founder juror/the product juror/the marketing juror: "hotel number one needs no
+ * The night clerk as a run-log producer (round 5, founders, product and marketing reviews: "hotel number one needs no
  * robot", so the night staff's own input must exist). Every tap on Nattevaktens logg becomes the same
  * run-log decision the robot writes (docs/runlog.schema.json), with `source: "staff"` and the clerk's
  * name, so the handover reads a night with no robot exactly as it reads one with:

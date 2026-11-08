@@ -276,7 +276,7 @@ export class HotelScene {
     this.robotCarry.className = "h3d-robot-carry";
     this.robotLabel.append(this.robotTask, this.robotCarry);
     const robotTag = new CSS2DObject(this.robotLabel);
-    // Beside the robot, not on it (jury round 1: the tooltip hid the robot): its left edge at the
+    // Beside the robot, not on it (review round 1: the tooltip hid the robot): its left edge at the
     // robot's middle, pushed right in CSS (.h3d-robot margin). Near the view's right edge it flips to the
     // robot's left (round 6: at 1152 px the side panel clipped it), see `placeRobotLabel`.
     robotTag.center.set(0, 0.5);
@@ -422,7 +422,7 @@ export class HotelScene {
         roomMesh.setColorAt(index, colour);
         const tag = label(roomNumber(room.id), "h3d-room");
         tag.position.set(room.x, y + ROOM_HEIGHT + 0.05, room.z);
-        // Room numbers are quiet until they matter: 36 of them over stacked floors collide (jury round 1).
+        // Room numbers are quiet until they matter: 36 of them over stacked floors collide (review round 1).
         tag.element.toggleAttribute("data-hidden", true);
         group.add(tag);
         labels.push(tag.element);

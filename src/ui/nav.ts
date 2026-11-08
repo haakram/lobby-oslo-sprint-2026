@@ -78,7 +78,7 @@ export function onHostScreen(pathname: string): boolean {
 
 /**
  * The groups a role sees, with the screens it may open; empty groups are dropped. The admin's rail is
- * the hotel's (jury round 1: 18 entries was too many for the demo): the host's group shows only while an
+ * the hotel's (review round 1: 18 entries was too many for the demo): the host's group shows only while an
  * admin is on one of its screens, and the user plate links to it otherwise; and it is cut to the pilot
  * (`pilotCut`). A screen whose service the server lacks (Stemme without the voice agent) stays out of the
  * menu, for every role.
@@ -94,7 +94,7 @@ export function groupsFor(role: Role, context: NavContext = {}): NavGroup[] {
 }
 
 /**
- * The admin's menu, cut to the pilot (jury round 3, the product juror: 13 modules in the sidebar for a four-screen pilot):
+ * The admin's menu, cut to the pilot (round 3, product review: 13 modules in the sidebar for a four-screen pilot):
  * Oversikt as the start page, *Piloten* (`PILOT_MODULES`, in that order), the host's group while on one of
  * its screens, then every other hotel screen under one collapsed *Utenfor piloten*: reachable, not in the way.
  * Only the menu changes; the admin may still open everything.
@@ -115,7 +115,7 @@ function pilotCut(groups: readonly NavGroup[]): NavGroup[] {
 
 /**
  * A role's own phone bar, when it differs from the registry's pins. The admin (the demo's morning manager,
- * `siri`) reaches the 06:00 handover in one tap from anywhere (jury round 3, the product juror): Oversikt, Overlevering,
+ * `siri`) reaches the 06:00 handover in one tap from anywhere (round 3, product review): Oversikt, Overlevering,
  * Rom, Forespørsler, then Meny, where Natteskift leads and the rest sits under *Utenfor piloten*.
  */
 const BAR_FOR: Partial<Record<Role, readonly string[]>> = {

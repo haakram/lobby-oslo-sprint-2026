@@ -77,11 +77,11 @@ describe("the navigation groups, from the module registry", () => {
   });
 
   it("cuts the admin's menu to the pilot: Oversikt, then the pilot screens, every other screen under one folded group", () => {
-    // Jury round 3 (the product juror): 13 modules in the sidebar for a four-screen pilot. siri, jury and admin are all admins.
+    // Review round 3 (product review): 13 modules in the sidebar for a four-screen pilot. siri, jury and admin are all admins.
     const [start, pilot, outside] = groupsFor("admin", { services: [] });
     expect(start).toMatchObject({ label: "", items: [expect.objectContaining({ href: "/", label: "Oversikt" })] });
     expect(pilot.label).toBe("Piloten");
-    // Jury round 5: the night clerk's log that feeds the handover sits right after it.
+    // Review round 5: the night clerk's log that feeds the handover sits right after it.
     expect(pilot.items.map((item) => item.href)).toEqual(["/overlevering", "/natt", "/rom", "/foresporsler", "/natteskift"]);
     expect(outside).toMatchObject({ label: "Utenfor piloten", collapsible: true });
     expect(outside.items.map((item) => item.href)).toEqual(["/gjester", "/ruter", "/vedlikehold", "/lager", "/ansatte", "/hotell", "/oyne", "/resepsjon"]);
@@ -101,7 +101,7 @@ describe("the navigation groups, from the module registry", () => {
 
   it("leaves out a screen whose service the server lacks; unknown services show everything", () => {
     const count = (role: Role, services?: readonly "voice-agent"[]) => groupsFor(role, { services }).flatMap((group) => group.items).length;
-    // The demo menus before → after (jury round 1): admin 18 → 13, robot manager 10 → 9, the desk 8, the host 4;
+    // The demo menus before → after (review round 1): admin 18 → 13, robot manager 10 → 9, the desk 8, the host 4;
     // round 5 adds the night clerk's log for the admin and the desk.
     expect({ admin: count("admin", []), robot: count("robot", []), receptionist: count("receptionist", []), host: count("host", []) }).toEqual({
       admin: 14,
@@ -115,7 +115,7 @@ describe("the navigation groups, from the module registry", () => {
   });
 
   it("fills the phone bar with the role's pinned screens first, then the rest in order", () => {
-    // The admin's own bar leads with the 06:00 handover (jury round 3).
+    // The admin's own bar leads with the 06:00 handover (review round 3).
     expect(barItemsFor("admin", 4).map((item) => item.href)).toEqual(["/", "/overlevering", "/rom", "/foresporsler"]);
     expect(barItemsFor("admin", 4).map((item) => item.short)).toEqual(["Oversikt", "Overlevering", "Rom", "Forespørsler"]);
     // Topped up from the rest in menu order when there is room for more: the pilot's next screen first.

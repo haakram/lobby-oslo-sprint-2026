@@ -58,7 +58,7 @@ export function selectAlerts(data: AlertData): Alert[] {
   const alerts: Alert[] = [];
   const may = (route: string) => canAccess(data.role, route);
 
-  // Safety first (jury round 3): each wet floor nobody has signed is its own Haster, with an owner and
+  // Safety first (review round 3): each wet floor nobody has signed is its own Haster, with an owner and
   // a time, then the stranger the robot refused all night. Overlevering's Åpent nå opens with the same.
   const wet = data.maintenance.filter((order) => order.safety && order.status !== "lost");
   const wetScreen: ModuleId = may("/vedlikehold") ? "vedlikehold" : "hotell3d";
@@ -101,7 +101,7 @@ export function selectAlerts(data: AlertData): Alert[] {
     });
   }
 
-  // The robot refused a stranger at door after door and told no one (jury round 2, the Wybe engineer): a person must know.
+  // The robot refused a stranger at door after door and told no one (round 2, robot-domain review): a person must know.
   const stranger = data.safety?.stranger;
   if (stranger) {
     const rooms = stranger.rooms.length || stranger.refusals.length;
@@ -112,7 +112,7 @@ export function selectAlerts(data: AlertData): Alert[] {
       module: screen,
       priority: "hoy",
       icon: "shield",
-      // Overlevering's neutral words (jury round 4, the creative juror): who he is, nobody knows; check the innocent explanation first.
+      // Overlevering's neutral words (round 4, marketing review): who he is, nobody knows; check the innocent explanation first.
       title: `En person ba roboten slippe ham inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}`,
       detail: `${stranger.refusals.length > 1 ? `${hhmm(stranger.first)}–${hhmm(stranger.last)}. Roboten sa nei hver gang.` : `Kl. ${hhmm(stranger.first)}. Roboten sa nei.`} ${STRANGER_CHECK} ${STRANGER_OWNER}, ${SAFETY_DUE}.`,
       action: open(screen),

@@ -57,7 +57,7 @@ export function roleLabel(role: Role): string {
 
 /**
  * Where a role starts. The pilot accounts (admin: siri, hamad, jury) start on Overlevering, the product's one
- * page (jury round 5, the product juror and the creative juror: "the cut you claim should be the cut I see first"); Oversikt stays
+ * page (round 5, product and marketing reviews: "the cut you claim should be the cut I see first"); Oversikt stays
  * one tap away in the rail. Other roles: Oversikt when they may open it, else their first page (the host: /vert).
  */
 export const PILOT_HOME = "/overlevering";

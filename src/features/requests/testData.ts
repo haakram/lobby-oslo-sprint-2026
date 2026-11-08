@@ -1,7 +1,7 @@
 /**
  * TODO(phase-3): replace with the request desk integration (staff app, in-room voice, PMS messages).
  * Test data: the requests that did not come through the robot or the phone, all inside the night
- * (22:00–06:00), so nothing on a 06:00 screen is timed after the handover (jury round 2). Made-up only.
+ * (22:00–06:00), so nothing on a 06:00 screen is timed after the handover (review round 2). Made-up only.
  */
 
 export type ManualRequest = {

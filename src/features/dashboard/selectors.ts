@@ -294,7 +294,7 @@ export type RoomView = HotelRoom & {
   /**
    * The room check found it empty, but the booking system still holds it (213 on the demo night): not a
    * green Klar until a person confirmed and released it ("Bekreft først"), so the rack's legend counts
-   * the same Klare til salg as the figure beside it (jury round 3, the founder juror/the design juror).
+   * the same Klare til salg as the figure beside it (round 3, founders and design reviews).
    */
   toConfirm?: boolean;
   /**
@@ -316,7 +316,7 @@ export function withClosed(rooms: readonly RoomView[], closed: readonly string[]
 /**
  * The rooms the room check held back (rooms/reconcile.ts): the robot found them tidy, but it carried an
  * arriving guest's bags in, so the rack shows them taken ("Holdt tilbake"), never as a green Klar
- * beside the money line that says they are held (jury round 3).
+ * beside the money line that says they are held (review round 3).
  */
 export function withHeld(rooms: readonly RoomView[], held: readonly string[], toConfirm: readonly string[] = [], pending: readonly string[] = []): RoomView[] {
   if (held.length === 0 && toConfirm.length === 0 && pending.length === 0) return rooms as RoomView[];

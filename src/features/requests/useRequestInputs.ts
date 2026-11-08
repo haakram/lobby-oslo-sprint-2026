@@ -12,7 +12,7 @@ import { fromRoomCheck } from "./select";
  * What selectRequests needs besides the night and the calls: the phone tasks the AI receptionist took
  * down (this browser's records and last night's seeded calls, TODO(phase-3)), who took each one, and
  * the tasks made on Rom. Forespørsler and Oversikt (its widget, the bell) both read it, so the page
- * and its widget count the same requests (jury round 2, item A1).
+ * and its widget count the same requests (review round 2, item A1).
  */
 export function useRequestInputs({ today, demo, calls }: { today: string; demo?: readonly DemoCall[]; calls: readonly CallSummary[] | null }) {
   const { records } = useStoredRecords();

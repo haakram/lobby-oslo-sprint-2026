@@ -62,7 +62,7 @@ const VERB: Record<Exclude<RequestStatus, "fullfort" | "avvist" | "avlyst">, str
   pagar: "Marker fullført",
 };
 
-/** A refusal is a decision for a person (jury round 3, the Wybe engineer): the verb fits what the robot refused. */
+/** A refusal is a decision for a person (round 3, robot-domain review): the verb fits what the robot refused. */
 function declineVerb(request: RequestView): string {
   switch (request.decline?.kind) {
     case "noOrder":
@@ -127,7 +127,7 @@ function handlerLine(request: RequestView, now: number): string {
 
 /**
  * Whether a refusal was confirmed, after the robot's reason, in a manager's words with its source (round 5,
- * the design juror): "bekreftet av simulatoren", as Oversikt and Natteskift say it. The referee behind it is named
+ * design review): "bekreftet av simulatoren", as Oversikt and Natteskift say it. The referee behind it is named
  * only under the lane's *Slik vet vi det*.
  */
 function judgeLine(request: RequestView): string | null {
@@ -537,7 +537,7 @@ function Row({
 
 /**
  * Behind *Slik vet vi det* under Avvist etter sjekk: who stands behind "bekreftet" and "godkjent" on a
- * refusal. The referee's words live here, never on a row (round 5, the design juror). Quiet ink, as on Overlevering.
+ * refusal. The referee's words live here, never on a row (round 5, design review). Quiet ink, as on Overlevering.
  */
 function DeclineProof() {
   return (

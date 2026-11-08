@@ -28,7 +28,7 @@ const ACCOUNTS = [
   // The Airbnb host: their own app under /vert, no hotel screens, no view switcher.
   { u: "vert", name: "Ingrid Berge", role: "host" },
   // The demo's morning manager, the presenter's persona: what she does is stamped "Siri Haugen · nå", and the
-  // sign-off reads her name (jury round 3, the creative juror and the product juror). Admin, so one login opens the whole demo.
+  // sign-off reads her name (round 3, marketing and product reviews). Admin, so one login opens the whole demo.
   { u: "siri", name: "Siri Haugen", role: "admin" },
 ];
 // The jury's demo account: its own password, never the team's, so the README need not print an admin password.

@@ -1,4 +1,4 @@
-"""scripts/forecast.py: the build + seed model behind the final's forecast (jury round 4, item C4)."""
+"""scripts/forecast.py: the build + seed model behind the final's forecast (review round 4, item C4)."""
 
 from __future__ import annotations
 

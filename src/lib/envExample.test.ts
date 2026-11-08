@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * .env.example is the env contract (docs/ARCHITECTURE.md § 4.4). Jury round 2 found it naming a budget
+ * .env.example is the env contract (docs/ARCHITECTURE.md § 4.4). Review round 2 found it naming a budget
  * variable the Next app never reads and missing the one it does; this keeps the two in step.
  */
 const ROOT = join(__dirname, "..", "..");

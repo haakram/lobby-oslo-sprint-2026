@@ -6,7 +6,7 @@ import { useSyncExternalStore } from "react";
  * Who did something, and how long ago: "Siri Haugen · nå", "Siri Haugen · for 3 min siden". The one
  * stamp every action on a 06:00 screen carries (a room released, *Ta saken*, *Gi det likevel*,
  * *Kvitter mottatt*). Never a wall-clock time: on stage at 14:15 a "14:15" beside a 06:00 handover
- * contradicts the story, while "nå" is true at any hour (jury round 3, the product juror). Store the moment as
+ * contradicts the story, while "nå" is true at any hour (round 3, product review). Store the moment as
  * ISO (`stampNow()`), render it with `actionStamp(who, at, now)` and `useNowMs()` so it ages.
  */
 

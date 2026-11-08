@@ -10,7 +10,7 @@ const TRAIL = /(?<=\d)(\D+)$/;
 /**
  * A figure for a Martian Mono setting, with what isn't a digit set in the text face. A monospace gives
  * the decimal comma and the thousands space a full cell, so "4,7" read as "4 , 7", "151 530" as two
- * numbers, "ca. 13" as "ca . 13" and "88 %" with a gap on the projector (jury round 1). A comma or
+ * numbers, "ca. 13" as "ca . 13" and "88 %" with a gap on the projector (review round 1). A comma or
  * point also closes up on the wide digits beside it; a thousands space stays a thin gap. The figure is
  * read out whole (`sr-only`); the split copy is only drawn. A value that is only digits (or has no
  * digit at all) is returned as it is.

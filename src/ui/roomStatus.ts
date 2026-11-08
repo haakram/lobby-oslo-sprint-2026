@@ -3,7 +3,7 @@ import type { RegenName } from "./icons/regenPaths";
 
 /**
  * The one place a room status gets its word, its colour token, its icon and its look (UX audit X2;
- * jury round 1: four visual languages for the same states). Rom og renhold's rack, Oversikt's widget,
+ * review round 1: four visual languages for the same states). Rom og renhold's rack, Oversikt's widget,
  * the room sheet, Ruter's plans and the 3D hotel all read from here, so a state looks and reads the same
  * on every screen: a coloured key tag (`tag`) beside the word, on a tile (`tile`) where there is room.
  * `RoomStatusTag` (src/ui/RoomStatusTag.tsx) draws exactly that for lists, sheets and panels.

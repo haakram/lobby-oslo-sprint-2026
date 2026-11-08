@@ -30,7 +30,7 @@ const PIN_S = 0.15;
 /**
  * Below this the floor scrolls sideways inside its panel instead of shrinking the room tiles. 10 px
  * a metre keeps a room tile at 28 px and lets all three floors sit in one row from 1440 px, so a
- * route across floors is seen whole above the fold (jury round 1).
+ * route across floors is seen whole above the fold (review round 1).
  */
 const MIN_PX_PER_M = 10;
 /** On touch a room tile is a target: 2.8 m × 16 px ≈ 45 px (DESIGN.md: touch targets ≥ 44 px). */

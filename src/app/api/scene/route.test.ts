@@ -81,7 +81,7 @@ describe("POST /api/scene", () => {
     expect(describeScene).toHaveBeenCalledTimes(max);
   });
 
-  it("refuses a request from another site with 403, before the limit counts or the model is called (jury round 4, the security juror)", async () => {
+  it("refuses a request from another site with 403, before the limit counts or the model is called (round 4, security review)", async () => {
     describeScene.mockResolvedValue([]);
     const crossSite = () =>
       POST(new Request("http://localhost/api/scene", { method: "POST", headers: { "sec-fetch-site": "cross-site", origin: "https://evil.example" }, body: JSON.stringify({ image: jpeg() }) }));

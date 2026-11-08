@@ -117,7 +117,7 @@ describe("NotificationBellView", () => {
   it("lists five and names the rest, so nothing is dropped without a word; the badge counts all six", () => {
     const many = Array.from({ length: 6 }, (_, index) => alert(`a${index}`, `Varsel ${index + 1}`));
     render(<NotificationBellView alerts={many} loading={false} user="hamad" />);
-    // Every new alert counts, also the one named in "og 1 til" (jury round 1: the badge said 5 with 6 in the sheet).
+    // Every new alert counts, also the one named in "og 1 til" (review round 1: the badge said 5 with 6 in the sheet).
     expect(bell()).toHaveAccessibleName("Varsler, 6 nye");
     const sheet = openBell();
     expect(sheet.getByText("6 nye, trenger en person")).toBeInTheDocument();

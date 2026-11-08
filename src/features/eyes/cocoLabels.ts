@@ -88,7 +88,7 @@ export const COCO_CLASSES = Object.keys(LABELS) as CocoClass[];
 
 /**
  * Classes worth a Claude call: things a store room or a hotel trolley might hold. People, furniture,
- * vehicles and animals keep their free label and are never sent. Nor are guests' belongings (jury round 2,
+ * vehicles and animals keep their free label and are never sent. Nor are guests' belongings (review round 2,
  * law): a phone held to an ear or a bag on a shoulder would send part of the person, and a luggage tag or a
  * book cover would be read out. None of them is in the catalogue.
  */

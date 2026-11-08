@@ -6,7 +6,7 @@ import type { RunLine } from "./runlog";
  * How each of the robot's requests really ended, read from the run log (docs/ARCHITECTURE.md § 4.3),
  * and the night's totals from that one reading. Every screen that counts the robot's work (Oversikt,
  * Forespørsler, Natteskift, Overlevering, the bell) counts it here, so one night has one set of
- * numbers (jury round 2, item A1).
+ * numbers (review round 2, item A1).
  *
  * The verdicts, in a hotel's words:
  * - **done**: reported done and the Wybe server credited it ("Noted. Thanks.").

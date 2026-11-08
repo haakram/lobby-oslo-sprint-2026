@@ -14,7 +14,7 @@ import { selectGuestDay } from "./testData";
 const DEMO = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
 const ROOMS = selectRooms(foldNight(parseRunLog(DEMO).lines));
 const DAY = selectGuestDay();
-// "Klar" is one number everywhere (jury round 3, the design juror): the room check's Klare til salg, as on Oversikt and Rom.
+// "Klar" is one number everywhere (round 3, design review): the room check's Klare til salg, as on Oversikt and Rom.
 const PMS = pmsLastNight(DAY.today);
 const READY = roomMoney({ reconciliation: reconcileNight(parseRunLog(DEMO).lines, PMS, DAY.today), marks: {}, revenue: revenueLastNight(ROOMS.length, PMS), rooms: ROOMS, pms: PMS }).readyToSell;
 

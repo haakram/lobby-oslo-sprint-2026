@@ -71,7 +71,7 @@ describe("GET /api/reception/token", () => {
     expect(sdk.getWebrtcToken).toHaveBeenCalledTimes(max);
   });
 
-  it("refuses a request from another site with 403, before the limit counts or ElevenLabs is asked (jury round 4, the security juror)", async () => {
+  it("refuses a request from another site with 403, before the limit counts or ElevenLabs is asked (round 4, security review)", async () => {
     sdk.getWebrtcToken.mockResolvedValue({ token: "short-lived" });
     const response = await GET(get({ "sec-fetch-site": "cross-site", origin: "https://evil.example" }));
     expect(response.status).toBe(403);

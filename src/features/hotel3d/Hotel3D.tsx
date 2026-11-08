@@ -160,7 +160,7 @@ export function Hotel3D({ replay: played, variant = "full", className, selectedR
   }, [scene, floorMode]);
 
   // Place names on one floor at a time (the robot's, or the one chosen), never on every floor at once:
-  // over stacked or spread floors they collide (jury round 1).
+  // over stacked or spread floors they collide (review round 1).
   const labelFloor = floorMode === "exploded" || floorMode === "all" ? robotFloor : focusFloor;
   useEffect(() => {
     scene?.setLabelFloor(labelFloor);

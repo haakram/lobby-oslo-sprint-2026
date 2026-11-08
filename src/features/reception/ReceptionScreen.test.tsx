@@ -284,7 +284,7 @@ describe("ReceptionScreen", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it("opens on last night's sample calls, labelled Eksempel, instead of empty (jury round 4, the creative juror)", async () => {
+    it("opens on last night's sample calls, labelled Eksempel, instead of empty (round 4, marketing review)", async () => {
       stubCalls(ok({ calls: [] }));
       render(<ReceptionScreen />);
       await screen.findByText("Ingen nye samtaler.");

@@ -2,7 +2,7 @@ import { type RunLine, parseRunLog } from "@/features/nightshift/runlog";
 import type { PmsRoom } from "@/features/rooms/pms";
 
 /**
- * The door lock and the energy slot as a run-log producer (jury round 5): the lock vendor's
+ * The door lock and the energy slot as a run-log producer (review round 5): the lock vendor's
  * room-management system gives Fettero ONE derived signal per room at 06:00, never who and never when.
  * Staff and master cards are filtered out at the source; no card id, no name, no entry list and no
  * guest's clock ever reaches the app (docs/PRIVACY.md). A `room_signal` decision per room
@@ -20,7 +20,7 @@ import type { PmsRoom } from "@/features/rooms/pms";
  * (the night clerk, then reception) turns it into a room to sell. Pure; no I/O.
  */
 
-/** The window the signal covers: a guest card used since 18:00, yes or no (the law juror, round 4). */
+/** The window the signal covers: a guest card used since 18:00, yes or no (legal review, round 4). */
 export const SIGNAL_WINDOW_FROM = "18:00";
 
 /**

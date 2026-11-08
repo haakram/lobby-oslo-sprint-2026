@@ -2,7 +2,7 @@ import { doneBasis, type SignalOrigin, signalOrigin, unfinishedTasks } from "./c
 import { type RunLine, runLine } from "./runlog";
 
 /**
- * A second producer for run log v1 (jury round 4, item C6; domain review): Open-RMF's task_state and
+ * A second producer for run log v1 (review round 4, item C6; domain review): Open-RMF's task_state and
  * fleet_state messages (rmf_api_msgs) turned into the lines the handover reads (docs/runlog.schema.json),
  * so a robot that is not Wybe's simulator gets the same judgement card. Pure; no network.
  *
@@ -15,7 +15,7 @@ import { type RunLine, runLine } from "./runlog";
  * - evidence, from the task's phase events (RMF does not standardise these names; this is the mapping):
  *   a door opened (the door adapter, the lock trail) → `lock`; a photo → `photo`; a compartment/drawer
  *   event → `compartment`; a recipient/guest confirmation or PIN → `guest_ack`. Only completed events count.
- *   Each carries its `origin` (jury round 5, the evidence rule in conduct.ts): "bekreftet" needs one signal
+ *   Each carries its `origin` (review round 5, the evidence rule in conduct.ts): "bekreftet" needs one signal
  *   from outside the robot, so the compartment and the guest's PIN confirm a delivery; a door the robot
  *   opened with its own credential plus its own photo is "robotens egen observasjon".
  * - fleet_state robots: a `state` line per snapshot with the battery (0–1 → per cent); RMF has map

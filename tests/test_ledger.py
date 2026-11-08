@@ -1,4 +1,4 @@
-"""scripts/ledger.py: the evidence ledger computed from live run logs (jury round 3, item C1)."""
+"""scripts/ledger.py: the evidence ledger computed from live run logs (review round 3, item C1)."""
 
 from __future__ import annotations
 

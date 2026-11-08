@@ -96,7 +96,7 @@ describe("GET /api/reception/calls", () => {
     expect(sdk.list).not.toHaveBeenCalled();
   });
 
-  it("refuses a request from another site with 403, before ElevenLabs is asked (jury round 4, the security juror)", async () => {
+  it("refuses a request from another site with 403, before ElevenLabs is asked (round 4, security review)", async () => {
     const response = await GET(get({ "sec-fetch-site": "cross-site", origin: "https://evil.example" }));
     expect(response.status).toBe(403);
     expect(response.headers.get("cache-control")).toContain("no-store");

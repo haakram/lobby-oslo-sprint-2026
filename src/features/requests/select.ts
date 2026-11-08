@@ -29,7 +29,7 @@ export const SOURCE_WORD: Record<RequestSource, string> = {
 export const SOURCES: readonly RequestSource[] = ["telefon", "stemme", "personale", "robot"];
 
 /**
- * `?filter=robot` opens Forespørsler on one source (Overlevering's hand-back item links there, jury round
+ * `?filter=robot` opens Forespørsler on one source (Overlevering's hand-back item links there, review round
  * 3). Here, not in the screen: the page (a server component) reads it.
  */
 export function sourceFromQuery(value: string | string[] | undefined): RequestSource | null {
@@ -94,7 +94,7 @@ export type RequestView = {
 };
 
 /**
- * Where a row stands on Forespørsler, top to bottom (jury round 3, the product juror): what the robot handed back first,
+ * Where a row stands on Forespørsler, top to bottom (round 3, product review): what the robot handed back first,
  * pinned, so calls that arrive a moment later can't push it down; the phone's calls in their own group below;
  * then everything else that waits, what is under way, done, refused after a check and called off.
  */
@@ -150,7 +150,7 @@ const ROBOT_HANDLER: Partial<Record<RequestStatus, string>> = {
 
 function robotRequest(id: string, kind: string, room: string | null, text: string | null, at: string | null, status: RequestStatus, outcome: Outcome | undefined): RequestView {
   // A person can take over what the robot failed or left open, and give what it refused anyway (a refusal is a
-  // decision for a person, jury round 3, the Wybe engineer); done, running and called-off stay the robot's.
+  // decision for a person, round 3, robot-domain review); done, running and called-off stay the robot's.
   const needsPerson = status === "venter" || status === "feilet" || status === "avvist";
   return {
     id: `robot:${id}`,

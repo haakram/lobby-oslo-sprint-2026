@@ -3,7 +3,7 @@ import { type DemoCall, demoCalls } from "./demoCalls";
 import { maskPhone } from "./maskPhone";
 
 /**
- * The night's calls, one source for every screen that shows or counts them (jury round 4, the creative juror:
+ * The night's calls, one source for every screen that shows or counts them (round 4, marketing review:
  * Oversikt said "Ingen samtaler ennå" while Overlevering said "3 samtaler"). The live call log first,
  * newest first as the route sends it, then last night's sample calls: the same `demoCalls(today)`
  * Overlevering and Forespørsler count, marked as samples wherever they are shown.

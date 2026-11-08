@@ -5,7 +5,7 @@ import type { Held, Sellable } from "@/features/rooms/reconcile";
  * The 3D-kart says what the room check says (src/features/rooms/reconcile.ts, the same result Rom,
  * Oversikt's rack and Overlevering read through `useRoomCheck`): a room the robot found empty and tidy
  * but carried an arriving guest's bags into (209 on the demo night, booked to tomorrow: a double
- * allocation) is taken, "Holdt tilbake", never a green "Klar" (jury round 3).
+ * allocation) is taken, "Holdt tilbake", never a green "Klar" (review round 3).
  *
  * The map is a replay, so a room is held from the moment of its first holding delivery: before the bags
  * go in, the night had not shown it yet. The row a room carries lists only the deliveries made so far.
@@ -13,7 +13,7 @@ import type { Held, Sellable } from "@/features/rooms/reconcile";
  * A sleeper (213 on the demo night: the guest was due out 7.11, the check-out never recorded, so the
  * booking system still holds the room tonight) is not a green "Klar" either until reception has
  * confirmed and released it: taken, "Bekreft først", as the rack says it (`withHeld`'s `toConfirm`,
- * read from the same `money.toSell`), from the moment the robot's room check found it empty (jury round 4).
+ * read from the same `money.toSell`), from the moment the robot's room check found it empty (review round 4).
  */
 
 /** A room on the map, with the room check's hold (or its sleeper row, still to confirm) when it has one. */

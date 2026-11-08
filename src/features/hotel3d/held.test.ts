@@ -52,7 +52,7 @@ describe("the 3D-kart follows the room check (209 held back, never a green Klar)
   });
 });
 
-describe("the 3D-kart shows 213 as a sleeper (jury round 4), never a green Klar before it is released", () => {
+describe("the 3D-kart shows 213 as a sleeper (review round 4), never a green Klar before it is released", () => {
   it("213 is the room check's sleeper: due out yesterday, check-out never recorded, the robot found it empty at 04:24", () => {
     expect(toConfirm.map((row) => row.room)).toEqual(["room-213"]);
     expect(toConfirm[0]).toMatchObject({ guest: "Ola Nygård", at: "04:24:42" });

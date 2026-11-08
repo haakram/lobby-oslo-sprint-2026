@@ -55,7 +55,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
   const total = rooms?.length ?? ROOMS_IN_HOTEL;
   // Last night's rooms sold, from the one booking system Oversikt and Overlevering read too.
   const sold = useMemo(() => revenueLastNight(total, pmsLastNight(day.today)).roomsSold, [total, day.today]);
-  // "Klar" is one number everywhere (jury round 3, the design juror): the room check's Klare til salg, the figure
+  // "Klar" is one number everywhere (round 3, design review): the room check's Klare til salg, the figure
   // Oversikt and Rom show, so a room held back (209) or not yet released (213) is never offered here.
   const { money } = useRoomCheck(run.status === "ready" ? run.lines : null, rooms, day.today);
   const readyRooms = rooms && money ? money.readyToSell : null;

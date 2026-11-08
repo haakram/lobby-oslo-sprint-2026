@@ -1,6 +1,6 @@
 """The evidence ledger: one row per live Night Shift practice shift, computed from the run logs.
 
-Jury round 3, item C1 (data and domain reviews): every agent number in the docs and on screen must come from a
+Review round 3, item C1 (data and domain reviews): every agent number in the docs and on screen must come from a
 file anyone can regenerate, not from hand-assembled tables. This script reads every live start the
 agent logged (``temp/live_runs.jsonl`` in each checkout) and every run log it can find
 (``temp/runs/*.jsonl``), and writes:
@@ -48,7 +48,7 @@ the ledger.json nights that reported at least one "done"; printed by this script
 How each column is computed (the same rules as the app, src/features/nightshift):
 - ``done_reports``: ``report`` calls with outcome ``done`` that the server accepted (ok).
 - ``done_credited``: those the server answered with its verified reply ("Noted. Thanks.").
-- ``done_after_rise`` / ``done_own`` (jury round 4, data and domain reviews): what each "done" rested on. After the
+- ``done_after_rise`` / ``done_own`` (round 4, data and domain reviews): what each "done" rested on. After the
   rise: a score the robot saw between the request's last ``task_start`` and its report was higher than the
   score before it, so the simulator's referee had confirmed the work before the robot said "done" (the
   agent's ``_deliver``/``message`` flows read that rise). Own judgement: no rise during the task; the robot
@@ -59,7 +59,7 @@ How each column is computed (the same rules as the app, src/features/nightshift)
 - ``declines_credited`` / ``declines_not_credited``: ``report … declined`` calls whose score went up /
   did not go up between the last score seen before the report and the first one after it
   (``declines_pending``: no score after it, e.g. a log that stops there).
-- ``room_checks_done`` / ``room_checks_contradicted`` / ``done_own_holds_log`` (jury round 6, the data and domain
+- ``room_checks_done`` / ``room_checks_contradicted`` / ``done_own_holds_log`` (review round 6, the data and domain
   reviews): the card's self-contradiction rule (``selfContradictions`` in src/features/nightshift/conduct.ts) over
   every night, not only the demo night. A room check reported "done" is contradicted when the robot had placed a
   non-sign item "inside" that room earlier the same night (the server's reply said "inside"), its last bare look
@@ -72,13 +72,13 @@ How each column is computed (the same rules as the app, src/features/nightshift)
 - ``blind_checks`` / ``blind_said_no`` (score-blind nights only): the agent's ``blind_check`` decisions, and how
   many of them observed the work as not done (``observed: false``). Zero "no" means the robot's own check never
   disagreed on those nights: the score was not needed there, which says nothing yet about how well the check
-  catches a failure (jury round 5, data and domain reviews).
-- Distinct claims (printed, and ``distinct_own`` in ledger.json; jury round 5, data review): the final branch's
+  catches a failure (round 5, data and domain reviews).
+- Distinct claims (printed, and ``distinct_own`` in ledger.json; round 5, data review): the final branch's
   own-judgement "done" counted once per (seed, request), since its builds replay the same deterministic
   seeds; a claim is credited only when every report of it was. With a Wilson 95 % interval, as is the demo
   night's own-judgement figure (``public/runs/demo.jsonl``). A claim holds against the robot's own log when it was
-  credited and no report of it was contradicted (``holds_log``, with its own interval; jury round 6).
-- The dress rehearsal (``rehearsal`` in ledger.json; jury round 6): the build that plays at 12:00
+  credited and no report of it was contradicted (``holds_log``, with its own interval; review round 6).
+- The dress rehearsal (``rehearsal`` in ledger.json; review round 6): the build that plays at 12:00
   (``REHEARSAL_BUILD``) on the ten seeds no build had played (``REHEARSAL_SEEDS``, the same as scripts/forecast.py):
   own-judgement "done" credited and holding against its own log, room checks contradicted and on how many nights.
 - ``score``: the ``end`` line's score, else the last score seen (``complete`` says which).
@@ -625,9 +625,9 @@ def wilson(successes: int, n: int, z: float = 1.959964) -> tuple[float, float]:
 
 def distinct_own(nights: list[Night]) -> dict:
     """The robot's own-judgement "done" over `nights`, counted once per (seed, request), not once per replay
-    (jury round 5, data review: four near-identical builds on the same deterministic seeds repeat the same
+    (round 5, data review: four near-identical builds on the same deterministic seeds repeat the same
     claims). A distinct claim counts as credited only when every report of it was credited. It holds against the
-    robot's own log (jury round 6) when it was credited and no report of it was contradicted (the self-contradiction
+    robot's own log (review round 6) when it was credited and no report of it was contradicted (the self-contradiction
     rule above)."""
     claims: dict[tuple, bool] = {}
     disputed: dict[tuple, bool] = {}

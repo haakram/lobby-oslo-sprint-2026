@@ -55,7 +55,7 @@ import type { RunLine } from "./runlog";
 /**
  * "Robotens vurderinger i natt": the calls the robot made on its own, from its run log, in the
  * hotel's words. The refusals of the stranger come first, as one security incident with its times;
- * then every "done" split by what it rested on (jury round 4, data and domain reviews): said on the robot's own
+ * then every "done" split by what it rested on (round 4, data and domain reviews): said on the robot's own
  * judgement (room checks, spills: no score rise during the task) or only after the simulator had
  * confirmed the work, with one line on what confirms "done" in a real hotel (domain review); the refusals,
  * in a manager's words, handed to reception where a guest may still want the thing; the wet floors with

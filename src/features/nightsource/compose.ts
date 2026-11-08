@@ -26,7 +26,7 @@ import {
 } from "@/features/staffinput/read";
 
 /**
- * "Uten robot" (jury round 5, the founder juror/the product juror/the marketing juror): the same Overlevering, built from the sources a hotel
+ * "Uten robot" (round 5, founders, product and marketing reviews): the same Overlevering, built from the sources a hotel
  * without a robot has tonight: the booking system (test data), the door lock's one signal per room
  * (doorlock/feed.ts, test data) and the night clerk's own entries (staffinput/). No robot line goes in:
  * the night is folded from nothing, so every figure the robot would give is zero and every line on the
@@ -141,7 +141,7 @@ function hazardItem(hazard: StaffHazard, canOpen: (route: string) => boolean): O
   if (hazard.hazard === "door") {
     return { id: `staff-${hazard.id}`, text: `Dør ${placePhrase(hazard.place)}, ${told}.${note} Sjekk at den er lukket og låst.`, owner: STRANGER_OWNER, due: SAFETY_DUE, ...link, urgent: false, safety: true };
   }
-  // Neutral, as the robot night's stranger (jury round 3, the law juror): who it was, nobody knows yet.
+  // Neutral, as the robot night's stranger (round 3, legal review): who it was, nobody knows yet.
   return {
     id: `staff-${hazard.id}`,
     text: `En person ${placePhrase(hazard.place)}, ${told}.${note} Sjekk først om en gjest var låst ute. Ved tvil: avvik etter hotellets rutine.`,

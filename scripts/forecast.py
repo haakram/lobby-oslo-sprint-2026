@@ -1,4 +1,4 @@
-"""The final's forecast: a build + seed model fitted on the evidence ledger (jury round 4, item C4; data review).
+"""The final's forecast: a build + seed model fitted on the evidence ledger (review round 4, item C4; data review).
 
 The Wybe simulator is deterministic: the same code on the same seed plays the same night. So the
 spread between nights is not noise in a build, it is between seeds (how hard a night is) and between
@@ -13,7 +13,7 @@ settle; no numpy, so it runs in the repo's venv and in CI).
 
 Then:
 
-The target is the build that plays at 12:00: the head of ``hamad/final``, read from git (jury round 5,
+The target is the build that plays at 12:00: the head of ``hamad/final``, read from git (review round 5,
 data and domain reviews), and every commit whose agent code (``agent/``) is identical to it counts as the same
 build (``013f90d`` and ``8de9ffc`` differ only in a test).
 
@@ -33,7 +33,7 @@ build (``013f90d`` and ``8de9ffc`` differ only in a test).
    (``REHEARSAL_SEEDS``), started Sun 05:02. It is compared with the forecast committed before it (the
    last commit of ``docs/runs/forecast.txt`` before the first rehearsal start, read from git), and the
    rehearsal's own nights give a second forecast (a bootstrap of its scores, best 9 of 10).
-4. **The second forecast** (jury round 6, the data review), committed before 12:00 next to the first: the
+4. **The second forecast** (review round 6, the data review), committed before 12:00 next to the first: the
    rehearsal's posterior predictive. A 10-point bootstrap ignores the uncertainty in the mean and spread it
    rests on, so it is too narrow; this draws them. Log scores, flat prior on the mean and the log SD: per
    simulated final, sigma^2 = (n - 1) s^2 / chi^2(n - 1), mu ~ N(mean, sigma^2 / n), ten new nights

@@ -9,9 +9,9 @@ import { cleaningHref, DAY_ROUND } from "./selectors";
 /**
  * The top of Oversikt: a greeting by the shift clock of the night on screen (on stage at 14:15 the
  * recorded night still ends at 06:00, so it says "God morgen"), one factual line on the night (green
- * only for what is done; what needs a person is named, calmly: jury round 2 found a green "Natten gikk
+ * only for what is done; what needs a person is named, calmly: review round 2 found a green "Natten gikk
  * fint." beside three unsigned wet floors and a stranger at seven doors), and the screen's one primary
- * action: *Se overleveringen 06:00*, the product's front door (jury round 2, the product juror), with the cleaning
+ * action: *Se overleveringen 06:00*, the product's front door (round 2, product review), with the cleaning
  * route beside it as a secondary action.
  */
 export function Greeting({ data }: { data: DashboardData }) {
@@ -38,7 +38,7 @@ export function Greeting({ data }: { data: DashboardData }) {
   const day = daySummary(data);
   const rest = [staff, day].filter(Boolean).join(" ");
 
-  // Ruter is outside the pilot: the pilot accounts (admin) get no cleaning-route button (round 5, the product juror).
+  // Ruter is outside the pilot: the pilot accounts (admin) get no cleaning-route button (round 5, product review).
   const pilot = data.role === "admin";
   const cleaning = pilot ? null : dirty.length > 0 ? (
       // Ruter opens on Dagens renhold: the night's dirty rooms and today's departures, with the saving.

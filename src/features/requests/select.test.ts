@@ -15,7 +15,7 @@ const message = (id: string, text: string): MessageRecord => ({
   urgent: false,
 });
 
-describe("Forespørsler's lanes and unknown rooms (jury round 3)", () => {
+describe("Forespørsler's lanes and unknown rooms (review round 3)", () => {
   it("knows tonight's rooms only from a night that has ended", () => {
     const map = hotelForRun([{ v: 1, type: "start", shift: "w2-0000000000000000000000000000000c", mode: "practice", seed: 1, t: 1 }] as never);
     expect(hotelRoomsOf(BASE_HOTEL, true)).toBeNull();

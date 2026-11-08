@@ -21,8 +21,8 @@ import type { PmsRoom } from "./pms";
  *   in later"), or anything delivered after the check. Never offered for sale (round 2, 209: the
  *   robot carried a late arrival's bags in at 01:29, 04:35 and 05:16 while the booking has another
  *   guest there until tomorrow, a double allocation).
- * - **Flere ankomster**: the robot carried bags for two or more arrivals into one room tonight (jury
- *   round 3, domain review: 212 got three, 304 two). Read from the robot's own log, no booking system needed.
+ * - **Flere ankomster**: the robot carried bags for two or more arrivals into one room tonight (round
+ *   3, domain review: 212 got three, 304 two). Read from the robot's own log, no booking system needed.
  * - **Motsier seg selv**: the robot's room check reported the room empty and tidy after it had itself
  *   put something inside earlier that night (round 4, domain review: luggage-209 placed at 01:29, "Nobody
  *   is here. The room is tidy." at 03:47). The camera and the task log disagree, so the room is never

@@ -62,8 +62,8 @@ const NO_CALLS: readonly CallNote[] = [];
 /**
  * Samtalelogg: the latest calls to the receptionist, from the browser and the phone, above last night's
  * sample calls (nightCalls.ts: the same three Overlevering and Forespørsler count), so the screen never
- * opens empty and still shows a call when the live log or the venue's network fails (jury round 4,
- * the creative juror). Loads on open, on Oppdater, and once when a call on this screen ends. No polling.
+ * opens empty and still shows a call when the live log or the venue's network fails (round 4,
+ * marketing review). Loads on open, on Oppdater, and once when a call on this screen ends. No polling.
  */
 export function CallLogPanel({ callActive, demo }: { callActive: boolean; demo?: readonly DemoCall[] }) {
   const [state, setState] = useState<LogState>({ kind: "loading" });

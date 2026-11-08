@@ -10,7 +10,7 @@ import { RegenIcon } from "./icons/RegenIcon";
 export const HANDOVER_HREF = "/overlevering";
 
 /**
- * "Se overleveringen": the way from Oversikt to the morning manager's page (jury round 1: it was
+ * "Se overleveringen": the way from Oversikt to the morning manager's page (review round 1: it was
  * reachable only from the rail). Orange as text, like *Åpne*, so it reads as a link on the dark top bar
  * without competing with the screen's one primary action. Nothing for a role that can't open the page.
  */

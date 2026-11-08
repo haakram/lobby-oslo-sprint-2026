@@ -20,7 +20,7 @@ import { WIDE, WIDGETS } from "./widgets";
  */
 export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   const { data, run, night, robot } = useHotelData(viewerUrl);
-  // The pilot accounts (admin) see the pilot's widgets only, the same cut as the rail (round 5, the product juror, the creative juror):
+  // The pilot accounts (admin) see the pilot's widgets only, the same cut as the rail (round 5, product and marketing reviews):
   // no Lager, Ansatte, Vedlikehold, Gjester, Resepsjon or 3D widget for a manager whose pilot is four screens.
   const widgets = MODULES.filter((module) => module.widget && canAccess(data.role, module.route) && (data.role !== "admin" || PILOT_MODULES.includes(module.id)));
 

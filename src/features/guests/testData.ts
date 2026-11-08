@@ -50,7 +50,7 @@ type Seed = {
  * maintenance and 132, 210, 312, 314 were free. 209 and 213 are booked, and the robot found them
  * empty and tidy: 213's guest was due out YESTERDAY and the check-out was never recorded, so the
  * system still has him in house and holds the room tonight (a real sleeper: a due-out-today room is
- * already in tonight's inventory, jury round 3); it is sold after reception confirms. 209 is Hiroshi
+ * already in tonight's inventory, review round 3); it is sold after reception confirms. 209 is Hiroshi
  * Sato's until tomorrow and the robot carried an arriving guest's bags in there three times (a double
  * allocation, held back); 210 has no booking, and the robot met a guest there. The team wrote these
  * bookings after the night to show the room check (the screens say so: "Testdata: bookingen er lagt

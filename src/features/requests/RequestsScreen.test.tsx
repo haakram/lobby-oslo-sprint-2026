@@ -84,7 +84,7 @@ describe("RequestsScreen (Forespørsler)", () => {
     expect(within(towels).getByRole("button", { name: "Marker fullført: Utstyr, Rom 108" })).toBeInTheDocument();
   });
 
-  it("stamps an action with who did it and how long ago, never the wall clock (jury round 3)", async () => {
+  it("stamps an action with who did it and how long ago, never the wall clock (review round 3)", async () => {
     route();
     const session = { user: { u: "siri", name: "Siri Haugen", role: "admin" as const }, view: "admin" as const, effectiveRole: "admin" as const, exp: 0 };
     render(
@@ -258,7 +258,7 @@ describe("RequestsScreen (Forespørsler)", () => {
     expect(within(row).getByRole("button", { name: "Ta saken: Sjekk registreringen, Rom 328" })).toBeInTheDocument();
   });
 
-  it("pins what the robot handed back first; calls that arrive a moment later go in their own group below (jury round 3)", async () => {
+  it("pins what the robot handed back first; calls that arrive a moment later go in their own group below (review round 3)", async () => {
     let answer: (value: Response) => void = () => {};
     const call = { id: "c9", startedAt: "2026-11-08T05:40:00.000Z", title: "Håndklær", summary: "Gjesten i rom 214 mangler håndklær", callerName: "Kari Nordmann", requestType: null, arrival: null, departure: null, guests: null, needsCallback: true };
     fetchMock.mockImplementation(async (input) => {
@@ -333,7 +333,7 @@ const DECLINES = [
   .map((line) => JSON.stringify(line))
   .join("\n");
 
-describe("RequestsScreen: the robot's refusals are a decision for a person (jury round 3)", () => {
+describe("RequestsScreen: the robot's refusals are a decision for a person (review round 3)", () => {
   it("splits them by the referee's verdict, the unapproved one first, and gives one anyway in one tap with a stamp", async () => {
     route({ run: () => new Response(DECLINES, { status: 200 }) });
     const session = { user: { u: "siri", name: "Siri Haugen", role: "admin" as const }, view: "admin" as const, effectiveRole: "admin" as const, exp: 0 };
@@ -347,7 +347,7 @@ describe("RequestsScreen: the robot's refusals are a decision for a person (jury
     expect(screen.queryByText(/falsk/)).not.toBeInTheDocument();
     const avvist = screen.getByRole("heading", { name: /^Avvist etter sjekk/ }).parentElement as HTMLElement;
     const [first, second] = within(avvist).getAllByRole("listitem");
-    // Plain words with the source on the row; the referee only behind Slik vet vi det (round 5, the design juror).
+    // Plain words with the source on the row; the referee only behind Slik vet vi det (round 5, design review).
     expect(within(first).getByText("Ikke bekreftet av simulatoren: se på denne først.")).toBeInTheDocument();
     expect(within(first).getByRole("button", { name: "Sjekk likevel: Søl" })).toBeInTheDocument();
     expect(within(second).getByText("Bekreftet av simulatoren.")).toBeInTheDocument();

@@ -212,12 +212,16 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
      on the test warehouse map, **16 m or 10 % shorter than a list sorted by shelf** (32 % against the
      list as written, shown beside it), and the four work guides as cards in Norsk, Polski, Українська
      and English. Re-read both off the screen.
-   - **Resepsjon** (ElevenLabs): *Ring resepsjonen*, ask in English or Polish for a room next weekend; it
-     says it is an AI, quotes the direct price, haggles in fixed steps (at most 10 % under), records a
-     request that waits for *Bekreft*, never takes a card number. Ask callers on stage to use a made-up
-     name.
+   - **Resepsjon** (ElevenLabs): *Samtalelogg* opens on last night's three calls, labelled *Eksempel*
+     (made-up guests and numbers, each with the guest's words, the language and the task it became), so
+     the screen is never empty if the live call or the wifi fails. Then *Ring resepsjonen*, ask in
+     English or Polish for a room next weekend; it says it is an AI, quotes the direct price, haggles in
+     fixed steps (at most 10 % under), records a request that waits for *Bekreft*, never takes a card
+     number. Ask callers on stage to use a made-up name. (Team item: the live agent keeps the old guide
+     and privacy wording until someone re-runs `src/features/reception/setup-agent.ts`.)
    - **Robotens øyne** (Holio pain 3): boxes drawn on the phone (nothing sent); tap a product, Claude
-     reads the pack and matches the catalogue; *Vis vei* opens its route. People are never cropped and
+     reads the pack and matches the catalogue; when it is sure, *Vis vei* opens its route; when it isn't,
+     the SKU stays hidden and there is no *Vis vei* until the label agrees. People are never cropped and
      sent. Holio detail: `docs/HOLIO.md`.
 3. **How it works (1 slide, 1 min; IT and security, Innovation).** "The run log is an event stream;
    every screen is a projection of it." `Wybe simulation ⇄ our agent (Python: exact sim-time router,

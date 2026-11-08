@@ -1,7 +1,8 @@
 # HOLIO.md — Holio pains 3, 6 and 9 in Fettero, with the honest status
 
 > For Holio (the Holio juror and the people at the stand) and for us. Written Sun 8 Nov, updated
-> at about 03:10 from the code on `hamad/jury-loop`. Fettero is a hotel product; this page says plainly which parts
+> at about 03:10 and again at 05:50 (owner E's round-5 fixes: no way round the label, guides that name
+> only real controls) from the code on `hamad/jury-loop`. Fettero is a hotel product; this page says plainly which parts
 > of it work for a web-shop warehouse today, which parts are hotel stand-ins, and what we would build
 > first. The brief: `docs/CONTEXT.md` § 6 and *Hackathon - Holio og utfordringer fra lagerdriften.pdf*.
 
@@ -18,9 +19,9 @@ and 9 what it plugs into.
 
 | Pain | Where in Fettero | What works today | Honest status |
 |---|---|---|---|
-| **3. Recognise a product without a barcode** | **Robotens øyne** (`/oyne`, `src/features/eyes/`) | The phone's camera draws boxes on the device (MediaPipe EfficientDet-Lite0; nothing sent). Tap a box: the crop goes through our server to Claude, which reads the text on the pack and picks the SKU from the catalogue, with what it read and a confidence label (*Sikker / Ganske sikker / Usikker, sjekk varen*). Only a *Sikker* match goes straight to *Legg i plukkliste*; **when the model is not sure, the worker types the SKU from the item's or the shelf's label**, and the item goes on the list only if the label agrees; a label that names another product offers that one instead (`src/features/picklist/ShelfLabelCheck.tsx`). Then *Vis vei* (route to the shelf). *Identifiser hele bildet* sends the whole frame when no box appears. | **Works with network and a key; not measured.** The catalogue is 12 test SKUs in the prompt (`src/features/catalog/products.ts`), which does not scale. The on-device detector knows COCO classes (bottle, cup …), with no class for a carton, polybag or envelope, so most warehouse goods need a tap. The confidence is the model's own label, not calibrated. No accuracy, speed or cost figure exists yet. The label check is typed today; scanning the label with the camera or the handheld's scanner is `TODO(phase-3)`. |
+| **3. Recognise a product without a barcode** | **Robotens øyne** (`/oyne`, `src/features/eyes/`) | The phone's camera draws boxes on the device (MediaPipe EfficientDet-Lite0; nothing sent). Tap a box: the crop goes through our server to Claude, which reads the text on the pack and picks the SKU from the catalogue, with what it read and a confidence label (*Sikker / Ganske sikker / Usikker, sjekk varen*). Only a *Sikker* match goes straight to *Legg i plukkliste*; **when the model is not sure, the worker types the SKU from the item's or the shelf's label**, and the item goes on the list only if the label agrees; a label that names another product offers that one instead (`src/features/picklist/ShelfLabelCheck.tsx`). **While the model is unsure there is no way round the label:** the guess's SKU stays hidden (*Sjekkes mot etiketten*) and *Vis vei* appears only once the label agrees (`src/features/eyes/ProductCard.tsx`); a `/ruter?sku=` link only shows the way to that shelf, with the name and the shelf, never the SKU, and never adds to the pick list (`src/features/routes/PicklistMode.tsx`). *Identifiser hele bildet* sends the whole frame when no box appears. | **Works with network and a key; not measured.** The catalogue is 12 test SKUs in the prompt (`src/features/catalog/products.ts`), which does not scale. The on-device detector knows COCO classes (bottle, cup …), with no class for a carton, polybag or envelope, so most warehouse goods need a tap. The confidence is the model's own label, not calibrated. No accuracy, speed or cost figure exists yet. The label check is typed today; scanning the label with the camera or the handheld's scanner is `TODO(phase-3)`. |
 | **6. Shortest route / less walking** | **Ruter** (`/ruter`, `src/features/routes/`), tab *Plukkliste* | A TypeScript port of our robot's router (parity tests against the Python agent) finds the shortest round over several floors, by lift when a trolley is in use. The *Plukkliste* tab is always there and plans a pick round from start and back for the items Øyne or Stemme added; an empty list opens on an example restocking order of 5 SKUs. **The headline compares with a list sorted by shelf, which is what a WMS prints: 16 m saved, 10 % shorter (146 m against 162 m).** Against the order the list was written in, it is 70 m, 32 %, shown beside it as the second baseline (`RouteStats.tsx`). | **Works on a test map, and the saving is small.** The warehouse map is 4 shelves on two floors with a packing zone as start (*Testkart*, `TODO(phase-2)`); a four-shelf map can't prove much. The hotel cleaning round is the same router on the real night's hotel map, and there it is as short as room-number order. The big savings in a warehouse are slotting (fast movers closer to packing) and batching; neither is built, and nothing uses order history yet, which is the word in pain 6. |
-| **9. Guidance in the worker's own language** | **Ruter → Plukkliste** (the guide cards, `src/features/picklist/PickingGuides.tsx`) and **Snakk gjennom roboten** (`/stemme`, `src/features/voice/`) | **The four work guides (*Varemottak, Plukking, Pakking, Retur*) show as cards on Plukkliste, with a switch between Norsk, Polski, Українська and English, without the voice agent** (`src/features/picklist/guides.ts`; the bokmål steps are the voice agent's own). The ElevenLabs voice agent answers in eleven languages; a spoken task for the robot only opens a confirm sheet. | **The cards work; the voice doesn't run here.** The Polish, Ukrainian and English steps are the team's translations, not yet checked by a native speaker (`TODO(phase-3)`). No agent id is set on our server, so `/stemme` says it isn't connected and is out of the menu. Guest-to-staff translation is not built. |
+| **9. Guidance in the worker's own language** | **Ruter → Plukkliste** (the guide cards, `src/features/picklist/PickingGuides.tsx`) and **Snakk gjennom roboten** (`/stemme`, `src/features/voice/`) | **The four work guides (*Varemottak, Plukking, Pakking, Retur*) show as cards on Plukkliste, with a switch between Norsk, Polski, Українська and English, without the voice agent** (`src/features/picklist/guides.ts`; the bokmål steps are the voice agent's own). Since round 5 they name only controls that exist (*Plukkliste*, *Plassering*, *Vis vei*): no "Beste rute" button, no tick-off, no hotel rooms or storerooms. The ElevenLabs voice agent answers in eleven languages; a spoken task for the robot only opens a confirm sheet. | **The cards work; the voice doesn't run here.** The Polish, Ukrainian and English steps are the team's translations, not yet checked by a native speaker (`TODO(phase-3)`). No agent id is set on our server, so `/stemme` says it isn't connected and is out of the menu. Guest-to-staff translation is not built. |
 
 ## Holio, 60 seconds at the stand (rehearse once; lead with pain 3)
 
@@ -29,16 +30,20 @@ into. Five physical items on the table, Øyne open on a phone (logged in, camera
 
 1. **Tap an item with readable text.** The card shows *Tekst på pakken* (what the model read) and
    *Sikker*; *Legg i plukkliste* is offered.
-2. **Tap an item with no readable text.** It shows *Usikker, sjekk varen* and asks for the label: type
-   `1004` (the soap bar), or another product's SKU to show that the label wins (*… Etiketten
-   gjelder.*).
+2. **Tap an item with no readable text.** It shows *Usikker, sjekk varen*, hides the SKU and offers no
+   *Vis vei*: it asks for the label. Type `1004` (the soap bar), or another product's SKU to show that
+   the label wins (*… Etiketten gjelder.*). Only then does *Vis vei* appear. This is the Holio juror's own
+   stand question ("walk me from an unsure result to the pick list"): there is no way round the label.
 3. ***Vis vei*:** the pick round, with the saving against a list sorted by shelf (the baseline a WMS
    prints), read off the screen.
 4. **Switch the work guides to *Polski*** on Plukkliste (the translations are ours, not yet checked by
    a native speaker).
 
 Say before he asks: the camera is for exceptions (receiving, returns, packing), not every pick, and
-"not measured yet" until the 20-item run below exists. If the detector hasn't loaded or has failed, Øyne
+"not measured yet" until the 20-item run below exists. On returns, photograph the item, never the
+parcel: a shipping label carries a customer's name and address, and Øyne would send it to a US
+processor (the person cover handles people, not labels). On a TC27 the label field should take a
+hardware scan as keystrokes through Zebra's DataWedge with no code change: **untested**. If the detector hasn't loaded or has failed, Øyne
 sends nothing at all (people can't be covered), so start the phone a minute early.
 
 ## How it would fit Holio Ops

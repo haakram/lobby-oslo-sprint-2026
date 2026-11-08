@@ -4,8 +4,11 @@
 > does today, checked in the code on Sun 8 Nov at about 03:00 (`hamad/jury-loop`; the product trades as
 > Fettero there, while code identifiers keep the old `lobby` names), and what a real hotel deployment
 > would still need. The transfer basis per processor (§ 3.1) was checked against primary sources (the
-> DPF list, each vendor's DPA) at about 04:00 the same morning. Not legal advice; a
-> pilot needs a lawyer's review. The full threat model for login and roles is in
+> DPF list, each vendor's DPA) at about 04:00 the same morning. The pilot's own data sources (the
+> door-lock signal, the energy slot and the night clerk's entries, § 10) and the EEA status of the EU
+> acts (§ 7) were read against primary sources at about 05:30 (Lovdata, EUR-Lex, EFTA's EEA-Lex,
+> Datatilsynet). A data processing agreement a hotel can sign is in [`docs/DPA.md`](./DPA.md). Not legal
+> advice; a pilot needs a lawyer's review. The full threat model for login and roles is in
 > [`docs/checks/threat-model.md`](./checks/threat-model.md).
 
 ## 1. In one paragraph
@@ -18,7 +21,9 @@ after a cut-off** (`RECEPTION_CALLS_SINCE`, set on the demo laptop to Sun 8 Nov 
 test calls never reach a screen, and the team also deletes them in ElevenLabs before 14:00. There is
 **no database**.
 Camera frames and voice go to two AI processors, **Anthropic (Claude API)** and **ElevenLabs**, both
-outside the EEA. Nothing identifies people: there is no face recognition anywhere in the code.
+outside the EEA. Nothing identifies people: there is no face recognition anywhere in the code. The
+pilot (software only) uses neither: it reads the booking system, **one signal per room from the door
+lock and the energy slot, never who**, and the night clerk's own entries (§ 10).
 
 ## 2. What personal data the demo touches
 
@@ -58,8 +63,13 @@ The list was queried for each name through the search behind
 
 Two more to check before a pilot: whether Anthropic appears as a sub-processor on ElevenLabs' list
 (ElevenLabs runs Claude inside our agents; **to verify**), and whether the DPF survives its court
-challenges. If it fell, ElevenLabs and Vercel would move to the SCCs already in their DPAs, as Anthropic
-uses today.
+challenges. The first one failed: the EU General Court dismissed the action for annulment of the DPF
+adequacy decision (Implementing Decision (EU) 2023/1795) on 3 September 2025, *Latombe v Commission*,
+T-553/23, ECLI:EU:T:2025:831 ([EUR-Lex](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:62023TJ0553));
+an appeal to the Court of Justice is reported (case number C-703/25 P, **to verify** on curia.europa.eu).
+If the DPF fell, ElevenLabs and Vercel would move to the SCCs already in their DPAs, as Anthropic uses
+today. For Øyne, Claude through an EU region of a cloud provider would remove the transfer question
+altogether (§ 7, "An EU hosting path").
 
 No analytics, no ad trackers, no third-party fonts at runtime (`next/font` self-hosts them), no CDN
 for the camera model (served from our own origin, `src/features/eyes/useDetector.ts`). MediaPipe's
@@ -162,11 +172,29 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   the robot at all (`TODO(phase-3)` in `src/features/voice/VoiceScreen.tsx`).
 - **No real phone number** is connected on the deployed app: the webhook tools answer 503 because no
   `RECEPTION_TOOL_SECRET` is set (checked Sat night).
+- **Known gap: a phone caller hears none of the transfer information (team item: ShirazIQ's prompt in
+  `src/features/reception/agentConfig.ts`).** The first message says it is the hotel's AI assistant
+  and that requests are written down; the US processors, the 30 days and the rights come only "if the
+  guest asks" (prompt § Privacy). The notice under *Ring resepsjonen* reaches only someone looking at
+  the screen. Art. 13 asks for the information "på det tidspunktet personopplysningene innhentes",
+  including the recipients (Art. 13(1)(e)), the transfer to a third country (13(1)(f)) and the
+  retention period (13(2)(a)) ([Lovdata, the GDPR in Norwegian](https://lovdata.no/dokument/NL/lov/2018-06-15-38/KAPITTEL_gdpr-3)).
+  A layered notice is the accepted way to do that on a call: a short first layer, the rest on request
+  (Article 29 Working Party, *Guidelines on transparency*, WP260 rev.01, 11 Apr 2018, endorsed by the
+  EDPB; the section on the layered approach outside a screen: paragraph **to verify**). Proposed first
+  layer, appended to `firstMessage` (the law juror): *«Samtalen behandles av ElevenLabs og Anthropic i USA,
+  og teksten slettes etter 30 dager. Si «personvern» for mer.»* The live agent carries it only after
+  `setup-agent.ts` is run again. Same file, same owner: goal 3 has the agent say in every call that
+  booking direct is 10 % cheaper than the booking sites, which is true only against the prompt's
+  static `otaPrice` (markedsføringsloven, § 7 below); cut it to what is always true (breakfast is
+  included when booking direct) or tie it to a dated price check.
 
 ## 7. What a real deployment needs (GDPR and beyond)
 
 - **Roles:** the hotel is the **controller**; Fettero is a **processor** with a data processing
-  agreement (Art. 28). Sub-processors listed and agreed: Anthropic, ElevenLabs, Vercel.
+  agreement (Art. 28): a one-page draft on the Commission's standard clauses is in
+  [`docs/DPA.md`](./DPA.md). Sub-processors listed and agreed: Vercel for the pilot; Anthropic and
+  ElevenLabs only if the hotel switches on the camera or the receptionist, which the pilot doesn't.
 - **Transfers outside the EEA** (Anthropic, ElevenLabs, Vercel): one basis per processor, checked on
   Sun 8 Nov (§ 3.1): ElevenLabs and Vercel are on the DPF list; Anthropic is not, so its DPA's SCCs carry
   the transfer, and a transfer impact assessment comes before a pilot. EU data residency where offered
@@ -174,6 +202,8 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
 - **Legal basis:** legitimate interest (Art. 6(1)(f)) for staff tools (handover, routes, work orders),
   with a written balancing test; steps before a contract (Art. 6(1)(b)) for a caller's booking request;
   explicit consent for any special-category detail a guest volunteers (the receptionist asks first).
+  The door-lock and energy-slot signal is a further use of the hotel's own log: its Art. 6(4) test is
+  in § 10.2.
 - **DPIA** (Art. 35) before a pilot: a moving camera in corridors and voice processing at scale are
   the reasons.
 - **Cameras:** signage where the robot or a staff phone films; never inside an occupied room; the
@@ -207,12 +237,18 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   employee representatives and announce before rollout, with signs where cameras film. We commit to
   no per-person performance statistics.
 - **AI Act:** Art. 50 (tell people they are talking to an AI) applies in the EU from 2 August 2026,
-  and the receptionist says it is an AI in its first sentence. In Norway the AI Act applies only once it
-  is taken into the EEA Agreement and a Norwegian act puts it into force; its status today is **to
-  verify** (we don't write "applies in Norway from 2 August 2026"). The language model is kept out of the
-  robot's safety loop (safety rules are code), which matters under the Machinery Regulation (EU)
-  2023/1230, which applies in the EU from 20 January 2027 and under which a hotel robot needs CE marking
-  (EEA status in Norway: **to verify**).
+  and the receptionist says it is an AI in its first sentence. **In Norway it does not apply yet:** on
+  Sun 8 Nov 2026 EFTA's EEA-Lex lists Regulation (EU) 2024/1689 as "under scrutiny for incorporation
+  into the EEA Agreement by Iceland, Liechtenstein and Norway", with no Joint Committee decision
+  ([EEA-Lex 32024R1689](https://www.efta.int/eea-lex/32024R1689)); a Norwegian AI act needs that first.
+  We follow Art. 50 anyway. The language model is kept out of the robot's safety loop (safety rules are
+  code). That is a legal design choice as well as an engineering one, on our reading: under the AI Act
+  a machine becomes high-risk through AI only where an AI system is its safety component, or is itself
+  the product, under the harmonisation legislation in Annex I (Art. 6(1)), and the Machinery Regulation
+  is on that list. The **Machinery Regulation (EU) 2023/1230** applies in the EU from 20 January 2027
+  (its Art. 54), and a hotel robot needs CE marking under it; it is taken into the EEA Agreement by
+  Joint Committee decision 171/2025 of 11 July 2025, whose entry into force is pending constitutional
+  requirements ([EEA-Lex 32023R1230](https://www.efta.int/eea-lex/32023R1230), read Sun 8 Nov).
 - **Prices set by the receptionist:** its discount steps are fixed in a tool and the same for every
   caller who pushes back, at most 10 % under the direct price (`src/features/reception/agentConfig.ts`):
   a published ladder, not a price personalised by automated decision-making, which the EU consumer
@@ -220,10 +256,23 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
 - **Liability:** in Norway today a claim runs under
   [produktansvarsloven](https://lovdata.no/dokument/NL/lov/1988-12-23-104) (1988). The EU's new Product
   Liability Directive, (EU) 2024/2853, treats software as a product; EU states must transpose it by
-  9 December 2026, and it reaches Norway only through the EEA. The design answer is the same either way
-  (safety gates in code, "done" only when verified), and a pilot writes it up as a one-page safety
-  case. One behaviour of the simulation agent must not reach a hotel: moving a warning sign off a floor
-  that is still wet (`sign_move`, on for Wybe's game only); a pilot build switches it off.
+  9 December 2026, and it reaches Norway only through the EEA (on Sun 8 Nov EEA-Lex lists it as "under
+  scrutiny for incorporation", no Joint Committee decision: [EEA-Lex 32024L2853](https://www.efta.int/eea-lex/32024L2853)).
+  Under it, liability to an injured person can't be excluded by contract: our terms can cap what we owe
+  the hotel, not what is owed to a guest who slipped, so the one-page safety case comes before the
+  first pilot. The design answer is the same either way (safety gates in code, "done" only when
+  verified). One behaviour of the simulation agent must not reach a hotel: moving a warning sign off a
+  floor that is still wet (`sign_move`, on for Wybe's game only); a pilot build switches it off.
+- **The handover as evidence of care (the law juror):** what the robot knows about a hazard, the hotel knows.
+  A page that read *siden 23:51 … innen 06:30* beside a wet floor would be the first exhibit in a slip
+  claim (negligence, and the employer's liability under
+  [skadeserstatningsloven § 2-1](https://lovdata.no/dokument/NL/lov/1969-06-13-26/KAPITTEL_2): the
+  employer answers for harm caused by intent or negligence while an employee does the work). So since
+  round 5 a safety item on Overlevering reads *straks*, with when the night staff were alerted, or
+  *varsle nå* when the log doesn't show it (`src/features/handover/`, owner A), and the pilot rule is
+  that the night staffer is alerted the moment the robot sees a wet floor it can't sign, escalated if
+  nobody acknowledges within 10 minutes (pilot design, not built: the bell is in the browser). The same
+  record then shows reasonable care: acknowledged at 23:52, sign out at 00:05.
 - **The demo calls:** the team deletes its own ElevenLabs test conversations before the demo, and asks
   anyone calling the receptionist on stage to give a made-up name and number (a juror's real details
   would otherwise stay at ElevenLabs for 30 days).
@@ -308,3 +357,95 @@ FETTERRO, FETUERO, and FERRERO for the reputation question) in
 and the [WIPO Global Brand Database](https://branddb.wipo.int), in classes 9, 42 and 43, plus the
 identical word in any class. Write the result and the date here and in `docs/DEMO.md` § 6.1. An
 automated TMview query was refused by the site's bot protection on Sun 8 Nov, so this is done by hand.
+
+## 10. The pilot's data sources: the door-lock signal, the energy slot and the night clerk
+
+The pilot is software only (`docs/DEMO.md` § 7): it reads the booking system (read-only), the door
+lock, the energy slot and the night clerk's own entries. Not the camera, not the voice. This section
+answers the question a hotel's lawyer asks first (the law juror, round 4): on what basis does the hotel hand
+over its door-lock data, and what stops it becoming staff monitoring. Read against primary sources on
+Sun 8 Nov, about 05:30: the GDPR in Norwegian on Lovdata (Art. 6(4), 13, 28), arbeidsmiljøloven
+chapter 9 on Lovdata, and the regulators' joint guide on control and monitoring at work
+([*Veileder om kontroll og overvåking i arbeidslivet*](https://www.datatilsynet.no/personvern-pa-ulike-omrader/personvern-pa-arbeidsplassen/veileder-om-kontroll-og-overvaking-i-arbeidslivet/),
+Datatilsynet, Arbeidstilsynet and Petroleumstilsynet with the social partners, 2019; the section
+*Adgangskontroll*, pp. 34–35 of the [PDF](https://www.arbeidstilsynet.no/contentassets/04ec2eb566d44942bd6693e9e3a0c99e/veileder-om-kontroll-og-overvaking-2019.pdf)).
+Our reading, not legal advice.
+
+### 10.1 What Fettero takes: one signal per room, never who
+
+| Source at the hotel | What it holds | What reaches Fettero | Never |
+|---|---|---|---|
+| The lock system's audit trail (ASSA ABLOY, Salto, dormakaba and others) | Every card at every door: guests', housekeepers', porters', master and emergency cards | Per guest room: the time of the last **guest-card** entry, or "none since 18:00" | the card's id, the guest's name, any staff, master or emergency card, any door that isn't a guest room |
+| The energy slot (the card switch in the room), where a room-control system reports it | Whether a card sits in the slot, sometimes which card | Per guest room: "empty since hh:mm" | whose card |
+| The night clerk's phone (§ 10.3) | What she checked and wrote | Room, finding, time, her name | — |
+
+On screen the signal reads like *rom 213: ingen kort i energibryteren siden 22:10*: **ett signal per
+rom, aldri hvem.** In the demo it is a team-written sample in the run-log format (source `door_lock`),
+labelled as test data; no lock system has been connected or seen yet.
+
+- **Where the reduction happens:** on the hotel's side, before anything leaves it. Best case, the lock
+  vendor's report or API gives the per-room value. If the only export is the raw audit trail, it is
+  reduced on the hotel's own machine before it is sent, or we don't take it. Which vendors can give a
+  per-room report: **to verify**, vendor by vendor.
+- **Offline locks:** many hotels run locks whose audit trail is read at the door with a handheld, and
+  have no networked room control (the founder juror, the Wybe engineer). Then there is no signal at night, and the pilot
+  runs on the night clerk's check (§ 10.3): slower, but nothing legal stops it. How many target hotels
+  have online locks is a phone-round question (`docs/DEMO.md` § 8.1).
+- **Retention:** the signal is deleted 24 hours after the handover it fed (our proposal; the hotel sets
+  it in the DPA). For scale: the regulators' guide gives 90 days as the normal maximum for raw access
+  logs in Datatilsynet's practice (p. 35, *«Under normale omstendigheter vil 90 dager … være maksimal
+  lagringstid for passeringsopplysninger»*).
+- **Never on its own:** the signal never sells a room. A named receptionist confirms the folio, the
+  bags and the key card, then the manager sends it to reception, and the booking system stays the truth
+  (read-only; `docs/PRD.md` § 6).
+
+### 10.2 The hotel's basis: the Art. 6(4) compatibility test
+
+The hotel is the controller of its lock log and collected it to secure the rooms and control who
+enters them. Telling whether a room the booking system still holds is actually empty is a further
+purpose. Where a further purpose rests neither on consent nor on law, Art. 6(4) has the controller
+weigh, among other things, five points
+([Lovdata](https://lovdata.no/dokument/NL/lov/2018-06-15-38/KAPITTEL_gdpr-2)). The hotel's test, one
+line each:
+
+| Art. 6(4) | For the per-room signal |
+|---|---|
+| (a) the link between the purposes | Both are about who uses the room the guest paid for; the further one serves the same rooms. |
+| (b) the context, the relation between guest and hotel | The guest's card opens the guest's own room; that the hotel knows a room hasn't been entered since the departure date is within what a guest expects, and the hotel's privacy notice says it (below). |
+| (c) the nature of the data | No special categories, nothing on offences; one value per room, not a movement trail. |
+| (d) the possible consequences for the guest | The worst case is a room offered while a guest still has a right to it. It can't be sold on the signal: a named receptionist confirms first, and the booking system decides. |
+| (e) safeguards | Reduced on the hotel's side, no card ids or names, staff cards removed at the source, deleted after 24 hours, a processor bound by Art. 28 (`docs/DPA.md`). |
+
+Recital 50: where the further purpose is compatible, no legal basis separate from the one that
+allowed the collection is required. Because views differ on how far that reaches, the hotel also writes
+down a legitimate-interest balancing (Art. 6(1)(f)) for the same use: belt and braces, and a lawyer
+confirms before the pilot (**to verify**).
+
+One sentence for the hotel's privacy notice: *«Vi bruker dørlåsens logg til å se om et rom står tomt
+etter avreise, slik at det kan selges igjen. Bare ett signal per rom, aldri hvem, går til vår
+leverandør Fettero, og det slettes etter 24 timer.»*
+
+### 10.3 Staff: not a control measure, and the night clerk's entries
+
+- **The lock log is staff data too.** The regulators' guide: card passages *«er opplysninger om den
+  enkelte ansatte som kortet er utstedt til»*; ordinary access control is *«vanligvis … et saklig og
+  lite inngripende kontrolltiltak»*; its purpose must be written down; and *«I utgangspunktet kan ikke
+  opplysningene i adgangskontrollsystemet brukes til andre formål»* (p. 34). So Fettero never receives a
+  staff, master or emergency card event: they are removed at the source. Were a pilot to read them, it
+  would be a control measure under [arbeidsmiljøloven](https://lovdata.no/dokument/NL/lov/2005-06-17-62/KAPITTEL_10)
+  § 9-1 (it needs *«saklig grunn i virksomhetens forhold»* and must not be *«en uforholdsmessig
+  belastning for arbeidstakeren»*), to be discussed with the employees' representatives *«så tidlig som
+  mulig»* (§ 9-2) before rollout. That is weeks, not Monday; excluding staff cards at the source is
+  what lets the pilot start.
+- **The night clerk's entries** (the *Uten robot* input, `docs/DEMO.md` § 2): she taps a room (*tom og
+  ryddig*, *ikke tom*, *trenger vask*), a safety item, or writes a short note, and each becomes a
+  run-log event with source `staff` and her name. That is staff data: her name and what she recorded,
+  for the handover, like the paper *vaktbok* it replaces. Basis: the hotel's legitimate interest in a
+  safe handover. In the pilot build the entries stay **on that device** (the browser's storage; the
+  screen says so; a server store with its own retention is `TODO(phase-3)`). Free text can hold guest
+  details, so the note is for the room and the task, never a guest's health.
+- **The rule we sign up to: no per-person performance statistics, ever.** The page counts the robot's
+  conduct (*10 av 15 nøkkelkortinnganger uten banking*), never a person's. The receptionist named in
+  213's confirmation, and the manager who sends it on, are recorded so the hotel can show it checked
+  before reselling, not to score them. In one line for the staff and their representatives:
+  **Fettero signerer for nattevakten, ikke på henne.**

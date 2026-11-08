@@ -200,9 +200,9 @@ describe("endOfShift (round 6)", () => {
     expect(endOfShift(DEMO, 4 * 3600)).toBeNull();
   });
 
-  it("reads the hotel-rules night: docked at 06:00 with 20 %, the keycard picked up at 00:28 still in hand", () => {
+  it("reads the hotel-rules night: docked at 06:00 (16 % at its last state line, as the tile says), the keycard picked up at 00:28 still in hand", () => {
     const lines = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/hotel-rules-seed16.jsonl"), "utf8")).lines;
-    expect(endOfShift(lines)).toMatchObject({ place: "charging-dock", docked: true, battery: 20, keycard: true });
+    expect(endOfShift(lines)).toMatchObject({ place: "charging-dock", docked: true, battery: 16.4, keycard: true });
     expect(masterKeyEntries(lines).withoutKnock).toBe(0);
     expect(signsMovedOffWet(lines).filter((move) => move.stillWet)).toHaveLength(0);
   });

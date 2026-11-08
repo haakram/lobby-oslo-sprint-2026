@@ -414,13 +414,12 @@ export function signsMovedOffWet(lines: readonly RunLine[], until?: number): Sig
 /** Where the robot ended the shift: its place, whether it docked, its battery, and whether it still holds the master keycard. */
 export type EndOfShift = { place: string | null; docked: boolean; battery: number | null; keycard: boolean; clock: string | null };
 
-const DOCK_BATTERY = /\bto (\d+(?:\.\d+)?)\s*%/i;
-
 /**
  * The robot at the end of the shift (round 6, the domain review: a robot that ends in a corridor, or holding the
  * master keycard, is what a hotel acts on at 06:00). Read only once the log's `end` line is within `until`; null
  * while the night runs. The keycard counts while it is in the robot's hands or cart on the last state line, or
- * picked up after it and not put down.
+ * picked up after it and not put down. The battery is the last one the robot reported (a state or status line), the
+ * same figure Natteskift's tile shows, not the dock's own charge note.
  */
 export function endOfShift(lines: readonly RunLine[], until?: number): EndOfShift | null {
   const seen = linesUntil(lines, until);
@@ -442,11 +441,7 @@ export function endOfShift(lines: readonly RunLine[], until?: number): EndOfShif
     const item = str(rec(line.args)?.item);
     const result = rec(line.result);
     if (line.cmd === "move") docked = false;
-    if (line.cmd === "dock") {
-      docked = true;
-      const charged = DOCK_BATTERY.exec(str(result?.outcome) ?? "");
-      if (charged) battery = Number(charged[1]);
-    }
+    if (line.cmd === "dock") docked = true;
     if (line.cmd === "status" && result) {
       if (typeof result.battery === "number") battery = result.battery;
       if (typeof result.docked === "boolean") docked = result.docked;

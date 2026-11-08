@@ -302,11 +302,12 @@ export function selectHighlights(data: DashboardData): Highlight[] {
       label: "Robotens oppdrag i natt",
       value: totals ? totals.done : null,
       unit: totals ? `av ${totals.total}` : undefined,
-      detail: night ? robotShort(night.tally) : undefined,
+      detail: night ? robotShort(night.tally, data.basis ? ownAgainstLog(data.basis, data.contradictions ?? []).contradicted : []) : undefined,
       method: night ? [robotDetail(night, data.declines, data.basis)] : undefined,
       methodLabel: "Slik vet vi det",
       source: "run-log",
-      tone: "success",
+      // Ink, not green (round 7): the 73 hold 209, which the robot's own log contradicts.
+      tone: "default",
       route: "/",
       fromNight: true,
     },
@@ -378,11 +379,23 @@ export function declineShort(split: DeclineSplit | null | undefined, declined: n
   return declined > 0 ? `${declined} avvist etter sjekk` : null;
 }
 
-/** "Alle 73 «ferdig» bekreftet · 4 til en person": the robot figure's one line on a manager's page (review round 3). */
-export function robotShort(robot: { done: number; reported: number; handedBack: number }): string {
-  const all = robot.reported > 0 && robot.done === robot.reported;
-  const confirmed = all ? (robot.done === 1 ? "1 «ferdig» bekreftet" : `Alle ${robot.done} «ferdig» bekreftet`) : `${robot.done} av ${robot.reported} «ferdig» bekreftet`;
-  return robot.handedBack > 0 ? `${confirmed} · ${robot.handedBack} til en person` : confirmed;
+/**
+ * "72 av 73 holder · 1 motsagt av egen logg (rom 209) · 4 til en person": the robot figure's one line on a manager's
+ * page. Round 7 (data and robot-domain reviews): "Alle 73 «ferdig» bekreftet" in green stood above the card's 209, so
+ * the line now counts what holds: of the "done" the robot reported, those the simulator credited and its own log does
+ * not contradict (`contradicted`: ownAgainstLog's, the credited ones only), then why the rest don't.
+ */
+export function robotShort(robot: { done: number; reported: number; handedBack: number }, contradicted: readonly { room: string }[] = []): string {
+  const parts = [robot.reported > 0 ? `${robot.done - contradicted.length} av ${robot.reported} holder` : "Ingen «ferdig» meldt"];
+  if (contradicted.length > 0) parts.push(`${contradicted.length} motsagt av egen logg (rom ${joinRooms(contradicted.map((entry) => entry.room))})`);
+  if (robot.reported > robot.done) parts.push(`${robot.reported - robot.done} ikke godkjent av simulatoren`);
+  if (robot.handedBack > 0) parts.push(`${robot.handedBack} til en person`);
+  return parts.join(" · ");
+}
+
+/** "209", "209 og 310", "209, 310 og 412". */
+function joinRooms(rooms: readonly string[]): string {
+  return rooms.length < 2 ? rooms.join("") : `${rooms.slice(0, -1).join(", ")} og ${rooms.at(-1)}`;
 }
 
 /**

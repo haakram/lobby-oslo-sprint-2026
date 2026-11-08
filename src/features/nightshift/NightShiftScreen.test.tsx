@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline, snapshotAt } from "@/features/replay";
-import { NightShiftScreen } from "./NightShiftScreen";
+import { doneBasis, ownAgainstLog, selfContradictions } from "./conduct";
+import { NightShiftScreen, notHoldingLine } from "./NightShiftScreen";
 import { outcomesAt } from "./outcomes";
 import { parseRunLog } from "./runlog";
 import { viewerBase } from "./useRun";
@@ -14,6 +15,9 @@ const TIMELINE = buildTimeline(parseRunLog(SAMPLE).lines);
 const END = snapshotAt(TIMELINE, TIMELINE.duration);
 // How each request ended, read the same way Oversikt, Forespørsler and Overlevering read it.
 const TALLY = outcomesAt(TIMELINE, END.eventCount, END.t).tally;
+// The "done" the robot's own log contradicts (the judgement card's rule), which do not hold (round 7).
+const CONTRADICTED = ownAgainstLog(doneBasis(TIMELINE.lines), selfContradictions(TIMELINE.lines)).contradicted.length;
+const DEMO = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
 const LAST_DECISION = [...TIMELINE.events].reverse().find((event) => event.decision)!;
 const SHIFT = "w2-3fa94c1d07be4e2a9c55d1e8b6a0f217";
 
@@ -50,11 +54,25 @@ describe("NightShiftScreen, replay", () => {
     expect(within(stats).getByText(END.clock)).toBeInTheDocument();
     // Done out of the robot's tasks, and the server's verdict on every "done" it reported.
     expect(within(stats).getByText("Oppdrag fullført").previousElementSibling).toHaveTextContent(`${TALLY.done}av ${TALLY.total}`);
-    expect(within(stats).getByText("«Ferdig» bekreftet").previousElementSibling).toHaveTextContent(`${TALLY.done}av ${TALLY.reported}`);
+    expect(within(stats).getByText("«Ferdig» som holder").previousElementSibling).toHaveTextContent(`${TALLY.done - CONTRADICTED}av ${TALLY.reported}`);
     expect(within(stats).getByText("Wybe-poeng (simulering)")).toBeInTheDocument();
     expect(screen.getByRole("figure", { name: "Hotellet som plantegning" })).toBeInTheDocument();
     expect(screen.getAllByText(LAST_DECISION.text).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Spill av/ })).toBeEnabled();
+  });
+
+  it("reads the demo night's done as what holds, in ink: 72 av 73, 1 motsagt av egen logg (rom 209) (round 7)", async () => {
+    fetchMock.mockImplementation(async () => textResponse(DEMO));
+    render(<NightShiftScreen />);
+    expect(await screen.findByText("Ferdig")).toBeInTheDocument();
+    const stats = screen.getByRole("group", { name: "Skiftet i tall" });
+    expect(within(stats).getByText("«Ferdig» som holder").previousElementSibling).toHaveTextContent("72av 73");
+    expect(within(stats).getByText("Oppdrag fullført").previousElementSibling).toHaveTextContent("73av 77");
+    expect(stats).toHaveTextContent("1 motsagt av egen logg (rom 209)");
+    expect(stats).not.toHaveTextContent(/bekreftet/);
+    expect(stats.querySelector(".text-success")).toBeNull();
+    expect(notHoldingLine({ done: 73, reported: 73 }, [])).toBeNull();
+    expect(notHoldingLine({ done: 70, reported: 73 }, [{ room: "209" }, { room: "310" }])).toBe("2 motsagt av egen logg (rom 209 og 310) · 3 ikke godkjent av simulatoren");
   });
 
   it("lets the Robotlogg switch drive the whole page: the hotel-rules night loads its own log, Open-RMF its own figures (round 6)", async () => {

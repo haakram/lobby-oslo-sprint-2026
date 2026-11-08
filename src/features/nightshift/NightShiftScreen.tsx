@@ -9,6 +9,7 @@ import { RoomPicker } from "@/features/hotel3d/RoomPicker";
 import { useHeldReplay } from "@/features/hotel3d/useHeldReplay";
 import { type HotelReplay, itemName, placeName, type ReplaySource, roomNumber, simToClock, type Task, taskKindName, useHotelReplay } from "@/features/replay";
 import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, PageHeader, RegenIcon, Skeleton, Stat } from "@/ui";
+import { doneBasis, ownAgainstLog, type SelfContradiction, selfContradictions } from "./conduct";
 import { forManagers } from "./eventFilter";
 import { HANDED_BACK, type NightOutcomes, type OutcomeRow, outcomeRows, outcomesAt, reasonGroups, RIGHTLY_NOT_DONE } from "./outcomes";
 import rmfSample from "./fixtures/open-rmf-night.json";
@@ -377,17 +378,38 @@ function RmfStatRow({ lines }: { lines: readonly RunLine[] }) {
   );
 }
 
+/**
+ * "1 motsagt av egen logg (rom 209)": why a reported "done" does not hold (round 7, data and robot-domain reviews:
+ * the tile read "73 av 73 «Ferdig» bekreftet" above the card's 209). Null when every one holds.
+ */
+export function notHoldingLine(tally: { done: number; reported: number }, contradicted: readonly Pick<SelfContradiction, "room">[]): string | null {
+  const rooms = contradicted.map((entry) => entry.room);
+  const parts = [
+    rooms.length > 0 ? `${rooms.length} motsagt av egen logg (rom ${rooms.length < 2 ? rooms.join("") : `${rooms.slice(0, -1).join(", ")} og ${rooms.at(-1)}`})` : null,
+    tally.reported > tally.done ? `${tally.reported - tally.done} ikke godkjent av simulatoren` : null,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 function StatRow({ replay, verdicts }: { replay: HotelReplay; verdicts: NightOutcomes }) {
   const snapshot = replay.snapshot!;
   const low = snapshot.battery !== null && snapshot.battery < 20;
   const { tally } = verdicts;
+  // The robot's own log against its own "done", up to the scrubber (the judgement card's rule): 209 on the demo night.
+  const lines = replay.timeline?.lines;
+  const contradicted = useMemo(() => (lines ? ownAgainstLog(doneBasis(lines, snapshot.t), selfContradictions(lines, snapshot.t)).contradicted : []), [lines, snapshot.t]);
+  const notHolding = notHoldingLine(tally, contradicted);
   return (
     <section role="group" aria-label="Skiftet i tall" className="border-y border-line py-5">
       <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 2xl:grid-cols-8">
-        <Stat label="Oppdrag fullført" value={tally.done} unit={`av ${tally.total}`} tone="success" />
-        {/* Every "done" checked against the referee (the Wybe Night Shift simulator, named under the judgement card's Slik vet vi det): a done it did not credit is not counted as done. */}
-        <Stat label="«Ferdig» bekreftet" value={tally.done} unit={`av ${tally.reported}`} />
-        {/* Plain counts beside the green one: the night's misses are part of its total, not an alarm. */}
+        {/* Task state, in ink (round 7): the 73 hold one "done" the robot's own log contradicts. */}
+        <Stat label="Oppdrag fullført" value={tally.done} unit={`av ${tally.total}`} />
+        {/* The result: a "done" holds when the simulator credited it and the robot's own log does not contradict it. */}
+        <div className="min-w-0">
+          <Stat label="«Ferdig» som holder" value={tally.done - contradicted.length} unit={`av ${tally.reported}`} />
+          {notHolding && <p className="mt-1 text-sm text-muted">{notHolding}</p>}
+        </div>
+        {/* Plain counts: the night's misses are part of its total, not an alarm. */}
         <Stat label="Ga videre til en person" value={tally.handedBack} />
         <Stat label="Avvist eller avlyst" value={tally.declined + tally.cancelled} />
         <Stat label="Avvik meldt" value={snapshot.workOrders.length} />

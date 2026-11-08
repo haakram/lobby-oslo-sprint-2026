@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { selectGuestDay } from "@/features/guests/testData";
 import { lowStock, STOCK } from "@/features/inventory/testData";
-import { doneBasis, selfContradictions } from "@/features/nightshift/conduct";
+import { doneBasis, ownAgainstLog, selfContradictions } from "@/features/nightshift/conduct";
 import { declineSplit } from "@/features/nightshift/declines";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import type { RequestView } from "@/features/requests/select";
@@ -144,7 +144,8 @@ describe("selectHighlights (the figures)", () => {
     expect(by.belegg).toMatchObject({ value: occupancy(revenue, rooms), unit: "%", detail: `${revenue.roomsSold} av ${rooms} rom solgt`, source: "test" });
     expect(by.inntekt).toMatchObject({ unit: "kr", source: "test" });
     expect(by.inntekt.detail).toMatch(/^Snittpris .+ kr · RevPAR .+ kr$/);
-    expect(by.oppgaver).toMatchObject({ value: NIGHT.tally.done, unit: `av ${NIGHT.tally.total}`, tone: "success", source: "run-log" });
+    // Ink, not green (round 7): the robot's "done" hold one its own log contradicts on the demo night (209).
+    expect(by.oppgaver).toMatchObject({ value: NIGHT.tally.done, unit: `av ${NIGHT.tally.total}`, tone: "default", source: "run-log" });
     // One line a manager reads; the referee is one tap away, behind "Slik vet vi det".
     expect(by.oppgaver.detail).toBe(robotShort(NIGHT.tally));
     expect(by.oppgaver).toMatchObject({ methodLabel: "Slik vet vi det" });
@@ -209,7 +210,11 @@ describe("the robot figure's refusals, split by the referee (the judgement card'
       `Bekreftet av Wybe Night Shift-simulatoren, som ikke finnes i et ekte hotell: ${night.tally.done} av ${night.tally.reported} «ferdig» (64 etter at poengsummen steg, 9 på robotens egen vurdering) · 6 meldinger uten bestilling og 1 alt levert · 1 ikke godkjent`,
     );
     expect(detail).not.toMatch(/8 avvist uten bestilling|falsk/);
-    expect(robotShort(night.tally)).toBe(`Alle ${night.tally.done} «ferdig» bekreftet · ${night.tally.handedBack} til en person`);
+    // Round 7: what holds, not "Alle 73 «ferdig» bekreftet" above the card's 209.
+    const contradicted = ownAgainstLog(doneBasis(lines), selfContradictions(lines)).contradicted;
+    expect(robotShort(night.tally, contradicted)).toBe(`72 av 73 holder · 1 motsagt av egen logg (rom 209) · ${night.tally.handedBack} til en person`);
+    expect(robotShort({ done: 70, reported: 73, handedBack: 0 })).toBe("70 av 73 holder · 3 ikke godkjent av simulatoren");
+    expect(robotShort({ done: 0, reported: 0, handedBack: 2 })).toBe("Ingen «ferdig» meldt · 2 til en person");
     // Without the split, the plain count.
     expect(declineShort(null, 3)).toBe("3 avvist etter sjekk");
     expect(declineShort(null, 0)).toBeNull();

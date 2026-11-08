@@ -29,9 +29,10 @@ export type DoneBasis = Tally & {
    * A producer with no referee (docs/runlog.schema.json, e.g. the Open-RMF adapter): a `task_done` with an
    * `evidence` list and no report call, judged by `evidenceVerdict`: confirmed only with two different
    * signals, at least one from outside the robot; `robotOnly` had two or more, all the robot's own
-   * ("robotens egen observasjon"). `signals` names the signals behind the confirmed ones.
+   * ("robotens egen observasjon"). `signals` names the signals behind the confirmed ones; `outside` only those from
+   * outside the robot (round 7, robot-domain review: the compartment sensor is the robot's own, never "utenfra").
    */
-  evidence: Tally & { robotOnly: number; signals: string[] };
+  evidence: Tally & { robotOnly: number; signals: string[]; outside: string[] };
 };
 
 export type MasterKeyEntry = { room: string; clock: string | null; knocked: boolean };
@@ -159,7 +160,7 @@ export function doneBasis(lines: readonly RunLine[], until?: number): DoneBasis 
     afterRise: tally(),
     own: { ...tally(), roomChecks: tally(), spills: tally(), other: tally(), confirmedRequests: [] },
     unknown: tally(),
-    evidence: { ...tally(), robotOnly: 0, signals: [] },
+    evidence: { ...tally(), robotOnly: 0, signals: [], outside: [] },
   };
   const open = new Map<string, { kind: string | null; rose: boolean }>();
   const reportedDone = new Set<string>();
@@ -185,6 +186,7 @@ export function doneBasis(lines: readonly RunLine[], until?: number): DoneBasis 
         add(basis.evidence, confirmed);
         if (judged.verdict === "robot_only") basis.evidence.robotOnly += 1;
         if (confirmed) for (const signal of judged.signals) if (!basis.evidence.signals.includes(signal)) basis.evidence.signals.push(signal);
+        if (confirmed) for (const signal of judged.outside) if (!basis.evidence.outside.includes(signal)) basis.evidence.outside.push(signal);
       }
       if (line.kind === "task_done" || line.kind === "task_failed") open.delete(request);
       continue;

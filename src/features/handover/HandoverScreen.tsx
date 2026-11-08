@@ -7,6 +7,7 @@ import { formatKroner, nightLabel } from "@/features/dashboard/format";
 import { declineShort, robotShort } from "@/features/dashboard/highlights";
 import { DOOR_LOCK_IS_TEST_DATA, doorLockLines, doorLockSignals } from "@/features/doorlock/feed";
 import { type DeclineSplit, declineSplit } from "@/features/nightshift/declines";
+import { doneBasis, ownAgainstLog, selfContradictions } from "@/features/nightshift/conduct";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
@@ -61,6 +62,8 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   const now = useNowMs();
   const ready = run.status === "ready";
   const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
+  // The robot figure counts what holds against its own log (round 7): 209's "done" is not one of them.
+  const contradictedDone = useMemo(() => (lines ? ownAgainstLog(doneBasis(lines), selfContradictions(lines)).contradicted : []), [lines]);
   // The sources a room row draws as chips: the door lock's one signal, the night clerk's look (and the robot's, on its night).
   const doorSignals = useMemo(() => doorLockSignals(doorLockLines()), []);
   const clerkRooms = useMemo(() => staffRooms(readStaffLog(staff)), [staff]);
@@ -219,8 +222,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
             label="Robotens oppdrag"
             value={figures?.robot.done}
             unit={figures ? `av ${figures.robot.total}` : undefined}
-            tone="success"
-            detail={figures ? robotShort(figures.robot) : undefined}
+            detail={figures ? robotShort(figures.robot, contradictedDone) : undefined}
             more={figures ? <Disclosure summary="Slik vet vi det">{robotProof(figures, declines)}</Disclosure> : undefined}
             to={ready && run.lines.length > 0 ? "vurderinger-overlevering" : undefined}
           />

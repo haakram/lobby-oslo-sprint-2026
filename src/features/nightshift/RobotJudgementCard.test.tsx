@@ -192,7 +192,10 @@ describe("RobotJudgementCard on the demo night", () => {
     const items = within(figures).getAllByRole("listitem");
     expect(items).toHaveLength(3);
     // The robot's faults amber with their word ("Obs:" for a screen reader, "Robotens feil." on screen); the refusals ink.
-    expect(items[0]).toHaveTextContent("Obs: 8av 9«ferdig» på egen vurdering holder mot robotens egen loggRobotens feil.1 tatt: rom 209, bagasje inn 01:29, meldt tomt 03:47.");
+    // Task state apart from the result (round 7): every check made, one answer disagrees with the robot's own log.
+    expect(items[0]).toHaveTextContent(
+      "Obs: 8av 9«ferdig» på egen vurdering holder mot robotens egen loggRobotens feil.5 romsjekker og 4 søl gjort · 1 svar uenig med egen logg: rom 209, bagasje inn 01:29, meldt tomt 03:47.",
+    );
     expect(items[1]).toHaveTextContent("7ganger sa nei til en ukjent person01:17–05:11, 7 rom · holdt nøkkelkortet ved 209 og 304.");
     expect(items[1]).not.toHaveTextContent(/Obs|Robotens feil/);
     expect(items[2]).toHaveTextContent("Obs: 10av 15nøkkelkortinnganger uten å banke påRobotens feil.Også: skled i korridor 2B 23:51, krysset 27 ganger til uten skilt.");
@@ -209,7 +212,7 @@ describe("RobotJudgementCard on the demo night", () => {
     fireEvent.click(toggle);
     expect(within(card).getByRole("button", { name: "Vis mindre" })).toHaveAttribute("aria-expanded", "true");
     expect(card).toHaveTextContent("Sa nei 7 ganger til en ukjent person");
-    expect(card).not.toHaveTextContent("1 tatt: rom 209");
+    expect(card).not.toHaveTextContent("1 svar uenig med egen logg: rom 209");
     expect(card.textContent!.match(/I et ekte hotell/g)).toHaveLength(1);
   });
 

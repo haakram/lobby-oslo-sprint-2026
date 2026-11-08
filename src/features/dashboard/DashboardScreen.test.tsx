@@ -6,12 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { canAccess, type Role } from "@/features/auth/roles";
 import { SessionProvider } from "@/features/auth/SessionProvider";
 import { type ModuleId, MODULES, PILOT_MODULES } from "@/features/modules/registry";
-import { doneBasis, selfContradictions } from "@/features/nightshift/conduct";
+import { doneBasis, ownAgainstLog, selfContradictions } from "@/features/nightshift/conduct";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import { MANUAL_REQUESTS } from "@/features/requests/testData";
 import { occupancy, revenueLastNight } from "@/features/rooms/pms";
 import { DashboardScreen } from "./DashboardScreen";
-import { atNight, basisLine } from "./highlights";
+import { atNight, basisLine, robotShort } from "./highlights";
 import { placeLabel } from "./labels";
 import { foldNight, selectRobot, selectRooms } from "./selectors";
 
@@ -117,7 +117,9 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     // The night's misses are part of its total, not a red count of their own; the server's verdict is said.
     expect(figure("Robotens oppdrag i natt")).toBe(`${DONE}av ${TOTAL}`);
     // One line a manager reads; the referee one tap away, behind "Slik vet vi det".
-    expect(figures().getByText(`Alle ${NIGHT.tally.done} «ferdig» bekreftet · ${NIGHT.tally.handedBack} til en person`)).toBeInTheDocument();
+    // What holds (round 7): the "done" the simulator credited that the robot's own log does not contradict.
+    const contradicted = ownAgainstLog(doneBasis(LINES), selfContradictions(LINES)).contradicted;
+    expect(figures().getByText(robotShort(NIGHT.tally, contradicted))).toHaveTextContent(new RegExp(`^${NIGHT.tally.done - contradicted.length} av ${NIGHT.tally.reported} holder`));
     expect(figures().getByText("Slik vet vi det")).toBeInTheDocument();
     expect(figures().getByText(new RegExp(`^Bekreftet av Wybe Night Shift-simulatoren, som ikke finnes i et ekte hotell: ${NIGHT.tally.done} av ${NIGHT.tally.reported} «ferdig»`))).toBeInTheDocument();
     // No referee anywhere on the pilot's Oversikt, and no cleaning route (Ruter is outside the pilot).

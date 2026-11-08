@@ -178,7 +178,8 @@ describe("the evidence rule (review round 5: at least one signal from outside th
       decision("task_start", { request: "T-3" }),
       decision("task_done", { request: "T-3", evidence: [{ signal: "photo" }] }),
     ];
-    expect(doneBasis(lines).evidence).toEqual({ reported: 3, confirmed: 1, robotOnly: 1, signals: ["compartment", "guest_ack"] });
+    // Only the outside one is named as from outside the robot (round 7): the compartment sensor is the robot's own.
+    expect(doneBasis(lines).evidence).toEqual({ reported: 3, confirmed: 1, robotOnly: 1, signals: ["compartment", "guest_ack"], outside: ["guest_ack"] });
   });
 });
 

@@ -339,8 +339,10 @@ function CompactFigures({
       unit: `av ${own.reported}`,
       label: "«ferdig» på egen vurdering holder mot robotens egen logg",
       line:
+        // Task state apart from the result (round 7, robot-domain review, as Open-RMF keeps them): every check was made,
+        // one answer disagrees with the robot's own log.
         own.contradicted.length > 0
-          ? `${own.contradicted.length} tatt: ${own.contradicted.map(contradictionShort).join("; ")}.`
+          ? `${capitalise(ownParts(b.own))} gjort · ${own.contradicted.length} svar uenig med egen logg: ${own.contradicted.map(contradictionShort).join("; ")}.`
           : own.holds < own.reported
             ? `${own.reported - own.holds} holdt ikke.`
             : `${capitalise(ownParts(b.own))}.`,
@@ -430,10 +432,20 @@ function slipShort(slip: SlipCrossing): string {
   return `skled i ${inSentence(place(slip.place))}${when}${after}.`;
 }
 
+/**
+ * "; skuffsensor er robotens eget signal": the robot's own signals behind the confirmed ones, named apart from the
+ * outside ones (round 7, robot-domain review: the compartment sensor was listed as a signal from outside the robot).
+ */
+function ownSignals(ev: DoneBasis["evidence"]): string {
+  const own = ev.signals.filter((signal) => !ev.outside.includes(signal));
+  if (own.length === 0) return "";
+  return `; ${joinNo(own.map(signalName))} er robotens ${own.length === 1 ? "eget signal" : "egne signaler"}`;
+}
+
 /** A plain count with no split (a caller without the log's basis): every "done" of unknown basis. */
 function unsplit(done: RobotJudgement["done"]): DoneBasis {
   const zero = { reported: 0, confirmed: 0 };
-  return { ...done, afterRise: zero, own: { ...zero, roomChecks: zero, spills: zero, other: zero, confirmedRequests: [] }, unknown: done, evidence: { ...zero, robotOnly: 0, signals: [] } };
+  return { ...done, afterRise: zero, own: { ...zero, roomChecks: zero, spills: zero, other: zero, confirmedRequests: [] }, unknown: done, evidence: { ...zero, robotOnly: 0, signals: [], outside: [] } };
 }
 
 /** "5 romsjekker og 4 søl". */
@@ -475,7 +487,7 @@ function DoneRow({ basis, contradictions = [] }: { basis: DoneBasis; contradicti
         }
         label="«Ferdig» bekreftet"
       >
-        {ev.confirmed > 0 && `${ev.confirmed} med et signal utenfra roboten (${joinNo(ev.signals.map(signalName))}). `}
+        {ev.confirmed > 0 && `${ev.confirmed} med et signal utenfra roboten (${joinNo(ev.outside.map(signalName))})${ownSignals(ev)}. `}
         {ev.robotOnly > 0 && `${ev.robotOnly} er robotens egen observasjon: to signaler, begge fra roboten. `}
         {single > 0 && `${single} har bare ett signal og står som «ikke bekreftet».`}
         {realHotel}

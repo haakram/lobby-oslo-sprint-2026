@@ -50,7 +50,7 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     serve(() => new Response(TEST_NIGHT_JSONL, { status: 200 }));
     show();
     // The labels stand under skeletons while the night loads; the details come with it.
-    expect(await screen.findByText("1 «ferdig» bekreftet · 1 til en person")).toBeInTheDocument();
+    expect(await screen.findByText("1 av 1 holder · 1 til en person")).toBeInTheDocument();
     // The robot's figure is its night's one tally; the referee and the simulator sit behind "Slik vet vi det".
     expect(screen.getByText("Robotens oppdrag")).toBeInTheDocument();
     const proof = within(screen.getByRole("region", { name: "Natten i tall" })).getByText("Slik vet vi det").closest("details");

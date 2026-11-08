@@ -54,7 +54,7 @@ describe("fromOpenRmf: Open-RMF task and fleet states as run log v1", () => {
 
   it("confirms a done only with an outside signal: 2 of 4 (compartment + PIN), 1 the robot's own observation, 1 single signal; no referee", () => {
     const basis = doneBasis(lines);
-    expect(basis.evidence).toEqual({ reported: 4, confirmed: 2, robotOnly: 1, signals: ["guest_ack", "compartment"] });
+    expect(basis.evidence).toEqual({ reported: 4, confirmed: 2, robotOnly: 1, signals: ["guest_ack", "compartment"], outside: ["guest_ack"] });
     expect(basis.afterRise.reported + basis.own.reported).toBe(0);
   });
 
@@ -80,7 +80,7 @@ describe("the judgement card on the Open-RMF sample", () => {
     expect(card).toHaveTextContent("Fra Open-RMF-eksempelet (testdata)");
     expect(card).toHaveTextContent("2 av 4«Ferdig» bekreftet");
     expect(card).toHaveTextContent(
-      "2 med et signal utenfra roboten (gjestens bekreftelse og skuffsensor). 1 er robotens egen observasjon: to signaler, begge fra roboten. 1 har bare ett signal og står som «ikke bekreftet».",
+      "2 med et signal utenfra roboten (gjestens bekreftelse); skuffsensor er robotens eget signal. 1 er robotens egen observasjon: to signaler, begge fra roboten. 1 har bare ett signal og står som «ikke bekreftet».",
     );
     expect(card).toHaveTextContent("3Oppgaver ikke fullført");
     expect(card).toHaveTextContent("delivery.pillow.0004 (rom 305): Door [door:room_305] did not open");

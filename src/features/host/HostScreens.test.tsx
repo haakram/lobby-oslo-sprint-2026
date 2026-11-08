@@ -38,6 +38,12 @@ describe("Mine boliger (the host's start page)", () => {
       expect(tiles.getByRole("heading", { name })).toBeInTheDocument();
     }
     for (const status of ["Ny gjest i dag", "Gjest inne", "Rengjøres", "Klar"]) expect(tiles.getByText(status)).toBeInTheDocument();
+    // The dot stays with the place, so a wrapped line never starts or stands with a lone "·" (design review, round 5).
+    expect(tiles.getByText("Grünerløkka ·")).toHaveClass("whitespace-nowrap");
+    // The name is read before its badge; the tile stacks them when it is narrow (a container query), never overlapping.
+    const name = tiles.getByRole("heading", { name: "Grünerløkka-leiligheten" });
+    expect(name.compareDocumentPosition(tiles.getByText("Ny gjest i dag")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(name.closest("[class*='@container']")).not.toBeNull();
     // The worst case, answered on the tile: cleaned before check-in, code sent.
     expect(tiles.getByText("Kode sendt i går 18:00")).toBeInTheDocument();
 

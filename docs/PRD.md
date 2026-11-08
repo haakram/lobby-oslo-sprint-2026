@@ -102,7 +102,7 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 2. ***Uten robot*** (0:20–0:29): hotel number one has no robot; the same page from the booking system,
    one signal per room from the door lock (never who) and the night clerk's entries.
 3. **The money, without a robot** (0:29–0:58): the money figure lands on 213: due out yesterday, the
-   check-out never recorded; the lock shows no card since 22:10 and Kjersti saw it empty at 04:24, two
+   check-out never recorded; the lock shows no guest card since 18:00 and Kjersti saw it empty at 04:24, two
    sources and no robot; found five hours before housekeeping, about 1,500 kroner if the night sells
    out. Reception confirms (who, folio, bags, key card), the room goes to reception, and the row waits
    for the booking system: the button never says sold.
@@ -139,10 +139,15 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 - **Nattevaktens logg** (`/natt`, in the pilot menu after Overlevering): the night clerk logs a room in
   two taps (*Tom og ryddig*, *Ikke tom*, *Trenger vask*), a safety item with its place (*Vått gulv*,
   *Dør*, *Person*) or a short note; each entry is the same run-log line the robot writes, with source
-  `staff`, her name and the time; *Angre* appends a correction; kept on the device for the pilot
-  (`TODO(phase-3)`: a server store). The door lock's per-room signal is a team-written sample in the
-  same format, and *Sjekk disse først* lists where it and the booking system disagree
-  (`src/features/staffinput/`, `src/features/doorlock/`). The hotel-one product, without a robot.
+  `staff`, her name and the time; *Angre* appends a correction; a wet floor asks *Skilt satt ut? Ja /
+  Nei* (required, so the record says whether a sign went out); kept on the device for 30 days
+  (`RETENTION_DAYS`, pruned on load; `TODO(phase-3)`: a server store). *Fra roboten* lists the robot's
+  hazards at its clock, each with a *Kvitter* that records who saw it and when. The door lock's
+  per-room signal is a team-written sample in the same format, with no clock (a card in the slot is a
+  yes; "no card" means since 18:00), and *Sjekk disse først* lists where it and the booking system
+  disagree; the lock line and the guest's name show only on those rooms, an unflagged booked room
+  reads *booket* (`src/features/staffinput/`, `src/features/doorlock/`). The hotel-one product, without
+  a robot.
 - **Rom og renhold** with **Robotens romsjekk mot bookingsystemet**: the robot's room checks
   reconciled with the (test) PMS; a room must be empty after 01:00 before it is suggested, a later
   delivery into it, or the robot's own log contradicting its report, holds it back, and a room goes to

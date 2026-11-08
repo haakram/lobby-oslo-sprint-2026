@@ -2,13 +2,19 @@ import { cx, Figure as Digits, Skeleton, Stat } from "@/ui";
 import type { DashboardData } from "./data";
 import { figureSources, type Highlight, selectHighlights } from "./highlights";
 
-/** One rule however many figures the role sees (Tailwind needs the class names written out). */
-const WIDE_COLUMNS: Record<number, string> = {
-  2: "xl:grid-cols-2",
-  3: "xl:grid-cols-3",
-  4: "xl:grid-cols-4",
-  5: "xl:grid-cols-5",
-  6: "xl:grid-cols-6",
+/**
+ * One rule however many figures the role sees, and never a figure left alone on a second line (design
+ * review, round 5: four figures wrapped 3 + 1 at 1152 px, "19 av 36" on its own). Columns follow the
+ * row's own width (a container query), not the window's, so the rail beside it can't break the count:
+ * four figures are 2 + 2 or one rule of 4, six are 3 + 3 or 6. Tailwind needs the class names written out.
+ */
+export const COLUMNS: Readonly<Record<number, string>> = {
+  1: "grid-cols-1",
+  2: "grid-cols-2",
+  3: "grid-cols-2 @min-[36rem]:grid-cols-3",
+  4: "grid-cols-2 @min-[44rem]:grid-cols-4",
+  5: "grid-cols-2 @min-[36rem]:grid-cols-3 @min-[60rem]:grid-cols-5",
+  6: "grid-cols-2 @min-[36rem]:grid-cols-3 @min-[66rem]:grid-cols-6",
 };
 
 /**
@@ -24,8 +30,8 @@ export function KpiStrip({ data }: { data: DashboardData }) {
   const figures = selectHighlights(data);
   return (
     <section aria-label="Hotellet i tall" data-enter>
-      <div className="border-y border-line py-6">
-        <div className={cx("grid grid-cols-2 items-start gap-x-6 gap-y-6 sm:grid-cols-3 lg:gap-x-8", WIDE_COLUMNS[figures.length])}>
+      <div className="@container border-y border-line py-6">
+        <div className={cx("grid items-start gap-x-6 gap-y-6 lg:gap-x-8", COLUMNS[figures.length] ?? COLUMNS[6])}>
           {figures.map((figure) => (
             <Figure key={figure.id} figure={figure} loading={data.loading} />
           ))}

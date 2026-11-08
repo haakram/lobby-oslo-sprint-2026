@@ -46,7 +46,7 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
       booking system, one signal per room from the door lock (never who) and the night clerk's own
       entries (*Nattevaktens logg*, `/natt`), with no robot line: the product hotel number one buys.
    3. **213, the money step:** due out yesterday, the check-out never recorded; without the robot the
-      lock shows no card since 22:10 and the night clerk saw it empty at 04:24 (*Bekreftet av to
+      lock shows no guest card since 18:00 and the night clerk saw it empty at 04:24 (*Bekreftet av to
       kilder*). Reception confirms who checked and three facts (folio, bags, key card), then *Send til
       resepsjonen*; the row reads *Venter på PMS-en*, because the pilot never writes to the booking
       system. Nothing says "sold".

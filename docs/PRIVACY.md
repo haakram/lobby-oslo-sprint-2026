@@ -89,7 +89,7 @@ only:** the public URL (lobby-sandy.vercel.app) serves `main`, whose older heade
 |---|---|---|
 | **Session cookie** `lobby_session` | Username, role, view, expiry; HMAC-SHA256 signed, nothing secret inside (`src/features/auth/session.ts`) | 12 hours |
 | **Run logs** (JSONL) | Every API call the agent made in the simulation, its decisions, the sim's fictional guests | Agent laptop `temp/runs/` (gitignored), kept for the event. One recorded night is committed (`public/runs/demo.jsonl`, seed 16) and served only behind login (`src/features/auth/roles.ts`, `SHARED_ROUTES`) |
-| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room confirmations (which receptionist, the three checks, who recorded it and when) and rooms sent to reception, the handover sign-off with the user's name (the screen says *lagret på denne enheten*), and the night clerk's log per handover day (`lobby:nattevakt-logg`, corrections appended, never deleted) | Until staff clear them or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store) |
+| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room confirmations (which receptionist, the three checks, who recorded it and when) and rooms sent to reception, the handover sign-off with the user's name (the screen says *lagret på denne enheten*), the night clerk's log per handover day (`lobby:nattevakt-logg`, corrections appended, never deleted), and Øyne's avvik log per handover day (`lobby:oyne-avvik`) | **The night clerk's log: 30 days**, as code (`RETENTION_DAYS` in `src/features/staffinput/retention.ts`; days older than that are dropped on load and on every write, tested; `/natt` says *Lagres på denne enheten i 30 dager*); Øyne's avvik log: 30 days, dropped when read (`src/features/eyes/deviations.ts`). The rest (the room confirmations with the receptionist's name, the sign-off, the requests) until staff clear them or the browser data is cleared: not pruned yet (`TODO(phase-3)`). On the staff device only; no server copy (`TODO(phase-3)`: a shared store with the same 30 days) |
 | **ElevenLabs** | Receptionist conversations: transcript and post-call fields, **no audio** | 30 days, set in the agent config (`privacy`, `src/features/reception/agentConfig.ts`; Resepsjon says the same before the call). **To check (team):** open the receptionist agent in the ElevenLabs dashboard, confirm *record voice* off and retention 30 days, and write the time here. Until then we say "configured", never "checked". The live agent carries a changed config only after `src/features/reception/setup-agent.ts` is run again |
 | **ElevenLabs** | Stemme (staff voice) conversations | No retention setting in `src/features/voice/agentConfig.ts`: the account default applies. Set it before any pilot |
 | **Our server** | Nothing. No database, no file writes. Logs carry only error types or HTTP status, never bodies (`src/app/api/identify/route.ts`, `src/app/api/voice/token/route.ts`, `src/app/api/reception/tools/[tool]/route.ts`: "Arguments are never logged") | — |
@@ -270,12 +270,18 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   A page that read *siden 23:51 … innen 06:30* beside a wet floor would be the first exhibit in a slip
   claim (negligence, and the employer's liability under
   [skadeserstatningsloven § 2-1](https://lovdata.no/dokument/NL/lov/1969-06-13-26/KAPITTEL_2): the
-  employer answers for harm caused by intent or negligence while an employee does the work). So since
-  round 5 a safety item on Overlevering reads *straks*, with when the night staff were alerted, or
-  *varsle nå* when the log doesn't show it (`src/features/handover/`, owner A), and the pilot rule is
-  that the night staffer is alerted the moment the robot sees a wet floor it can't sign, escalated if
-  nobody acknowledges within 10 minutes (pilot design, not built: the bell is in the browser). The same
-  record then shows reasonable care: acknowledged at 23:52, sign out at 00:05.
+  employer answers for harm caused by intent or negligence while an employee does the work). So a
+  safety item on Overlevering reads *straks*, with when the night staff were alerted, and the record
+  now shows care when there was care: **a wet floor the night clerk reports carries her answer to
+  *Skilt satt ut? Ja / Nei***, a required choice stored as `signed` and `signedAt`, and a sign put out
+  later is its own line, so the handover says *skilt satt ut 02:16* or *uten skilt siden 02:15*
+  (`src/features/staffinput/entries.ts`). **The robot's hazards reach her as they happen:** *Fra
+  roboten* on `/natt` lists them at the robot's clock, each with a *Kvitter* tap that records who saw it
+  and when (`src/features/staffinput/robotHazards.ts`), so the time from the robot's report to a
+  person's acknowledgement is computed, not guessed. {AFTER_A_WAIT} The pilot rule beyond that: a push
+  to the night staffer's phone the moment the robot sees a wet floor it can't sign, escalated if nobody
+  acknowledges within 10 minutes (pilot design, not built: today she sees it when she opens the
+  screen).
 - **The demo calls:** the team deletes its own ElevenLabs test conversations before the demo, and asks
   anyone calling the receptionist on stage to give a made-up name and number (a juror's real details
   would otherwise stay at ElevenLabs for 30 days).
@@ -296,6 +302,13 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
     substantiation or goes.
 - **The print-out:** *Skriv ut* puts guest names and the stranger incident on paper. A pilot's print
   footer says it holds personal data and is shredded after the shift.
+- **The safety lines are the exception to shredding (legal review; proposal, not built).** A slip claim
+  runs three years from when the injured person learned of the harm and who is liable
+  ([foreldelsesloven § 9](https://lovdata.no/dokument/NL/lov/1979-05-18-18)), and the safety lines
+  (the place, since when, whether a sign went out, who was told and when) are the hotel's best evidence
+  of care. So the pilot keeps a name-free safety extract for that period and shreds the rest; the hotel
+  sets it in the DPA. Until the pilot's server store exists (append-only, server time), the signed
+  print-out is the real record: `localStorage` can be edited or wiped at the desk.
 
 ## 8. Security basics already in place (checked in code)
 
@@ -379,15 +392,20 @@ Our reading, not legal advice.
 
 | Source at the hotel | What it holds | What reaches Fettero | Never |
 |---|---|---|---|
-| The lock system's audit trail (ASSA ABLOY, Salto, dormakaba and others) | Every card at every door: guests', housekeepers', porters', master and emergency cards | Per guest room: the time of the last **guest-card** entry, or "none since 18:00" | the card's id, the guest's name, any staff, master or emergency card, any door that isn't a guest room |
-| The energy slot (the card switch in the room), where a room-control system reports it | Whether a card sits in the slot, sometimes which card | Per guest room: "empty since hh:mm" | whose card |
+| The lock system's audit trail (ASSA ABLOY, Salto, dormakaba and others) | Every card at every door: guests', housekeepers', porters', master and emergency cards | Per guest room, one value **with no clock**: no **guest-card** entry at the door since 18:00, the start of the window | the card's id, the guest's name, the time of any entry, any staff, master or emergency card, any door that isn't a guest room |
+| The energy slot (the card switch in the room), where a room-control system reports it | Whether a card sits in the slot, sometimes which card | Folded into the same value: a guest card is in the slot (a yes, no clock), or none all window | whose card, since when |
 | The night clerk's phone (§ 10.3) | What she checked and wrote | Room, finding, time, her name | — |
 
-On screen the signal reads like *rom 213: ingen kort i energibryteren siden 22:10*: **ett signal per
-rom, aldri hvem.** In the demo it is a team-written sample in the run-log format, one `room_signal`
-line per room (`no_card` or `card_in`, since a clock, source `door_lock`; `src/features/doorlock/feed.ts`,
-labelled *Testdata: dørlåsens signal er skrevet av teamet*); no lock system has been connected or seen
-yet.
+On screen the signal reads *rom 213: ingen kort i energibryteren siden kl. 18:00* (the window, not a
+guest's time) or *kort i energibryteren* (a yes): **ett signal per rom, aldri hvem eller når.** In the
+demo it is a team-written sample in the run-log format, one `room_signal` line per room (`no_card` with
+only the window, or `card_in` with no clock, source `door_lock`; `src/features/doorlock/feed.ts`,
+labelled *Testdata: dørlåsens signal er skrevet av teamet*). A time a feed sends on `card_in` anyway is
+dropped on read, and tests check that no line carries a guest's clock (`feed.test.ts`). On the night
+clerk's screen the lock line shows only on a room where the lock and the booking system disagree, and
+an unflagged booked room reads *booket til 9.11*, without the guest's name, with *bank på og vent*
+before she goes in (`src/features/staffinput/NightClerkScreen.tsx`). No lock system has been connected
+or seen yet.
 
 - **Where the reduction happens:** on the hotel's side, before anything leaves it. Best case, the lock
   vendor's report or API gives the per-room value. If the only export is the raw audit trail, it is
@@ -450,7 +468,9 @@ leverandør Fettero, og det slettes etter 24 timer.»*
   staff data: her name and what she recorded, for the handover, like the paper *vaktbok* it replaces.
   Basis: the hotel's legitimate interest in a safe handover. *Angre* adds a correction line and never
   deletes one, so the log stays a record. In the pilot build the entries stay **on that device**, per
-  handover day (the screen says so; a server store with its own retention is `TODO(phase-3)`). Free
+  handover day, **for 30 days** (`RETENTION_DAYS`, pruned on load and on every write; the screen says
+  *Lagres på denne enheten i 30 dager*; a server store with the same retention is `TODO(phase-3)`). A
+  wet floor records whether a sign went out (*Skilt satt ut? Ja / Nei*). Free
   text can hold guest details, so the note is for the room and the task, never a guest's health. The
   demo's entries are a sample night, labelled as test data.
 - **The rule we sign up to: no per-person performance statistics, ever.** The page counts the robot's

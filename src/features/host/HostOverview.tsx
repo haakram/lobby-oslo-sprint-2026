@@ -93,12 +93,14 @@ function Overview({ host }: { host: HostReady }) {
           </section>
 
           <section aria-labelledby="bytter-heading" data-enter>
-            <Card className="sm:p-6">
+            {/* Two apartments side by side only when the panel itself has room (design review, round 5: at
+                1152 px the two columns squeezed to two or three words a line). */}
+            <Card className="@container sm:p-6">
               <PanelHead id="bytter-heading" title="Dagens bytter" note="Utsjekk, rengjøring og innsjekk, og hvem som tar hvert steg." />
               {day.turnovers.length === 0 ? (
                 <p className="mt-3 text-base text-muted">Ingen bytter i dag. Alle gjestene blir der de er.</p>
               ) : (
-                <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
+                <div className="mt-4 grid grid-cols-1 gap-6 @min-[40rem]:grid-cols-2 @min-[40rem]:gap-8">
                   {day.turnovers.map((turnover) => (
                     <TurnoverSteps key={turnover.apartment.id} turnover={turnover} />
                   ))}
@@ -125,15 +127,20 @@ function Overview({ host }: { host: HostReady }) {
 function ApartmentTile({ entry }: { entry: ApartmentNow }) {
   return (
     <li data-tile>
-      <Card className="flex h-full flex-col gap-3 sm:p-6">
-        <div className="flex items-start justify-between gap-3">
+      <Card className="@container flex h-full flex-col gap-3 sm:p-6">
+        {/* The badge sits beside the name only when the tile has room, else above it (design review, round
+            5: at 1152 px "Ny gjest i dag" covered "Grünerløkka-leiligheten"). */}
+        <div className="flex flex-col-reverse items-start gap-2 @min-[18rem]:flex-row @min-[18rem]:justify-between @min-[18rem]:gap-3">
           <div className="min-w-0">
-            <h3 className="font-semibold">{entry.apartment.name}</h3>
+            <h3 className="font-semibold [overflow-wrap:anywhere]">{entry.apartment.name}</h3>
+            {/* The dot stays with the place, so a wrapped line never starts or stands with a lone "·". */}
             <p className="text-sm text-muted">
-              <span className="whitespace-nowrap">{entry.apartment.area}</span> · <span className="whitespace-nowrap">{entry.apartment.layout}</span>
+              <span className="whitespace-nowrap">{entry.apartment.area} ·</span> <span className="whitespace-nowrap">{entry.apartment.layout}</span>
             </p>
           </div>
-          <Badge tone={STATUS_TONE[entry.status]}>{STATUS_WORD[entry.status]}</Badge>
+          <Badge tone={STATUS_TONE[entry.status]} className="shrink-0">
+            {STATUS_WORD[entry.status]}
+          </Badge>
         </div>
         <p className="text-sm">{entry.line}</p>
         {entry.guards.length > 0 && (

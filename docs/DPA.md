@@ -27,9 +27,10 @@
    - Tillegg som ikke strider mot vilkårene (klausul 2): punkt 3–6 her.
 3. **Ingen skriving i hotellets systemer.** Piloten leser bookingsystemet (lesetilgang). Fettero
    endrer aldri en booking og selger aldri et rom; et rom går til resepsjonen, som gjør endringen.
-4. **Ett signal per rom fra dørlåsen, aldri hvem.** Fettero tar ikke imot dørlåsens logg. Hotellet
-   (eller låsleverandørens rapport) gir per gjesterom tidspunktet for siste inngang med gjestekort og om
-   energibryteren står tom. Kort for ansatte, hovedkort og nødkort fjernes før noe sendes. Har hotellet
+4. **Ett signal per rom fra dørlåsen, aldri hvem eller når.** Fettero tar ikke imot dørlåsens logg.
+   Hotellet (eller låsleverandørens rapport) gir per gjesterom ett signal uten klokkeslett: et gjestekort
+   står i energibryteren, eller ingen gjestekort er brukt i døra eller satt i energibryteren siden
+   kl. 18:00. Kort for ansatte, hovedkort og nødkort fjernes før noe sendes. Har hotellet
    ikke en slik rapport, bruker piloten nattevaktens egen romsjekk i stedet.
 5. **Ingen ytelsesmåling av ansatte.** Navn på ansatte står i overleveringen for å vise hvem som eier
    og har bekreftet hva. Fettero lager aldri statistikk per person.
@@ -53,10 +54,10 @@ Signert for Fettero: _______________________ Dato: ________
 |---|---|
 | **Formål** | Lage hotellets overlevering kl. 06:00 på én side: åpne saker med eier og frist, rom som kan selges etter at resepsjonen har bekreftet, hva som ble gjort i natt, og kvitteringen. |
 | **Registrerte** | Hotellets gjester (bookede og innsjekkede); hotellets ansatte som står i overleveringen (navn og rolle); nattevakten som registrerer. |
-| **Opplysninger** | Fra bookingsystemet: gjestens navn, rom, ankomst og avreise, om utsjekken er registrert. Fra dørlås og energibryter: ett signal per rom (se punkt 4), aldri kort-id, navn eller ansattes kort. Fra nattevakten: rom, funn, klokkeslett, hennes navn og et kort notat. Fra overleveringen: hvem som bekreftet et rom og hva som ble sjekket (folio, bagasje, nøkkelkort), hvem som kvitterte og når. **Ingen** betalingskort, fødselsnummer eller helseopplysninger. |
+| **Opplysninger** | Fra bookingsystemet: gjestens navn, rom, ankomst og avreise, om utsjekken er registrert. Fra dørlås og energibryter: ett signal per rom (se punkt 4), aldri kort-id, navn, klokkeslett eller ansattes kort. Fra nattevakten: rom, funn, klokkeslett, hennes navn og et kort notat. Fra overleveringen: hvem som bekreftet et rom og hva som ble sjekket (folio, bagasje, nøkkelkort), hvem som kvitterte og når. **Ingen** betalingskort, fødselsnummer eller helseopplysninger. |
 | **Særlige kategorier** | Ingen. Nattevaktens notat gjelder rommet og oppgaven, aldri en gjests helse. |
 | **Behandlingen** | Lese, sammenstille og vise siden; skrive den ut. Ingen språkmodell på siden: hver linje er avledet av kildene. |
-| **Varighet og lagring** | Pilotens fire uker. Dørlåssignalet slettes 24 timer etter overleveringen det inngikk i. En overlevering lagres [hotellet bestemmer; forslag 30 dager], deretter slettes den. Utskriften makuleres etter vakten (står på arket). |
+| **Varighet og lagring** | Pilotens fire uker. Dørlåssignalet slettes 24 timer etter overleveringen det inngikk i. Nattevaktens registreringer slettes etter **30 dager** på enheten (konstanten `RETENTION_DAYS` i `src/features/staffinput/retention.ts`, brukt når loggen leses og skrives). En overlevering lagres [hotellet bestemmer; forslag 30 dager, samme tall], deretter slettes den. Sikkerhetslinjene uten navn (sted, siden når, om skilt ble satt ut, hvem som ble varslet og når) beholdes [hotellet bestemmer; forslag tre år, foreldelsesfristen for et personskadekrav, foreldelsesloven § 9]. Utskriften makuleres etter vakten (står på arket), bortsett fra sikkerhetslinjene. |
 | **Hvor** | I pilotbygget ligger registreringer og kvitteringer i nettleseren på hotellets egen enhet. Før noe lagres på en server: en EU-region hos Vercel (ikke satt ennå) og en ny versjon av dette vedlegget. |
 
 ## Vedlegg III: Tekniske og organisatoriske tiltak
@@ -79,7 +80,12 @@ tilgang fjernes samme dag en ansatt slutter. Kjente hull som må lukkes før pil
 ## Before a pilot starts (not part of the agreement)
 
 - A lawyer reads this draft and `docs/PRIVACY.md` § 10 (the Art. 6(4) test for the lock signal).
-- A short DPIA screening for the software-only pilot, checked against Datatilsynet's list of
-  processing that always needs a DPIA (Art. 35(4)); the camera and the robot need a full DPIA before
-  they are switched on (`docs/PRIVACY.md` § 7). **To do.**
+- A DPIA, not just a screening (legal review): the software-only pilot combines datasets (the booking
+  system, the lock signal and the night clerk's entries) and covers employees, two of the criteria in
+  the Article 29 Working Party's DPIA guidelines (WP248 rev.01, endorsed by the EDPB), and two criteria
+  is the usual sign that one is needed. Two pages: purpose, the data flow (`docs/PRIVACY.md` § 10), the
+  risks (re-identification through the booking system, staff monitoring creep, a room resold wrongly),
+  the measures, the residual risk. Checked also against Datatilsynet's list of processing that always
+  needs a DPIA (Art. 35(4)). The camera and the robot need their own before they are switched on
+  (`docs/PRIVACY.md` § 7). **To do.**
 - The hotel's privacy notice gets the sentence in `docs/PRIVACY.md` § 10.2.

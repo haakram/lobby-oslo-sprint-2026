@@ -29,7 +29,7 @@ function plan(m: RouteMatrix, products: Product[]) {
   const tour = bestTour(m, stops);
   if ("error" in tour) return { ok: false as const, missing: tour };
   const naive = listOrderMetres(m, stops);
-  // How a warehouse system prints a pick list: by location code (1A, 1B, 2A, 2B). The fair baseline (the Holio juror).
+  // How a warehouse system prints a pick list: by location code (1A, 1B, 2A, 2B). The fair baseline (domain review).
   const shelfMetres = listOrderMetres(m, [...stops].sort(byShelf));
   return {
     ok: true as const,
@@ -55,7 +55,7 @@ export function PicklistMode({ showSku, matrix }: { showSku?: string; matrix?: R
   // The pick list's own words follow the work guides' language, kept on this device (Holio pain 9).
   const { language, words } = usePicklistWords();
   const lang = language === "nb" ? undefined : language;
-  // ?sku= (Øyne's "Vis vei") shows the way to that one shelf until "Se plukklisten" (jury round 4, the Holio juror).
+  // ?sku= (Øyne's "Vis vei") shows the way to that one shelf until "Se plukklisten" (domain review, round 4).
   const [previewClosed, setPreviewClosed] = useState(false);
   const preview = showSku && !previewClosed ? productBySku(showSku) : undefined;
   const closePreview = () => {
@@ -77,7 +77,7 @@ export function PicklistMode({ showSku, matrix }: { showSku?: string; matrix?: R
   };
 
   // An address never puts anything on the pick list: only "Legg i plukkliste", the label check or the
-  // voice agent do (a guessed SKU in ?sku= once went straight on the list; jury round 4, the Holio juror).
+  // voice agent do (a guessed SKU in ?sku= once went straight on the list; domain review, round 4).
   // Without ?sku=, an empty list gets the example order, once per session, before the first paint.
   useLayoutEffect(() => {
     if (!showSku) seedOnce(EXAMPLE_ORDER);

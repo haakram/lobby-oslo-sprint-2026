@@ -4,7 +4,7 @@ import type { CleaningPlan } from "./cleaningPlan";
 const metres = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 0 });
 
 /**
- * What the best round saves, in metres only (jury round 3, the data juror): against the same rooms in
+ * What the best round saves, in metres only (data review, round 3): against the same rooms in
  * room-number order, the baseline the optimiser plays by too (any order, no time windows), and,
  * shown beside it, against the order the rooms were given in. Time never leads: it would pick
  * whichever figure is larger.

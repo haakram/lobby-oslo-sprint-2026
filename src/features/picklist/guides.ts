@@ -2,7 +2,7 @@ import { GUIDE_STEPS, GUIDES, type Guide, type GuideStep } from "@/features/voic
 
 /**
  * The four work guides on screen, in the languages a warehouse temp in Norway reads (Holio pain 9,
- * jury round 3, the Holio juror): bokmål from the voice agent's own guides (src/features/voice/guides.ts,
+ * domain review, round 3): bokmål from the voice agent's own guides (src/features/voice/guides.ts,
  * one source), and the team's translations into Polish, Ukrainian and English, step for step.
  * TODO(phase-3): have each translation checked by a native speaker before a pilot.
  */
@@ -146,7 +146,7 @@ export function guidesIn(language: GuideLanguage): { step: GuideStep; guide: Gui
 }
 
 /**
- * The pick list's own words in the guide language (Holio pain 9 inside the flow, product review round
+ * The pick list's own words in the guide language (Holio pain 9 inside the flow, domain review, round
  * 5): the stop list, its buttons, the empty list and Angre. The rest of the screen (the route's figures
  * for the manager, the tabs, the product names from the catalogue) stays in bokmål.
  * TODO(phase-3): checked by a native speaker, as the guides.

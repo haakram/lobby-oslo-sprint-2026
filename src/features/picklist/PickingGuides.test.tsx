@@ -25,7 +25,7 @@ describe("the work guides in four languages", () => {
     expect(guidesIn("nb")[1].guide).toBe(GUIDES.picking);
   });
 
-  it("names only controls that exist on the screen, in every language (jury round 4, the Holio juror)", () => {
+  it("names only controls that exist on the screen, in every language (domain review, round 4)", () => {
     // Ruter's tab, the Øyne card's field and the Øyne card's button: every «…» a guide names is one of these.
     const onScreen = new Set(["Plukkliste", "Plassering", "Vis vei"]);
     // A stat label that is not a button, a tick-off that does not exist, and the hotel's words.

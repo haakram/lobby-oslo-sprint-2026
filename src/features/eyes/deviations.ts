@@ -6,7 +6,7 @@ import { addDays, osloToday } from "@/features/reception/dates";
 import { handoverDay, osloClock } from "@/features/staffinput/entries";
 
 /**
- * *Ingen av disse* on Øyne as an avvik (product review, round 5: "a deviation without an owner" is
+ * *Ingen av disse* on Øyne as an avvik (domain review, round 5: "a deviation without an owner" is
  * how a warehouse loses an item). The worker said none of the camera's candidates is the item in hand,
  * or the item is not in the catalogue at all: that becomes the same run-log decision the robot writes
  * for what it finds in the night, `work_order` with `type: "annet"`, marked `source: "eyes"`, so

@@ -22,7 +22,7 @@ import { HostFigures, HostPage, longDate } from "./HostPage";
 import { type HostReady, useHost } from "./HostProvider";
 
 /**
- * Only figures the host's own data proves (jury round 3, the marketing juror/the founder juror): no "Timer spart" or "Oppgaver
+ * Only figures the host's own data proves (product review, round 3): no "Timer spart" or "Oppgaver
  * gjort for deg", which were per-stay assumptions shown as facts, unlike the hotel side's "ca." and method.
  */
 export const OVERVIEW_FIGURES = ["Bookinger i november", "Belegg i november", "Inntekt hittil i november", "Snittvurdering", "Netter booket i november", "Opphold fulgt opp"];

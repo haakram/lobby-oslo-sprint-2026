@@ -299,7 +299,7 @@ describe("RoutesScreen, Plukkliste", () => {
     expect(within(screen.getByRole("region", { name: "Rutetall" })).getByText("120")).toBeInTheDocument();
   });
 
-  it("shows the way to the shelf from ?sku= and never adds it to the pick list (jury round 4, the Holio juror)", () => {
+  it("shows the way to the shelf from ?sku= and never adds it to the pick list (domain review, round 4)", () => {
     renderWith([], <RoutesScreen params={{ sku: "FT-1007" }} />);
     expect(screen.getByRole("tab", { name: /Plukkliste/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: /^Veien til / })).toBeInTheDocument();

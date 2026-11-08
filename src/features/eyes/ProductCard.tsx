@@ -22,7 +22,7 @@ type Reported = { day: string; id: string; at: string };
 
 /**
  * The identify result: what the product is, where it lives, and what to do with it. When the camera
- * is not sure, a person decides (product review, round 5): the two or three products it could be,
+ * is not sure, a person decides (domain review, round 5): the two or three products it could be,
  * each with its look from the catalogue, *Ja, det er denne* on each and *Ingen av disse*, which
  * becomes an avvik on Overlevering 06:00. The guessed SKU stays hidden until a person has chosen, so
  * nothing reaches the pick list or the route on the camera's word alone.

@@ -5,9 +5,9 @@ import { type Product, productBySku } from "@/features/catalog/products";
 import { Button } from "@/ui";
 
 /**
- * When the camera is not sure and the item carries its own label, the label decides (product review:
+ * When the camera is not sure and the item carries its own label, the label decides (domain review:
  * a wrong SKU in a warehouse becomes a wrong shipment). The worker types the SKU printed on the item
- * itself, never the shelf's: the guessed shelf's label would only confirm the guess (product review,
+ * itself, never the shelf's: the guessed shelf's label would only confirm the guess (domain review,
  * round 5). Items with no label are settled by picking among the candidates on Øyne's card. The
  * camera's guess goes on the list only when the label agrees; a label that names another product
  * offers that product instead; anything else says so and keeps what was typed.

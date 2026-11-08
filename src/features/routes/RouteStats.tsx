@@ -26,7 +26,7 @@ function Baseline({ label, metres, saved }: { label: string; metres: number; sav
 /**
  * The pick route's figures. The saving leads against shelf order (the list sorted by location code,
  * as a warehouse system prints it), the baseline a warehouse person would ask for; the list as
- * written is shown beside it, named, so the larger figure never stands alone (jury round 3, the Holio juror).
+ * written is shown beside it, named, so the larger figure never stands alone (domain review, round 3).
  */
 export function RouteStats({
   metres,

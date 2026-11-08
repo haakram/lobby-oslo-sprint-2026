@@ -15,13 +15,14 @@
 **Fettero is the night shift that reports back. At 06:00 the manager who takes over the hotel gets
 the night on one page: what needs a person now and who owns it, which rooms can be sold today and for
 how much, and what the night robot did and refused to do. Nothing on it says "done" unless it was
-confirmed.** Hotel number one needs no robot: Fettero reads its booking system and its door-lock log.
-The robot is how we prove "confirmed" can be measured: our AI agent ran Wybe's live hotel simulation on
-its own. On the night in the demo it said "done" 73 times; 64 of those came after it had seen the
-simulator's score rise, and **9 rested on its own judgement (5 room checks, 4 spills): 9 of 9
-credited**. Over the final branch's 18 live nights, 185 of its 189 own-judgement claims were credited
-(97.9 %), room checks 117 of 117. With the score hidden from its decisions, four live nights: 290 of
-291 credited, a false-done rate of 0.3 %.
+confirmed.** Hotel number one needs no robot: Fettero reads its booking system (read-only), one signal
+per room from the door lock, never who, and the night clerk's own entries. The robot is how we prove
+"confirmed" can be measured, and we hold it to the same rule: **of the 9 "done" our AI agent claimed on
+its own judgement on the demo night, the simulator credited 9, and its own log contradicts one (209),
+so the card says 8 of 9.**
+
+Two figures in the pitch, no more (the creative juror): the room **found free hours earlier, about 1,500 kroner
+if the night sells out**, and **8 of 9**. Everything else is for questions (§ 1.1).
 
 The one line, as on the login screen and the first slide: ***Natten, ærlig overlevert.*** (the night,
 handed over honestly). One sentence after it, the one in `src/ui/brand.ts` (`DESCRIPTION`), which since
@@ -50,10 +51,11 @@ Why it matters (sourced; use one or two on the hook slide, never all):
 - "About 1,500 kroner": it is one room (213) × last night's average rate in the test PMS (NOK 1,467,
   rounded on screen to *ca. 1 500 kr*; *Slik regner vi* shows the method, with SSB's Oslo rate beside
   it), and only after the desk confirms. 213's guest was **due out yesterday (7.11)** and the check-out
-  was never recorded, so the booking system still has him in house and holds the room tonight: without
-  the release it would stand unsold. It is gross room revenue, extra only on a night the rest of the
-  hotel sells (Oslo sold 72 % of its rooms in 2025). Say "on the demo night", never "per night" or "per
-  hotel".
+  was never recorded, so the booking system still has him in house. **Never "otherwise unsold"
+  (the founder juror, the Wybe engineer):** housekeeping's round would find the room by late morning. What Fettero buys is
+  the hours: found free before the round, worth the kroner only **if the night sells out** (the demo
+  hotel has 31 of 36 sold tonight, and the screen shows it) or for an early check-in. Say "on the demo
+  night", never "per night" or "per hotel".
 - A room whose guest is **due out today** is not a sleeper: every PMS already sells it tonight. What
   finding it empty early buys is an early clean and an early check-in, not a room-night.
 - That a real robot would open a booked room. It did in Wybe's simulation; in a pilot the evidence for
@@ -73,7 +75,9 @@ worktree's git reflog). Every number below is in **`docs/runs/ledger.csv`** (one
 and **`docs/runs/builds.csv`** (one row per commit), which `python3 scripts/ledger.py` rebuilds from the
 run logs (read-only; `--check` says whether the committed files are current). The logs themselves are
 on Hamad's laptop (`oslo-wt/*/temp/runs/`), not in the repo; only `public/runs/demo.jsonl` is. Read from the ledger as
-regenerated at 04:08 Sun (229 live starts; the all-nights rows move as nights are logged).
+regenerated at 04:08 Sun (229 live starts; the all-nights rows move as nights are logged); the rows
+for the build that plays at 12:00, the forecast, the dress rehearsal and the distinct claims from C's
+regeneration at 05:30 (272 live starts).
 Board tests, the seed-specific experiments in the `lottery`, `lottery2`, `lafinal`, `lawet` and `wetoff`
 checkouts (53 full nights started 02:37–04:02, 52 of them on seeds 10 and 16), are `kind=board-test`
 in `ledger.csv`: their commit is the checkout's HEAD, not a build, so they are not in `builds.csv` or
@@ -87,15 +91,18 @@ with the same result.
 | Build `cb72845`, 01:07–01:14 | seed 10 **2,707** · 16 **2,680** · 23 **2,334** · 5 **2,584**: mean **2,576** | `builds.csv` row `cb72845` |
 | Build `8eac151`, 01:50–01:58 | seed 10 **2,760** · 16 **2,679** · 23 **2,240** · 5 **2,559**: mean **2,560** | `builds.csv` row `8eac151` |
 | Build `c3801e0`, 03:26: the head of `hamad/final` at 03:30 (`8eac151`'s agent plus the end-of-night battery guard and a spill look) | seed 10 **2,760** · 16 **2,748** · 23 **2,298** · 5 **2,559**: mean **2,591**. Not played on seeds 9 or 11 | `builds.csv` row `c3801e0` |
-| **Forecast for the final** (mean of the best 9 of 10 unseen seeds, `c3801e0`) | **median 2,035, 80 % between 1,898 and 2,186.** Model: log score = build + seed, least squares over 63 build×seed cells of complete live build nights (18 builds, 20 seeds, residual SD 0.065), then 20,000 simulated finals. **Why lower than the tuned nights (2,591): mostly seed difficulty.** The four seeds this build played are easy (+19 % against the average seed; the unseen ones −4 %), which alone is −19 %; the tuning penalty we can measure is −6 %, from two nights (leave-seed-out on `d4e445c`: seed 9 predicted 1,869, played 1,965; seed 11 predicted 2,254, played 1,914). Sensitivity: no penalty 2,154, penalty doubled 1,923. Committed 04:08 Sun, before the final; the replay bed screened changes on all 20 seeds, so the final is the only true holdout | `docs/runs/forecast.txt` (`python3 scripts/forecast.py`) |
+| **The build that plays at 12:00: `8de9ffc`**, the head of `hamad/final` at 05:30 (`c3801e0` plus a cleaning-closed corridor avoided 90 min; `013f90d` has the same agent) | tuned seeds (04:50): 10 **2,759** · 16 **2,748** · 23 **2,298** · 5 **2,559**, mean **2,591**. **Dress rehearsal on ten seeds no build had played** (22, 34, 53, 55, 67, 70, 78, 83, 86, 93; 05:02): 4 of 10 complete at 05:30, 22 **2,085** · 34 **2,166** · 53 **2,481** · 55 **2,138**, mean **2,218**; 231 of 231 "done" credited | `builds.csv` rows `013f90d`, `8de9ffc` |
+| **Forecast for the final** (mean of the best 9 of 10 unseen seeds, `8de9ffc`) | **median 2,050, 80 % between 1,759 and 2,393.** Model: log score = build + seed, least squares over 67 build×seed cells of complete live build nights (19 builds, 20 seeds), then 20,000 simulated finals. The band carries the tuning penalty's uncertainty (drawn per simulated final from N(−0.054, 0.106)) and the leave-one-cell-out error (0.088 on the log scale, against an in-sample 0.063): the data juror's correction; round 4's method gives 1,903–2,196. **Why lower than the tuned nights (2,591): mostly seed difficulty.** The four seeds this build played are easy (+19 % against the average seed; the unseen ones −4 %), which alone is −19 %; the tuning penalty we can measure is −5 %, from two nights (leave-seed-out on `d4e445c`: seed 9 predicted 1,865, played 1,965; seed 11 predicted 2,245, played 1,914). Sensitivity: no penalty 2,163, penalty doubled 1,942. Regenerated 05:30 Sun, before the final. **The larger risk no band covers:** the final may use another map and other tasks | `docs/runs/forecast.txt` (`python3 scripts/forecast.py`, reads the head of `hamad/final` from git) |
+| **Forecast against the dress rehearsal** (out of sample) | The forecast committed at **04:08**, before the rehearsal (`b57e4c1`, for `c3801e0`: final median 2,035, 80 % 1,898–2,186), expected a **mean night of 1,989** on unseen seeds. The four rehearsal nights complete at 05:30 average **2,218: +11 %** (+5 % against the forecast without the penalty). Practice seeds go to 999 (`docs/research/wybe-api.md`), so a holdout was always available; "the final is the only true holdout", which we wrote at 04:08, was wrong | `docs/runs/forecast.txt`, section *Out-of-sample check* |
 | "Done" credited, 18 nights of these four builds | **1,263 of 1,267 (99.7 %)**; the 4 not credited were all on seed 23, one per build | `builds.csv`: `done_reports`, `done_credited` |
-| What each "done" rested on, same 18 nights | **1,078** sent after the agent had seen the score rise during the task (credited by construction: the simulator's verifier, not trust). **189 on the robot's own judgement, 185 credited (97.9 %)**: room checks **117 of 117**, spill reports **68 of 72**. The 4 misses are one probe (R-037 on seed 23, a sign on another request's patch) repeated in all four builds, because what the agent learns resets every shift | `builds.csv`/`ledger.csv`: `done_after_rise`, `done_own`, `done_own_credited`, `done_room_check*`, `done_spill*` (the rule in `scripts/ledger.py`; the app's `doneBasis` runs the same rule) |
-| "Done" with the score hidden (the Wybe juror) | Side branch `hamad/blind` (`NS_SCORE_BLIND=1`), four live nights started 04:26 Sun, seeds 10/16/23/5: the agent decides "done" only from what it saw, never from the score or the reply's wording. **290 of 291 credited (99.7 %), false-done 0.3 %**; the miss is R-037 on seed 23, the same spill the sighted build misses. Scores 2,760 · 2,748 · 2,304 · 2,559: the sighted `c3801e0`'s on 10, 16 and 5, +6 on 23 | the four logs (`flags.score_blind`), `kind=experiment` in `ledger.csv`; § 6.1 |
+| What each "done" rested on, same 18 nights | **1,078** sent after the agent had seen the score rise during the task (credited by construction: the simulator's verifier, not trust). **189 on the robot's own judgement, 185 credited (97.9 %)**: room checks **117 of 117**, spill reports **68 of 72**. The 4 misses are one probe (R-037 on seed 23, a sign on another request's patch) repeated in all four builds, because what the agent learns resets every shift. **Counted once per (seed, request), the 189 are 65 distinct claims: 64 credited, 95 % (Wilson) interval 92–99.7 %**; the only miss is 23/R-037 | `builds.csv`/`ledger.csv`: `done_after_rise`, `done_own`, `done_own_credited`, `done_room_check*`, `done_spill*`; the distinct count in `ledger.json` (`distinct_own`); the rule in `scripts/ledger.py`, which the app's `doneBasis` runs too |
+| "Done" with the score hidden (the Wybe juror, the data juror) | Side branch `hamad/blind` (`NS_SCORE_BLIND=1`), four live nights started 04:26 Sun, seeds 10/16/23/5: the agent decides "done" only from what it saw, never from the score or the reply's wording. **The same 291 "done" reports as the sighted build, 290 credited**; the miss is R-037 on seed 23, the same spill the sighted build misses. Scores 2,760 · 2,748 · 2,304 · 2,559: the sighted `c3801e0`'s on 10, 16 and 5, +6 on 23. **Its own check said "not done" 0 times in 265** (D recounted the four logs): no action failed, so the run shows the score wasn't needed on those nights, **not how well the robot catches a failure**. We no longer quote a false-done rate from it. A test with failures injected at known rates in the offline fake measures that: **PENDING** | the four logs (`flags.score_blind`), `kind=experiment` and `blind_checks`/`blind_said_no` in `ledger.csv`; § 6.1 |
+| What hotel rules cost (the Wybe juror, the Wybe engineer) | A knock before every keycard entry, no sign moved off a wet floor, known wet corridors avoided, a sign where it slipped: **PENDING** (being measured on a side branch). Until the number is in, say "not measured" | — |
 | Declines, same 18 nights | 112 declined; the referee credited **93** (+5 each) and gave **19** nothing | `builds.csv`: `declines_credited`, `declines_not_credited` |
 | Best practice score on the board | **2,807**, **#8 of 20** at 04:10 Sun, level with the team below us (top 3,448; we played 242 practice shifts, the leader 1,556). It came from a board test (the `lottery` checkout, `d7040b7`, seed 10, 03:38), so it is **not** the final build; the final branch's best (2,760, `8eac151` and `c3801e0`) would rank #11 | `nightshift-board.wybe.me/data`; `ledger.csv`, `kind` `board-test` |
 | All full live nights, every version | **120** nights that ran to 06:00 by 04:08 (4 more stranded). Builds: **67**, Sat 13:15 – Sun 03:26, median **1,960**, mean **2,030**, most from earlier, weaker builds. Board tests: **53**, Sun 02:37–04:02, mean **2,753**, best **2,807**, on the seeds they were tuned for (42 on seed 10). Moves as nights are logged | `ledger.csv`, `end_reason` "server ended: time", `kind` |
 | "Done" credited, every live night with a log | **8,156 of 8,191 (99.6 %)**, 130 nights at 04:08, every version: every build night with a log, and board tests only when they ran the full night; on the robot's own judgement **1,113 of 1,145 (97.2 %)**, room checks 657 of 662 (the figures behind *Slik vet vi det* on the judgement card; recomputed from the ledger on every build, so they move) | `ledger.csv`: `done_reports`, `done_credited`, `done_own*`, `kind` |
-| The night in the app | seed 16, **2,680**, build `cb72845`: 85 requests, 73 "done", **73 of 73 credited** ("Noted. Thanks."): **64 after the score rose, 9 on its own judgement (5 room checks, 4 spills), 9 of 9 credited**; 8 declined, 7 credited (6 orders that never existed, 1 already delivered), 1 not (R-036, a spill report on floor 3); 4 still open at 06:00 (battery 8.6 % at 05:28:58); one penalty all night (−15, slipped on a wet floor in corridor 2B at 23:51) | `public/runs/demo.jsonl` (shift `w2-5991166a…`) |
+| The night in the app | seed 16, **2,680**, build `cb72845`: 85 requests, 73 "done", **73 of 73 credited** ("Noted. Thanks."): **64 after the score rose, 9 on its own judgement (5 room checks, 4 spills), 9 of 9 credited (95 % interval 70–100 %), 8 of 9 against its own log** (R-049: luggage-209 placed inside 209 at 01:29:26, "Nobody is here. The room is tidy." at 03:47:31; `selfContradictions` in `src/features/nightshift/conduct.ts`); at 05:57 not docked, battery 19.8 %, holding the master keycard and a towel, with the housekeeping cart (a towel, a toiletry kit) in corridor 3A; 8 declined, 7 credited (6 orders that never existed, 1 already delivered), 1 not (R-036, a spill report on floor 3); 4 still open at 06:00 (battery 8.6 % at 05:28:58); one penalty all night (−15, slipped on a wet floor in corridor 2B at 23:51) | `public/runs/demo.jsonl` (shift `w2-5991166a…`) |
 | How we test a change before a live shift | a **replay bed** rebuilds every full live night offline (72 when we ran it at 02:55). Replayed with the code that played them, 50 nights land within **61 points (3.2 %)** of live on average, 48 of 50 within 10 % (the first 40: 72 points, 3.8 %, the figure we quoted before). **In-sample**: the reward model was fitted on 50 nights that include these | `docs/runs/replay-fidelity.txt` (from `python -m agent replaybench --fidelity`; `agent/replaybed.py` on `hamad/final`) |
 | Wybe's final (10 shifts, Sun 12:00–13:00) | **[fill after 13:05: mean, rank]** | Wybe's board |
 
@@ -192,16 +199,17 @@ opens the referee and the ledger line for the data juror and the Wybe juror.
 
 Each juror scores from their own field (CONTEXT § 11). Every part names the field it answers.
 
-1. **Problem, story first, then money and safety (1 min; Real problem, Founders, Marketing).** "Last
-   night the robot carried an arriving guest's suitcase into room 209, which the booking system still
-   had booked to someone else. Fettero held the room back before anyone was handed a key. It also found
-   213 empty: the guest was due out yesterday and nobody recorded the check-out, so the system still
-   blocked the room. About 1,500 kroner, sold once the desk confirmed. And three wet floors without a
-   sign each had an owner at 06:00." Then one SSB figure (staff churn) and SSB's Oslo rate (NOK 1,631 a
-   room-night in 2025, 72 % sold; table 14169). Then, inside the first 20 seconds of the business part:
-   "Hotel number one needs no robot: we read the booking system and the door-lock log." Then what we
-   heard on the phone this morning (§ 8) **[fill; if the round wasn't run, say "we haven't asked a
-   hotel yet; that's step one"]**.
+1. **Problem, story first, then money and safety (1 min; Real problem, Founders, Marketing).** Open
+   on the image (the creative juror): the 3D replay for 8 seconds, the robot at 209 at 01:27 with the stranger,
+   then the page, where the night clerk's note says *«Rolig natt.»* beside three wet floors and a man at
+   seven doors. "From the desk it *was* a calm night. The robot saw the rest. And we check the robot
+   too: at 01:29 it carried bags into 209, at 03:47 it reported 209 empty. Fettero held the room back.
+   It also found 213 free: the guest was due out yesterday and nobody recorded the check-out. Found
+   hours before the housekeeping round, worth about 1,500 kroner if the night sells out. And every wet
+   floor had an owner at 06:00." Then one SSB figure (staff churn). Then, inside the first 20 seconds of
+   the business part: "Hotel number one needs no robot" and the *Uten robot* switch. Then what we heard
+   on the phone this morning (§ 8) **[fill; if the round wasn't run, say "we haven't asked a hotel yet;
+   that's step one"]**.
 2. **Live demo (3–4 min; Functionality, Design).** The § 2 story, then the extras the 2 minutes skip:
    - **Ruter** (Holio pain 6): *Renhold* opens on today's rooms to clean. At 04:16 the screen said *260 m
      · ca. 8 min for 7 rom*, **as short as room-number order** (*like kort*), and 286 m in the order the
@@ -232,11 +240,12 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
    lived tokens from our server. Login with roles enforced on the server; per-user rate limits on the
    paid routes. Evaluation: a replay bed of every full live night (72) screens a change before it gets
    a live shift; it reproduces a night within 3.2 % with the code that played it (in-sample, § 1.1).
-   "Done", split by what it rested on: over the last 18 live nights, 1,078 sent after the score rose
-   (the simulator's verifier), and 185 of 189 on the robot's own judgement credited (97.9 %), room
-   checks 117 of 117. The forecast for the final (median 2,035, 80 % 1,898–2,186) was committed before
-   it. The page itself has no language model in it: every line is a projection of logs, so it can't make
-   anything up. The run-log contract is a file, `docs/runlog.schema.json`, with an Open-RMF adapter beside the Wybe one: Natteskift's *Robotlogg* switch shows the same judgement card on an Open-RMF sample night (our own example, labelled), where 'done' needs two signals because there is no referee.
+"Done", split by what it rested on: over the last four builds' 18 live nights, 1,078 sent after
+   the score rose (the simulator's verifier), and on the robot's own judgement 64 of 65 distinct claims
+   credited (95 % interval 92–99.7 %). The forecast for the build that plays (`8de9ffc`: median 2,050,
+   80 % 1,759–2,393) was committed before the final, and checked out of sample on ten never-played
+   seeds: the 04:08 forecast expected 1,989 a night, the rehearsal's first four nights averaged 2,218. The page itself has no language model in it: every line is a projection of logs, so it can't make
+   anything up. The run-log contract is a file, `docs/runlog.schema.json`, with an Open-RMF adapter beside the Wybe one: Natteskift's *Robotlogg* switch shows the same judgement card on an Open-RMF sample night (our own example, labelled), shaped like the compartment robots hotels actually run: the guest's PIN plus an empty compartment is *bekreftet*; the robot's own credential plus its own photo only *robotens egen observasjon*. "Confirmed" needs a signal from outside the robot.
 4. **Business (1–2 min; Founders, Marketing).** The business slide, § 7: one buyer, one price with its
    arithmetic, today's tools, the channel, Monday's next step, the first 100 users.
 5. **Team (20 s; Team efficiency, Founders).** Hamad (agent, app, tooling) and ShirazIQ (UI, voice,
@@ -245,7 +254,8 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
    and pinned to a shift id, and a replay bed to screen changes before a live shift. "We built thirteen
    screens and show one; the cut list is in the PRD." The commitment and the stop rule: **"We both work
    on this full-time for four weeks from Monday. If fewer than 2 of 10 hotels take a free pilot by
-   8 December, we stop the hotel wedge and test selling through robot makers."**
+   8 December, we stop the hotel wedge and test selling through robot makers."** Hold up the printed
+   A4 last (the design juror, the product juror): "This page is what hotel number one gets on Monday, without a robot."
 
 ## 4. Backup plan
 
@@ -273,14 +283,23 @@ The login limiter counts failed tries per address: 5 per address and user and 20
 minutes (`src/features/auth/rateLimit.ts`). On venue wifi every juror shares one public address, and
 three jurors were locked out for minutes during the night's reviews. So nobody types a password on stage.
 
-- [ ] **Log in on the demo laptop before going on stage**, as `siri`, in the browser that will be on
+- [ ] **Run the production build on the demo laptop, not `next dev`** (the security juror, the data juror):
+      `npm ci && npm run build && npm start`, then http://localhost:3000, with `.env.local` as in § 4.
+      Then the CSP a juror can inspect has no `'unsafe-eval'` and no `ws://localhost`, and the session
+      cookie is `Secure`. Build in its own checkout, not in a worktree where a dev server is running
+      (`next build` rewrites `.next`). **Check the login once under `npm start` in the demo browser**
+      (a `Secure` cookie on http://localhost: current Chrome and Firefox accept it; to verify on the
+      laptop). Say it once in Q&A: "You're looking at the production build."
+- [ ] **Log in on the demo laptop before the slot**, as `siri`, in the browser that will be on
       the projector; open Overlevering, at the top, zoom set (1440 px at 110–125 %).
 - [ ] **A second tab, already logged in,** on Overlevering in the same browser (same session cookie;
       12 h). If the first tab stalls, switch tabs; never log in again live.
 - [ ] **Backup account, logged in in a second browser** (or a private window): `hamad`, on Overlevering.
       If `siri` is locked out, present from it (the stamps then read Hamad's name; say so).
-- [ ] Clear rehearsal ticks: *Angre* on 213 and on the sign-off, so the page starts unreleased and
-      unsigned (they live in this browser's `localStorage`).
+- [ ] Clear rehearsal ticks: *Angre* on 213 (back to the start, ticks and name cleared) and on the
+      sign-off, so the page starts unconfirmed and unsigned, and the source switch on *Med robot*
+      (they live in this browser's `localStorage`). The night clerk's sample entries for *Uten robot*
+      must still be there: check the switch once before walking up.
 - [ ] Tell jurors who try the `jury` account to type carefully: their mistakes count against the same
       address as the presenter's.
 - [ ] Recorded video (§ 4) open in a third window, paused on frame one.
@@ -298,11 +317,18 @@ three jurors were locked out for minutes during the night's reviews. So nobody t
       do: `docs/PRIVACY.md` § 9.
 - [ ] The ElevenLabs receptionist's live retention checked in the dashboard and dated in
       `docs/PRIVACY.md` § 4 (team).
+- [ ] The receptionist's first message tells a phone caller where the call goes and for how long
+      (`docs/PRIVACY.md` § 6, the proposed first layer; ShirazIQ's prompt), the "10 % cheaper than the
+      booking sites" line cut or dated, then the agent setup re-run (`src/features/reception/setup-agent.ts`)
+      so the live agent carries it; the live ElevenLabs agents also keep the old work-guide wording
+      until their setup is re-run (owner E's note; team).
 - [ ] The forecast (`docs/runs/forecast.txt`) committed **before 12:00** with its timestamp, and after
       13:05 "forecast X (80 %: a–b) · actual Y" added to § 1.1 (the data juror).
 - [ ] A team e-mail address for the print footer and the README (the founder juror, the marketing juror: a leave-behind nobody
       can reply to doesn't do its job). None exists yet; don't invent one.
-- [ ] Repo access for the jury: public, or the jury added (team lead's decision, CONTEXT § 11).
+- [ ] Repo access for the jury: **add the jury as collaborators; don't make the repo public**
+      (the law juror): `docs/` holds the organisers' decks, Wybe's guide and Holio's challenge PDF, and making
+      the repo public would redistribute third-party material (team lead's decision, CONTEXT § 11).
 - [ ] `README.md` first screen: what it is, the URL, the jury login, three things to click, how to run.
 - [ ] Jury account: its password in the `/lever` message, not in the repo; `LOBBY_USERS` with the jury
       account set on Vercel too (today only `.env.local` has it); removed after the event.

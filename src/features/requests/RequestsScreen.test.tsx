@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
-import { RequestsScreen } from "./RequestsScreen";
+import { RequestsScreen, sourceFromQuery } from "./RequestsScreen";
 
 // A short night: the robot fails one request (towels, Rom 108) and leaves one open when the shift ends
-// (room service, Rom 104).
+// (room service, Rom 104). Its look from corridor 1a shows room 134 (the radiator call's room).
 const NIGHT = [
   { v: 1, type: "start", shift: "w2-0000000000000000000000000000000a", mode: "practice", seed: 1, t: 1794058477 },
   { v: 1, type: "state", clock: "22:00:00", location: "charging-dock", score: 0 },
+  { v: 1, type: "call", cmd: "look", args: {}, ok: true, clock: "22:00:30", result: { location: "corridor-1a", floor: 1, exits: [{ to: "room-134", metres: 4 }] } },
   { v: 1, type: "decision", kind: "request", data: { request: "R-001", kind: "amenity", text: "Two towels for room 108, please" } },
   { v: 1, type: "decision", kind: "task_start", data: { request: "R-001", kind: "amenity", room: "room-108" } },
   { v: 1, type: "state", clock: "22:10:00", location: "lobby", score: 0 },
@@ -74,9 +75,29 @@ describe("RequestsScreen (Forespørsler)", () => {
     fireEvent.click(failed);
     const towels = rowWith("«Two towels for room 108, please»");
     expect(within(towels).getByText("Pågår")).toBeInTheDocument();
-    expect(within(towels).getByText("Personalet tok over fra roboten")).toBeInTheDocument();
+    // Nobody logged in: the stamp says "Personalet", and how long ago, never a clock.
+    expect(within(towels).getByText("Personalet tok saken · nå")).toBeInTheDocument();
     expect(within(towels).getByRole("button", { name: "Marker fullført: Utstyr, Rom 108" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /^Roboten fikk det ikke til/ })).not.toBeInTheDocument();
+  });
+
+  it("stamps an action with who did it and how long ago, never the wall clock (jury round 3)", async () => {
+    route();
+    const session = { user: { u: "siri", name: "Siri Haugen", role: "admin" as const }, view: "admin" as const, effectiveRole: "admin" as const, exp: 0 };
+    render(
+      <SessionProvider session={session}>
+        <RequestsScreen />
+      </SessionProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Ta saken: Romservice, Rom 104" }));
+    const tray = rowWith("«A tray to room 104»");
+    const stamp = within(tray).getByText("Siri Haugen tok saken · nå");
+    expect(stamp.textContent).not.toMatch(/\d{1,2}:\d{2}/);
+    expect(JSON.parse(localStorage.getItem("lobby:request-stamps") ?? "{}")["robot:R-002"]).toMatchObject({ act: "took", who: "Siri Haugen" });
+
+    // Angre puts the stamp back too.
+    fireEvent.click(within(tray).getByRole("button", { name: "Angre: Romservice, Rom 104" }));
+    expect(within(rowWith("«A tray to room 104»")).getByText("Roboten · trenger en person")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("lobby:request-stamps") ?? "{}")).toEqual({});
   });
 
   it("says where the row went and puts the focus on Angre, which puts it back", async () => {
@@ -96,7 +117,7 @@ describe("RequestsScreen (Forespørsler)", () => {
     expect(within(rowWith("«Two towels for room 108, please»")).getByText("Feilet")).toBeInTheDocument();
   });
 
-  it("closes a request that is already in progress with one click, and shows it first under Fullført", async () => {
+  it("closes a request that is already in progress with one click, and keeps the row where it stood until the next action", async () => {
     route();
     render(<RequestsScreen />);
     await screen.findByRole("button", { name: /^Ta over/ });
@@ -104,9 +125,15 @@ describe("RequestsScreen (Forespørsler)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Marker fullført: Romservice, Rom 134" }));
     const done = rowWith("Frokost på rommet 08:30, fire personer.");
     expect(within(done).getByText("Fullført")).toBeInTheDocument();
-    expect(screen.getByText("Romservice, Rom 134 står nå under Fullført.")).toBeInTheDocument();
+    // The status line and Angre sit in the row itself: nothing jumps away from the hand that tapped.
+    expect(within(done).getByRole("status")).toHaveTextContent("Romservice, Rom 134 står nå under Fullført.");
+    const pagar = screen.getByRole("heading", { name: /^Pågår/ }).nextElementSibling as HTMLElement;
+    expect(within(pagar).getAllByRole("listitem")).toContain(done);
+
+    // The next action lets it go to its own group.
+    fireEvent.click(screen.getByRole("button", { name: "Ta over: Utstyr, Rom 108" }));
     const fullfort = screen.getByRole("heading", { name: /^Fullført/ }).nextElementSibling as HTMLElement;
-    expect(within(fullfort).getAllByRole("listitem")[0]).toBe(done);
+    expect(within(fullfort).getByText("Frokost på rommet 08:30, fire personer.")).toBeInTheDocument();
   });
 
   it("says when the night failed to load, offers Prøv igjen, and keeps the other sources", async () => {
@@ -180,7 +207,7 @@ describe("RequestsScreen (Forespørsler)", () => {
     const moved = rowWith("Rom 214 ønsker to ekstra håndklær.");
     // Nothing reaches the robot yet (TODO(phase-3)): the screen never says "sendt til roboten".
     expect(within(moved).getByText("I robotens kø")).toBeInTheDocument();
-    expect(within(moved).getByText("Lagt i robotens kø · sendes når roboten er koblet til")).toBeInTheDocument();
+    expect(within(moved).getByText("Personalet la den i robotens kø · nå · sendes når roboten er koblet til")).toBeInTheDocument();
     expect(screen.queryByText(/sendt til roboten/)).not.toBeInTheDocument();
     const status = screen.getByText("Utstyr, Rom 214 er lagt i robotens kø. Den sendes når roboten er koblet til.").closest("[role=status]") as HTMLElement;
     fireEvent.click(within(status).getByRole("button", { name: "Angre: Utstyr, Rom 214" }));
@@ -220,5 +247,106 @@ describe("RequestsScreen (Forespørsler)", () => {
     expect(within(row).getByText("Romsjekk")).toBeInTheDocument();
     expect(within(row).getByText("Resepsjonen · laget av Ana Pereira")).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: "Ta saken: Sjekk registreringen, Rom 328" })).toBeInTheDocument();
+  });
+
+  it("pins what the robot handed back first; calls that arrive a moment later go in their own group below (jury round 3)", async () => {
+    let answer: (value: Response) => void = () => {};
+    const call = { id: "c9", startedAt: "2026-11-08T05:40:00.000Z", title: "Håndklær", summary: "Gjesten i rom 214 mangler håndklær", callerName: "Kari Nordmann", requestType: null, arrival: null, departure: null, guests: null, needsCallback: true };
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/runs/demo.jsonl") return new Response(NIGHT, { status: 200 });
+      if (url === "/api/reception/calls") return new Promise<Response>((resolve) => (answer = resolve));
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    render(<RequestsScreen today="2026-11-08" demo={[]} />);
+    await screen.findByRole("button", { name: "Ta over: Utstyr, Rom 108" });
+    const headings = () => screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent?.replace(/\d+$/, ""));
+    expect(headings()[0]).toBe("Roboten ga videre");
+    // The phone's place is held while its calls are on their way.
+    expect(headings()[1]).toBe("Fra telefonen");
+    expect(screen.getByText("Henter telefonen")).toBeInTheDocument();
+    const firstRow = () => screen.getAllByRole("listitem")[0];
+    expect(within(firstRow()).getByText("«Two towels for room 108, please»")).toBeInTheDocument();
+
+    answer(Response.json({ calls: [call] }));
+    expect(await screen.findByText("Gjesten i rom 214 mangler håndklær")).toBeInTheDocument();
+    expect(headings()[0]).toBe("Roboten ga videre");
+    expect(within(firstRow()).getByText("«Two towels for room 108, please»")).toBeInTheDocument();
+    const phone = screen.getByRole("heading", { name: /^Fra telefonen/ }).nextElementSibling as HTMLElement;
+    expect(within(phone).getByText("Gjesten i rom 214 mangler håndklær")).toBeInTheDocument();
+  });
+
+  it("files a call for a room the hotel doesn't have as Ukjent rom, for reception, with no robot button", async () => {
+    const call = { id: "c222", startedAt: "2026-11-08T05:45:00.000Z", title: "Utstyr", summary: "Gjesten i rom 222 mangler håndklær", callerName: "Test Testesen", requestType: null, arrival: null, departure: null, guests: null, needsCallback: true };
+    route({ calls: () => Response.json({ calls: [call] }) });
+    render(<RequestsScreen today="2026-11-08" demo={[]} />);
+    const row = rowWith(await screen.findByText("Gjesten i rom 222 mangler håndklær").then((el) => el.textContent ?? ""));
+    expect(within(row).getByText("Ukjent rom")).toBeInTheDocument();
+    expect(within(row).getByText("Hotellet har ikke rom 222. Ring gjesten tilbake og spør hvilket rom det gjelder.")).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /^Send roboten/ })).not.toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Ta saken: Ukjent rom" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Se samtalen: Ukjent rom" })).toBeInTheDocument();
+    const phone = screen.getByRole("heading", { name: /^Fra telefonen/ }).nextElementSibling as HTMLElement;
+    expect(within(phone).getAllByRole("listitem")).toContain(row);
+  });
+
+  it("opens on the robot's requests with ?filter=robot, the hand-backs first", async () => {
+    expect(sourceFromQuery("robot")).toBe("robot");
+    expect(sourceFromQuery(["telefon"])).toBe("telefon");
+    expect(sourceFromQuery("noe-annet")).toBeNull();
+    expect(sourceFromQuery(undefined)).toBeNull();
+    route();
+    render(<RequestsScreen today="2026-11-08" initialSource="robot" />);
+    await screen.findByRole("button", { name: "Ta over: Utstyr, Rom 108" });
+    expect(screen.getByRole("button", { name: "Roboten" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(screen.getAllByRole("listitem")[0]).getByText("«Two towels for room 108, please»")).toBeInTheDocument();
+    expect(screen.queryByText("Rom 214 ønsker to ekstra håndklær.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^Fra telefonen/ })).not.toBeInTheDocument();
+  });
+});
+
+// The robot refuses two follow-ups: the referee raises the score after one (+5), not after the other.
+const DECLINES = [
+  { v: 1, type: "start", shift: "w2-0000000000000000000000000000000b", mode: "practice", seed: 1, t: 1794058477 },
+  { v: 1, type: "state", clock: "22:00:00", location: "charging-dock", score: 0 },
+  { v: 1, type: "decision", kind: "request", data: { request: "R-010", kind: "followup", text: "Front desk passed on a call from 108: the guest says the water bottle they ordered an hour ago never came." } },
+  { v: 1, type: "decision", kind: "task_start", data: { request: "R-010", kind: "followup", room: "room-108", item: "water-bottle" } },
+  { v: 1, type: "call", cmd: "report", args: { request: "R-010", outcome: "declined", note: "No water-bottle order from 108 on record tonight; nothing was ordered." }, ok: true, clock: "01:00:00", result: "Noted." },
+  { v: 1, type: "decision", kind: "task_failed", data: { request: "R-010", status: "declined", note: "No water-bottle order from 108 on record tonight; nothing was ordered." } },
+  { v: 1, type: "state", clock: "01:00:01", location: "lobby", score: 5 },
+  { v: 1, type: "decision", kind: "request", data: { request: "R-011", kind: "spill", text: "Someone mentioned a spill on floor 2." } },
+  { v: 1, type: "decision", kind: "task_start", data: { request: "R-011", kind: "spill", room: null } },
+  { v: 1, type: "call", cmd: "report", args: { request: "R-011", outcome: "declined", note: "No new wet patch on floor 2 and no wet-floor sign in stock." }, ok: true, clock: "02:00:00", result: "Noted." },
+  { v: 1, type: "decision", kind: "task_failed", data: { request: "R-011", status: "declined", note: "No new wet patch on floor 2 and no wet-floor sign in stock." } },
+  { v: 1, type: "state", clock: "02:00:01", location: "lobby", score: 5 },
+  { v: 1, type: "end", score: 5, requests_served: 0, reason: "server ended: time" },
+]
+  .map((line) => JSON.stringify(line))
+  .join("\n");
+
+describe("RequestsScreen: the robot's refusals are a decision for a person (jury round 3)", () => {
+  it("splits them by the referee's verdict, the unapproved one first, and gives one anyway in one tap with a stamp", async () => {
+    route({ run: () => new Response(DECLINES, { status: 200 }) });
+    const session = { user: { u: "siri", name: "Siri Haugen", role: "admin" as const }, view: "admin" as const, effectiveRole: "admin" as const, exp: 0 };
+    render(
+      <SessionProvider session={session}>
+        <RequestsScreen today="2026-11-08" demo={[]} />
+      </SessionProvider>,
+    );
+    const water = await screen.findByRole("button", { name: "Gi det likevel: Oppfølging, Rom 108" });
+    expect(screen.getByText(/1 falsk klage avvist \(godkjent av dommeren\) · 1 ikke godkjent\./)).toBeInTheDocument();
+    const avvist = screen.getByRole("heading", { name: /^Avvist etter sjekk/ }).parentElement as HTMLElement;
+    const [first, second] = within(avvist).getAllByRole("listitem");
+    expect(within(first).getByText("Ikke godkjent av dommeren: se på denne først.")).toBeInTheDocument();
+    expect(within(first).getByRole("button", { name: "Sjekk likevel: Søl" })).toBeInTheDocument();
+    expect(within(second).getByText("Godkjent av dommeren.")).toBeInTheDocument();
+    expect(within(second).getByText("Roboten sjekket først · din beslutning")).toBeInTheDocument();
+
+    fireEvent.click(water);
+    const given = rowWith("«Front desk passed on a call from 108: the guest says the water bottle they ordered an hour ago never came.»");
+    expect(within(given).getByText("Pågår")).toBeInTheDocument();
+    expect(within(given).getByText("Siri Haugen ga det likevel · nå")).toBeInTheDocument();
+    expect(within(given).getByRole("button", { name: "Marker fullført: Oppfølging, Rom 108" })).toBeInTheDocument();
+    expect(screen.getByText(/· 1 gitt likevel\./)).toBeInTheDocument();
   });
 });

@@ -2,10 +2,13 @@ import type { CallSummary } from "@/features/dashboard/useReceptionCalls";
 import { hhmm } from "@/features/dashboard/format";
 import { requestKindLabel } from "@/features/dashboard/labels";
 import type { Night, OrderStatus, QueuedRequest, Task } from "@/features/dashboard/selectors";
+import { type HotelMap, roomsOf } from "@/features/hotel";
+import type { DeclineCheck, DeclineSplit } from "@/features/nightshift/declines";
 import type { Outcome } from "@/features/nightshift/outcomes";
 import { formatClock } from "@/features/reception/format";
 import type { RoomCheckMark } from "@/features/rooms/reconcile";
 import type { PhoneAssignment, PhoneTask } from "./phoneTasks";
+import type { RequestStamp } from "./stamps";
 import { type ManualRequest, MANUAL_REQUESTS } from "./testData";
 
 /**
@@ -64,9 +67,48 @@ export type RequestView = {
   reason?: string | null;
   /** Put in the robot's queue but not sent: there is no connection to the robot yet (TODO(phase-3)). */
   pending?: boolean;
-  /** The status badge's word when it says more than the status's own ("Avvist (ingen bestilling)"). */
+  /** The status badge's word when it says more than the status's own. */
   statusWord?: string;
+  /** The guest named a room the hotel doesn't have ("222"): "Ukjent rom", for reception, never a room task. */
+  unknownRoom?: string;
+  /** The call an unknown-room request came from (*Se samtalen*); not a phone task, so nobody is sent to the room. */
+  call?: PhoneTask;
+  /** Who moved it along on Forespørsler, and when (ISO); the row says "Siri Haugen tok saken · nå". */
+  stamp?: RequestStamp;
+  /** A phone task given in one tap: to the robot's queue, or to this person. */
+  assignedTo?: "robot" | string;
+  /** A robot's refusal: what the referee (the Wybe Night Shift simulator) made of it, and what kind it was. */
+  decline?: Pick<DeclineCheck, "judged" | "kind">;
 };
+
+/**
+ * Where a row stands on Forespørsler, top to bottom (jury round 3, the product juror): what the robot handed back first,
+ * pinned, so calls that arrive a moment later can't push it down; the phone's calls in their own group below;
+ * then everything else that waits, what is under way, done, refused after a check and called off.
+ */
+export type RequestLane = "handback" | "phone" | "venter" | "pagar" | "fullfort" | "avvist" | "avlyst";
+
+export const REQUEST_LANES: readonly RequestLane[] = ["handback", "phone", "venter", "pagar", "fullfort", "avvist", "avlyst"];
+
+export function requestLane(request: RequestView): RequestLane {
+  if (request.status === "venter" || request.status === "feilet") {
+    if (request.source === "robot" && !request.badge) return "handback";
+    if (request.source === "telefon") return "phone";
+    return "venter";
+  }
+  return request.status;
+}
+
+/**
+ * The rooms of tonight's hotel, to tell a room a caller names from one that doesn't exist. Only from a night
+ * that has ended (the robot's whole night shaped the map); earlier, or with no night, null: nothing is
+ * called unknown on a half-drawn map.
+ */
+export function hotelRoomsOf(map: HotelMap, ended: boolean): ReadonlySet<string> | null {
+  if (!map.fromRun || !ended) return null;
+  const rooms = roomsOf(map);
+  return rooms.length > 0 ? new Set(rooms.map((node) => node.id)) : null;
+}
 
 /** The robot's verdict as a request's status: refused and called-off requests are their own, quiet states. */
 function robotStatus(outcome: Outcome | undefined, fallback: RequestStatus): RequestStatus {
@@ -90,13 +132,14 @@ function robotStatus(outcome: Outcome | undefined, fallback: RequestStatus): Req
 const ROBOT_HANDLER: Partial<Record<RequestStatus, string>> = {
   venter: "Roboten · trenger en person",
   feilet: "Roboten · trenger en person",
-  avvist: "Roboten sjekket først",
+  avvist: "Roboten sjekket først · din beslutning",
   avlyst: "Avlyst av nattsjefen",
 };
 
 function robotRequest(id: string, kind: string, room: string | null, text: string | null, at: string | null, status: RequestStatus, outcome: Outcome | undefined): RequestView {
-  // A person can take over what the robot failed or left open; done, running, refused and called-off stay the robot's.
-  const needsPerson = status === "venter" || status === "feilet";
+  // A person can take over what the robot failed or left open, and give what it refused anyway (a refusal is a
+  // decision for a person, jury round 3, the Wybe engineer); done, running and called-off stay the robot's.
+  const needsPerson = status === "venter" || status === "feilet" || status === "avvist";
   return {
     id: `robot:${id}`,
     source: "robot",
@@ -110,7 +153,6 @@ function robotRequest(id: string, kind: string, room: string | null, text: strin
     actionable: needsPerson,
     tonight: true,
     reason: outcome?.reason ?? null,
-    statusWord: status === "avvist" && outcome?.reason?.includes("ingen bestilling") ? "Avvist (ingen bestilling)" : undefined,
   };
 }
 
@@ -188,6 +230,33 @@ export function fromPhoneTask(task: PhoneTask, assignment: PhoneAssignment | und
     tonight: false,
     phone: task,
     pending: queued,
+    ...(assignment ? { assignedTo: assignment.to === "robot" ? "robot" : assignment.who } : {}),
+  };
+}
+
+/**
+ * A call that names a room the hotel doesn't have (a test call to "rom 222" in a hotel of 201–214): not a
+ * room task and nothing for the robot. Reception rings back and asks; it waits in the phone's group, never
+ * at the top of Overlevering or in the bell's Haster.
+ */
+export function fromUnknownRoom(task: PhoneTask): RequestView {
+  const number = task.room.replace(/^room-/, "");
+  return {
+    id: task.id,
+    source: "telefon",
+    badge: "Telefon (AI)",
+    kind: "Ukjent rom",
+    room: null,
+    text: task.record.message,
+    lang: "nb",
+    at: task.at || null,
+    handler: "Resepsjon",
+    status: "venter",
+    actionable: true,
+    tonight: false,
+    reason: `Hotellet har ikke rom ${number}. Ring gjesten tilbake og spør hvilket rom det gjelder.`,
+    unknownRoom: number,
+    call: task,
   };
 }
 
@@ -210,10 +279,11 @@ export function fromRoomCheck(day: string, room: string, mark: RoomCheckMark): R
 }
 
 /** A staff-kept status (Ny → Tildelt → Løst) over a request's own: Tildelt is "pågår", Løst "fullført". */
-function withStaffStatus(request: RequestView, status: OrderStatus): RequestView {
+function withStaffStatus(request: RequestView, status: OrderStatus, stamp: RequestStamp | undefined): RequestView {
   if (!request.actionable || status === "ny") return request;
-  const handler = request.source === "robot" && !request.badge ? "Personalet tok over fra roboten" : request.handler;
-  return { ...request, status: status === "tildelt" ? "pagar" : "fullfort", handler };
+  const robot = request.source === "robot" && !request.badge;
+  const handler = robot ? (request.status === "avvist" ? "Personalet ga det likevel" : "Personalet tok over fra roboten") : request.handler;
+  return { ...request, status: status === "tildelt" ? "pagar" : "fullfort", handler, ...(stamp ? { stamp } : {}) };
 }
 
 /** The Ny → Tildelt → Løst step a row shows now, so the first click on it moves it one step on. */
@@ -229,6 +299,9 @@ export function selectRequests({
   phone = [],
   assignments = {},
   extra = [],
+  hotelRooms = null,
+  stamps = {},
+  declines = null,
 }: {
   night: Night | null;
   calls: CallSummary[] | null;
@@ -239,6 +312,12 @@ export function selectRequests({
   assignments?: Readonly<Record<string, PhoneAssignment>>;
   /** Requests made on other screens (the robot's room checks on Rom). */
   extra?: readonly RequestView[];
+  /** Tonight's rooms (`hotelRoomsOf`): a call naming any other room is "Ukjent rom". Null: don't judge. */
+  hotelRooms?: ReadonlySet<string> | null;
+  /** Who moved each request along here, and when (stamps.ts). */
+  stamps?: Readonly<Record<string, RequestStamp>>;
+  /** The referee's verdict on each refusal (src/features/nightshift/declines.ts). */
+  declines?: DeclineSplit | null;
 }): RequestView[] {
   const robot = night
     ? [
@@ -249,17 +328,37 @@ export function selectRequests({
   // A callback that became a phone task (it names a room) is listed once, as the task.
   const asTask = new Set(phone.map((task) => task.id));
   const callbacks = (calls ?? []).filter((call) => call.needsCallback && !asTask.has(`call:${call.id}`)).map(fromCall);
-  const phoneTasks = phone.map((task) => fromPhoneTask(task, assignments[task.id], statusOf(task.id)));
+  const known = (task: PhoneTask) => !hotelRooms || hotelRooms.has(task.room);
+  const phoneTasks = phone.map((task) =>
+    known(task) ? fromPhoneTask(task, assignments[task.id], statusOf(task.id)) : fromUnknownRoom(task),
+  );
   const staff = manual.map(fromManual);
-  return [...phoneTasks, ...callbacks, ...extra, ...staff, ...robot]
-    .map((request) => withStaffStatus(request, statusOf(request.id)))
-    // A guest waiting in their room (a phone task) comes first in its group, then the newest.
-    .sort(
-      (a, b) =>
-        REQUEST_ORDER.indexOf(a.status) - REQUEST_ORDER.indexOf(b.status) ||
-        Number(Boolean(b.phone)) - Number(Boolean(a.phone)) ||
-        (b.at ?? "").localeCompare(a.at ?? ""),
-    );
+  const withDecline = (request: RequestView): RequestView => {
+    const check = request.status === "avvist" && request.source === "robot" ? declines?.byRequest.get(request.id.replace(/^robot:/, "")) : undefined;
+    return check ? { ...request, decline: { judged: check.judged, kind: check.kind } } : request;
+  };
+  return [...phoneTasks, ...callbacks, ...extra, ...staff, ...robot.map(withDecline)]
+    .map((request) => withStaffStatus(request, statusOf(request.id), stamps[request.id]))
+    .sort(byLane);
+}
+
+const JUDGED_FIRST: Record<NonNullable<RequestView["decline"]>["judged"], number> = { not_credited: 0, pending: 1, credited: 2 };
+
+/**
+ * Lane by lane (REQUEST_LANES); inside one, the newest first, except: in the phone's group a guest waiting
+ * in a room the hotel has (a phone task) before a callback or an unknown room; among the refusals, the one
+ * the referee did not approve first (the likeliest to be wrong).
+ */
+function byLane(a: RequestView, b: RequestView): number {
+  const lane = REQUEST_LANES.indexOf(requestLane(a)) - REQUEST_LANES.indexOf(requestLane(b));
+  if (lane !== 0) return lane;
+  const phone = Number(Boolean(b.phone)) - Number(Boolean(a.phone));
+  if (phone !== 0) return phone;
+  if (a.status === "avvist") {
+    const judged = (a.decline ? JUDGED_FIRST[a.decline.judged] : 3) - (b.decline ? JUDGED_FIRST[b.decline.judged] : 3);
+    if (judged !== 0) return judged;
+  }
+  return (b.at ?? "").localeCompare(a.at ?? "");
 }
 
 export function countRequests(requests: readonly RequestView[]): Record<RequestStatus, number> {

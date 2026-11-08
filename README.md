@@ -114,7 +114,11 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   seeds; the rehearsal's best 9 of 10 came in at **2,176, inside that committed interval**, and its mean
   night, 2,137, was 7 % above the forecast (2 % above it without the tuning penalty). Practice
   seeds go to 999, so a holdout was always there; the larger risk no band covers is that the final may
-  use another map and other tasks (the note at the top of `docs/research/wybe-api.md`).
+  use another map and other tasks (the note at the top of `docs/research/wybe-api.md`). **A second
+  forecast, committed at 06:44 Sun before the final (`c6b8c54`), from the rehearsal alone: a median of
+  2,170, 80 % between 2,055 and 2,301** (a posterior predictive of its ten nights; no model, no tuned
+  seed). How the ten rehearsal seeds were chosen is not recorded; the seed hunt's estimates put them
+  at typical, not easy (percentile ranks 8–85). After 13:05 the final goes next to both.
 - **"Done" is checked, and we say what it rests on:** over the 18 nights of the four builds in the
   table the agent said "done" 1,267
   times and the referee (Wybe's server) credited 1,263, 99.7 %. But **1,078** of them were sent after

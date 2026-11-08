@@ -227,7 +227,8 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 - **Real robot hardware, and the sim-to-real gaps** we name rather than hide:
   - For deliveries, *done* is gated by Wybe's score rising; a hotel has no score. So the card splits
     them: on the demo night 64 "done" came after the score rose and 9 on the robot's own judgement (9
-    of 9 credited); over the final branch's 18 nights, 185 of 189 own-judgement claims. A pilot needs a
+    of 9 credited, 8 of 9 holding against its own log); over the final branch's 18 nights, 64 of 65
+    distinct own-judgement claims (95 % interval 92–99.7 %). A pilot needs a
     second signal instead, and **at least one from outside the robot** (the lock's guest-card entry,
     the guest's acknowledgement or PIN, the clerk's check, the PMS); two signals from the robot alone
     (its own lock credential and its own photo) read *robotens egen observasjon*, one signal *ikke

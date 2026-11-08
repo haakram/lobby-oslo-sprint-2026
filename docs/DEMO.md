@@ -149,13 +149,13 @@ points, build `cb72845`, `public/runs/demo.jsonl`), test bookings, a team-writte
 the night clerk's sample entries, all said in one quiet band under the night line. Before going on
 stage: § 4.1.
 
-**Timed on :3300 at Sun 05:45–05:50 as `siri`, at 1152×720 (1440 px at 125 %, the projector), in a
-clean browser (Playwright),** after A's, B's and C's round-5 commits: login lands on Overlevering with
+**Timed on :3300 at Sun 05:44–05:50 as `siri`, at 1152×720 (1440 px at 125 %, the projector), in a
+clean browser (Playwright),** after A's, B's and C's round-5 commits (last re-walk after A's `21cf85f`): login lands on Overlevering with
 *Åpent nå* in 0.4–0.9 s; a reload shows it in 0.1–0.2 s. *Uten robot* answers in under 0.1 s; a figure
 link scrolls to its row in about 0.6 s; three ticks and *Bekreft med resepsjonen* in about 0.15 s;
 *Send til resepsjonen* in under 0.1 s; *Med robot* in 0.1 s; *Kvitter mottatt* in 0.05 s. The page is
-2,794 px tall at 1152×720 (3.9 screens) with the robot, 1,625 px without; 2,662 px at 1440×900 (3.0);
-5,094 px at 390 px (6.0), no sideways scroll at any size. **No free scrolling: every move is a tap.**
+2,774 px tall at 1152×720 (3.9 screens) with the robot, 1,625 px without; 2,662 px at 1440×900 (3.0);
+5,074 px at 390 px (6.0), no sideways scroll at any size. **No free scrolling: every move is a tap.**
 Each landing was checked on screen at 1152×720: the money figure under *Uten robot* lands with 213's
 whole row (the lock, Kjersti's look, *Bekreftet av to kilder*, the name field, the three ticks and the
 button) on one screen; *Home* and *Med robot* bring the top back; the robot figure lands with the card,
@@ -191,7 +191,9 @@ time, the keycard held at 209 and 304 until he had gone. Of 15 keycard entries, 
 73 `report done`, all credited; 64 after the score rose, 9 on its own judgement, 8 of them holding
 against its own log. At 05:57 the robot stood in corridor 3A, not docked, battery 19.8 %, holding the
 master keycard (the handover's item: *før 06:15*, owner the night clerk). The night clerk's note
-*«Rolig natt. Roboten tok det meste av runden selv …»* is the demo's test note.
+*«Rolig natt. Støy fra rom 210 rundt 23:20 …»* is the first line of her sample entries in
+*Nattevaktens logg* (`src/features/staffinput/entries.ts`, test data); with no entries the page falls
+back to a test note that also starts *«Rolig natt.»*.
 
 **Re-read every number off the build at the rehearsal** (the screens may still move): the kroner and
 "5 timer", 31 of 36, the count in *Åpent nå*, the order of its items, the line under the switch, and

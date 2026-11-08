@@ -139,7 +139,8 @@ slim bar reads *Fettero* and *Korttidsutleie i Oslo*, and the name links to /ver
 phone reads one dark header.
 
 The phone bar holds the role's first four *pinned* modules (Oversikt, Rom, then Gjester / Forespørsler
-/ Vedlikehold by role) and *Meny*; everything else is in the sheet, each with its one-line hint. Short
+/ Vedlikehold by role; the admin's bar is Oversikt, Overlevering, Rom, Forespørsler, so the 06:00 handover is one
+tap away) and *Meny*; everything else is in the sheet, each with its one-line hint. Short
 names (`short` in the registry: Rom, Gjester, Lager, Vakter, Øyne, Stemme) go under the icons.
 
 ### Oversikt, the whole hotel, good news first

@@ -85,7 +85,11 @@ describe("the navigation groups, from the module registry", () => {
   });
 
   it("fills the phone bar with the role's pinned screens first, then the rest in order", () => {
-    expect(barItemsFor("admin", 4).map((item) => item.href)).toEqual(["/", "/rom", "/gjester", "/foresporsler"]);
+    // The admin's own bar leads with the 06:00 handover (jury round 3).
+    expect(barItemsFor("admin", 4).map((item) => item.href)).toEqual(["/", "/overlevering", "/rom", "/foresporsler"]);
+    expect(barItemsFor("admin", 4).map((item) => item.short)).toEqual(["Oversikt", "Overlevering", "Rom", "Forespørsler"]);
+    // Topped up from the rest in order when there is room for more.
+    expect(barItemsFor("admin", 5).map((item) => item.href)).toEqual(["/", "/overlevering", "/rom", "/foresporsler", "/gjester"]);
     expect(barItemsFor("receptionist", 4).map((item) => item.href)).toEqual(["/", "/rom", "/gjester", "/foresporsler"]);
     expect(barItemsFor("robot", 4).map((item) => item.href)).toEqual(["/", "/rom", "/foresporsler", "/vedlikehold"]);
     // Fewer pinned screens than places: topped up in group order.

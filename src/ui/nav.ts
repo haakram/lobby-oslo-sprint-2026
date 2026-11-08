@@ -65,10 +65,20 @@ export function groupsFor(role: Role, context: NavContext = {}): NavGroup[] {
     .filter((group) => group.items.length > 0);
 }
 
-/** The phone bar: the role's pinned screens first, topped up in order, `count` in all. */
+/**
+ * A role's own phone bar, when it differs from the registry's pins. The admin (the demo's morning manager,
+ * `siri`) reaches the 06:00 handover in one tap from anywhere (jury round 3, the product juror): Oversikt, Overlevering,
+ * Rom, Forespørsler, then Meny. Gjester stays one tap away in Meny.
+ */
+const BAR_FOR: Partial<Record<Role, readonly string[]>> = {
+  admin: ["/", "/overlevering", "/rom", "/foresporsler"],
+};
+
+/** The phone bar: the role's own bar or its pinned screens first, topped up in order, `count` in all. */
 export function barItemsFor(role: Role, count: number, context: NavContext = {}): NavItem[] {
   const all = groupsFor(role, context).flatMap((group) => group.items);
-  const pinned = all.filter((item) => item.pinned).slice(0, count);
+  const own = BAR_FOR[role];
+  const pinned = (own ? own.flatMap((href) => all.filter((item) => item.href === href)) : all.filter((item) => item.pinned)).slice(0, count);
   const rest = all.filter((item) => !pinned.includes(item));
   return [...pinned, ...rest].slice(0, count);
 }

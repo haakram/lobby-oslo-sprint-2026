@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { canAccess, useSession } from "@/features/auth";
-import { Badge, type BadgeTone, buttonClasses, Sheet } from "@/ui";
+import { AvvikMark, Badge, type BadgeTone, buttonClasses, Sheet } from "@/ui";
 import { hhmm } from "./format";
 import {
   humanizeText,
@@ -58,12 +58,9 @@ export function RoomSheet({
       {room && (
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={STATUS_TONE[room.status]}>{STATUS_LOOK[room.status].word}</Badge>
-            {room.openOrders > 0 && (
-              <Badge tone="danger">
-                {room.openOrders} {room.openOrders === 1 ? "åpent avvik" : "åpne avvik"}
-              </Badge>
-            )}
+            <Badge tone={STATUS_TONE[room.status]}>{room.closed ? "Ute av drift" : STATUS_LOOK[room.status].word}</Badge>
+            {/* An ink mark, never red (DESIGN.md): what an avvik needs is on Vedlikehold and in the bell. */}
+            <AvvikMark count={room.openOrders} />
             <span className="text-sm text-muted">
               {room.statusAt ? `Sist sett ${hhmm(room.statusAt)}` : "Ikke sjekket i natt"} · {room.floor}. etasje
             </span>
@@ -133,7 +130,7 @@ function EntryBody({ entry, ended }: { entry: RoomNightEntry; ended: boolean }) 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-base font-semibold">Arbeidsordre</span>
-            <Badge tone="danger">{orderTypeLabel(entry.order.type)}</Badge>
+            <Badge tone="neutral">{orderTypeLabel(entry.order.type)}</Badge>
           </div>
           <span className="text-sm text-muted">{humanizeText(entry.order.text)}</span>
         </div>

@@ -8,7 +8,7 @@ import { placeLabel } from "@/features/dashboard/labels";
 import { RoomBoard } from "@/features/dashboard/RoomBoard";
 import { RoomSheet } from "@/features/dashboard/RoomSheet";
 import { RunBadge } from "@/features/dashboard/TopBar";
-import { cleaningHref, countRooms, selectRoomNight } from "@/features/dashboard/selectors";
+import { cleaningHref, countRooms, selectRoomNight, withClosed } from "@/features/dashboard/selectors";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
@@ -36,6 +36,7 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
   const technician = byRole("Vedlikehold").find((member) => member.shift === "dag") ?? null;
   const maintenance = useMemo(() => selectMaintenance({ orders, statusOf, assignee: technician?.name ?? null }), [orders, statusOf, technician]);
   const outOfOrder = useMemo(() => outOfOrderRooms(maintenance), [maintenance]);
+  const rackRooms = useMemo(() => (rooms ? withClosed(rooms, outOfOrder) : null), [rooms, outOfOrder]);
   const assignments = useMemo(() => (rooms ? assignRooms(rooms, cleanersToday()) : null), [rooms]);
 
   const [sheet, setSheet] = useState<{ room: string; open: boolean } | null>(initialRoom ? { room: initialRoom, open: true } : null);
@@ -102,10 +103,10 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
       </FigureRow>
 
       {/* Good news first: rooms the booking system thought were taken that can be sold today. */}
-      <RoomChecksPanel lines={ready ? run.lines : null} />
+      <RoomChecksPanel lines={ready ? run.lines : null} roomsInHotel={rooms?.length} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] lg:items-start lg:gap-8">
-        <RoomBoard rooms={rooms} clock={robot?.clock ?? null} onOpen={openRoom} />
+        <RoomBoard rooms={rackRooms} clock={robot?.clock ?? null} onOpen={openRoom} />
 
         <div className="flex min-w-0 flex-col gap-6 lg:gap-8">
           {/* The route itself is the header's action; the panel says what it will cover. */}

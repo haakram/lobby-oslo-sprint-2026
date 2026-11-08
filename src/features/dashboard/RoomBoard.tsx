@@ -99,7 +99,9 @@ function RoomTile({ room, clock, onOpen }: { room: RoomView; clock: string | nul
   const look = STATUS_LOOK[room.status];
   const avvik = room.openOrders > 0;
   const stale = room.statusAt && clock ? hoursBetween(room.statusAt, clock) >= STALE_HOURS : false;
-  const label = `Rom ${room.number}: ${look.word}${avvik ? `, ${room.openOrders} åpne avvik` : ""}${stale ? `, sjekket ${hhmm(room.statusAt)}` : ""}`;
+  // Closed today (out of order): the tile says so, as the bell and "Ute av drift" do.
+  const word = room.closed ? "Ute av drift" : look.word;
+  const label = `Rom ${room.number}: ${word}${avvik ? `, ${room.openOrders} åpne avvik` : ""}${stale ? `, sjekket ${hhmm(room.statusAt)}` : ""}`;
 
   return (
     <button
@@ -114,13 +116,13 @@ function RoomTile({ room, clock, onOpen }: { room: RoomView; clock: string | nul
         className={cx(
           "relative flex h-full min-h-[84px] flex-col justify-between rounded-sm p-2",
           "transition-[filter] duration-[120ms] ease-standard group-hover:brightness-110",
-          look.tile,
+          room.closed ? "bg-sunken" : look.tile,
           // An ink mark, not red: what an avvik needs is on Vedlikehold and in the bell.
           avvik && "shadow-[inset_3px_0_0_0_var(--text)]",
         )}
       >
         <span className="flex items-center justify-between gap-1">
-          <span aria-hidden="true" className={cx("h-1.5 w-5 rounded-full", look.tag)} />
+          <span aria-hidden="true" className={cx("h-1.5 w-5 rounded-full", room.closed ? "bg-line-strong" : look.tag)} />
           {stale && !avvik && <span className="text-xs leading-4 text-muted tabular-nums">{hhmm(room.statusAt)}</span>}
           {avvik && (
             <span className="text-xs leading-4 font-semibold text-text">
@@ -131,7 +133,7 @@ function RoomTile({ room, clock, onOpen }: { room: RoomView; clock: string | nul
         <span>
           <span className="block font-mono text-lg leading-none font-medium tabular-nums">{room.number}</span>
           {/* The word is the tile's point: it wraps ("Ikke / sjekket") rather than cut to "Ikke sjek…". */}
-          <span className={cx("mt-1 block text-sm leading-5", look.loud ? "font-semibold" : "font-medium", look.word_class)}>{look.word}</span>
+          <span className={cx("mt-1 block text-sm leading-5", room.closed ? "font-medium text-muted" : look.loud ? "font-semibold" : "font-medium", !room.closed && look.word_class)}>{word}</span>
         </span>
       </span>
     </button>

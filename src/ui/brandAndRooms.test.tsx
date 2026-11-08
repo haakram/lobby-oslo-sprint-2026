@@ -12,6 +12,13 @@ describe("the brand", () => {
     expect(TAGLINE).toBe("Natten, ærlig overlevert.");
     for (const line of [TAGLINE, DESCRIPTION]) expect(line).not.toMatch(/[—–]|Lobby/);
   });
+
+  it("says what it is without needing a robot: the handover first, the robot one source beside the night staff's notes", () => {
+    expect(DESCRIPTION).toMatch(/^Morgenvakten/);
+    expect(DESCRIPTION).toContain("nattevaktens notater");
+    expect(DESCRIPTION).toContain("eventuelt en robot");
+    expect(DESCRIPTION).not.toMatch(/^Roboten/);
+  });
 });
 
 describe("Figure (Martian Mono separators)", () => {

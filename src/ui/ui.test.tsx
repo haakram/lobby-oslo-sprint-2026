@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
-import { MODULES } from "@/features/modules/registry";
+import { MODULES, moduleById, PILOT_MODULES } from "@/features/modules/registry";
 import { AppNav, Badge, Button, Card, drawLine, EmptyState, ErrorState, fadeRise, Sheet, sheetIn, Stat } from "./index";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/resepsjon" }));
@@ -184,7 +184,7 @@ describe("Sheet", () => {
 });
 
 describe("AppNav", () => {
-  it("has a Resepsjon link in its own group, marked active on /resepsjon, after every other hotel module", () => {
+  it("has a Resepsjon link, marked active on /resepsjon, last under the admin's Utenfor piloten (opened by itself)", () => {
     const admin = { user: { u: "hamad", name: "Hamad", role: "admin" as const }, view: "admin" as const, effectiveRole: "admin" as const, exp: 0 };
     render(
       <SessionProvider session={admin}>
@@ -195,8 +195,12 @@ describe("AppNav", () => {
     expect(link).toHaveAttribute("href", "/resepsjon");
     expect(link).toHaveAttribute("aria-current", "page");
     const labels = screen.getAllByRole("link").map((a) => a.textContent);
-    expect(labels.slice(1)).toEqual(MODULES.filter((module) => module.group !== "utleie").map((module) => module.name));
-    // Resepsjon closes the hotel's groups; the host's Utleie group is off the admin's hotel rail.
+    // The admin's pilot cut: Oversikt and the pilot first, then every other hotel module in registry order.
+    const pilot = PILOT_MODULES.map((id) => moduleById(id).name);
+    const outside = MODULES.filter((module) => module.group !== "utleie" && module.id !== "oversikt" && !PILOT_MODULES.includes(module.id));
+    expect(labels.slice(1)).toEqual(["Oversikt", ...pilot, ...outside.map((module) => module.name)]);
+    expect(screen.getByRole("button", { name: /^Utenfor piloten/ })).toHaveAttribute("aria-expanded", "true");
+    // Resepsjon closes the hotel's modules; the host's Utleie group is off the admin's hotel rail.
     expect(labels.at(-1)).toBe("Resepsjon");
   });
 });

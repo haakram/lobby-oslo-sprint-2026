@@ -9,5 +9,11 @@ export const APP_NAME = "Fettero";
 /** The one line: on the login page, in the page metadata, in the README and on the first slide. */
 export const TAGLINE = "Natten, ærlig overlevert.";
 
-/** What it is, in one sentence after the tagline (login lede, meta description). */
-export const DESCRIPTION = "Roboten tar natten, og morgenvakten får hele hotellet på én side kl. 06:00.";
+/**
+ * What it is, in one sentence after the tagline (login lede, meta description, link previews, the app
+ * manifest). It sells without a robot (jury round 3, the marketing juror: the hotel called on Monday owns none): the
+ * handover is the product, and the robot is one source beside the night staff's own notes. "kl. 06:00"
+ * never breaks across lines.
+ */
+export const DESCRIPTION =
+  "Morgenvakten på hotellet får natten på én side kl.\u00a006:00: rom som kan selges, det som er åpent med eier og frist, og hva som faktisk ble gjort, fra nattevaktens notater og eventuelt en robot.";

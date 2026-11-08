@@ -22,10 +22,28 @@ const martian = Martian_Mono({
   display: "swap",
 });
 
+/**
+ * The name, the one line and what it is, the same words as the login page (src/ui/brand.ts). A shared link
+ * (the /lever message in Slack, a mail) previews with them and `opengraph-image.png` / `twitter-image.png`
+ * beside this file; the icons are `favicon.ico`, `icon.svg` and `apple-icon.png` (the F on night steel), and
+ * `manifest.ts` names the installed app. Next resolves the image URLs to the deployment's own address.
+ */
 export const metadata: Metadata = {
   title: { default: APP_NAME, template: `%s | ${APP_NAME}` },
   description: `${TAGLINE} ${DESCRIPTION}`,
   applicationName: APP_NAME,
+  openGraph: {
+    type: "website",
+    siteName: APP_NAME,
+    locale: "nb_NO",
+    title: `${APP_NAME} · ${TAGLINE}`,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${APP_NAME} · ${TAGLINE}`,
+    description: DESCRIPTION,
+  },
 };
 
 export const viewport: Viewport = {

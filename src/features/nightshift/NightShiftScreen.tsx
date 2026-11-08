@@ -129,7 +129,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
                             <span className="font-semibold">{taskName(task)}</span>
                             <span className="font-mono text-sm whitespace-nowrap text-muted tabular-nums">{clock.slice(0, 5)}</span>
                           </div>
-                          {reason && <p className="text-sm text-danger">{reason}</p>}
+                          {reason && <p className="text-sm text-muted">{reason}</p>}
                           {task.text && (
                             <p lang="en" className="text-sm text-muted">
                               «{task.text}»
@@ -258,10 +258,11 @@ function StatRow({ replay, open }: { replay: HotelReplay; open: number }) {
     <section role="group" aria-label="Skiftet i tall" className="border-y border-line py-5">
       <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Oppgaver fullført" value={snapshot.tasksDone} tone="success" />
-        <Stat label={open > 0 ? `Feilet · ${open} ikke ferdig` : "Oppgaver feilet"} value={snapshot.tasksFailed} tone={snapshot.tasksFailed > 0 ? "danger" : "default"} />
+        {/* Plain counts beside the green one: the night's misses are part of its total, not an alarm. */}
+        <Stat label={open > 0 ? `Feilet · ${open} ikke ferdig` : "Oppgaver feilet"} value={snapshot.tasksFailed} />
         <Stat label="Avvik meldt" value={snapshot.workOrders.length} />
         <Stat label="Klokke" value={snapshot.clock} />
-        <Stat label={low ? "Batteri · lavt" : "Batteri"} value={snapshot.battery === null ? "–" : Math.round(snapshot.battery)} unit={snapshot.battery === null ? undefined : "%"} tone={low ? "warning" : "default"} />
+        <Stat label={low ? "Batteri · lavt" : "Batteri"} value={snapshot.battery === null ? "–" : Math.round(snapshot.battery)} unit={snapshot.battery === null ? undefined : "%"} />
         <Stat label="Poeng" value={snapshot.score} />
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-muted">

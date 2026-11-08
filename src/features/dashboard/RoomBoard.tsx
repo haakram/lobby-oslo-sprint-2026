@@ -50,7 +50,7 @@ export function RoomBoard({
             );
           })}
           <li className="flex items-center gap-2 text-sm">
-            <span aria-hidden="true" className="size-2 rounded-full bg-danger" />
+            <span aria-hidden="true" className="size-2 rounded-full bg-text" />
             <span className="text-muted">Avvik</span>
             {counts ? <span className="font-semibold tabular-nums">{counts.avvik}</span> : <Skeleton className="h-4 w-4" />}
           </li>
@@ -115,14 +115,15 @@ function RoomTile({ room, clock, onOpen }: { room: RoomView; clock: string | nul
           "relative flex h-full min-h-[84px] flex-col justify-between rounded-sm p-2",
           "transition-[filter] duration-[120ms] ease-standard group-hover:brightness-110",
           look.tile,
-          avvik && "shadow-[inset_3px_0_0_0_var(--danger)]",
+          // An ink mark, not red: what an avvik needs is on Vedlikehold and in the bell.
+          avvik && "shadow-[inset_3px_0_0_0_var(--text)]",
         )}
       >
         <span className="flex items-center justify-between gap-1">
           <span aria-hidden="true" className={cx("h-1.5 w-5 rounded-full", look.tag)} />
           {stale && !avvik && <span className="text-xs leading-4 text-muted tabular-nums">{hhmm(room.statusAt)}</span>}
           {avvik && (
-            <span className="text-xs leading-4 font-semibold text-danger">
+            <span className="text-xs leading-4 font-semibold text-text">
               Avvik{room.openOrders > 1 ? ` ${room.openOrders}` : ""}
             </span>
           )}

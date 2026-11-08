@@ -178,7 +178,8 @@ export function RobotJudgementView({
           aria-expanded={open}
           aria-controls={fullId}
           onClick={() => setOpen((value) => !value)}
-          className="mt-3 inline-flex min-h-11 cursor-pointer items-center text-sm font-semibold text-accent-text hover:underline pointer-fine:min-h-8"
+          // Quiet, not orange: on Overlevering the money step is the page's one orange action (round 5, owner A, the design juror).
+          className="mt-3 inline-flex min-h-11 cursor-pointer items-center text-sm font-semibold text-muted underline underline-offset-4 hover:text-text pointer-fine:min-h-8"
         >
           {open ? "Vis mindre" : "Vis alt og slik vet vi det"}
         </button>
@@ -584,7 +585,7 @@ function HowWeKnow({
   if (source) {
     return (
       <details className="group mt-5 border-t border-line pt-1 text-sm text-muted">
-        <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-accent-text hover:underline pointer-fine:min-h-8">
+        <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-muted underline underline-offset-4 hover:text-text pointer-fine:min-h-8">
           Slik vet vi det
         </summary>
         <div className="flex max-w-[72ch] flex-col gap-1.5 pb-1">
@@ -610,7 +611,7 @@ function HowWeKnow({
   const disputed = basis ? ownAgainstLog(basis, contradictions).contradicted : [];
   return (
     <details className="group mt-5 border-t border-line pt-1 text-sm text-muted">
-      <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-accent-text hover:underline pointer-fine:min-h-8">
+      <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-muted underline underline-offset-4 hover:text-text pointer-fine:min-h-8">
         Slik vet vi det
       </summary>
       <div className="flex max-w-[72ch] flex-col gap-1.5 pb-1">
@@ -733,7 +734,7 @@ function DeclineRow({ declines }: { declines: DeclineSplit }) {
             <span className="mt-1 block">
               {guests === 1 ? "Én gjest sa" : `${capitalise(countWord(guests))} gjester sa`} at noe aldri kom. Roboten fant ingen bestilling og leverte ikke. Gi det likevel? Det
               avgjør resepsjonen i{" "}
-              <Link href="/foresporsler?filter=robot" className="font-semibold text-accent-text underline-offset-2 hover:underline">
+              <Link href="/foresporsler?filter=robot" className="font-semibold text-text underline underline-offset-2 hover:no-underline">
                 Forespørsler
               </Link>
               .

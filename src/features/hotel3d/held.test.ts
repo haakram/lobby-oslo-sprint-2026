@@ -6,7 +6,7 @@ import { buildTimeline, clockToSim, snapshotAt } from "@/features/replay";
 import { osloToday } from "@/features/reception/dates";
 import { pmsLastNight } from "@/features/rooms/pms";
 import { reconcileNight } from "@/features/rooms/reconcile";
-import { CONFIRM_WORD, checkWord, HELD_WORD, heldOf, roomWord, toConfirmOf, withHeldRooms } from "./held";
+import { CONFIRM_WORD, checkWord, HELD_WORD, heldOf, PENDING_WORD, pendingOf, roomWord, toConfirmOf, withHeldRooms } from "./held";
 
 const lines = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
 const timeline = buildTimeline(lines);
@@ -95,5 +95,18 @@ describe("the 3D-kart shows 213 as a sleeper (jury round 4), never a green Klar 
     expect(withHeldRooms(raw, [], [fake])).toBe(raw);
     const both = withHeldRooms(raw, held, [{ ...toConfirm[0], room: "room-209" }])!;
     expect(roomWord(both.rooms["room-209"])).toBe(HELD_WORD);
+  });
+});
+
+describe("the 3D-kart shows a room sent to reception as pending (round 5, owner A), never a green Klar", () => {
+  it("213 sent to reception reads Venter på PMS-en, taken, until the booking system confirms it", () => {
+    const raw = snapshotAt(timeline, timeline.duration);
+    const shown = withHeldRooms(raw, held, [], toConfirm)!;
+    expect(shown.rooms["room-213"].status).toBe("opptatt");
+    expect(roomWord(shown.rooms["room-213"])).toBe(PENDING_WORD);
+    expect(pendingOf(shown.rooms["room-213"])).toMatchObject({ room: "room-213" });
+    expect(toConfirmOf(shown.rooms["room-213"])).toBeNull();
+    expect(roomWord(shown.rooms["room-209"])).toBe(HELD_WORD);
+    expect(raw.rooms["room-213"].status).toBe("klar"); // not mutated
   });
 });

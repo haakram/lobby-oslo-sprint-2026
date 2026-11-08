@@ -355,7 +355,7 @@ export const PILOT_ROUTES: ReadonlySet<string> = new Set(["/", ...PILOT_MODULES.
 export function readyDetail(data: Pick<DashboardData, "money" | "rooms">): string | null {
   const money = data.money;
   if (!money || money.readyToSell === null || !data.rooms) return null;
-  const readyRooms = data.rooms.filter((room) => room.status === "klar" && !room.closed && !room.held && !room.toConfirm);
+  const readyRooms = data.rooms.filter((room) => room.status === "klar" && !room.closed && !room.held && !room.toConfirm && !room.pending);
   if (readyRooms.length !== money.readyToSell) return null;
   const names = (ids: readonly string[]) => (ids.length === 0 ? "" : `rom ${ids.map((id) => id.replace(/^room-/, "")).join(", ")}`);
   const parts: string[] = [];

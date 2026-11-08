@@ -207,7 +207,11 @@ describe("withHeld: the rack says what the room check says", () => {
     const rack = withHeld(rooms, ["room-209"], ["room-213"]);
     expect(rack.find((room) => room.id === "room-213")).toMatchObject({ status: "opptatt", toConfirm: true });
     expect(countRooms(rack).klar).toBe(countRooms(rooms).klar - 2);
-    // Released: no longer to confirm, a green Klar again.
-    expect(withHeld(rooms, ["room-209"], []).find((room) => room.id === "room-213")?.status).toBe("klar");
+    // Sent to reception (round 5): pending, neutral, never a green Klar until the booking system confirms it.
+    const sent = withHeld(rooms, ["room-209"], [], ["room-213"]).find((room) => room.id === "room-213");
+    expect(sent).toMatchObject({ status: "opptatt", pending: true });
+    expect(sent?.toConfirm).toBeUndefined();
+    // Confirmed free in the booking system (neither to confirm nor pending): a green Klar again.
+    expect(withHeld(rooms, ["room-209"], [], []).find((room) => room.id === "room-213")?.status).toBe("klar");
   });
 });

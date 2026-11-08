@@ -58,7 +58,15 @@ export function useHotelData(viewerUrl?: string) {
   const { money } = useRoomCheck(lines, rackRooms, osloToday());
   // The rack and the money line agree: a room held back is taken, and one still to confirm is not a green Klar.
   const heldRooms = useMemo(
-    () => (rackRooms && money ? withHeld(rackRooms, money.held.map((row) => row.room), money.toSell.map((row) => row.room)) : rackRooms),
+    () =>
+      rackRooms && money
+        ? withHeld(
+            rackRooms,
+            money.held.map((row) => row.room),
+            money.toSell.map((row) => row.room),
+            money.released.map((row) => row.room),
+          )
+        : rackRooms,
     [rackRooms, money],
   );
   const shift = shiftAt(hour);

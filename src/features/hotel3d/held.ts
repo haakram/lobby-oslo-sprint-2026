@@ -17,19 +17,26 @@ import type { Held, Sellable } from "@/features/rooms/reconcile";
  */
 
 /** A room on the map, with the room check's hold (or its sleeper row, still to confirm) when it has one. */
-export type MapRoomView = RoomView & { held?: Held; toConfirm?: Sellable };
+export type MapRoomView = RoomView & { held?: Held; toConfirm?: Sellable; pending?: Sellable };
 
 export const HELD_WORD = "Holdt tilbake";
 /** The rack's word for a room the system still holds that the robot found empty: confirm, then sell. */
 export const CONFIRM_WORD = "Bekreft først";
+/** Sent to reception, the booking system not yet confirming it (round 5, owner A): neutral, never a green Klar. */
+export const PENDING_WORD = "Venter på PMS-en";
 
 /**
  * The snapshot with every held room that reads "klar" at its moment shown as taken (status opptatt,
  * `held`), and every room still to confirm (`toConfirm`, the room check's sellable rows not yet released)
  * shown as taken with its row, never a green Klar.
  */
-export function withHeldRooms(snapshot: Snapshot | null, held: readonly Held[], toConfirm: readonly Sellable[] = []): Snapshot | null {
-  if (!snapshot || (held.length === 0 && toConfirm.length === 0)) return snapshot;
+export function withHeldRooms(
+  snapshot: Snapshot | null,
+  held: readonly Held[],
+  toConfirm: readonly Sellable[] = [],
+  pending: readonly Sellable[] = [],
+): Snapshot | null {
+  if (!snapshot || (held.length === 0 && toConfirm.length === 0 && pending.length === 0)) return snapshot;
   let rooms: Record<string, MapRoomView> | null = null;
   for (const row of held) {
     const view = snapshot.rooms[row.room];
@@ -50,6 +57,12 @@ export function withHeldRooms(snapshot: Snapshot | null, held: readonly Held[], 
     rooms ??= { ...snapshot.rooms };
     rooms[row.room] = { ...view, status: "opptatt", toConfirm: row };
   }
+  for (const row of pending) {
+    const view = (rooms ?? snapshot.rooms)[row.room] as MapRoomView | undefined;
+    if (!view || view.status !== "klar" || view.held || view.toConfirm) continue;
+    rooms ??= { ...snapshot.rooms };
+    rooms[row.room] = { ...view, status: "opptatt", pending: row };
+  }
   return rooms ? { ...snapshot, rooms } : snapshot;
 }
 
@@ -63,9 +76,14 @@ export function toConfirmOf(view: RoomView | undefined): Sellable | null {
   return (view as MapRoomView | undefined)?.toConfirm ?? null;
 }
 
-/** The room check's own word for the room ("Holdt tilbake", "Bekreft først"), or null when it has none. */
+/** The room's row once sent to reception, while the booking system has not confirmed it free. */
+export function pendingOf(view: RoomView | undefined): Sellable | null {
+  return (view as MapRoomView | undefined)?.pending ?? null;
+}
+
+/** The room check's own word for the room ("Holdt tilbake", "Bekreft først", "Venter på PMS-en"), or null when it has none. */
 export function checkWord(view: RoomView | undefined): string | null {
-  return heldOf(view) ? HELD_WORD : toConfirmOf(view) ? CONFIRM_WORD : null;
+  return heldOf(view) ? HELD_WORD : toConfirmOf(view) ? CONFIRM_WORD : pendingOf(view) ? PENDING_WORD : null;
 }
 
 /** The room's state in words, as the rack says it: "Holdt tilbake", "Bekreft først", else its status. */

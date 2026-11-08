@@ -14,7 +14,7 @@ import { percent } from "./format";
 import { placeLabel, type RoomStatus, STATUS_LOOK } from "./labels";
 import type { DashboardData } from "./data";
 import { ReceptionPanelView } from "./ReceptionPanel";
-import { countRooms, floorsOfRooms } from "./selectors";
+import { countRooms, floorsOfRooms, PENDING_WORD } from "./selectors";
 import { batteryLow, robotDoing } from "./TopBar";
 
 /**
@@ -130,7 +130,6 @@ function RoomsWidget({ data, className }: WidgetProps) {
   const counts = rooms ? countRooms(rooms) : null;
   const floorsDown = rooms ? [...floorsOfRooms(rooms)].reverse() : [];
   const money = data.money ? moneyHeadline(data.money) : null;
-  const released = data.money ? data.money.toSell.length === 0 && data.money.released.length > 0 : false;
   return (
     <Frame module="rom" className={className}>
       {!rooms || !counts ? (
@@ -140,7 +139,8 @@ function RoomsWidget({ data, className }: WidgetProps) {
           {money && (
             <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 rounded-md bg-sunken px-3 py-1">
               <p aria-live="polite" className="flex items-start gap-1.5 text-base font-semibold">
-                <RegenIcon name={released ? "circle-check" : "key"} size={18} strokeWidth={2} className={cx("mt-0.5 shrink-0", released ? "text-success" : "text-muted")} />
+                {/* Sent to reception is pending, not done: neutral until the booking system confirms it (round 5, owner A). */}
+                <RegenIcon name="key" size={18} strokeWidth={2} className="mt-0.5 shrink-0 text-muted" />
                 <span>{money}</span>
               </p>
               <Link href="/rom" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
@@ -177,7 +177,7 @@ function RoomsWidget({ data, className }: WidgetProps) {
                       const look = STATUS_LOOK[room.status];
                       const avvik = room.openOrders > 0;
                       // Closed today: the bell's "Rom 137 er stengt i dag" and the tile say the same.
-                      const word = room.closed ? "Ute av drift" : room.held ? "Holdt tilbake" : room.toConfirm ? "Bekreft først" : look.word;
+                      const word = room.closed ? "Ute av drift" : room.held ? "Holdt tilbake" : room.toConfirm ? "Bekreft først" : room.pending ? PENDING_WORD : look.word;
                       return (
                         <li key={room.id}>
                           <Link

@@ -297,7 +297,15 @@ export type RoomView = HotelRoom & {
    * the same Klare til salg as the figure beside it (jury round 3, the founder juror/the design juror).
    */
   toConfirm?: boolean;
+  /**
+   * Sent to reception to check out in the booking system (step 2 on Rom or Overlevering), not yet confirmed
+   * there: "Venter på PMS-en", neutral, never a green Klar until the PMS says it is free (round 5, owner A).
+   */
+  pending?: boolean;
 };
+
+/** The rack's word for a room sent to reception that the booking system has not confirmed yet. */
+export const PENDING_WORD = "Venter på PMS-en";
 
 /** The rooms with today's closed ones marked, so the rack says "Ute av drift" where the bell says "stengt". */
 export function withClosed(rooms: readonly RoomView[], closed: readonly string[]): RoomView[] {
@@ -310,14 +318,17 @@ export function withClosed(rooms: readonly RoomView[], closed: readonly string[]
  * arriving guest's bags in, so the rack shows them taken ("Holdt tilbake"), never as a green Klar
  * beside the money line that says they are held (jury round 3).
  */
-export function withHeld(rooms: readonly RoomView[], held: readonly string[], toConfirm: readonly string[] = []): RoomView[] {
-  if (held.length === 0 && toConfirm.length === 0) return rooms as RoomView[];
+export function withHeld(rooms: readonly RoomView[], held: readonly string[], toConfirm: readonly string[] = [], pending: readonly string[] = []): RoomView[] {
+  if (held.length === 0 && toConfirm.length === 0 && pending.length === 0) return rooms as RoomView[];
   const set = new Set(held);
   const confirm = new Set(toConfirm);
+  const waiting = new Set(pending);
   return rooms.map((room) => {
     if (room.status !== "klar") return room;
     if (set.has(room.id)) return { ...room, status: "opptatt", held: true };
-    return confirm.has(room.id) ? { ...room, status: "opptatt", toConfirm: true } : room;
+    if (confirm.has(room.id)) return { ...room, status: "opptatt", toConfirm: true };
+    // Sent to reception, the booking system not yet confirming it: taken, neutral, never a green Klar.
+    return waiting.has(room.id) ? { ...room, status: "opptatt", pending: true } : room;
   });
 }
 

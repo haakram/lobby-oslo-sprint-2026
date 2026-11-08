@@ -18,7 +18,7 @@ import type { Sellable } from "@/features/rooms/reconcile";
 import { bookingLine, heldLine } from "@/features/rooms/RoomChecksPanel";
 import { AvvikMark, Badge, type BadgeTone, Button, Card, cx, fadeRise, RegenIcon, RoomStatusTag } from "@/ui";
 import { isRoomStatusKey, ROOM_STATUS } from "@/ui/roomStatus";
-import { checkWord, heldOf, roomWord, toConfirmOf } from "./held";
+import { checkWord, heldOf, pendingOf, roomWord, toConfirmOf } from "./held";
 
 /** The replay's status as the shared room-status key (avvik is a mark, not a status). */
 function statusKey(status: RoomStatus) {
@@ -65,6 +65,7 @@ export function RoomCard({
   // Held back by the room check (held.ts), or a sleeper still to confirm: taken, in the rack's words, with why.
   const held = heldOf(room);
   const toConfirm = toConfirmOf(room);
+  const pending = pendingOf(room);
   const word = checkWord(room);
   const tasks = (timeline?.tasks ?? []).filter((task) => task.room === roomId && task.start <= snapshot.t);
   const requests = new Set(tasks.map((task) => task.id));
@@ -100,6 +101,7 @@ export function RoomCard({
       {room?.note && <p className="text-base text-muted">{room.note}</p>}
       {held && <p className="text-base">{heldLine(held)}</p>}
       {toConfirm && <p className="text-base">{toConfirmLine(toConfirm)}</p>}
+      {pending && <p className="text-base">Sendt til resepsjonen for utsjekk i bookingsystemet. Venter på PMS-en før rommet selges.</p>}
       {orders.length > 0 && (
         <ul aria-label="Arbeidsordre for rommet" className="flex flex-col gap-1">
           {orders.map((order) => (

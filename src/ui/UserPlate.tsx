@@ -1,16 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { ADMIN_VIEWS, type Role, roleLabel } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
 import { Monogram } from "./Monogram";
+import { HOST_HOME } from "./nav";
 
 /**
  * Bottom-left of the navigation: who is logged in (a generated monogram, the name, the role). The
  * plate opens a small menu: for admins the view switcher (Admin · Resepsjonist · Robotansvarlig),
- * which calls `switchView` (the server reloads the page), and "Logg ut" for everyone. Escape or a
+ * which calls `switchView` (the server reloads the page), then "Andre visninger" (the Airbnb host's app,
+ * kept out of the admin's hotel rail), and "Logg ut" for everyone. Escape or a
  * click outside closes the menu; the arrow keys move between the views (one Tab stop for the group).
  */
 export function UserPlate({ className, onSwitched }: { className?: string; onSwitched?: () => void }) {
@@ -89,6 +92,25 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
                   onPick={() => void pick(role)}
                 />
               ))}
+            </div>
+          )}
+          {admin && (
+            <div className="flex flex-col gap-0.5 border-t border-line">
+              <p className="px-3 pt-1.5 pb-0.5 text-xs text-muted">Andre visninger</p>
+              <Link
+                href={HOST_HOME}
+                onClick={() => {
+                  setOpen(false);
+                  onSwitched?.();
+                }}
+                className={cx(
+                  "flex min-h-10 items-center gap-2 rounded-sm px-3 text-sm text-muted",
+                  "transition-colors duration-[120ms] ease-standard hover:text-text focus-visible:outline-offset-[-2px]",
+                )}
+              >
+                <RegenIcon name="home" size={16} />
+                Utleie for verter
+              </Link>
             </div>
           )}
           {error && (

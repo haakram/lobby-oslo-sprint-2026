@@ -64,6 +64,26 @@ describe("the navigation groups, from the module registry", () => {
     expect(barItemsFor("host", 4).map((item) => item.short)).toEqual(["Boliger", "Meldinger", "Bookinger", "Drift"]);
   });
 
+  it("keeps the host's group off the admin's hotel rail, except on the host's own screens", () => {
+    expect(groupsFor("admin").map((group) => group.label)).toEqual(["Hotellet", "Drift", "Roboten", "Resepsjon"]);
+    expect(groupsFor("admin", { pathname: "/vert/drift" }).map((group) => group.label)).toEqual(["Hotellet", "Drift", "Roboten", "Resepsjon", "Utleie"]);
+    expect(groupsFor("admin", { pathname: "/vertskap" }).map((group) => group.id)).not.toContain("utleie");
+  });
+
+  it("leaves out a screen whose service the server lacks; unknown services show everything", () => {
+    const count = (role: Role, services?: readonly "voice-agent"[]) => groupsFor(role, { services }).flatMap((group) => group.items).length;
+    // The demo menus before → after (jury round 1): admin 18 → 13, robot manager 10 → 9, the desk 8, the host 4.
+    expect({ admin: count("admin", []), robot: count("robot", []), receptionist: count("receptionist", []), host: count("host", []) }).toEqual({
+      admin: 13,
+      robot: 9,
+      receptionist: 8,
+      host: 4,
+    });
+    expect(count("admin", ["voice-agent"])).toBe(14);
+    expect(count("robot")).toBe(10);
+    expect(barItemsFor("robot", 4, { services: [] }).map((item) => item.href)).toEqual(["/", "/rom", "/foresporsler", "/vedlikehold"]);
+  });
+
   it("fills the phone bar with the role's pinned screens first, then the rest in order", () => {
     expect(barItemsFor("admin", 4).map((item) => item.href)).toEqual(["/", "/rom", "/gjester", "/foresporsler"]);
     expect(barItemsFor("receptionist", 4).map((item) => item.href)).toEqual(["/", "/rom", "/gjester", "/foresporsler"]);
@@ -74,10 +94,14 @@ describe("the navigation groups, from the module registry", () => {
 });
 
 describe("AppNav on a desktop (the rail)", () => {
-  it("lists the admin's screens under Hotellet, Drift, Roboten and Resepsjon, in registry order", () => {
+  it("lists the admin's screens under Hotellet, Drift, Roboten and Resepsjon, in registry order: the hotel only", () => {
     render(as("admin", <AppNav />));
     const labels = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(labels).toEqual([expect.stringContaining("Lobby"), ...MODULES.map((module) => module.name)]);
+    const hotel = MODULES.filter((module) => module.group !== "utleie").map((module) => module.name);
+    expect(labels).toEqual([expect.stringContaining("Fettero"), ...hotel]);
+    // The demo rail: 14 hotel screens, not 18 (the host's app is one tap away on the user plate).
+    expect(hotel).toHaveLength(14);
+    expect(screen.queryByText("Utleie")).not.toBeInTheDocument();
     for (const group of ["Hotellet", "Drift", "Roboten", "Resepsjon"]) expect(screen.getAllByText(group).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "3D-kart" })).toHaveAttribute("href", "/hotell");
     expect(screen.getByRole("link", { name: "Lager og lin" })).toHaveAttribute("href", "/lager");
@@ -123,7 +147,7 @@ describe("AppNav on a desktop (the rail)", () => {
   it("gives the host their own rail: home is /vert, one group, and no view switcher in the user menu", () => {
     path.current = "/vert/meldinger";
     render(as("host", <AppNav />));
-    expect(screen.getByRole("link", { name: /Lobby/ })).toHaveAttribute("href", "/vert");
+    expect(screen.getByRole("link", { name: /Fettero/ })).toHaveAttribute("href", "/vert");
     expect(screen.getByText("Korttidsutleie i Oslo")).toBeInTheDocument();
     expect(screen.queryByText("Hotellet")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Oversikt" })).not.toBeInTheDocument();
@@ -139,12 +163,41 @@ describe("AppNav on a desktop (the rail)", () => {
     expect(screen.getByRole("button", { name: "Logg ut" })).toBeInTheDocument();
   });
 
-  it("keeps the admin's view switcher to the hotel's three views (no Vert)", () => {
+  it("keeps the admin's view switcher to the hotel's three views (no Vert), with the host's app under Andre visninger", () => {
     render(as("admin", <AppNav />));
+    expect(screen.queryByRole("link", { name: "Mine boliger" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { expanded: false }));
     expect(screen.getAllByRole("radio").map((radio) => radio.textContent)).not.toContain("Vert");
-    // Admins see everything, the host's app included.
-    expect(screen.getByRole("link", { name: "Mine boliger" })).toHaveAttribute("href", "/vert");
+    // Admins may open everything: the host's app is one tap away, off the hotel rail.
+    expect(screen.getByText("Andre visninger")).toBeInTheDocument();
+    const host = screen.getByRole("link", { name: "Utleie for verter" });
+    expect(host).toHaveAttribute("href", "/vert");
+    fireEvent.click(host);
+    expect(screen.getByRole("button", { expanded: false })).toBeInTheDocument();
+  });
+
+  it("gives the receptionist and the robot manager no Andre visninger", () => {
+    render(as("receptionist", <AppNav />));
+    fireEvent.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.queryByText("Andre visninger")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Utleie for verter" })).not.toBeInTheDocument();
+  });
+
+  it("shows an admin the host's group while on one of its screens, so they can move between them", () => {
+    path.current = "/vert/meldinger";
+    render(as("admin", <AppNav />));
+    expect(screen.getByText("Utleie")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Gjestemeldinger" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Oversikt" })).toHaveAttribute("href", "/");
+  });
+
+  it("leaves Stemme out of the menu while the server has no voice agent, and shows it once it has", () => {
+    const { unmount } = render(as("robot", <AppNav services={[]} />));
+    expect(screen.queryByRole("link", { name: "Snakk gjennom roboten" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Robotens øyne" })).toBeInTheDocument();
+    unmount();
+    render(as("robot", <AppNav services={["voice-agent"]} />));
+    expect(screen.getByRole("link", { name: "Snakk gjennom roboten" })).toHaveAttribute("href", "/stemme");
   });
 
   it("closes the user menu on Escape (focus back on the plate) and on a click outside", () => {
@@ -224,7 +277,7 @@ describe("AppNav on a phone (the bar and Meny)", () => {
     path.current = "/rom";
     render(as("robot", <AppNav bell={<button type="button">Varsler, 4 nye</button>} />));
     const top = within(screen.getByRole("banner"));
-    expect(top.getByRole("link", { name: /^Lobby/ })).toHaveAttribute("href", "/");
+    expect(top.getByRole("link", { name: /^Fettero/ })).toHaveAttribute("href", "/");
     expect(top.getByRole("button", { name: "Varsler, 4 nye" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Varsler/ })).toHaveLength(1);
   });
@@ -234,7 +287,7 @@ describe("AppNav on a phone (the bar and Meny)", () => {
     path.current = "/vert/bookinger";
     render(as("host", <AppNav bell={<button type="button">Varsler, 4 nye</button>} />));
     const top = within(screen.getByRole("banner"));
-    expect(top.getByRole("link", { name: /^Lobby/ })).toHaveAttribute("href", "/vert");
+    expect(top.getByRole("link", { name: /^Fettero/ })).toHaveAttribute("href", "/vert");
     expect(top.getByText("Korttidsutleie i Oslo")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Varsler/ })).not.toBeInTheDocument();
     const bar = within(screen.getByRole("navigation", { name: "Hovedmeny" }));

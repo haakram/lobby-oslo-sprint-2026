@@ -27,13 +27,13 @@ const STATUS_TONE: Record<ApartmentStatus, BadgeTone> = { klar: "success", "ny-g
 
 export const HANDLER: Record<HandlerKind, { icon: RegenName; word: string; className: string }> = {
   renholder: { icon: "user", word: "Renholder", className: "text-muted" },
-  // The robot keeps its orange, as everywhere in Lobby.
+  // The robot keeps its orange, as everywhere in Fettero.
   robot: { icon: "agent", word: "Robot", className: "text-accent-text" },
   automatikk: { icon: "zap", word: "Automatisk", className: "text-muted" },
 };
 
 const STEP: Record<StepState, { word: string; icon: RegenName; className: string }> = {
-  done: { word: "Ferdig", icon: "circle-check", className: "text-success" },
+  done: { word: "Fullført", icon: "circle-check", className: "text-success" },
   active: { word: "Pågår", icon: "clock", className: "text-text" },
   planned: { word: "Planlagt", icon: "circle-frame", className: "text-line-strong" },
 };
@@ -248,7 +248,7 @@ function AutomationLog({ day }: { day: HostDay }) {
       <Card className="sm:p-6">
         <PanelHead id="ordnet-heading" title="Ordnet for deg" count={day.log.length} note="Siste døgn" />
         {shown.length === 0 ? (
-          <p className="mt-3 text-base text-muted">Ingenting å gjøre ennå i dag. Lobby fører det opp her når det skjer.</p>
+          <p className="mt-3 text-base text-muted">Ingenting å gjøre ennå i dag. Fettero fører det opp her når det skjer.</p>
         ) : (
           <ul className="mt-2 divide-y divide-line">
             {shown.map((entry) => {

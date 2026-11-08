@@ -195,8 +195,8 @@ describe("AppNav", () => {
     expect(link).toHaveAttribute("href", "/resepsjon");
     expect(link).toHaveAttribute("aria-current", "page");
     const labels = screen.getAllByRole("link").map((a) => a.textContent);
-    expect(labels.slice(1)).toEqual(MODULES.map((module) => module.name));
-    // Resepsjon closes the hotel's groups; only the host's Utleie group (admins see it too) comes after.
-    expect(labels.slice(labels.indexOf("Resepsjon") + 1)).toEqual(MODULES.filter((module) => module.group === "utleie").map((module) => module.name));
+    expect(labels.slice(1)).toEqual(MODULES.filter((module) => module.group !== "utleie").map((module) => module.name));
+    // Resepsjon closes the hotel's groups; the host's Utleie group is off the admin's hotel rail.
+    expect(labels.at(-1)).toBe("Resepsjon");
   });
 });

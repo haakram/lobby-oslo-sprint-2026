@@ -3,6 +3,7 @@ import { NoAccessActions } from "@/features/auth/NoAccessActions";
 import { roleLabel } from "@/features/auth/roles";
 import { getSession } from "@/features/auth/server";
 import { RegenIcon } from "@/ui";
+import { APP_NAME } from "@/ui/brand";
 
 export const metadata: Metadata = { title: "Ingen tilgang", robots: { index: false, follow: false } };
 
@@ -13,7 +14,7 @@ export default async function NoAccessPage() {
   let who = "";
   if (session) {
     const role = roleLabel(session.view).toLowerCase();
-    if (session.user.role === "admin" && session.view !== "admin") who = `Du ser Lobby som ${role}.`;
+    if (session.user.role === "admin" && session.view !== "admin") who = `Du ser ${APP_NAME} som ${role}.`;
     else if (session.user.name.toLowerCase() === role) who = `Du er logget inn som ${role}.`;
     else who = `Du er logget inn som ${session.user.name} (${role}).`;
   }

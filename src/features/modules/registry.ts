@@ -2,7 +2,7 @@ import type { Role } from "@/features/auth/roles";
 import type { RegenName } from "@/ui/icons/regenPaths";
 
 /**
- * The hotel's modules, in one place. Lobby is one place to see and run the whole hotel; the robot is
+ * The hotel's modules, in one place. Fettero is one place to see and run the whole hotel; the robot is
  * one module among many. Everything that lists modules reads this file: the navigation (`src/ui/nav.ts`),
  * who may open what (`src/features/auth/roles.ts` builds its route table from `roles` here), the
  * widgets on Oversikt (`src/features/dashboard/widgets.tsx` maps `id` → component) and the "Nå" band.
@@ -13,6 +13,12 @@ import type { RegenName } from "@/ui/icons/regenPaths";
  */
 
 export type ModuleGroupId = "hotellet" | "drift" | "roboten" | "resepsjon" | "utleie";
+
+/**
+ * A service a module needs from the server. Without it the menu leaves the module out (the page still
+ * answers and says what is missing), so the demo rail has no dead ends.
+ */
+export type ModuleService = "voice-agent";
 
 export const MODULE_GROUPS: readonly { id: ModuleGroupId; label: string }[] = [
   { id: "hotellet", label: "Hotellet" },
@@ -65,6 +71,8 @@ export type HotelModule = {
   widget?: boolean;
   /** Which source its figures come from, said on the screen so nobody trusts test data as real. */
   data: "run-log" | "reception" | "test" | "mixed" | "none";
+  /** A service the screen can't work without; the menu shows it only when the server has it. */
+  needs?: ModuleService;
 };
 
 const BOTH = ["receptionist", "robot"] as const;
@@ -85,10 +93,11 @@ export const MODULES: readonly HotelModule[] = [
   { id: "hotell3d", name: "3D-kart", hint: "Gå rundt i hotellet og følg roboten", icon: "cube", route: "/hotell", group: "roboten", roles: ["robot"], pinned: true, widget: true, data: "run-log" },
   { id: "natteskift", name: "Natteskift", hint: "Robotens natt, steg for steg", icon: "moon", route: "/natteskift", group: "roboten", roles: ["robot"], data: "run-log" },
   { id: "oyne", name: "Robotens øyne", short: "Øyne", hint: "Det roboten ser og kjenner igjen", icon: "eye", route: "/oyne", group: "roboten", roles: ["robot"], data: "none" },
-  { id: "stemme", name: "Snakk gjennom roboten", short: "Stemme", hint: "Snakk med roboten på ditt eget språk", icon: "mic", route: "/stemme", group: "roboten", roles: ["robot"], data: "none" },
+  { id: "stemme", name: "Snakk gjennom roboten", short: "Stemme", hint: "Snakk med roboten på ditt eget språk", icon: "mic", route: "/stemme", group: "roboten", roles: ["robot"], data: "none", needs: "voice-agent" },
   // Resepsjon
   { id: "resepsjon", name: "Resepsjon", hint: "Telefonen, bookinger og beskjeder", icon: "phone", route: "/resepsjon", group: "resepsjon", roles: ["receptionist"], widget: true, data: "reception" },
-  // Utleie (the host only; screens in src/features/host)
+  // Utleie (the host only; screens in src/features/host). Not in the admin's hotel rail: an admin reaches
+  // it from the user plate (Andre visninger), and sees the group only while on one of its screens.
   { id: "vert", name: "Mine boliger", short: "Boliger", hint: "Dagens bytter og status i hver bolig", icon: "home", route: "/vert", group: "utleie", roles: ["host"], pinned: true, data: "test" },
   { id: "vert-meldinger", name: "Gjestemeldinger", short: "Meldinger", hint: "Meldinger fra gjestene og svarene som er sendt", icon: "message", route: "/vert/meldinger", group: "utleie", roles: ["host"], pinned: true, data: "test" },
   { id: "vert-bookinger", name: "Bookinger og inntekt", short: "Bookinger", hint: "Kalenderen for de neste 14 dagene og månedens tall", icon: "calendar", route: "/vert/bookinger", group: "utleie", roles: ["host"], pinned: true, data: "test" },

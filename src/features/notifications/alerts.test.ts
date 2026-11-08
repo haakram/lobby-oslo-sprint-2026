@@ -6,6 +6,7 @@ import { nightSafety } from "@/features/handover/safety";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import type { WorkOrderView } from "@/features/maintenance/select";
 import type { RequestView } from "@/features/requests/select";
+import { CLERK_SAMPLE, hazardLine } from "@/features/staffinput/entries";
 import { type AlertData, MAX_ALERTS, selectAlerts } from "./alerts";
 
 // The bell: only what needs a person, each with its one way in, Haster first, per role.
@@ -160,5 +161,28 @@ describe("selectAlerts (the bell)", () => {
     const twoB = safety.wetFloors.find((floor) => floor.place === "corridor-2b")?.orderIds ?? [];
     const lost = twoB.map((id) => order(id, { origin: "robot", status: "lost", safety: true }));
     expect(selectAlerts({ ...busy(), maintenance: lost, safety }).some((alert) => alert.id === "wet-floor:corridor-2b")).toBe(false);
+  });
+  it("adds the night clerk's own entries as Overlevering's Med robot does: her lobby floor (sign out) and her door are Haster too", () => {
+    const lines = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
+    const door = hazardLine("door", "stairwell-2", "", { by: "Kjersti Lund", now: new Date("2026-11-08T01:40:00Z") }); // 02:40 Oslo
+    const safety = nightSafety(lines, [...CLERK_SAMPLE, door]);
+    const alerts = selectAlerts({ ...busy(), safety });
+    // The robot's floors and hers in the night's order, as the safety row lists them; then the stranger and her door.
+    expect(alerts.slice(0, 6).map((alert) => alert.id)).toEqual([
+      "wet-floor:corridor-2b",
+      "wet-floor:lobby",
+      "wet-floor:corridor-3d",
+      "wet-floor:corridor-1c",
+      "stranger",
+      `staff-${String(door.type === "decision" ? door.data?.id : "")}`,
+    ]);
+    // A floor with a sign out still needs mopping: said as it is, never "uten skilt".
+    expect(alerts[1]).toMatchObject({ priority: "hoy", title: "Vått gulv i lobbyen, skilt satt ut", detail: "Siden 02:15. Meldt av Kjersti Lund, skilt satt ut 02:16. Vaktmester, straks." });
+    expect(alerts[5]).toMatchObject({
+      priority: "hoy",
+      title: "Dør i trappen, 2. etasje: sjekk at den er lukket og låst",
+      detail: "Dør i trappen, 2. etasje, meldt av Kjersti Lund kl. 02:40. Sjekk at den er lukket og låst. Resepsjon, straks.",
+      action: { label: "Åpne Logg", href: "/natt" },
+    });
   });
 });

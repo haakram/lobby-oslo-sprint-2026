@@ -210,9 +210,12 @@ What needs a person moved into the bell.
 ### The bell (`NotificationBell`)
 
 Everything that needs a person, from every module the role may open (`selectAlerts`), in one place
-on every page. Only what is actionable, safety first: each wet floor without a sign (*Haster*, its own
-alert: since when, the robot's slip or the sign it moved, *Vaktmester / renhold, innen 06:30*), the
-stranger the robot refused at door after door (*Haster*, *Sikkerhet / resepsjon*), a request the robot handed over (*Haster*), a staff-reported
+on every page. Only what is actionable, safety first: Overlevering's straks saker, read from the same
+composition as the page (`useHandover`, the night clerk's entries added as on *Med robot*): each wet
+floor (*Haster*, its own alert, in the night's order: since when, the robot's slip or the sign it
+moved, or who on the night shift reported it and whether a sign is out, *Vaktmester, straks*), the
+stranger the robot refused at door after door (*Haster*, *Resepsjon, straks*), a door or a person the
+night clerk logged (*Haster*), then a request the robot handed over (*Haster*), a staff-reported
 urgent order, callers waiting for a call back, an arrival without a room, a room out of order, stock
 under minimum, the robot's low battery. Routine work stays out (the cleaning route is Oversikt's
 primary action).
@@ -220,8 +223,10 @@ primary action).
 - **Button:** 44 px icon button with the `bell` icon; a count badge (Martian Mono 12, `text` pill
   with `bg` digits: a calm, high-contrast pill, not red) shows how many are new to this person. Its
   name says it: "Varsler, 3 nye" · "Varsler, 1 ny" · "Varsler, ingen nye" · "Varsler, henter".
-- **Sheet** (`Sheet`, light, portalled to `<body>`): "N nye, trenger en person" and *Merk alle som
-  sett*; the new alerts, *Haster* first, at most five ("og N til" names the rest as links). A row is
+- **Sheet** (`Sheet`, light, portalled to `<body>`): for a role that may open Overlevering, one line
+  with the page's two numbers, "Overlevering 06:00: 5 straks av 13 åpne", and *Åpne Overlevering*
+  (link, `accent-text`), so the bell's count never reads as a contradiction of *Åpent nå*; then
+  "N nye, trenger en person" and *Merk alle som sett*; the new alerts, *Haster* first, at most five ("og N til" names the rest as links). A row is
   an icon (`danger` circle for Haster, the module's icon in `warning` otherwise), the title, one line
   of detail, its one action (*Åpne …*, secondary small; taking it counts as seen) and *Marker som
   sett* (ghost). Seen alerts stay listed under **Sett** in `muted`, without colour, so nothing

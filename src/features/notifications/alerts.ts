@@ -3,9 +3,11 @@ import type { DashboardData } from "@/features/dashboard/data";
 import { hhmm, percent } from "@/features/dashboard/format";
 import { placeLabel } from "@/features/dashboard/labels";
 import { batteryLow } from "@/features/dashboard/TopBar";
-import { corridorName, openWetFloors, SAFETY_DUE, STRANGER_CHECK, STRANGER_OWNER, WET_FLOOR_OWNER } from "@/features/handover/safety";
+import { corridorName, SAFETY_DUE, STRANGER_CHECK, STRANGER_OWNER, WET_FLOOR_OWNER, type WetFloor } from "@/features/handover/safety";
+import { openWetFloorsInOrder, staffSafetyText } from "@/features/handover/select";
 import { storeName } from "@/features/inventory/testData";
 import { type ModuleId, moduleById } from "@/features/modules/registry";
+import { placePhrase } from "@/features/staffinput/read";
 import type { RegenName } from "@/ui/icons/regenPaths";
 
 /**
@@ -53,33 +55,51 @@ function roomNumber(room: string): string {
   return room.replace(/^room-/, "");
 }
 
+/**
+ * "Vått gulv uten skilt i korridor 2B" · "Vått gulv i lobbyen, skilt satt ut": a floor with a sign out is
+ * still Overlevering's safety sak (it needs mopping), so it stays here, said as it is.
+ */
+function wetFloorTitle(floor: WetFloor): string {
+  const place = floor.source === "staff" ? placePhrase(floor.place) : `i ${corridorName(floor.place)}`;
+  return floor.signed ? `Vått gulv ${place}, skilt satt ut` : `Vått gulv uten skilt ${place}`;
+}
+
+/** Since when and why, or who on the night shift reported it: "Siden 02:15. Meldt av Kjersti Lund, skilt satt ut 02:16." */
+function wetFloorDetail(floor: WetFloor): string {
+  const since = floor.since ? `Siden ${hhmm(floor.since)}.` : "I natt.";
+  if (floor.source === "staff") return `${since} Meldt av ${floor.reported?.by ?? "nattevakten"}${floor.sign ? `, ${floor.sign}` : ""}.`;
+  const why = floor.signMoved
+    ? ` Skiltet ble flyttet til ${floor.signMoved.to ? corridorName(floor.signMoved.to) : "et nytt søl"}.`
+    : floor.slippedAt
+      ? " Roboten skled der."
+      : "";
+  return `${since}${why}`;
+}
+
 /** Every alert the role may act on, Haster first. The bell shows the first MAX_ALERTS. */
 export function selectAlerts(data: AlertData): Alert[] {
   const alerts: Alert[] = [];
   const may = (route: string) => canAccess(data.role, route);
 
-  // Safety first (review round 3): each wet floor nobody has signed is its own Haster, with an owner and
-  // a time, then the stranger the robot refused all night. Overlevering's Åpent nå opens with the same.
+  // Safety first (review round 3): each open wet floor is its own Haster, with an owner and a time, then the
+  // stranger the robot refused all night and the night clerk's doors and persons: Overlevering's straks
+  // saker, one for one (the bell passes the same safety as the page, useHandover).
   const wet = data.maintenance.filter((order) => order.safety && order.status !== "lost");
   const wetScreen: ModuleId = may("/vedlikehold") ? "vedlikehold" : "hotell3d";
   const wetAction = wetScreen === "vedlikehold" ? open("vedlikehold") : { label: "Vis i 3D-kartet", href: "/hotell" };
   const lost = new Set(data.maintenance.filter((order) => order.status === "lost").map((order) => order.id));
-  const floors = data.safety ? openWetFloors(data.safety.wetFloors, (id) => lost.has(id)) : null;
+  // The same open floors in the same order as Overlevering's safety row (handover/select.ts).
+  const floors = data.safety ? openWetFloorsInOrder(data.safety.wetFloors, (id) => lost.has(id)) : null;
   if (floors) {
     for (const floor of floors) {
-      const why = floor.signMoved
-        ? ` Skiltet ble flyttet til ${floor.signMoved.to ? corridorName(floor.signMoved.to) : "et nytt søl"}.`
-        : floor.slippedAt
-          ? " Roboten skled der."
-          : "";
       alerts.push({
         id: `wet-floor:${floor.place}`,
         level: 1,
         module: wetScreen,
         priority: "hoy",
         icon: "alert-triangle",
-        title: `Vått gulv uten skilt i ${corridorName(floor.place)}`,
-        detail: `${floor.since ? `Siden ${hhmm(floor.since)}.` : "I natt."}${why} ${WET_FLOOR_OWNER}, ${SAFETY_DUE}.`,
+        title: wetFloorTitle(floor),
+        detail: `${wetFloorDetail(floor)} ${WET_FLOOR_OWNER}, ${SAFETY_DUE}.`,
         action: wetAction,
       });
     }
@@ -116,6 +136,21 @@ export function selectAlerts(data: AlertData): Alert[] {
       title: `En person ba roboten slippe ham inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}`,
       detail: `${stranger.refusals.length > 1 ? `${hhmm(stranger.first)}–${hhmm(stranger.last)}. Roboten sa nei hver gang.` : `Kl. ${hhmm(stranger.first)}. Roboten sa nei.`} ${STRANGER_CHECK} ${STRANGER_OWNER}, ${SAFETY_DUE}.`,
       action: open(screen),
+    });
+  }
+
+  // The night clerk's own doors and persons the robot's log has no item for: Overlevering's same safety rows.
+  const clerkScreen: ModuleId = may("/natt") ? "natt" : "overlevering";
+  for (const entry of data.safety?.staff ?? []) {
+    alerts.push({
+      id: `staff-${entry.id}`,
+      level: 1,
+      module: clerkScreen,
+      priority: "hoy",
+      icon: entry.hazard === "door" ? "key" : "shield",
+      title: entry.hazard === "door" ? `Dør ${placePhrase(entry.place)}: sjekk at den er lukket og låst` : `En person ${placePhrase(entry.place)}, meldt av nattevakten`,
+      detail: `${staffSafetyText(entry)} ${STRANGER_OWNER}, ${SAFETY_DUE}.`,
+      action: open(clerkScreen),
     });
   }
 

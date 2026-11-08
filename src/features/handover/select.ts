@@ -202,8 +202,8 @@ export function strangerText(stranger: NonNullable<NightSafety["stranger"]>): st
   return `En person i badekåpe ba roboten slippe ham inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}${span}. Roboten sa nei. ${STRANGER_TODO}`;
 }
 
-/** A door or a person the night clerk logged that the robot's log has no item for, in the robot-free page's words. */
-function staffSafetyText(entry: StaffSafety): string {
+/** A door or a person the night clerk logged that the robot's log has no item for, in the robot-free page's words (the bell says it so too). */
+export function staffSafetyText(entry: StaffSafety): string {
   const when = inNightHours(entry.at) ? ` kl. ${hhmm(entry.at)}` : "";
   const note = entry.note ? ` ${entry.note.replace(/[.!]?$/, ".")}` : "";
   if (entry.hazard === "door") return `Dør ${placePhrase(entry.place)}, meldt av ${entry.by}${when}.${note} Sjekk at den er lukket og låst.`;
@@ -257,6 +257,11 @@ function heldConsequence(row: Held, lead: boolean): string {
     : `Rom ${number(row.room)}: roboten bar inn bagasje kl. ${hhmm(row.deliveredAt)}, etter romsjekken, og systemet har ${guest}. Resepsjonen avgjør før innsjekk kl. ${HOTEL.checkIn}.`;
 }
 
+/** The wet floors nobody marked Løst, in the night's order (22:00 first): the safety row's lines, and the bell's alerts. */
+export function openWetFloorsInOrder(wetFloors: readonly WetFloor[], resolved: (orderId: string) => boolean): WetFloor[] {
+  return openWetFloors(wetFloors, resolved).sort((a, b) => NIGHT_ORDER(a.since ?? "00:00") - NIGHT_ORDER(b.since ?? "00:00"));
+}
+
 export function composeHandover({
   night,
   rooms,
@@ -305,7 +310,7 @@ export function composeHandover({
     (request) => (request.source === "personale" || request.source === "stemme") && request.status === "fullfort" && atNight(request.at),
   ).length;
   const money = roomMoney({ reconciliation, marks, revenue, rooms, pms });
-  const wetFloors = openWetFloors(safety.wetFloors, resolved).sort((a, b) => NIGHT_ORDER(a.since ?? "00:00") - NIGHT_ORDER(b.since ?? "00:00"));
+  const wetFloors = openWetFloorsInOrder(safety.wetFloors, resolved);
   const booked = tonight ?? { booked: bookedTonight(today), rooms: rooms.length };
   const unbilledRooms = reconciliation.guestFound.map((row) => row.room);
 

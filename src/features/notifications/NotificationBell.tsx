@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { canAccess } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { useHotelData } from "@/features/dashboard/useHotelData";
+import { openSummary, useHandover } from "@/features/handover/useHandover";
 import { moduleById } from "@/features/modules/registry";
+import { osloToday } from "@/features/reception/dates";
 import { Badge, Button, buttonClasses, cx, EmptyState, RegenIcon, Sheet, Skeleton } from "@/ui";
 import { type Alert, MAX_ALERTS, selectAlerts } from "./alerts";
 import { isNew, useSeen } from "./useSeen";
@@ -19,15 +22,27 @@ export function bellLabel(fresh: number, loading: boolean): string {
 
 const noop = () => () => {};
 
+/** What *Åpent nå* on Overlevering holds: every sak, and the safety saker (straks) among them. */
+export type HandoverSummary = { total: number; straks: number };
+
+/** "Overlevering 06:00: 5 straks av 13 åpne": the bell's safety alerts are those straks, the rest is on the page. */
+export function handoverLine({ total, straks }: HandoverSummary): string {
+  return `Overlevering 06:00: ${straks} straks av ${total} ${total === 1 ? "åpen" : "åpne"}`;
+}
+
 /**
  * The bell in the navigation, on every page and for every role: what needs a person, from every
- * module the role may open. Reads the same hotel as Oversikt (useHotelData).
+ * module the role may open. Reads the same hotel as Oversikt (useHotelData), and the same Overlevering
+ * as the page (useHandover): its safety alerts are *Åpent nå*'s straks saker, the night clerk's
+ * entries included, and its line says how many saker the page holds.
  */
 export function NotificationBell({ viewerUrl }: { viewerUrl?: string }) {
   const { user } = useSession();
-  const { data } = useHotelData(viewerUrl);
-  const alerts = useMemo(() => selectAlerts(data), [data]);
-  return <NotificationBellView alerts={alerts} loading={data.loading} nightFailed={data.nightStatus === "error"} user={user?.u ?? null} />;
+  const { data, nightState, statusOf } = useHotelData(viewerUrl);
+  const { safety, handover } = useHandover({ nightState, statusOf, today: osloToday() });
+  const alerts = useMemo(() => selectAlerts({ ...data, safety: safety ?? data.safety }), [data, safety]);
+  const summary = useMemo(() => (handover && canAccess(data.role, "/overlevering") ? openSummary(handover.open) : null), [handover, data.role]);
+  return <NotificationBellView alerts={alerts} loading={data.loading} nightFailed={data.nightStatus === "error"} user={user?.u ?? null} handover={summary} />;
 }
 
 /**
@@ -41,11 +56,14 @@ export function NotificationBellView({
   loading,
   nightFailed = false,
   user,
+  handover = null,
 }: {
   alerts: readonly Alert[];
   loading: boolean;
   nightFailed?: boolean;
   user: string | null;
+  /** Overlevering's *Åpent nå* (useHandover), for a role that may open it; null otherwise. */
+  handover?: HandoverSummary | null;
 }) {
   const [open, setOpen] = useState(false);
   const [said, setSaid] = useState("");
@@ -99,6 +117,15 @@ export function NotificationBellView({
         <p role="status" className="sr-only">
           {said}
         </p>
+        {/* The page's two numbers, from the same composition: the bell's Haster safety rows are its straks. */}
+        {handover && handover.total > 0 && !waiting && (
+          <p className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line pb-2 text-sm">
+            <span>{handoverLine(handover)}</span>
+            <Link href="/overlevering" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center font-semibold text-accent-text hover:underline">
+              Åpne Overlevering
+            </Link>
+          </p>
+        )}
         {waiting ? (
           <div className="flex flex-col gap-4 py-2" aria-busy="true">
             <Skeleton className="h-16 w-full" />

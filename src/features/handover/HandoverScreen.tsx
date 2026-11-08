@@ -2,45 +2,35 @@
 
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { canAccess, useSession } from "@/features/auth";
+import { useSession } from "@/features/auth";
 import { formatKroner, nightLabel } from "@/features/dashboard/format";
 import { declineShort, robotShort } from "@/features/dashboard/highlights";
 import { DOOR_LOCK_IS_TEST_DATA, doorLockLines, doorLockSignals } from "@/features/doorlock/feed";
-import { eyesOpenItem, useEyesLines } from "@/features/eyes/deviations";
 import { type DeclineSplit, declineSplit } from "@/features/nightshift/declines";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
 import { RobotJudgementCard } from "@/features/nightshift/RobotJudgementCard";
 import { SourceSwitch } from "@/features/nightsource/SourceSwitch";
-import { clerkNoteOf } from "@/features/nightsource/compose";
-import { useNightSource } from "@/features/nightsource/useNightSource";
-import { useWithoutRobot } from "@/features/nightsource/useWithoutRobot";
 import { SourceNote } from "@/features/modules/SourceNote";
 import { osloToday } from "@/features/reception/dates";
-import { type DemoCall, demoCalls } from "@/features/reception/demoCalls";
+import type { DemoCall } from "@/features/reception/demoCalls";
 import { formatClock } from "@/features/reception/format";
-import { useStoredRecords } from "@/features/reception/useStoredRecords";
 import { CLERK_SAMPLE_IS_ON } from "@/features/staffinput/entries";
 import { readStaffLog, staffRooms } from "@/features/staffinput/read";
-import { useStaffLines } from "@/features/staffinput/useStaffLines";
-import { PHONE_ASSIGNMENTS, phoneTasks } from "@/features/requests/phoneTasks";
-import { hotelRoomsOf, selectRequests } from "@/features/requests/select";
 import { hoursEarlier, moneyMethod, releasedLine, tonightLine, unbilledMethod } from "@/features/rooms/money";
 import { PMS_IS_TEST_DATA, TEST_BOOKING_WORD } from "@/features/rooms/pms";
 import type { Contradiction, RoomCheckMark } from "@/features/rooms/reconcile";
 import { SellSteps } from "@/features/rooms/SellSteps";
-import { useRoomCheck } from "@/features/rooms/useRoomCheck";
 import { HOTEL_NAME } from "@/ui/AppNav";
 import { APP_NAME, TAGLINE } from "@/ui/brand";
 import { actionStamp, relativeTime, stampNow, useNowMs } from "@/ui/stamp";
 import { Badge, Button, Card, cx, EmptyState, ErrorState, Figure as Digits, Monogram, RegenIcon, Skeleton, Stat } from "@/ui";
 import { type RobotLook, type RoomSources, roomSources, type SourceChip } from "./evidence";
-import { robotAtHandover } from "./robotState";
-import { nightSafety } from "./safety";
-import { composeHandover, contradictionPoints, type Figures, type Highlight, itemAnchor, nightSourceLine, notifyTarget, type OpenItem, openCount, safetyCount, untoldCount, withExtraItems } from "./select";
+import { contradictionPoints, type Figures, type Highlight, itemAnchor, nightSourceLine, notifyTarget, type OpenItem, openCount, safetyCount, untoldCount } from "./select";
 import { sign, SIGNOFFS } from "./signoff";
 import { SAFETY_TOLD, type Told, tell } from "./told";
+import { useHandover } from "./useHandover";
 
 const BY: Record<Highlight["by"], { word: string; tone: "accent" | "neutral" }> = {
   robot: { word: "Roboten", tone: "accent" },
@@ -63,72 +53,19 @@ const BY: Record<Highlight["by"], { word: string; tone: "accent" | "neutral" }> 
 export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: string; demo?: readonly DemoCall[]; today?: string }) {
   const today = day ?? osloToday();
   const { resolved, statusOf } = useOrderStatuses();
-  const { run, night, rooms, map } = useNight(viewerUrl, resolved);
-  // Tonight's rooms: a call naming a room the hotel doesn't have is "Ukjent rom", never "Gjest venter" here.
-  const hotelRooms = useMemo(() => hotelRoomsOf(map, Boolean(night?.ended)), [map, night]);
-  const { user, effectiveRole } = useSession();
-  const { records } = useStoredRecords();
-  const seeded = useMemo(() => demo ?? demoCalls(today), [demo, today]);
-  const phone = useMemo(() => phoneTasks(records, seeded), [records, seeded]);
-  const assignments = PHONE_ASSIGNMENTS.use();
+  const nightState = useNight(viewerUrl, resolved);
+  // The page and the bell read one composition (useHandover): the same Åpent nå, the same safety saker.
+  const { run, night, lines, staff, reconciliation, marks, source, setSource, noRobot, withoutRobot, handover } = useHandover({ nightState, statusOf, today, demo });
+  const { user } = useSession();
   const signoff = SIGNOFFS.use()[today] ?? null;
   const now = useNowMs();
   const ready = run.status === "ready";
-  const lines = ready ? run.lines : null;
-  // The same room check, marks and money as Rom and Oversikt: a release here moves them too.
-  const { reconciliation, marks, revenue, pms } = useRoomCheck(lines, rooms, today);
-  // The night clerk's own log (owner B's /natt): who was told about a hazard, and her note for the page.
-  const staff = useStaffLines(today);
-  const clerkNote = useMemo(() => clerkNoteOf(staff), [staff]);
-  const safety = useMemo(() => (lines ? nightSafety(lines, staff) : null), [lines, staff]);
-  const robotState = useMemo(() => (lines ? robotAtHandover(lines) : null), [lines]);
   const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
   // The sources a room row draws as chips: the door lock's one signal, the night clerk's look (and the robot's, on its night).
   const doorSignals = useMemo(() => doorLockSignals(doorLockLines()), []);
   const clerkRooms = useMemo(() => staffRooms(readStaffLog(staff)), [staff]);
-  // Øyne's "Ingen av disse": an avvik with an owner, on whichever night the page shows (eyes/deviations.ts).
-  const eyesLines = useEyesLines(today);
   const told = SAFETY_TOLD.use()[today];
   const [wholeNight, setWholeNight] = useState(false);
-
-  const canOpen = useCallback((route: string) => effectiveRole === null || canAccess(effectiveRole, route), [effectiveRole]);
-  const requests = useMemo(
-    () => (night ? selectRequests({ night, calls: null, statusOf, phone, assignments, hotelRooms }) : null),
-    [night, statusOf, phone, assignments, hotelRooms],
-  );
-  const robotHandover = useMemo(() => {
-    if (!night || !rooms || !reconciliation || !safety || !requests) return null;
-    return composeHandover({
-      night,
-      rooms,
-      reconciliation,
-      marks,
-      requests,
-      phone,
-      revenue,
-      today,
-      pms,
-      safety,
-      robot: robotState,
-      ...(clerkNote ? { note: clerkNote } : {}),
-      resolved: (id) => statusOf(id) === "lost",
-      canOpen,
-    });
-  }, [night, rooms, reconciliation, safety, requests, robotState, clerkNote, statusOf, phone, marks, revenue, today, pms, canOpen]);
-  // Owner B's switch (round 5: "hotel number one needs no robot", shown): the same page from the
-  // booking system, the door lock's one signal per room and the night clerk's own entries.
-  const [source, setSource] = useNightSource();
-  const withoutRobot = useWithoutRobot({ today, rooms, requests, phone, canOpen });
-  const noRobot = source === "none";
-  const composed = noRobot ? (withoutRobot?.handover ?? null) : robotHandover;
-  const handover = useMemo(() => {
-    if (!composed || eyesLines.length === 0) return composed;
-    const eyes = eyesLines.map((line): OpenItem => {
-      const item = eyesOpenItem(line);
-      return { ...item, urgent: false, href: canOpen(item.href) ? item.href : null };
-    });
-    return { ...composed, open: withExtraItems(composed.open, eyes) };
-  }, [composed, eyesLines, canOpen]);
   const shownCheck = noRobot ? (withoutRobot?.reconciliation ?? null) : reconciliation;
   const sourcesOf = useCallback(
     (room: string): RoomSources | null => {

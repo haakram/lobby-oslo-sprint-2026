@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Alert } from "./alerts";
-import { bellLabel, NotificationBellView } from "./NotificationBell";
+import { bellLabel, handoverLine, NotificationBellView } from "./NotificationBell";
 import { SEEN_PREFIX } from "./useSeen";
 
 // The bell in the navigation: a count of what is new to this person, a sheet with one action per
@@ -35,6 +35,14 @@ describe("NotificationBellView", () => {
     expect(bell()).toHaveAttribute("aria-haspopup", "dialog");
     expect(bell()).toHaveTextContent("3");
     expect([bellLabel(1, false), bellLabel(0, false), bellLabel(0, true)]).toEqual(["Varsler, 1 ny", "Varsler, ingen nye", "Varsler, henter"]);
+  });
+
+  it("heads the sheet with Overlevering's two numbers when given, with the way there", () => {
+    render(<NotificationBellView alerts={ALERTS} loading={false} user="hamad" handover={{ total: 13, straks: 5 }} />);
+    const sheet = openBell();
+    const line = sheet.getByText("Overlevering 06:00: 5 straks av 13 åpne");
+    expect(within(line.parentElement!).getByRole("link", { name: "Åpne Overlevering" })).toHaveAttribute("href", "/overlevering");
+    expect(handoverLine({ total: 1, straks: 0 })).toBe("Overlevering 06:00: 0 straks av 1 åpen");
   });
 
   it("lists what needs a person, Haster said in words, each with its one way in", () => {

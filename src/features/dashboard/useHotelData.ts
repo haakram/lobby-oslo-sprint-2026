@@ -14,6 +14,7 @@ import { osloToday } from "@/features/reception/dates";
 import { hotelRoomsOf, selectRequests } from "@/features/requests/select";
 import { useRequestInputs } from "@/features/requests/useRequestInputs";
 import { useRoomCheck } from "@/features/rooms/useRoomCheck";
+import { useStaffLines } from "@/features/staffinput/useStaffLines";
 import { byRole, onShift, shiftAt } from "@/features/staff/testData";
 import type { DashboardData } from "./data";
 import { withClosed, withHeld } from "./selectors";
@@ -30,7 +31,8 @@ export function useHotelData(viewerUrl?: string) {
   const { effectiveRole, user } = useSession();
   const role: Role = effectiveRole ?? "admin";
   const { resolved, statusOf } = useOrderStatuses();
-  const { run, night, rooms, orders, robot, map } = useNight(viewerUrl, resolved);
+  const nightState = useNight(viewerUrl, resolved);
+  const { run, night, rooms, orders, robot, map } = nightState;
   const { state: calls, retry: retryCalls } = useReceptionCalls();
   const hour = useOsloHour();
 
@@ -50,7 +52,10 @@ export function useHotelData(viewerUrl?: string) {
   const rackRooms = useMemo(() => (rooms ? withClosed(rooms, outOfOrder) : null), [rooms, outOfOrder]);
   const guests = useMemo(() => selectGuestDay(), []);
   const lines = run.status === "ready" ? run.lines : null;
-  const safety = useMemo(() => (lines ? nightSafety(lines) : null), [lines]);
+  // What can hurt a guest as Overlevering counts it (Med robot): the robot's night with the night clerk's
+  // own entries added, so Oversikt, the bell and the handover name the same wet floors.
+  const staff = useStaffLines(osloToday());
+  const safety = useMemo(() => (lines ? nightSafety(lines, staff) : null), [lines, staff]);
   const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
   const basis = useMemo(() => (lines ? doneBasis(lines) : null), [lines]);
   const contradictions = useMemo(() => (lines ? selfContradictions(lines) : null), [lines]);
@@ -101,5 +106,6 @@ export function useHotelData(viewerUrl?: string) {
     [role, user, hour, run.status, night, heldRooms, safety, money, declines, basis, contradictions, robot, requests, maintenance, outOfOrder, guests, calls, retryCalls, shift],
   );
 
-  return { data, run, night, robot };
+  // The night as loaded and the staff-kept statuses: the bell composes Overlevering from these (useHandover), no second fetch.
+  return { data, run, night, robot, nightState, statusOf };
 }

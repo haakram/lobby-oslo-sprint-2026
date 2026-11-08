@@ -93,23 +93,21 @@ all 9 credited by the referee (95 % interval 70–100 %); but one of them, 209 r
 ## 4. The demo story
 
 Same as `docs/DEMO.md` § 2 (2:00, one user, one story, one page: Siri takes over from Kjersti and the
-robot, on Overlevering 06:00, scrolled from top to bottom):
+robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 
-1. **The top** (0:00–0:23): the story first: 209 held back (the robot carried an arriving guest's
-   bags into a room the test booking system still has booked to 9.11), then the money (*ca. 1 500 kr ·
-   Kan selges etter bekreftelse*, 213).
-2. ***Åpent nå*** (0:25–0:45): safety first, three unsigned wet floors and the stranger, each with an
-   owner and *innen 06:30*; then 209 (*Fettero holdt rommet tilbake*) and 213, each labelled *Testdata:
-   bookingen er lagt inn av teamet*, with where a pilot gets that evidence (the door-lock log and the
-   energy slot; the robot never enters a booked room).
-3. **The sale** (0:45–1:04): 213 is a real sleeper: the guest was due out yesterday (7.11) and the
-   check-out was never recorded, so the system still holds the room tonight; the robot found it empty
-   and tidy at 04:24. *Bekreft med resepsjonen*, then *Merk som ledig for salg*.
-4. **Robotens vurderinger i natt** (1:05–1:30): seven refusals to let a stranger into a room, one
-   incident; *9 av 9 «Ferdig» på robotens egen vurdering* (the other 64 sent after the simulator
-   confirmed the work); its own faults counted from the log (10 of 15 master-key entries without a
-   knock). The referee and the cross-night figures sit behind *Slik vet vi det*.
-5. **Kvitter mottatt** (1:31–1:38), last on the page: *Kvittert av Siri Haugen*, saved on this device.
+1. **The top** (0:00–0:20): 209 held back because the robot's own log contradicts its report (bags in at
+   01:29, "empty" at 03:47), and four safety items, each with an owner, *straks*.
+2. ***Uten robot*** (0:20–0:29): hotel number one has no robot; the same page from the booking system,
+   one signal per room from the door lock (never who) and the night clerk's entries.
+3. **The money, without a robot** (0:29–0:58): the money figure lands on 213: due out yesterday, the
+   check-out never recorded; the lock shows no card since 22:10 and Kjersti saw it empty at 04:24, two
+   sources and no robot; found five hours before housekeeping, about 1,500 kroner if the night sells
+   out. Reception confirms (who, folio, bags, key card), the room goes to reception, and the row waits
+   for the booking system: the button never says sold.
+4. **The robot's card** (0:58–1:25): back to *Med robot*, the robot figure lands on the card (*8 av 9*
+   against its own log, *7* refusals of a stranger, *10 av 15* entries without a knock) beside the night
+   clerk's *«Rolig natt.»*; the referee and the cross-night figures sit behind *Slik vet vi det*.
+5. **Kvitter mottatt** (1:25–1:35), last on the page: *Kvittert av Siri Haugen*, saved on this device.
 
 ## 5. Scope (as built)
 
@@ -117,18 +115,36 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
 
 - **Login with roles** (admin, resepsjonist, robotansvarlig, host), enforced on the server
   (`src/proxy.ts`, `src/features/auth/`), plus a separate `jury` account for the event.
-- **Overlevering 06:00**, read as *act → evidence → sign*: four figures (held back, the money with
-  *Slik regner vi*, safety by 06:30, the robot's tasks), *Åpent nå* in the wide column with an owner and
-  a deadline per item and safety first (unsigned wet floors and the stranger, from the run log), the
-  room check's 209 held back and 213 with the two-step release inline, the robot's flags (bags for
-  several arrivals in one room), with *Dette skjedde i natt* in a narrow column beside it (below it,
-  folded, on smaller screens), then the robot's judgement card, then *Kvitter mottatt* last (*Kvittert
-  av …*, saved on this device); the proof text behind *Slik vet vi det*; a print view
-  (`src/features/handover/`).
+- **Overlevering 06:00**, where the pilot accounts land after login, read as *act → evidence → sign*:
+  one quiet demo band says what is test data; four figures, each a link to its row (209 held back, the
+  money: *Funnet ledig 5 timer tidligere · ca. 1 500 kr hvis natten blir utsolgt · 31 av 36 booket i
+  kveld* with *Slik regner vi*, safety *straks*, the robot's tasks); *Åpent nå* in the wide column,
+  safety first with *straks* and who was told (or *varsle nå*), then everything by deadline, each with
+  an owner by role (Vaktmester, Resepsjon, Renhold, Nattevakt): the robot itself at 06:00 (not docked,
+  20 %, still holding the master keycard and the cart, *før 06:15*), 213 with its two steps inline, 209
+  led by the robot's own contradiction, the rooms with bags for several arrivals; *Dette skjedde i
+  natt* beside it on a wide screen (below it, folded, at 125 %); the judgement card as three figures
+  (*8 av 9* against its own log, *7* refusals of a stranger, *10 av 15* keycard entries without a
+  knock); *Kvitter mottatt* last (*Kvittert av …*, saved on this device); the proof behind *Slik vet vi
+  det*; a print view. The switch ***Natten fra: Med robot | Uten robot*** builds the same page from the
+  booking system, the door lock's one signal per room and the night clerk's entries only, with no robot
+  line (`src/features/handover/`, `src/features/nightsource/`).
+- **The money step obeys the product's rule:** step 1 records *which* receptionist confirmed (default
+  the night receptionist) and three checks (folio settled, no bags in the room, key card blocked), and
+  opens only with all three; step 2 is *Send til resepsjonen*, after which the row reads *Venter på
+  PMS-en*, never "sold" or "done", because the pilot is read-only and reception makes the change in the
+  PMS (`src/features/rooms/SellSteps.tsx`).
+- **Nattevaktens logg** (`/natt`, in the pilot menu after Overlevering): the night clerk logs a room in
+  two taps (*Tom og ryddig*, *Ikke tom*, *Trenger vask*), a safety item with its place (*Vått gulv*,
+  *Dør*, *Person*) or a short note; each entry is the same run-log line the robot writes, with source
+  `staff`, her name and the time; *Angre* appends a correction; kept on the device for the pilot
+  (`TODO(phase-3)`: a server store). The door lock's per-room signal is a team-written sample in the
+  same format, and *Sjekk disse først* lists where it and the booking system disagree
+  (`src/features/staffinput/`, `src/features/doorlock/`). The hotel-one product, without a robot.
 - **Rom og renhold** with **Robotens romsjekk mot bookingsystemet**: the robot's room checks
-  reconciled with the (test) PMS; a room must be empty after 01:00 before it is suggested for sale, a
-  later delivery into it holds it back, and selling takes two steps (*Bekreft med resepsjonen*, then
-  *Merk som ledig for salg*) (`src/features/rooms/`).
+  reconciled with the (test) PMS; a room must be empty after 01:00 before it is suggested, a later
+  delivery into it, or the robot's own log contradicting its report, holds it back, and a room goes to
+  reception in the same two steps as on Overlevering (`src/features/rooms/`).
 - **Forespørsler**: everything guests asked for, from the robot, the AI receptionist (a call becomes a
   task), staff and voice. What the robot handed back is pinned first; phone calls are their own group
   below, and a call for a room the hotel doesn't have shows *Ukjent rom* for reception, never a room
@@ -148,20 +164,21 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
 
 ### Should (makes the demo clearly better) — built
 
-- **Oversikt**: a greeting by the shift clock of the night shown, one factual line instead of a verdict
-  (*73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en eier*), *Se overleveringen 06:00*
-  as the one primary action, figures with a source line (from the robot's log or test data; *Rom klare
-  til salg* from the same selector as Rom and Overlevering); one widget per module
-  (`src/features/dashboard/`). *Timer spart* and *Gjester fornøyd* are gone from it (round 4: a first
-  screen carries only what the data proves).
-- **The menu is the pilot** for the admin, `siri` and `jury`: Oversikt as the start page, then
-  *Piloten* (Overlevering 06:00, Rom og renhold, Forespørsler, Natteskift); the eight other hotel
+- **Oversikt**, one tap from Overlevering: a greeting by the shift clock of the night shown, one
+  factual line that says what "done" rested on (*73 oppgaver ferdig (64 bekreftet av simulatoren, 9 på
+  robotens egen vurdering: 8 holder mot egen logg)*), *Se overleveringen 06:00* as the one primary
+  action, the pilot's figures only, with *Rom klare til salg* naming its rooms (*Klar nå: rom 314 ·
+  etter bekreftelse: rom 213 · holdt tilbake: rom 209*), and for the pilot accounts only the pilot's
+  widgets (`src/features/dashboard/`). *Timer spart* and *Gjester fornøyd* are gone (round 4), and so
+  are the widgets for modules outside the pilot (round 5).
+- **The menu is the pilot** for the admin, `siri` and `jury`: Overlevering as the landing page, then
+  *Piloten* (Overlevering 06:00, Nattevaktens logg, Rom og renhold, Forespørsler, Natteskift); the other hotel
   screens sit under one folded *Utenfor piloten* ("Bygget, men ikke med i piloten."), reachable but out
   of the way (`src/features/modules/registry.ts`, `PILOT_MODULES`). The desk, the robot manager and the
   host keep their own menus; access is unchanged.
 - **The bell** (*Varsler*): only what needs a person, safety first: each unsigned wet floor (since when,
-  owner, *innen 06:30*) and the stranger at seven doors as *Haster*, computed by Fettero from the run
-  log; red and amber appear only here.
+  owner) and the stranger at seven doors (in the handover's neutral words, *Resepsjon, straks*) as
+  *Haster*, computed by Fettero from the run log; red and amber appear only for what is urgent.
 - **Ruter**: shortest cleaning round and the robot's walk per task across floors, by lift with a cart,
   using a TypeScript port of the agent's router with parity tests (`src/features/routes/hotelRouter.ts`).
   The headline compares metres only, against a named baseline the optimiser also respects, and says

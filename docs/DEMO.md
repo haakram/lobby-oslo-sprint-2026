@@ -132,69 +132,82 @@ seeds in the bed and doesn't strand, and we say the live check is noise at this 
 
 ## 2. Demo script (2:00, then 1 minute of questions)
 
-One user: **the morning manager taking over at 06:00** (Siri Haugen), from the night shift (Kjersti and
-the robot). One story: the night is over; what needs a person, what can be sold, and can I trust what
-the robot says. **One tab, one page: Overlevering 06:00**, scrolled from top to bottom; no navigation.
-Since round 4 the page reads in the order the manager works: *act → evidence → sign*. The figures on
-top (held back, the money, safety, the robot), then *Åpent nå* in the wide column (safety first, then
-209 held back and 213 to sell) with *Dette skjedde i natt* narrow beside it at 1440 px (at 125 % it
-moves below, folded to the night clerk's note), then *Robotens vurderinger i natt*, and *Kvitter
-mottatt* last. The proof text (the referee, the ledger) sits behind *Slik vet vi det*. Before going on stage: § 4.1. The data is a real live practice night of our agent (seed 16,
-2,680 points, build `cb72845`, `public/runs/demo.jsonl`) plus test bookings, each marked *Testdata:
-bookingen er lagt inn av teamet* on screen.
+One user: **the morning manager taking over at 06:00** (Siri Haugen), from the night shift (Kjersti
+Lund and the robot). One story: the night is over; what needs a person, what can go to reception, and
+can I trust what the robot says. **One tab, one page: Overlevering 06:00**, where the pilot accounts
+land after login. The page reads *act → evidence → sign*: four figures on top, each a link to its row
+(209 held back, the money, safety *straks*, the robot); *Åpent nå* with an owner and a deadline per
+item, safety first; the robot's judgement card as three figures beside the night clerk's note; *Kvitter
+mottatt* last. Under the night line sits the switch ***Natten fra: Med robot | Uten robot***.
 
-**Timed on :3300 at Sun 04:16 and again at 04:31 as `siri`**, at 1152×720 (1440 px at 125 %, the
-projector) and at 1440×900, in a clean browser (Playwright): the page shows *Åpent nå* 0.3–0.5 s after
-the address is opened; *Bekreft med resepsjonen* → *Merk som ledig for salg* answers in about 0.1 s,
-the release in about 0.1 s, *Kvitter mottatt* in under 0.1 s. After A's and C's last commits (04:40) the page is 2,995 px tall at 1152×720 (4.2 screens) and
-2,737 px at 1440×900 (3.0); the card now also says *Med poengsummen skjult: 290 av 291 «ferdig» godkjent (4 netter)*. **Three scrolls and three taps**: top → *Åpent nå* (the safety items, 209
-and 213 with its button all on one screen at both sizes) → *Robotens vurderinger i natt* (the refusals,
-*9 av 9* and *10 av 15* on one screen) → the end, *Kvitter mottatt*. Speech: 227 words with the numbers
-read out, at 150 words a minute plus 0.7 s a tap and 1.5 s a scroll: **1:37; 1:51 at a calmer 130
-words a minute**. After 13:05 the final's score line adds about 4 s, so there are 5–20 s of slack for
-one stall.
+**The opening (decided in round 5): 209, the robot's own contradiction**, not a team-written booking
+(the Wybe engineer, the creative juror): at 01:29 it carried bags into 209, at 03:47 it reported 209 empty. It is the first
+figure on the page, it comes 100 % from the real log, and it sets up the rule the rest of the demo
+proves. Then the wedge on screen in 10 seconds (*Uten robot*, the product juror), the money step done *without* a
+robot, and the robot's card last. The data: a real live practice night of our agent (seed 16, 2,680
+points, build `cb72845`, `public/runs/demo.jsonl`), test bookings, a team-written door-lock sample and
+the night clerk's sample entries, all said in one quiet band under the night line. Before going on
+stage: § 4.1.
+
+**Timed on :3300 at Sun 05:45–05:50 as `siri`, at 1152×720 (1440 px at 125 %, the projector), in a
+clean browser (Playwright),** after A's, B's and C's round-5 commits: login lands on Overlevering with
+*Åpent nå* in 0.4–0.9 s; a reload shows it in 0.1–0.2 s. *Uten robot* answers in under 0.1 s; a figure
+link scrolls to its row in about 0.6 s; three ticks and *Bekreft med resepsjonen* in about 0.15 s;
+*Send til resepsjonen* in under 0.1 s; *Med robot* in 0.1 s; *Kvitter mottatt* in 0.05 s. The page is
+2,794 px tall at 1152×720 (3.9 screens) with the robot, 1,625 px without; 2,662 px at 1440×900 (3.0);
+5,094 px at 390 px (6.0), no sideways scroll at any size. **No free scrolling: every move is a tap.**
+Each landing was checked on screen at 1152×720: the money figure under *Uten robot* lands with 213's
+whole row (the lock, Kjersti's look, *Bekreftet av to kilder*, the name field, the three ticks and the
+button) on one screen; *Home* and *Med robot* bring the top back; the robot figure lands with the card,
+Kjersti's *«Rolig natt.»* and *Kvitter mottatt* on one screen. **Ten taps and one key**, 229 words with
+the numbers read out: at 150 words a minute plus 0.7 s an action, **1:39; 1:53 at a calmer 130**. After
+13:05 the final's score line adds about 4 s. There is little slack: if a beat stalls, drop the
+sentence about the faults (they are on the card).
 
 | Time | Screen / action | What the presenter says | Criterion it serves |
 |---|---|---|---|
-| 0:00–0:23 | **Top of Overlevering.** Point at the first figure, **1 rom · Holdt tilbake fra salg · Rom 209: dobbelt tildelt?**, then **ca. 1 500 kr · Kan selges etter bekreftelse · Rom 213 · ellers usolgt i natt**. (58 words) | "Six o'clock at an Oslo hotel. Siri takes over from the night shift, and she's often new. Fettero gives her the night on one page. First, what it held back: at 05:16 the robot carried an arriving guest's suitcase into 209, still booked to someone else. Fettero stopped that sale before anyone got a key." | A real problem · Innovation · Design |
-| 0:25–0:45 | **Scroll once to *Åpent nå*.** The three wet floors (2B: *Roboten skled der*; 3D: *Roboten flyttet skiltet herfra*), *Vaktmester / renhold · innen 06:30*; the man in the bathrobe, *Sikkerhet / resepsjon*; then 209 with *Fettero holdt rommet tilbake*, and 213. Point at the mono label *Testdata: bookingen er lagt inn av teamet* and the line *I en pilot: dørlåsloggen og energibryteren. Roboten går ikke inn i rom som er booket.* (50 words) | "What needs her now: three wet floors without a sign, one where the robot slipped, and a stranger who tried seven doors, each with an owner and a deadline. The bookings are our test data; in a pilot the door-lock log tells us, not a robot in a guest's room." | Law (care, and no entry into booked rooms) · Wybe (domain) · Design |
-| 0:45–1:04 | **Same screen, on 213:** tap **Bekreft med resepsjonen**, then **Merk som ledig for salg**. The row turns to *Rom 213 er lagt ut for salg i dag (ca. 1 500 kr)* with *Ledig for salg · Siri Haugen · nå* and *Gjort i dag*; *Åpent nå* drops from 9 to 8. (43 words) | "Then the money. 213's guest was due out yesterday and nobody recorded the check-out, so the system still holds the room tonight. The desk confirms he's gone; Siri releases it: about 1,500 kroner that would otherwise stand unsold." | Founders (money) · A real problem · Functionality |
-| 1:05–1:30 | **Scroll to *Robotens vurderinger i natt*:** *Sa nei 7 ganger til en ukjent person* (seven time-and-room chips, 01:17–05:11); **9 av 9 «Ferdig» på robotens egen vurdering** (*5 romsjekker og 4 søl … De andre 64 meldte den først etter at simulatoren hadde bekreftet arbeidet*; *I et ekte hotell bekrefter låsloggen og robotens foto «ferdig». Ett signal alene står som «ikke bekreftet».*), with *Med poengsummen skjult: 290 av 291 «ferdig» godkjent (4 netter)* under it (the Wybe juror's answer; leave it for Q&A); **10 av 15 Innganger med nøkkelkort uten å banke på**. (61 words) | "Every line comes from our agent's real log in Wybe's live simulation. Seven times a stranger asked it to open a room; seven times it said no. Of its 73 'done', 64 came after the simulator confirmed the work; the 9 it judged on its own all held. And it shows its faults: ten master-key entries without a knock." **After 13:05 add:** "In today's final: [mean], rank [N]." | Innovation · IT and security · data (the data juror) · Wybe (the Wybe juror) |
-| 1:31–1:38 | **Scroll to the end:** tap **Kvitter mottatt** → *Kvittert av Siri Haugen · nå · Natt til søndag 8. november er overlevert, med 8 åpne saker. Kvitteringen er lagret på denne enheten.* (15 words) | "Siri signs; she has the hotel. Fettero: *natten, ærlig overlevert*. The night, handed over honestly." | Design · all five |
+| 0:00–0:20 | **Top of Overlevering, *Med robot*.** Point at the first figure: **1 rom · Holdt tilbake fra salg · Rom 209: meldt tomt kl. 03:47, men roboten satte inn bagasje kl. 01:29**, then at **4 saker · Sikkerhet, straks**. No tap. (54 words) | "Six o'clock. Siri takes over the hotel. Fettero gives her the night on one page, and it checks the robot too. The robot reported 209 empty at 03:47, but its own log says it carried bags in at 01:29. So Fettero held 209 back. Beside it: four safety items, each with an owner, now." | A real problem · Innovation · Wybe (the Wybe engineer) |
+| 0:20–0:29 | **Tap *Uten robot*.** The robot's lines go; the line under the switch says *Uten robot: bookingsystemet, dørlåsen (ett signal per rom, aldri hvem) og 4 registreringer fra nattevakten (eksempler)*. (28 words) | "Hotel number one has no robot. Same page: from the booking system, one signal per room from the door lock, never who, and the night clerk's own taps." | Product (the product juror) · Founders · Law (the law juror) |
+| 0:29–0:44 | **Tap the money figure, *ca. 1 500 kr · Funnet ledig 5 timer tidligere*.** It lands on 213: *Dørlåsen: ingen kort i energibryteren siden 22:10. Kjersti Lund så rommet tomt og ryddig kl. 04:24. Bekreftet av to kilder.* (40 words) | "213: due out yesterday, check-out never recorded. The lock: no card since ten past ten. Kjersti saw it empty at 04:24. Two sources, no robot. Found at six, five hours before housekeeping: about 1,500 kroner if the night sells out." | Founders (the founder juror) · A real problem · Functionality |
+| 0:44–0:58 | **Same screen:** the name field already says *Hanne Vold*; tick **Folioen er gjort opp**, **Ingen bagasje på rommet**, **Nøkkelkortet er sperret**; tap **Bekreft med resepsjonen**, then **Send til resepsjonen**. The row reads *Venter på PMS-en* with the kroner on it. (30 words) | "Reception confirms, and we record who: folio settled, no bags, key card blocked. Then it goes to reception. Our own button never says sold: it waits for the booking system." | Product (the product juror) · Law (the law juror) · Functionality |
+| 0:58–1:25 | **Press *Home*, tap *Med robot*, tap the robot figure *73 av 77*.** It lands on *Robotens vurderinger i natt* (**8 av 9** · **7** · **10 av 15**), Kjersti's note and *Kvitter mottatt*, one screen. (62 words) | "With a robot, the page adds what only a robot sees. Kjersti wrote: 'Rolig natt.' From the desk, it was. The robot saw three wet floors and a stranger at seven doors, and refused him seven times. And it's held to the same rule: 8 of its 9 'done' hold against its own log. Its faults too: ten entries without a knock." **After 13:05 add:** "In today's final: [mean], rank [N]." | Innovation · Wybe (the Wybe juror) · data (the data juror) · Design (the creative juror) |
+| 1:25–1:35 | **Tap *Kvitter mottatt*** → *Kvittert av Siri Haugen · nå · Natt til søndag 8. november er overlevert, med … åpne saker. Kvitteringen er lagret på denne enheten.* (15 words) | "Siri signs; she has the hotel. Fettero: *natten, ærlig overlevert*. The night, handed over honestly." | Design · all five |
 
-Facts behind the lines (seed-16 log, `public/runs/demo.jsonl`, and the test bookings): the robot carried
-bags into 209 for three arrivals at 01:29, 04:35 and 05:16, for requests that say "the guest checks in
-later", while the team's test booking system has Hiroshi Sato in 209 until 9.11 (the simulator's own
-night manager said 209 was for the arrival: the "double allocation" exists because of our test data,
-which is why the row is labelled and says *Fettero* held it back). 213: the test booking has Ola
-Nygård due out 7.11, check-out never recorded (`checkoutMissing` in `src/features/guests/testData.ts`),
-so the room is held as in-house tonight; the robot found it empty and tidy at 04:24 (`room_status`). The
-robot slipped in corridor 2B at 23:51:33 (−15, the night's only penalty) and crossed that wet floor 27
-more times without signing it; at 04:38 it moved the sign from 3D (still wet) to 3C (`sign_moved`); 1C
-was wet without a sign at 06:00. The man in the bathrobe asked about rooms 308, 209, 203, 202, 304, 137
-and 205 between 01:17 and 05:11; every time the robot refused, and at 209 and 304 it waited to unlock
-until he had gone (`keycard_withheld`). Of 15 master-key entries, 5 came after a knock. 73 `report
-done`, 73 replies "Noted. Thanks."; 64 after the score rose during the task, 9 on the robot's own
-judgement (5 room checks, 4 spills), all 9 credited (`doneBasis` in `src/features/nightshift/`, the
-same rule as `scripts/ledger.py`). 8 `declined`, of which the score rose after 7 and not after R-036 (a
-spill report on floor 3). Behind *Slik vet vi det* on the card: every live night with a log, every
-version, board tests only when complete: 8,156 of 8,191 "done" credited over 130 nights (99.6 %), on
-its own judgement 1,113 of 1,145 (97.2 %), room checks 657 of 662, read at 04:15 (it moves as nights are
-logged); the final branch's 18 nights: 185 of 189 on its own judgement (§ 1.1). Bags for three arrivals
-in 212 and two in 304 are an open item (*Flere ankomster i samme rom: sjekk med resepsjonen*).
+Facts behind the lines (seed-16 log, `public/runs/demo.jsonl`; the samples): at 01:29:26 the robot ran
+`place luggage-209 → room-209` ("Placed luggage-209 inside room-209"), and at 03:47:31 its look said
+"Nobody is here. The room is tidy." and it reported R-049 empty and tidy, which the referee credited
+(`selfContradictions` in `src/features/nightshift/conduct.ts`; the team's test booking, Hiroshi Sato in
+209 until 9.11, is now only the consequence). 213: the test booking has Ola Nygård due out 7.11, the
+check-out never recorded (`checkoutMissing`), so the booking system holds the room; the robot found it
+empty and tidy at 04:24 (`room_status`); *Uten robot*, the door lock's sample says no card since 22:10
+(`room_signal`, `src/features/doorlock/feed.ts`) and Kjersti's sample entry says *tom og ryddig* at
+04:24 (`src/features/staffinput/`), two signals from outside a robot, so *Bekreftet av to kilder*
+(`evidenceVerdict`). "Five hours": from 06:00 to the 11:00 check-out after which housekeeping would find
+it (`src/features/rooms/money.ts`). 31 of 36 booked tonight: the test PMS. Safety: the robot slipped in
+corridor 2B at 23:51:33 (−15, the night's only penalty) and crossed it 27 more times without a sign; at
+04:38 it moved the sign from 3D (still wet) to 3C; 1C was wet without a sign at 06:00; the man in the
+bathrobe asked about rooms 308, 209, 203, 202, 304, 137 and 205 between 01:17 and 05:11, refused every
+time, the keycard held at 209 and 304 until he had gone. Of 15 keycard entries, 5 came after a knock.
+73 `report done`, all credited; 64 after the score rose, 9 on its own judgement, 8 of them holding
+against its own log. At 05:57 the robot stood in corridor 3A, not docked, battery 19.8 %, holding the
+master keycard (the handover's item: *før 06:15*, owner the night clerk). The night clerk's note
+*«Rolig natt. Roboten tok det meste av runden selv …»* is the demo's test note.
 
-**Re-read every number off the build at the rehearsal** (other owners may still change these screens):
-the kroner, the count in *Åpent nå*, the order of its first four items, and the card's figures.
+**Re-read every number off the build at the rehearsal** (the screens may still move): the kroner and
+"5 timer", 31 of 36, the count in *Åpent nå*, the order of its items, the line under the switch, and
+the card's three figures.
 
-Rules for the presenter: don't explain the navigation; stay on this one page; don't open Øyne, Stemme,
-Resepsjon, Forespørsler, the 3D map or the host view in the 2 minutes (they are Q&A answers and the 5–10
-minute final, § 3); if a screen stalls for 3 seconds, say the line and move on. Use half-screen scrolls
-at 125 %: a full PageDown from the top hides 2B's line while you're saying it. For a non-Norwegian
-juror, say the three on-screen phrases once with their meaning: *Kan selges etter bekreftelse* (can be
-sold once confirmed), *Åpent nå* (open now), *Kvitter mottatt* (sign for it). Q&A openers on the same
-page: *Åpne Forespørsler* on the robot's four hand-backs opens Forespørsler, where *Roboten ga videre*
-is pinned first; *Se robotens vurderinger* on the stranger item jumps to the card; *Slik vet vi det*
-opens the referee and the ledger line for the data juror and the Wybe juror.
+Rules for the presenter: don't explain the navigation; stay on this one page; every move is a tap on a
+figure, the switch or a button, never a free scroll (the figures land the rows exactly at 125 %; a
+hand scroll is how the 2B line or 213's button ends up under the fold). Don't open Øyne, Resepsjon,
+Forespørsler, *Nattevaktens logg*, the 3D map or the host view in the 2 minutes (they are Q&A answers
+and the 5–10 minute final, § 3); if a screen stalls for 3 seconds, say the line and move on. For a
+non-Norwegian juror, say three on-screen phrases once with their meaning: *Holdt tilbake fra salg*
+(held back from sale), *Uten robot* (without a robot), *Kvitter mottatt* (sign for it). Q&A openers on
+the same page: the bell is not touched in the 2 minutes; *Slik regner vi* opens the money's arithmetic
+(the founder juror); *Vis alt og slik vet vi det* opens the referee, the ledger, the score-blind run and the fault
+test (the data juror, the Wybe juror); *Åpne nattevaktens logg* on a safety item under *Uten robot* opens the clerk's
+screen (the product juror, the marketing juror).
 
 ## 3. Pitch outline for the final (5–10 min, top 10 at 18:00)
 
@@ -299,8 +312,11 @@ three jurors were locked out for minutes during the night's reviews. So nobody t
       If `siri` is locked out, present from it (the stamps then read Hamad's name; say so).
 - [ ] Clear rehearsal ticks: *Angre* on 213 (back to the start, ticks and name cleared) and on the
       sign-off, so the page starts unconfirmed and unsigned, and the source switch on *Med robot*
-      (they live in this browser's `localStorage`). The night clerk's sample entries for *Uten robot*
-      must still be there: check the switch once before walking up.
+      (they live in this browser's `localStorage`). **Never press *Angre* on the night clerk's sample
+      entries on the demo laptop** (owner B): an *Angre* appends a correction, and 213 under *Uten
+      robot* drops back to *sjekk rommet* (one signal, the lock alone, never sells). Tap *Uten robot*
+      once before walking up and check that 213 says *Bekreftet av to kilder*. If the switch ever
+      fails on stage, `/overlevering?kilde=uten-robot` opens the same view.
 - [ ] Tell jurors who try the `jury` account to type carefully: their mistakes count against the same
       address as the presenter's.
 - [ ] Recorded video (§ 4) open in a third window, paused on frame one.
@@ -899,13 +915,13 @@ mentioned.
 
 Who runs it: **[fill]** (a facilitator who reads the tasks and an observer with a stopwatch and this
 table). Three people at the venue who are not on our team, ideally one who has worked in a hotel or a
-reception; note their background, not their name. Laptop at 1440 px, logged in as `jury`, opened on
-**Oversikt**, cold. Read each task word for word, ask them to think aloud, don't help, stop a task at 60
+reception; note their background, not their name. Laptop at 1440 px, logged in as `jury`, opened
+where the login lands (**Overlevering**, since round 5), cold. Read each task word for word, ask them to think aloud, don't help, stop a task at 60
 seconds.
 
 | Task (read aloud) | Success looks like |
 |---|---|
-| T1 "Klokka er 06:00 og du tar over hotellet. Hvilke rom kan du selge i dag?" | Names 213 (sell after the desk confirms) from Overlevering or Rom; bonus if they say 209 is held back |
+| T1 "Klokka er 06:00 og du tar over hotellet. Hvilke rom kan du selge i dag?" | Names 213 (to reception after the desk confirms) from Overlevering or Rom; bonus if they say 209 is held back and why |
 | T2 "Hvilken sak fra roboten er fortsatt åpen, og hvordan tar du den?" | Taps *Ta saken* on the robot's open request |
 | T3 "Gjorde roboten noe i natt som den sikkerhetsansvarlige bør vite om?" | Finds the stranger at seven doors (the open item, the bell or *Robotens vurderinger i natt*) |
 | T4 "Kvitter for at du har tatt over vakten." | Taps *Kvitter mottatt* |

@@ -29,32 +29,35 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
    older security header (no `connect-src`; checked with curl Sun 02:50).
 2. Log in as **`jury`**: the jury's own account (admin view). Its password is in our `/lever`
    submission, not in this repo, and the account is deleted after the event.
-3. Click **Se overleveringen 06:00** on Oversikt, then scroll the one page from top to bottom. It reads
-   in the order the manager works: act, then evidence, then sign.
-   1. **The top:** one factual line (*73 oppgaver bekreftet · 3 våte gulv og 1 ukjent person trenger en
-      eier*) and four figures: *1 rom holdt tilbake fra salg* (209), *ca. 1 500 kr · Kan selges etter
-      bekreftelse* (213), *4 saker · Sikkerhet, innen 06:30*, and the robot's *73 av 77*.
-   2. ***Åpent nå*, safety first:** three wet floors without a sign and a stranger who asked the robot
-      to open seven doors, each with an owner and *innen 06:30*. Then the room check: **209 is held
-      back** (the robot carried bags for an arriving guest into a room the booking system still has
-      booked until 9.11: *Fettero holdt rommet tilbake*), and **213 can be sold**: its guest was due out
-      yesterday and the check-out was never recorded, so the system still holds the room tonight; the
-      robot found it empty and tidy. *Bekreft med resepsjonen*, then *Merk som ledig for salg* (two
-      steps, never one tap). Both rows say *Testdata: bookingen er lagt inn av teamet*: we wrote those
-      bookings after the night to show the join, and in a pilot the evidence is the door-lock log and the
-      energy slot, never a robot in a booked room.
-   3. ***Robotens vurderinger i natt*:** it refused the stranger seven times; *9 av 9 «Ferdig» på
-      robotens egen vurdering* (the other 64 came after the simulator confirmed the work); 7 of 8
-      declines held; and its own faults, counted from its log (10 of 15 master-key entries without a
-      knock, a wet floor it slipped on and never signed). The referee and the ledger sit behind *Slik vet
-      vi det*.
-   4. ***Kvitter mottatt*,** last.
+3. You land on **Overlevering 06:00**. Every move is a tap; it reads in the order the manager works:
+   act, then evidence, then sign.
+   1. **The top:** four figures, each a link to its row: *1 rom · Holdt tilbake fra salg* (209: the
+      robot reported it empty at 03:47, but its own log says it carried bags in at 01:29), *ca. 1 500 kr
+      · Funnet ledig 5 timer tidligere* (213, *hvis natten blir utsolgt · 31 av 36 booket i kveld*,
+      with *Slik regner vi*), *4 saker · Sikkerhet, straks*, and the robot's *73 av 77*. One quiet band
+      says what is test data.
+   2. **The switch *Natten fra: Med robot | Uten robot*.** *Uten robot* builds the same page from the
+      booking system, one signal per room from the door lock (never who) and the night clerk's own
+      entries (*Nattevaktens logg*, `/natt`), with no robot line: the product hotel number one buys.
+   3. **213, the money step:** due out yesterday, the check-out never recorded; without the robot the
+      lock shows no card since 22:10 and the night clerk saw it empty at 04:24 (*Bekreftet av to
+      kilder*). Reception confirms who checked and three facts (folio, bags, key card), then *Send til
+      resepsjonen*; the row reads *Venter på PMS-en*, because the pilot never writes to the booking
+      system. Nothing says "sold".
+   4. ***Åpent nå*, safety first:** three wet floors without a sign and a stranger who asked the robot
+      to open seven doors, *straks*, with who was told; the robot itself at 06:00, not docked and still
+      holding the master keycard; then everything by deadline, each with an owner.
+   5. ***Robotens vurderinger i natt*:** three figures, *8 av 9* "done" on its own judgement hold
+      against its own log, *7* refusals of the stranger, *10 av 15* keycard entries without a knock;
+      beside the night clerk's note, *«Rolig natt.»* The referee, the ledger, the score-blind run and
+      the fault test sit behind *Slik vet vi det*.
+   6. ***Kvitter mottatt*,** last.
 
    Then, if you like: **Forespørsler** (what the robot handed back is pinned first, with the reason)
    and **3D-kart → *Spill av*** (the robot's real night, replayed from its log).
 
-The menu shows the pilot: **Overlevering, Rom og renhold, Forespørsler, Natteskift** (with Oversikt as
-the start page). Everything else we built sits under the folded **Utenfor piloten**: **Robotens øyne**
+The menu shows the pilot: **Overlevering, Nattevaktens logg, Rom og renhold, Forespørsler, Natteskift**
+(Oversikt one tap away). Everything else we built sits under the folded **Utenfor piloten**: **Robotens øyne**
 on a phone (camera boxes; tap a product and Claude names it without a barcode; built for Holio),
 **Resepsjon** (allow the microphone, then *Ring resepsjonen*: the ElevenLabs AI receptionist; the screen
 says where the call goes; please give a made-up name), and more. The host view for short-let hosts

@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { canAccess, useSession } from "@/features/auth";
 import { formatKroner, nightLabel } from "@/features/dashboard/format";
 import { declineShort, nightFacts, robotShort } from "@/features/dashboard/highlights";
+import { doneBasis, selfContradictions } from "@/features/nightshift/conduct";
 import { type DeclineSplit, declineSplit } from "@/features/nightshift/declines";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
@@ -17,17 +18,18 @@ import { formatClock } from "@/features/reception/format";
 import { useStoredRecords } from "@/features/reception/useStoredRecords";
 import { PHONE_ASSIGNMENTS, phoneTasks } from "@/features/requests/phoneTasks";
 import { hotelRoomsOf, selectRequests } from "@/features/requests/select";
-import { moneyMethod, releasedLine } from "@/features/rooms/money";
-import type { RoomCheckMark } from "@/features/rooms/reconcile";
-import { BookingEvidence } from "@/features/rooms/BookingEvidence";
+import { hoursEarlier, moneyMethod, releasedLine, tonightLine } from "@/features/rooms/money";
+import { PILOT_EVIDENCE, PMS_IS_TEST_DATA, TEST_BOOKING_LABEL, TEST_BOOKING_WORD } from "@/features/rooms/pms";
+import type { Contradiction, RoomCheckMark } from "@/features/rooms/reconcile";
 import { SellSteps } from "@/features/rooms/SellSteps";
 import { useRoomCheck } from "@/features/rooms/useRoomCheck";
 import { HOTEL_NAME } from "@/ui/AppNav";
 import { APP_NAME, TAGLINE } from "@/ui/brand";
 import { actionStamp, relativeTime, stampNow, useNowMs } from "@/ui/stamp";
 import { Badge, Button, Card, cx, EmptyState, ErrorState, Figure as Digits, Monogram, RegenIcon, Skeleton, Stat } from "@/ui";
+import { robotAtHandover } from "./robotState";
 import { nightSafety } from "./safety";
-import { composeHandover, type Figures, type Highlight, type OpenItem, openCount } from "./select";
+import { composeHandover, type Figures, type Highlight, itemAnchor, nightSourceLine, type OpenItem, openCount } from "./select";
 import { sign, SIGNOFFS } from "./signoff";
 
 const BY: Record<Highlight["by"], { word: string; tone: "accent" | "neutral" }> = {
@@ -43,6 +45,10 @@ const BY: Record<Highlight["by"], { word: string; tone: "accent" | "neutral" }> 
  * safety first, then the room check's catch and sale; what happened, folded, beside it; the robot's
  * judgement card; *Kvitter mottatt* last. The proof (the referee, the simulator) sits behind *Slik vet vi
  * det*. Prints as one A4 leave-behind with a Fettero masthead.
+ *
+ * Round 4 (the product juror, the design juror, the creative juror): each top figure jumps to its row; the money step is the page's one
+ * orange action (and *Kvitter mottatt* takes the orange once no room waits for it); the other links are
+ * quiet ink; the test-data chips are one quiet demo band under the header.
  */
 export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: string; demo?: readonly DemoCall[]; today?: string }) {
   const today = day ?? osloToday();
@@ -62,7 +68,11 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   // The same room check, marks and money as Rom and Oversikt: a release here moves them too.
   const { reconciliation, marks, revenue, pms } = useRoomCheck(lines, rooms, today);
   const safety = useMemo(() => (lines ? nightSafety(lines) : null), [lines]);
+  const robotState = useMemo(() => (lines ? robotAtHandover(lines) : null), [lines]);
   const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
+  // What each "done" rested on, the same reading as Oversikt's line (owner C): one number per fact.
+  const basis = useMemo(() => (lines ? doneBasis(lines) : null), [lines]);
+  const contradictions = useMemo(() => (lines ? selfContradictions(lines) : null), [lines]);
   const [wholeNight, setWholeNight] = useState(false);
 
   const handover = useMemo(() => {
@@ -86,10 +96,11 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       today,
       pms,
       safety,
+      robot: robotState,
       resolved: (id) => statusOf(id) === "lost",
       canOpen: (route) => effectiveRole === null || canAccess(effectiveRole, route),
     });
-  }, [night, rooms, reconciliation, safety, statusOf, phone, assignments, hotelRooms, marks, revenue, today, pms, effectiveRole]);
+  }, [night, rooms, reconciliation, safety, robotState, statusOf, phone, assignments, hotelRooms, marks, revenue, today, pms, effectiveRole]);
 
   const signButton = useRef<HTMLDivElement>(null);
   const refocus = useRef(false);
@@ -142,10 +153,22 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
         confirmed: figures.robot.done,
         wetFloors: figures.safety.wetFloors,
         stranger: figures.safety.stranger,
+        basis: basis ?? undefined,
+        contradictions: contradictions ?? undefined,
       })
     : null;
   const signedWhen = signoff ? relativeTime(signoff.stamp, now) : null;
   const timeline = handover?.timeline ?? [];
+  const open = handover?.open ?? [];
+  // Each top figure jumps to its row (jury round 4, the product juror/the design juror): the presenter taps, never hunts for a scroll.
+  const anchors = {
+    held: open.find((item) => item.caught)?.id,
+    money: open.find((item) => item.sell)?.id,
+    safety: open.find((item) => item.safety)?.id,
+  };
+  // One orange action at a time: the money step while a room waits for it, then the signature.
+  const sellWaiting = (figures?.money.toSell.length ?? 0) > 0;
+  const bookingRows = open.some((item) => item.booking);
 
   return (
     <ModulePage
@@ -184,21 +207,34 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
               <RegenIcon name="circle-check" size={20} strokeWidth={2} className="mr-1.5 inline-block align-[-0.2em]" />
               {facts.done}
             </span>
+            {facts.basis && <span className="text-muted"> ({facts.basis})</span>}
             {facts.attention && <span className="font-semibold"> · {facts.attention}</span>}
           </p>
         )}
       </div>
 
+      {/* The test data said once, quietly, for the whole page (jury round 4, the creative juror): never a mono chip on the money row. */}
+      {ready && run.lines.length > 0 && (
+        <p data-demo-band className="-mt-2 flex items-start gap-2 rounded-md bg-sunken px-3 py-2 text-sm text-muted lg:-mt-4 print:mt-0 print:bg-transparent print:p-0 print:text-xs">
+          <RegenIcon name="info-circle" size={18} className="mt-0.5 shrink-0 print:hidden" />
+          <span>
+            Demo: {nightSourceLine(run.lines)}.
+            {PMS_IS_TEST_DATA && bookingRows ? ` ${TEST_BOOKING_LABEL}, merket «${TEST_BOOKING_WORD}».` : ""} {PILOT_EVIDENCE}
+          </span>
+        </p>
+      )}
+
       {/* On paper the figures' rule sits tighter, so the page fits one sheet. */}
       <div className="contents print:block print:[&>section>div]:py-2">
       <FigureRow label="Natten i tall">
-        {figures && figures.money.held.length > 0 && <HeldFigure figures={figures} />}
-        <MoneyFigure figures={figures} />
+        {figures && figures.money.caught.length > 0 && <HeldFigure figures={figures} contradicted={reconciliation?.contradicted ?? []} to={anchors.held} />}
+        <MoneyFigure figures={figures} to={anchors.money} />
         <Figure
-          label="Sikkerhet, innen 06:30"
+          label="Sikkerhet, straks"
           value={figures ? figures.safety.wetFloors + (figures.safety.stranger ? 1 : 0) : undefined}
           unit={figures ? (figures.safety.wetFloors + (figures.safety.stranger ? 1 : 0) === 1 ? "sak" : "saker") : undefined}
           detail={figures ? safetyDetail(figures.safety) : undefined}
+          to={anchors.safety ? itemAnchor(anchors.safety) : undefined}
         />
         <Figure
           label="Robotens oppdrag"
@@ -207,6 +243,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
           tone="success"
           detail={figures ? robotShort(figures.robot) : undefined}
           more={figures ? <Disclosure summary="Slik vet vi det">{robotProof(figures, declines)}</Disclosure> : undefined}
+          to={ready && run.lines.length > 0 ? "vurderinger-overlevering" : undefined}
         />
       </FigureRow>
       </div>
@@ -229,7 +266,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
             ) : (
               <ul className="mt-2 divide-y divide-line">
                 {handover.open.map((item) => (
-                  <OpenRow key={item.id} item={item} marks={marks} today={today} />
+                  <OpenRow key={item.id} item={item} marks={marks} today={today} figures={handover.figures} />
                 ))}
               </ul>
             )}
@@ -282,12 +319,10 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
 
         {/* The evidence: the robot's judgement calls (owner C's card, the whole night). On paper, one line instead. */}
         {ready && run.lines.length > 0 && (
-          <div data-enter className="lg:col-span-2 lg:row-start-2 print:hidden">
+          <div data-enter className="lg:col-span-2 lg:row-start-2 print:hidden [&>*]:scroll-mt-24">
             <RobotJudgementCard lines={run.lines} id="vurderinger-overlevering" compact />
           </div>
         )}
-        {/* On paper (the card is left off; its figures are in the row above): the booking note once, not under every room. */}
-        {handover?.open.some((item) => item.booking) && <BookingEvidence className="hidden print:col-start-2 print:row-start-2 print:flex" />}
 
         {/* The signature, last: after the work and the evidence (jury round 3: never sign above what you are asked to read). */}
         <section aria-labelledby="sign-heading" data-enter className="lg:col-start-2 lg:row-start-3 xl:col-span-2 xl:col-start-1 print:col-start-2 print:row-start-3">
@@ -330,7 +365,13 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
                   Angre kvitteringen
                 </Button>
               ) : (
-                <Button size="lg" className="w-full shrink-0 sm:w-auto lg:self-start xl:self-auto print:hidden" onClick={() => setSigned(true)} disabled={!handover}>
+                <Button
+                  size="lg"
+                  variant={sellWaiting ? "secondary" : "primary"}
+                  className="w-full shrink-0 sm:w-auto lg:self-start xl:self-auto print:hidden"
+                  onClick={() => setSigned(true)}
+                  disabled={!handover}
+                >
                   Kvitter mottatt
                 </Button>
               )}
@@ -372,13 +413,35 @@ function safetyDetail({ wetFloors, stranger }: { wetFloors: number; stranger: bo
 function Disclosure({ summary, children }: { summary: string; children: ReactNode }) {
   return (
     <details className="text-xs text-muted print:hidden">
-      <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-accent-text hover:underline pointer-fine:min-h-8">{summary}</summary>
+      {/* Quiet ink, not orange: orange on this page is the one thing to do (jury round 4, the design juror). */}
+      <summary className="inline-flex min-h-11 cursor-pointer items-center gap-1 font-semibold text-text underline decoration-line-strong underline-offset-4 hover:decoration-text pointer-fine:min-h-8">
+        {summary}
+      </summary>
       <p className="max-w-[44ch] pb-1">{children}</p>
     </details>
   );
 }
 
-function Figure({ label, value, unit, tone, detail, more }: { label: string; value: ReactNode | undefined; unit?: string; tone?: "success"; detail?: string; more?: ReactNode }) {
+/**
+ * A top figure that jumps to its row (jury round 4, the product juror/the design juror): the figure and its label are one
+ * link with a down arrow, its row is marked while it is the page's target. A disclosure stays outside the
+ * link (no control inside a control).
+ */
+function FigureLink({ to, children }: { to: string | null | undefined; children: ReactNode }) {
+  if (!to) return <>{children}</>;
+  return (
+    <a
+      href={`#${to}`}
+      className="group relative -mx-1.5 -my-1 flex min-w-0 flex-col rounded-md px-1.5 py-1 pr-7 transition-colors duration-[120ms] ease-standard hover:bg-sunken print:pr-1.5"
+    >
+      {children}
+      <RegenIcon name="arrow-down" size={16} strokeWidth={2} className="absolute top-2 right-1.5 text-muted group-hover:text-text print:hidden" />
+      <span className="sr-only">, gå til saken</span>
+    </a>
+  );
+}
+
+function Figure({ label, value, unit, tone, detail, more, to }: { label: string; value: ReactNode | undefined; unit?: string; tone?: "success"; detail?: string; more?: ReactNode; to?: string | null }) {
   if (value === undefined) {
     return (
       <div className="flex flex-col gap-1">
@@ -389,21 +452,28 @@ function Figure({ label, value, unit, tone, detail, more }: { label: string; val
   }
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <Stat label={label} value={value} unit={unit} tone={tone} />
+      <FigureLink to={to}>
+        <Stat label={label} value={value} unit={unit} tone={tone} />
+      </FigureLink>
       {detail && <p className="text-xs text-muted">{detail}</p>}
       {more}
     </div>
   );
 }
 
-function OpenRow({ item, marks, today }: { item: OpenItem; marks: Readonly<Record<string, RoomCheckMark>>; today: string }) {
+function OpenRow({ item, marks, today, figures }: { item: OpenItem; marks: Readonly<Record<string, RoomCheckMark>>; today: string; figures: Figures }) {
+  const value = item.sell ? (item.pending ? figures.money.releasedValue : figures.money.toSellValue) : 0;
   return (
-    // On paper the owner and the deadline sit beside the text, so the list fits one sheet.
-    <li className="flex flex-col gap-1.5 py-2.5 print:grid print:break-inside-avoid print:grid-cols-[minmax(0,1fr)_11rem] print:gap-x-4 print:py-1">
+    // On paper the owner and the deadline sit beside the text, so the list fits one sheet. A top figure's
+    // link lands here: the row is marked while it is the target (a sunken plane that bleeds past the text).
+    <li
+      id={itemAnchor(item.id)}
+      className="flex scroll-mt-24 flex-col gap-1.5 rounded-sm py-2.5 transition-colors duration-300 ease-standard target:bg-sunken target:shadow-[-12px_0_0_0_var(--color-sunken),12px_0_0_0_var(--color-sunken)] print:grid print:break-inside-avoid print:grid-cols-[minmax(0,1fr)_11rem] print:gap-x-4 print:py-1"
+    >
       <div className="flex min-w-0 flex-col gap-1.5">
         {/* The text claims 16rem before the badge sits beside it: on a phone the badge wraps under the text instead of squeezing it into a narrow column (209's row at 390 px). */}
         <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
-          <p className={cx("min-w-0 grow basis-64 text-base print:text-sm", item.done && "text-muted")}>
+          <p className="min-w-0 grow basis-64 text-base print:text-sm">
             {item.safety && <RegenIcon name="alert-triangle" size={18} className="mr-1.5 inline-block align-[-0.2em]" />}
             {item.text}
           </p>
@@ -417,8 +487,9 @@ function OpenRow({ item, marks, today }: { item: OpenItem; marks: Readonly<Recor
               <RegenIcon name="shield-check" size={14} className="mr-1 inline-block align-[-0.15em]" />
               Fettero holdt rommet tilbake
             </Badge>
-          ) : item.done ? (
-            <Badge tone="success">Gjort i dag</Badge>
+          ) : item.pending ? (
+            // Pending, never "Gjort i dag": the booking system has not said the room is free (jury round 4, the product juror).
+            <Badge>Venter på PMS-en</Badge>
           ) : null}
         </div>
         {item.lines && (
@@ -428,31 +499,59 @@ function OpenRow({ item, marks, today }: { item: OpenItem; marks: Readonly<Recor
             ))}
           </ul>
         )}
-        {item.booking && <BookingEvidence className="print:hidden" />}
+        {/* Who was told in the night: a known hazard is acted on at once (jury round 4, the law juror). */}
+        {item.escalation && (
+          <p className="flex items-start gap-1.5 text-sm font-semibold">
+            <RegenIcon name="bell" size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
+            {item.escalation}
+          </p>
+        )}
+        {/* The figure that changed, where the presenter is (jury round 4, the creative juror): the kroner on the row once it is sent. */}
+        {item.sell && item.pending && value > 0 && (
+          <p aria-live="polite" className="flex flex-wrap items-baseline gap-x-2 print:hidden">
+            <span className="font-mono text-xl font-medium tabular-nums">
+              <span className="mr-1.5 font-sans text-sm font-medium text-muted">ca.</span>
+              <Digits value={formatKroner(value)} />
+              <span className="ml-1 font-sans text-sm font-medium text-muted">kr</span>
+            </span>
+            <span className="text-sm text-muted">sendt til resepsjonen · venter på PMS-en</span>
+          </p>
+        )}
         {item.sell && (
           <div className="flex flex-col gap-2 print:hidden">
             {item.sell.map((room) => (
               <div key={room} className="flex flex-wrap items-start gap-x-3 gap-y-1">
                 {item.sell && item.sell.length > 1 && <span className="mt-2 rounded-sm bg-sunken px-2 py-1 font-mono text-sm font-medium tabular-nums">{room.replace(/^room-/, "")}</span>}
-                <SellSteps room={room} mark={marks[room]} today={today} className="min-w-0 flex-1" />
+                <SellSteps room={room} mark={marks[room]} today={today} primary className="min-w-0 flex-1" />
               </div>
             ))}
           </div>
         )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm print:items-start">
-        <span className="flex min-w-0 items-center gap-2 print:flex-wrap print:gap-x-1 print:gap-y-0">
-          {/* A role ("Vaktmester / renhold") gets its initials, not "V/". */}
-          <Monogram name={item.owner.replace(/^[^:]+: /, "").replace(/\s*\/\s*/g, " ")} size={24} className="print:hidden" />
-          <span className="min-w-0">{item.owner}</span>
-          <span className="text-muted">·</span>
-          <span className="whitespace-nowrap text-muted">
-            innen <span className="font-mono tabular-nums text-text">{item.due}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 print:gap-x-1 print:gap-y-0">
+          <Monogram name={item.who ?? item.owner} size={24} className="print:hidden" />
+          {/* A role the hotel has, and who is on in it (jury round 4, the design juror: not one name for everything). */}
+          <span className="min-w-0">
+            <span className="font-medium">{item.owner}</span>
+            {item.who && <span className="text-muted"> · {item.who}</span>}
           </span>
+          <span className="text-muted">·</span>
+          {item.due === "straks" ? (
+            <span className="font-semibold whitespace-nowrap">straks</span>
+          ) : (
+            <span className="whitespace-nowrap text-muted">
+              {item.dueWord ?? "innen"} <span className="font-mono tabular-nums text-text">{item.due}</span>
+            </span>
+          )}
+          {/* The bookings are test data: one small word on the row, the band at the top says it once. */}
+          {item.booking && PMS_IS_TEST_DATA && <span className="text-xs text-muted">· {TEST_BOOKING_WORD}</span>}
         </span>
         {item.href && (
-          <Link href={item.href} className="flex min-h-11 items-center font-semibold text-accent-text hover:underline pointer-fine:min-h-8 print:hidden">
+          // Quiet ink with an arrow: orange on this page is the one thing to do (jury round 4, the design juror).
+          <Link href={item.href} className="group flex min-h-11 items-center gap-1 font-semibold text-text hover:underline pointer-fine:min-h-8 print:hidden">
             {item.linkLabel}
+            <RegenIcon name="arrow-right" size={16} strokeWidth={2} className="text-muted transition-transform duration-[120ms] ease-standard group-hover:translate-x-0.5 group-hover:text-text motion-reduce:transition-none" />
           </Link>
         )}
       </div>
@@ -460,24 +559,34 @@ function OpenRow({ item, marks, today }: { item: OpenItem; marks: Readonly<Recor
   );
 }
 
-/** The catch leads (jury round 3, the creative juror): the room the room check held back before anyone got a key to it. */
-function HeldFigure({ figures }: { figures: Figures }) {
+/** "Rom 209: meldt tomt kl. 03:47, men roboten satte inn bagasje kl. 01:29." (the robot's own contradiction, jury round 4, the Wybe engineer). */
+function contradictionShort(row: Contradiction): string {
+  return `Rom ${row.room.replace(/^room-/, "")}: meldt tomt kl. ${row.checkedAt?.slice(0, 5) ?? "--:--"}, men roboten satte inn ${row.arrival ? "bagasje" : "noe"} kl. ${row.placedAt?.slice(0, 5) ?? "--:--"}`;
+}
+
+/** The catch leads: the room the room check held back, said as the robot's own contradiction when it is one (no booking needed). */
+function HeldFigure({ figures, contradicted, to }: { figures: Figures; contradicted: readonly Contradiction[]; to: string | undefined }) {
+  const caught = figures.money.caught;
+  const own = contradicted[0];
   const held = figures.money.held;
-  const rooms = held.map((row) => row.room.replace(/^room-/, ""));
+  const rooms = caught.map((room) => room.replace(/^room-/, ""));
   const doubled = held.some((row) => row.arrival);
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <Stat size="lg" label="Holdt tilbake fra salg" value={held.length} unit={held.length === 1 ? "rom" : "rom"} />
-      <p className="text-xs text-muted">
-        Rom {rooms.join(", ")}
-        {doubled ? ": dobbelt tildelt?" : ": i bruk etter romsjekken"}
-      </p>
+      <FigureLink to={to ? itemAnchor(to) : null}>
+        <Stat size="lg" label="Holdt tilbake fra salg" value={caught.length} unit="rom" />
+      </FigureLink>
+      <p className="text-xs text-muted">{own ? contradictionShort(own) : `Rom ${rooms.join(", ")}${doubled ? ": bagasje for en annen ankomst" : ": i bruk etter romsjekken"}`}</p>
     </div>
   );
 }
 
-/** The money (jury round 2, the founder juror/the creative juror): what the room check can sell, a room-night that would otherwise stand unsold. */
-function MoneyFigure({ figures }: { figures: Figures | undefined }) {
+/**
+ * The money (jury round 4, the founder juror/the product juror): what the room check buys is time, "funnet ledig 5 timer
+ * tidligere", and the kroner are real only if tonight sells out, so tonight's bookings stand beside them.
+ * Sent to reception it reads pending, never sold.
+ */
+function MoneyFigure({ figures, to }: { figures: Figures | undefined; to: string | undefined }) {
   if (!figures) {
     return (
       <div className="flex flex-col gap-1">
@@ -486,7 +595,7 @@ function MoneyFigure({ figures }: { figures: Figures | undefined }) {
       </div>
     );
   }
-  const { money } = figures;
+  const { money, tonight } = figures;
   const toSell = money.toSell.length;
   const released = money.released.length;
   if (toSell === 0 && released === 0) {
@@ -494,26 +603,28 @@ function MoneyFigure({ figures }: { figures: Figures | undefined }) {
   }
   const value = toSell > 0 ? money.toSellValue : money.releasedValue;
   const rooms = (toSell > 0 ? money.toSell : money.released).map((row) => row.room.replace(/^room-/, ""));
+  const hours = hoursEarlier();
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <Stat
-        size="lg"
-        label={toSell > 0 ? "Kan selges etter bekreftelse" : "Frigitt for salg i dag"}
-        value={
-          <>
-            <span className="mr-1.5 font-sans text-base font-medium text-muted">ca.</span>
-            <Digits value={formatKroner(value)} />
-          </>
-        }
-        unit="kr"
-        tone={toSell === 0 ? "success" : undefined}
-      />
+      <FigureLink to={to ? itemAnchor(to) : null}>
+        <Stat
+          size="lg"
+          label={toSell > 0 ? `Funnet ledig ${hours} ${hours === 1 ? "time" : "timer"} tidligere` : "Sendt til resepsjonen"}
+          value={
+            <>
+              <span className="mr-1.5 font-sans text-base font-medium text-muted">ca.</span>
+              <Digits value={formatKroner(value)} />
+            </>
+          }
+          unit="kr"
+        />
+      </FigureLink>
       <p aria-live="polite" className="text-xs text-muted">
-        {toSell > 0 ? `Rom ${rooms.join(", ")} · ellers usolgt i natt` : `Rom ${rooms.join(", ")}`}
+        {toSell > 0 ? `Rom ${rooms.join(", ")} · hvis natten blir utsolgt · ${tonightLine(tonight.booked, tonight.rooms)}` : `Rom ${rooms.join(", ")} · venter på PMS-en`}
       </p>
-      {/* Mixed: some sold, some still to confirm; the running count a release moves (the pilot's number). */}
+      {/* Mixed: some sent, some still to confirm; the running count step 2 moves (the pilot's number). */}
       {toSell > 0 && released > 0 && <p className="text-xs text-muted">{releasedLine(money)}</p>}
-      <Disclosure summary="Slik regner vi">{moneyMethod(money)}</Disclosure>
+      <Disclosure summary="Slik regner vi">{moneyMethod(money, tonight)}</Disclosure>
     </div>
   );
 }

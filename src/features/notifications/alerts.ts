@@ -3,7 +3,7 @@ import type { DashboardData } from "@/features/dashboard/data";
 import { hhmm, percent } from "@/features/dashboard/format";
 import { placeLabel } from "@/features/dashboard/labels";
 import { batteryLow } from "@/features/dashboard/TopBar";
-import { corridorName, openWetFloors, SAFETY_DUE, STRANGER_OWNER, WET_FLOOR_OWNER } from "@/features/handover/safety";
+import { corridorName, openWetFloors, SAFETY_DUE, STRANGER_CHECK, STRANGER_OWNER, WET_FLOOR_OWNER } from "@/features/handover/safety";
 import { storeName } from "@/features/inventory/testData";
 import { type ModuleId, moduleById } from "@/features/modules/registry";
 import type { RegenName } from "@/ui/icons/regenPaths";
@@ -79,7 +79,7 @@ export function selectAlerts(data: AlertData): Alert[] {
         priority: "hoy",
         icon: "alert-triangle",
         title: `Vått gulv uten skilt i ${corridorName(floor.place)}`,
-        detail: `${floor.since ? `Siden ${hhmm(floor.since)}.` : "I natt."}${why} ${WET_FLOOR_OWNER}, innen ${SAFETY_DUE}.`,
+        detail: `${floor.since ? `Siden ${hhmm(floor.since)}.` : "I natt."}${why} ${WET_FLOOR_OWNER}, ${SAFETY_DUE}.`,
         action: wetAction,
       });
     }
@@ -112,8 +112,9 @@ export function selectAlerts(data: AlertData): Alert[] {
       module: screen,
       priority: "hoy",
       icon: "shield",
-      title: `En ukjent person ba om å komme inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}`,
-      detail: `${stranger.refusals.length > 1 ? `${hhmm(stranger.first)}–${hhmm(stranger.last)}. Roboten sa nei hver gang.` : `Kl. ${hhmm(stranger.first)}. Roboten sa nei.`} ${STRANGER_OWNER}: se på kamera og skriv en avviksmelding.`,
+      // Overlevering's neutral words (jury round 4, the creative juror): who he is, nobody knows; check the innocent explanation first.
+      title: `En person ba roboten slippe ham inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}`,
+      detail: `${stranger.refusals.length > 1 ? `${hhmm(stranger.first)}–${hhmm(stranger.last)}. Roboten sa nei hver gang.` : `Kl. ${hhmm(stranger.first)}. Roboten sa nei.`} ${STRANGER_CHECK} ${STRANGER_OWNER}, ${SAFETY_DUE}.`,
       action: open(screen),
     });
   }

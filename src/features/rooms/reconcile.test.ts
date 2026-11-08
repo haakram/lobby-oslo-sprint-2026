@@ -5,7 +5,7 @@ import { parseRunLog } from "@/features/nightshift/runlog";
 import type { RunLine } from "@/features/nightshift/runlog";
 import { addDays, osloToday } from "@/features/reception/dates";
 import { pmsLastNight, revenueLastNight } from "./pms";
-import { markRoom, personAtDoor, reconcileNight, reconcileRooms, robotDeliveries, robotRoomChecks, ROOM_CHECK_MARKS } from "./reconcile";
+import { allChecked, markRoom, personAtDoor, reconcileNight, reconcileRooms, robotDeliveries, robotRoomChecks, ROOM_CHECK_MARKS } from "./reconcile";
 import { TEST_NIGHT } from "./testNight";
 
 const demoLines = () => parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
@@ -86,6 +86,24 @@ describe("the robot's room checks against the booking system", () => {
     expect(bags.agree).toBe(1);
   });
 
+  it("209 is the robot's own contradiction: luggage placed inside at 01:29, the room reported empty and tidy at 03:47 (owner C's rule)", () => {
+    const today = "2026-11-08";
+    const result = reconcileNight(demoLines(), pmsLastNight(today), today);
+    const own = { room: "room-209", request: "R-049", checkedAt: "03:47:31", placedAt: "01:29:26", item: "luggage-209", arrival: true };
+    expect(result.contradicted).toEqual([own]);
+    expect(result.held.find((row) => row.room === "room-209")?.contradiction).toEqual(own);
+    // Without a booking system the contradiction still stands: no team-written booking needed.
+    expect(reconcileNight(demoLines(), new Map(), today).contradicted.map((row) => row.room)).toEqual(["room-209"]);
+  });
+
+  it("a contradicted room the system has as free is not counted as agreeing", () => {
+    const own = { request: "R-900", room: "311", placed: [{ item: "luggage-311", clock: "01:00:00" }], clock: "03:14:30", finding: "Nobody is here. The room is tidy." };
+    const plain = reconcileRooms(robotRoomChecks(TEST_NIGHT), new Map());
+    const contradicted = reconcileRooms(robotRoomChecks(TEST_NIGHT), new Map(), new Map(), undefined, [own]);
+    expect(contradicted.contradicted).toMatchObject([{ room: "room-311", request: "R-900", placedAt: "01:00:00", arrival: true }]);
+    expect(contradicted.agree).toBe(plain.agree - 1);
+  });
+
   it("names the person who opened the door, and nothing else", () => {
     expect(personAtDoor("Dr Kowalski opens the door of room-104.")).toBe("Dr Kowalski");
     expect(personAtDoor("Nobody is here.")).toBeNull();
@@ -121,5 +139,21 @@ describe("the marks staff set per day", () => {
     const released = { action: "released" as const, at: "06:03", by: "Siri Haugen", stamp: "2026-11-08T05:03:00.000Z", confirmed: { at: "06:02", by: "Siri Haugen", stamp: confirmed.stamp } };
     markRoom("2026-11-08", "room-213", released);
     expect(ROOM_CHECK_MARKS.read()["2026-11-08"]["room-213"]).toEqual(released);
+  });
+
+  it("stores step 1's evidence: which receptionist confirmed and the three checks, and rejects a check it does not know", () => {
+    const evidence = { receptionist: "Hanne Vold", checks: ["folio", "bagasje", "kort"] as ("folio" | "bagasje" | "kort")[] };
+    const confirmed = { action: "confirmed" as const, at: "06:02", by: "Siri Haugen", stamp: "2026-11-08T05:02:00.000Z", ...evidence };
+    markRoom("2026-11-08", "room-213", confirmed);
+    expect(ROOM_CHECK_MARKS.read()["2026-11-08"]["room-213"]).toEqual(confirmed);
+    const released = { action: "released" as const, at: "06:03", by: "Siri Haugen", confirmed: { at: "06:02", by: "Siri Haugen", ...evidence } };
+    markRoom("2026-11-08", "room-213", released);
+    expect(ROOM_CHECK_MARKS.read()["2026-11-08"]["room-213"]).toEqual(released);
+    expect(allChecked(evidence.checks)).toBe(true);
+    expect(allChecked(["folio", "kort"])).toBe(false);
+
+    markRoom("2026-11-08", "room-213", null); // a write drops the store's copy, so the next read is the browser's
+    localStorage.setItem("lobby:room-check-marks", JSON.stringify({ "2026-11-08": { "room-213": { ...confirmed, checks: ["folio", "trust me"] } } }));
+    expect(ROOM_CHECK_MARKS.read()).toEqual({ "2026-11-08": {} });
   });
 });

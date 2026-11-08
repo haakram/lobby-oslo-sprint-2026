@@ -133,7 +133,7 @@ describe("selectAlerts (the bell)", () => {
     expect([one.id, one.level]).toEqual(["handover", 1]);
   });
 
-  it("on the demo night: each unsigned wet floor is its own Haster with an owner and 06:30, then the stranger, before anything else", () => {
+  it("on the demo night: each unsigned wet floor is its own Haster with an owner and straks, then the stranger, before anything else", () => {
     const safety = nightSafety(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
     const alerts = selectAlerts({ ...busy(), safety });
     expect(alerts.slice(0, 5).map((alert) => [alert.id, alert.priority])).toEqual([
@@ -143,13 +143,15 @@ describe("selectAlerts (the bell)", () => {
       ["stranger", "hoy"],
       ["handover", "hoy"],
     ]);
-    expect(alerts[0]).toMatchObject({ title: "Vått gulv uten skilt i korridor 2B", detail: "Siden 23:51. Roboten skled der. Vaktmester / renhold, innen 06:30.", action: { href: "/vedlikehold" } });
-    expect(alerts[1].detail).toBe("Siden 04:38. Skiltet ble flyttet til korridor 3C. Vaktmester / renhold, innen 06:30.");
+    expect(alerts[0]).toMatchObject({ title: "Vått gulv uten skilt i korridor 2B", detail: "Siden 23:51. Roboten skled der. Vaktmester, straks.", action: { href: "/vedlikehold" } });
+    expect(alerts[1].detail).toBe("Siden 04:38. Skiltet ble flyttet til korridor 3C. Vaktmester, straks.");
     expect(alerts[3]).toMatchObject({
       level: 7,
       icon: "shield",
-      title: "En ukjent person ba om å komme inn på 7 rom",
-      detail: "01:17–05:11. Roboten sa nei hver gang. Sikkerhet / resepsjon: se på kamera og skriv en avviksmelding.",
+      // Overlevering's neutral words: never "se på kamera og skriv en avviksmelding" about a possibly locked-out guest.
+      title: "En person ba roboten slippe ham inn på 7 rom",
+      detail:
+        "01:17–05:11. Roboten sa nei hver gang. Sjekk først om en gjest var låst ute (ring rommene, se nøkkelkortloggen). Ved tvil: avvik etter hotellets rutine. Resepsjon, straks.",
       action: { label: "Åpne Overlevering", href: "/overlevering" },
     });
     // The robot manager can't open Overlevering: the stranger opens Natteskift for them.

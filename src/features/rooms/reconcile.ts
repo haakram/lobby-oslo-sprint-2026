@@ -1,3 +1,4 @@
+import { type SelfContradiction, selfContradictions } from "@/features/nightshift/conduct";
 import type { RunLine } from "@/features/nightshift/runlog";
 import { createLocalStore, recordOf } from "@/features/modules/localStore";
 import type { PmsRoom } from "./pms";
@@ -20,6 +21,11 @@ import type { PmsRoom } from "./pms";
  *   guest there until tomorrow, a double allocation).
  * - **Flere ankomster**: the robot carried bags for two or more arrivals into one room tonight (jury
  *   round 3, the Wybe juror: 212 got three, 304 two). Read from the robot's own log, no booking system needed.
+ * - **Motsier seg selv**: the robot's room check reported the room empty and tidy after it had itself
+ *   put something inside earlier that night (jury round 4, the Wybe engineer: luggage-209 placed at 01:29, "Nobody
+ *   is here. The room is tidy." at 03:47). The camera and the task log disagree, so the room is never
+ *   offered, with or without a booking system. The rule is owner C's `selfContradictions`
+ *   (nightshift/conduct.ts), the same one the judgement card's "8 av 9 holder mot egen logg" counts.
  * Read from the run log's `room_status` decisions (docs/ARCHITECTURE.md § 4.3), the last one per room,
  * and its `place` calls. Pure: no clock, no I/O (today is passed in).
  */
@@ -121,6 +127,20 @@ export type Sellable = {
   departure: string | null;
 };
 export type GuestFound = { room: string; at: string | null; source: string | null; who: string | null };
+/** The robot's own log contradicts its room check: it put something inside before it reported the room empty. */
+export type Contradiction = {
+  room: string;
+  /** The room check's request (R-049), so a screen can say how it was counted. */
+  request: string | null;
+  /** When the room check said empty, HH:MM:SS. */
+  checkedAt: string | null;
+  /** The earliest delivery into the room before that check. */
+  placedAt: string | null;
+  item: string;
+  /** It was an arriving guest's bags. */
+  arrival: boolean;
+};
+
 export type Held = Sellable & {
   /** When the robot last put something in the room, HH:MM:SS. */
   deliveredAt: string | null;
@@ -130,6 +150,8 @@ export type Held = Sellable & {
   arrival: boolean;
   /** How many arrivals' bags went in (distinct bags requests): 3 at 209 on the demo night. */
   arrivals: number;
+  /** The room check said empty after the robot had already put something inside (209 at 01:29 / 03:47). */
+  contradiction: Contradiction | null;
 };
 /** A room the robot carried bags into for two or more arrivals tonight: more guests than it holds. */
 export type Crowded = {
@@ -157,6 +179,11 @@ export type Reconciliation = {
   dueOut: Sellable[];
   /** Bags for two or more arrivals in one room (from the robot's log alone), rooms not already held. */
   crowded: Crowded[];
+  /**
+   * Every room whose room check said empty after the robot put something inside it earlier tonight,
+   * booked or not (from the robot's log alone). A booked one is also in `held`, with the same contradiction.
+   */
+  contradicted: Contradiction[];
 };
 
 /** One per arrival: the bags requests (or, without one, the luggage items) that went into a room. */
@@ -188,6 +215,18 @@ function holding(deliveries: readonly Delivery[] | undefined, checkedAt: string 
   return (deliveries ?? []).filter((delivery) => delivery.arrival || nightMinute(delivery.at) > after);
 }
 
+/** Owner C's self-contradictions (nightshift/conduct.ts), keyed by room id: the last one per room, as the room's last check. */
+function contradictionsByRoom(found: readonly SelfContradiction[]): Map<string, Contradiction> {
+  const rooms = new Map<string, Contradiction>();
+  for (const entry of found) {
+    const first = entry.placed[0];
+    if (!first) continue;
+    const room = `room-${entry.room}`;
+    rooms.set(room, { room, request: entry.request, checkedAt: entry.clock, placedAt: first.clock, item: first.item, arrival: /^luggage/i.test(first.item) });
+  }
+  return rooms;
+}
+
 /**
  * `today` (YYYY-MM-DD) splits a guest due out today (no extra sale) from a room the system holds
  * tonight; without it every empty-and-tidy booked room counts as one to sell.
@@ -197,19 +236,33 @@ export function reconcileRooms(
   pms: ReadonlyMap<string, PmsRoom>,
   deliveries: ReadonlyMap<string, readonly Delivery[]> = new Map(),
   today?: string,
+  /** The robot's room checks its own log contradicts (owner C's `selfContradictions`). */
+  selfContradicted: readonly SelfContradiction[] = [],
 ): Reconciliation {
+  const contradictions = contradictionsByRoom(selfContradicted);
   const sellable: Sellable[] = [];
   const guestFound: GuestFound[] = [];
   const tooEarly: Sellable[] = [];
   const held: Held[] = [];
   const dueOut: Sellable[] = [];
+  const contradicted: Contradiction[] = [];
   for (const check of checks.values()) {
+    // Only while the room's last word is still the contradicted "empty": a later check supersedes it.
+    const contradiction = check.status === "klar" && check.source === "room_check" ? (contradictions.get(check.room) ?? null) : null;
+    if (contradiction) contradicted.push(contradiction);
     const booked = pms.get(check.room);
     if (booked && check.status === "klar" && check.source === "room_check") {
       const row: Sellable = { room: check.room, guest: booked.guest, at: check.at, departure: booked.departure };
       const holds = holding(deliveries.get(check.room), check.at);
       if (holds.length > 0) {
-        held.push({ ...row, deliveredAt: holds.at(-1)?.at ?? null, deliveries: holds, arrival: holds.some((delivery) => delivery.arrival), arrivals: arrivalsOf(holds).length });
+        held.push({
+          ...row,
+          deliveredAt: holds.at(-1)?.at ?? null,
+          deliveries: holds,
+          arrival: holds.some((delivery) => delivery.arrival),
+          arrivals: arrivalsOf(holds).length,
+          contradiction,
+        });
       } else if (!lateEnough(check.at)) tooEarly.push(row);
       else if (today !== undefined && booked.departure === today) dueOut.push(row);
       else sellable.push(row);
@@ -223,30 +276,56 @@ export function reconcileRooms(
     const arrivals = arrivalsOf(list);
     if (arrivals.length >= 2 && !heldRooms.has(room)) crowded.push({ room, arrivals: arrivals.length, at: arrivals.map((delivery) => delivery.at) });
   }
+  // A contradicted room the system has as free still disagrees with itself: it is not an agreement.
+  const unbookedContradictions = contradicted.filter((row) => !heldRooms.has(row.room)).length;
   return {
     checked: checks.size,
-    agree: checks.size - sellable.length - guestFound.length - tooEarly.length - held.length - dueOut.length,
+    agree: checks.size - sellable.length - guestFound.length - tooEarly.length - held.length - dueOut.length - unbookedContradictions,
     sellable: sellable.sort(byRoom),
     guestFound: guestFound.sort(byRoom),
     tooEarly: tooEarly.sort(byRoom),
     held: held.sort(byRoom),
     dueOut: dueOut.sort(byRoom),
     crowded: crowded.sort(byRoom),
+    contradicted: contradicted.sort(byRoom),
   };
 }
 
 /** The room check of a whole night: the robot's checks and deliveries against the booking system. */
 export function reconcileNight(lines: readonly RunLine[], pms: ReadonlyMap<string, PmsRoom>, today?: string): Reconciliation {
-  return reconcileRooms(robotRoomChecks(lines), pms, robotDeliveries(lines), today);
+  return reconcileRooms(robotRoomChecks(lines), pms, robotDeliveries(lines), today, selfContradictions(lines));
 }
 
 // ---------------------------------------------------------------------------------------------
 // What staff did about each one today: released for sale, or a task for reception.
 
+/** What reception checked before a room the robot found empty is sold (jury round 4, the law juror): all three, each a tick. */
+export const CONFIRM_CHECKS = [
+  { id: "folio", label: "Folioen er gjort opp", short: "folio" },
+  { id: "bagasje", label: "Ingen bagasje på rommet", short: "bagasje" },
+  { id: "kort", label: "Nøkkelkortet er sperret", short: "kort" },
+] as const;
+
+export type ConfirmCheck = (typeof CONFIRM_CHECKS)[number]["id"];
+
+/** Step 1's evidence: who at reception confirmed, and what they checked (stored with who recorded it and when). */
+export type Confirmation = {
+  at: string;
+  /** Who recorded it (the logged-in name). */
+  by: string | null;
+  stamp?: string;
+  /** The receptionist who confirmed (jury round 4: a name, not the person tapping). */
+  receptionist?: string;
+  /** What reception checked: every one of CONFIRM_CHECKS before step 2 opens. */
+  checks?: ConfirmCheck[];
+};
+
 export type RoomCheckMark = {
   /**
-   * confirmed: reception confirmed the guest has left (step 1 of selling a room; never one tap).
-   * released: marked free to sell (step 2). task: a task for reception (a guest without a booking).
+   * confirmed: reception confirmed the guest has left (step 1 of selling a room; never one tap), with
+   * the receptionist's name and the three checks. released: sent to reception to check the guest out in
+   * the booking system (step 2): the pilot reads the PMS and never writes it, so the room reads "Venter
+   * på PMS-en" until the booking system shows it free. task: a task for reception (a guest without a booking).
    */
   action: "released" | "task" | "confirmed";
   /** Wall clock HH:MM when it was marked. */
@@ -255,9 +334,20 @@ export type RoomCheckMark = {
   by: string | null;
   /** When it was marked, ISO (src/ui/stamp.ts), for "Siri Haugen · nå" (older marks have only `at`). */
   stamp?: string;
+  /** Step 1 on a confirmed mark: the receptionist who confirmed. */
+  receptionist?: string;
+  /** Step 1 on a confirmed mark: what reception checked. */
+  checks?: ConfirmCheck[];
   /** On a released room: the confirmation it was released on, so Angre steps back to it. */
-  confirmed?: { at: string; by: string | null; stamp?: string };
+  confirmed?: Confirmation;
 };
+
+const CHECK_IDS = new Set<string>(CONFIRM_CHECKS.map((check) => check.id));
+
+/** Every one of the three checks is ticked. */
+export function allChecked(checks: readonly string[] | undefined): boolean {
+  return CONFIRM_CHECKS.every((check) => checks?.includes(check.id));
+}
 
 /** Marks per day (YYYY-MM-DD, Oslo), then per room: tomorrow starts clean. */
 export type RoomCheckMarks = Record<string, Record<string, RoomCheckMark>>;
@@ -267,7 +357,13 @@ const ACTIONS = new Set(["released", "task", "confirmed"]);
 const isStamp = (value: unknown): boolean => {
   if (!value || typeof value !== "object") return false;
   const stamp = value as Record<string, unknown>;
-  return typeof stamp.at === "string" && (stamp.by === null || typeof stamp.by === "string") && (stamp.stamp === undefined || typeof stamp.stamp === "string");
+  return (
+    typeof stamp.at === "string" &&
+    (stamp.by === null || typeof stamp.by === "string") &&
+    (stamp.stamp === undefined || typeof stamp.stamp === "string") &&
+    (stamp.receptionist === undefined || typeof stamp.receptionist === "string") &&
+    (stamp.checks === undefined || (Array.isArray(stamp.checks) && stamp.checks.every((check) => typeof check === "string" && CHECK_IDS.has(check))))
+  );
 };
 
 const isMark = (value: unknown): value is RoomCheckMark => {

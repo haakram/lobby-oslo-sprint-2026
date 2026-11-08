@@ -12,10 +12,10 @@ import { osloToday } from "@/features/reception/dates";
 import { formatClock } from "@/features/reception/format";
 import { Badge, Button, Card, RegenIcon, Skeleton } from "@/ui";
 import { actionStamp, stampNow, useNowMs } from "@/ui/stamp";
-import { BookingEvidence } from "./BookingEvidence";
-import { PMS_IS_TEST_DATA, TEST_BOOKING_LABEL } from "./pms";
+import { BookingEvidence, TestBookingWord } from "./BookingEvidence";
+import { bookedTonight } from "./pms";
 import { moneyHeadline, moneyMethod, releasedLine, shortDate } from "./money";
-import { type Crowded, type GuestFound, type Held, markRoom, type RoomCheckMark, type Sellable } from "./reconcile";
+import { type Contradiction, type Crowded, type GuestFound, type Held, markRoom, type RoomCheckMark, type Sellable } from "./reconcile";
 import { SellSteps } from "./SellSteps";
 import { useRoomCheck } from "./useRoomCheck";
 
@@ -32,10 +32,11 @@ function clocks(times: readonly (string | null)[]): string {
  * holds tonight that can be sold after reception confirms (two steps, never one tap), the rooms Fettero
  * held back because the robot delivered into them tonight (a double allocation caught), the rooms where
  * the robot met a guest the system doesn't have, and, from the robot's log alone, rooms that got bags
- * for more than one arrival. Every row that rests on the bookings says they are test data, and where a
- * pilot gets the evidence without the robot opening a booked room. Marked per day in this browser.
- * TODO(phase-3): *Merk som ledig for salg* writes the room status to the PMS; the task goes to the
- * shared request desk.
+ * for more than one arrival. The panel says once that the bookings are test data, and where a pilot gets
+ * the evidence without the robot opening a booked room; each row resting on them carries "testbooking".
+ * Marked per day in this browser. The pilot reads the PMS and never writes it: *Send til resepsjonen*
+ * hands the check-out to reception. TODO(phase-3): the PMS connector reads the check-out back; the task
+ * goes to the shared request desk.
  */
 export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { lines: readonly RunLine[] | null; today?: string; rooms?: readonly RoomView[] | null }) {
   const { user, effectiveRole } = useSession();
@@ -58,10 +59,14 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
   };
 
   const sellable = result?.sellable.length ?? 0;
-  const held = result?.held.length ?? 0;
+  const heldRooms = new Set(result?.held.map((row) => row.room));
+  // A room check the robot's own log contradicts, on a room the system has free: held back too (209's rule without a booking).
+  const ownOnly = result?.contradicted.filter((row) => !heldRooms.has(row.room)) ?? [];
+  const held = (result?.held.length ?? 0) + ownOnly.length;
+  const tonight = { booked: bookedTonight(today), rooms: rooms?.length || 36 };
   const crowded = result?.crowded.length ?? 0;
   const headline = money ? moneyHeadline(money) : null;
-  const allReleased = money ? money.toSell.length === 0 && money.released.length > 0 : false;
+
 
   return (
     <section aria-labelledby="room-checks-heading" data-enter>
@@ -71,6 +76,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
           title="Robotens romsjekk mot bookingsystemet"
           note={result ? `${result.agree} av ${result.checked} sjekkede rom stemmer med systemet.` : undefined}
         />
+        {result && (sellable > 0 || held > 0 || result.guestFound.length > 0) && <BookingEvidence className="mt-1" />}
 
         {!result || !money ? (
           <div role="status" aria-busy="true" className="mt-4 flex flex-col gap-3">
@@ -95,15 +101,15 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
           <div ref={list} className="mt-4 flex flex-col gap-5">
             {headline && (
               <div className="flex items-start gap-2">
-                {/* Green only for what is done: a room released. A room still to confirm is plain. */}
-                <RegenIcon name={allReleased ? "circle-check" : "key"} size={22} className={allReleased ? "mt-0.5 shrink-0 text-success" : "mt-0.5 shrink-0 text-muted"} />
+                {/* Never green here: a room sent to reception waits for the booking system (jury round 4, the product juror). */}
+                <RegenIcon name="key" size={22} className="mt-0.5 shrink-0 text-muted" />
                 <div className="flex flex-col gap-0.5">
                   <p aria-live="polite" className="text-lg font-semibold tracking-[-0.01em]">
                     {headline}
                   </p>
                   {(sellable > 0 || money.released.length > 0) && (
                     <p className="text-sm text-muted">
-                      {releasedLine(money)}. {moneyMethod(money)}
+                      {releasedLine(money)}. {moneyMethod(money, tonight)}
                     </p>
                   )}
                 </div>
@@ -130,6 +136,9 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
                   <ul className="mt-1 divide-y divide-line">
                     {result.held.map((row) => (
                       <HeldRow key={row.room} row={row} today={today} guestsLink={guestsLink} />
+                    ))}
+                    {ownOnly.map((row) => (
+                      <OwnContradictionRow key={row.room} row={row} />
                     ))}
                   </ul>
                 </div>
@@ -196,6 +205,11 @@ export function crowdedLine(row: Crowded): string {
   return `Bagasje for ${row.arrivals} ankomster i natt${at ? ` (${at})` : ""}.`;
 }
 
+/** "Meldt tomt og ryddig kl. 03:47, men roboten satte inn bagasje her kl. 01:29.": the robot's own log against its check (the Wybe engineer). */
+export function contradictionLine(row: Contradiction): string {
+  return `Meldt tomt og ryddig kl. ${hhmm(row.checkedAt)}, men roboten satte inn ${row.arrival ? "bagasje" : "noe"} her kl. ${hhmm(row.placedAt)}.`;
+}
+
 /** Rom's held row: "Bagasje for 3 ankomster levert, sist 05:16, men bookingen har gjest til 9.11. Dobbelt tildelt?" */
 export function heldRowLine(row: Held): string {
   const until = row.departure ? ` til ${shortDate(row.departure)}` : "";
@@ -244,7 +258,25 @@ function SellableRow({ row, mark, today }: { row: Sellable; mark: RoomCheckMark 
       <p className="text-muted">
         Roboten fant rommet tomt og ryddig <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>.
       </p>
-      <BookingEvidence className="mt-1.5" />
+      <TestBookingWord />
+    </RowFrame>
+  );
+}
+
+/** A room the system has as free whose room check the robot's own log contradicts: never offered, from the log alone. */
+function OwnContradictionRow({ row }: { row: Contradiction }) {
+  return (
+    <RowFrame
+      room={row.room}
+      action={
+        <Badge tone="success">
+          <RegenIcon name="shield-check" size={14} className="mr-1 inline-block align-[-0.15em]" />
+          Fettero holdt rommet tilbake
+        </Badge>
+      }
+    >
+      <p className="font-semibold">{contradictionLine(row)}</p>
+      <p className="text-muted">Kameraet og robotens egen logg er uenige: se på rommet før det selges.</p>
     </RowFrame>
   );
 }
@@ -288,12 +320,14 @@ function HeldRow({ row, today, guestsLink }: { row: Held; today: string; guestsL
         </>
       }
     >
-      <p className="font-semibold">{heldRowLine(row)}</p>
+      {/* The robot's own contradiction leads, no booking needed; the double allocation is its consequence. */}
+      {row.contradiction && <p className="font-semibold">{contradictionLine(row.contradiction)}</p>}
+      <p className={row.contradiction ? "text-muted" : "font-semibold"}>{heldRowLine(row)}</p>
       <p className="text-muted">
         {bookingLine(row, today)}. Roboten fant rommet tomt og ryddig <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>
         {earlier.length > 0 ? `, og bar inn bagasje også kl. ${clocks(earlier)}` : ""}. Flytt én av dem før innsjekk kl. 15:00.
       </p>
-      <BookingEvidence className="mt-1.5" />
+      <TestBookingWord />
     </RowFrame>
   );
 }
@@ -347,7 +381,7 @@ function GuestRow({
       <p className="text-muted">
         {seen} <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>.
       </p>
-      {PMS_IS_TEST_DATA && <p className="mt-1.5 text-xs text-muted"><span className="rounded-sm bg-sunken px-1.5 py-0.5 font-mono">{TEST_BOOKING_LABEL}</span></p>}
+      <TestBookingWord />
     </RowFrame>
   );
 }

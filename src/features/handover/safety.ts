@@ -14,13 +14,25 @@ import { placeLabel } from "@/features/dashboard/labels";
  *   robot slipped there (`wet_floor` with `slipped`), the sign moved away at what time and to where.
  * - **The stranger**: the robot's refusals to let a person in (`robotJudgement`, the same count as the
  *   judgement card), one incident with its first and last time and the doors.
+ * - **Who was told** (jury round 4, the law juror): a hazard the hotel knew about is the hotel's to act on at
+ *   once, so each item says whether a person was told in the night (a staff entry for the same place in
+ *   the log: `source: "staff"`) or that nobody was, "varsle nå". Never a fixed deadline hours later.
  */
 
-/** Who owns what can hurt a guest (jury round 3): a role, so the page holds whoever is on. */
-export const WET_FLOOR_OWNER = "Vaktmester / renhold";
-export const STRANGER_OWNER = "Sikkerhet / resepsjon";
-/** Before the breakfast traffic: the first guests are in the corridors from 06:30. */
-export const SAFETY_DUE = "06:30";
+/** Who owns what can hurt a guest (jury round 3; round 4: real roles, not one name for everything). */
+export const WET_FLOOR_OWNER = "Vaktmester";
+export const STRANGER_OWNER = "Resepsjon";
+/**
+ * A known hazard is acted on at once (jury round 4, the law juror: "siden 23:51 … innen 06:30" read as a
+ * scheduled six-and-a-half-hour delay): the deadline is "straks", with who was told beside it.
+ */
+export const SAFETY_DUE = "straks";
+
+/** What to do about the stranger, in the neutral words Overlevering and the bell share (jury round 3, the law juror; round 4, the creative juror). */
+export const STRANGER_CHECK = "Sjekk først om en gjest var låst ute (ring rommene, se nøkkelkortloggen). Ved tvil: avvik etter hotellets rutine.";
+
+/** A person was told about it in the night: when (HH:MM:SS), and who wrote it down. */
+export type Notified = { at: string | null; by: string | null };
 
 export type WetFloor = {
   /** "corridor-2b". */
@@ -33,6 +45,8 @@ export type WetFloor = {
   slippedAt: string | null;
   /** The sign that stood here was moved to a newer spill: when, and to where. */
   signMoved: { at: string | null; to: string | null } | null;
+  /** The night staff wrote it down in the night (a staff entry for this place), or null: nobody was told. */
+  notified: Notified | null;
 };
 
 export type StrangerIncident = {
@@ -44,6 +58,8 @@ export type StrangerIncident = {
   rooms: string[];
   /** Rooms the robot waited to open until he was gone. */
   keycardWaits: string[];
+  /** The night staff wrote it down in the night (a staff security entry), or null: nobody was told. */
+  notified: Notified | null;
 };
 
 export type NightSafety = { wetFloors: WetFloor[]; stranger: StrangerIncident | null };
@@ -54,16 +70,35 @@ function str(value: unknown): string | null {
 
 type Sign = { place: string; request: string | null; index: number; moved: { at: string | null; for: string | null } | null };
 
+/** An entry the night staff made (owner B's night-clerk input writes the robot's line kinds with `source: "staff"`). */
+function fromStaff(line: RunLine): boolean {
+  if (line.type !== "decision") return false;
+  const data = (line.data ?? {}) as Record<string, unknown>;
+  return data.source === "staff" || (line as { source?: unknown }).source === "staff";
+}
+
+function staffEntry(data: Record<string, unknown>, clock: string | null): Notified {
+  return { at: str(data.at) ?? str(data.clock) ?? clock, by: str(data.by) ?? str(data.name) ?? str(data.author) };
+}
+
 export function nightSafety(lines: readonly RunLine[]): NightSafety {
   const wet: { id: string; place: string; at: string | null; index: number }[] = [];
   const signs: Sign[] = [];
   const slips = new Map<string, string | null>();
+  const staffHazards = new Map<string, Notified>();
+  let staffSecurity: Notified | null = null;
   let clock: string | null = null;
 
   lines.forEach((line, index) => {
     if ((line.type === "call" || line.type === "state") && line.clock) clock = line.clock;
     if (line.type !== "decision") return;
     const data = (line.data ?? {}) as Record<string, unknown>;
+    if (fromStaff(line)) {
+      const place = str(data.place);
+      if (line.kind === "hazard" && place && !staffHazards.has(place)) staffHazards.set(place, staffEntry(data, clock));
+      if (line.kind === "security_event" && !staffSecurity) staffSecurity = staffEntry(data, clock);
+      return;
+    }
     if (line.kind === "work_order" && data.type === "sol") {
       const place = str(data.place);
       const text = str(data.text) ?? "";
@@ -99,6 +134,7 @@ export function nightSafety(lines: readonly RunLine[]): NightSafety {
       since: moved?.moved?.at ?? order.at,
       slippedAt: slips.get(order.place) ?? null,
       signMoved: moved?.moved ? { at: moved.moved.at, to } : null,
+      notified: staffHazards.get(order.place) ?? null,
     });
   }
 
@@ -106,7 +142,14 @@ export function nightSafety(lines: readonly RunLine[]): NightSafety {
   const refusals = strangers.refusals;
   const stranger: StrangerIncident | null =
     refusals.length > 0
-      ? { refusals, first: refusals[0].clock, last: refusals.at(-1)?.clock ?? refusals[0].clock, rooms: strangers.rooms, keycardWaits: strangers.keycardWaits }
+      ? {
+          refusals,
+          first: refusals[0].clock,
+          last: refusals.at(-1)?.clock ?? refusals[0].clock,
+          rooms: strangers.rooms,
+          keycardWaits: strangers.keycardWaits,
+          notified: staffSecurity,
+        }
       : null;
 
   return { wetFloors: [...byPlace.values()], stranger };

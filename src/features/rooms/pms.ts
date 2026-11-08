@@ -15,13 +15,16 @@ import { stays } from "@/features/guests/testData";
  * False once the PMS integration reads a real hotel's bookings.
  */
 export const PMS_IS_TEST_DATA = true;
-/** The calm label on every room-check row while the bookings are test data. */
-export const TEST_BOOKING_LABEL = "Testdata: bookingen er lagt inn av teamet";
+/** The page-level line while the bookings are test data (one quiet band, jury round 4, the creative juror). */
+export const TEST_BOOKING_LABEL = "Bookingene er testdata lagt inn av teamet";
+/** The small word on a row that rests on a test booking, in the text face (never a mono chip). */
+export const TEST_BOOKING_WORD = "testbooking";
 /**
  * Where a pilot gets the same evidence without the robot opening a booked room (jury round 3,
- * the law juror/the Holio juror; PRD § 6: in a pilot the robot only checks rooms the system has as vacant).
+ * the law juror/the Holio juror; PRD § 6: in a pilot the robot only checks rooms the system has as vacant), said as
+ * the minimised signal it is (jury round 4, the law juror: one derived signal per room, never who).
  */
-export const PILOT_EVIDENCE = "I en pilot: dørlåsloggen og energibryteren. Roboten går ikke inn i rom som er booket.";
+export const PILOT_EVIDENCE = "I en pilot: ett signal per rom fra dørlåsen (gjestekort brukt siden kl. 18), aldri hvem. Roboten går ikke inn i rom som er booket.";
 
 export type PmsRoom = {
   room: string;
@@ -66,6 +69,16 @@ export function pmsLastNight(today: string = osloToday()): ReadonlyMap<string, P
     occupied.set(stay.room, { room: stay.room, guest: stay.name, departure: stay.departure, rate: RATES[stay.room] ?? STANDARD_RATE });
   }
   return occupied;
+}
+
+/**
+ * Tonight's bookings on the books (the night after the handover): stays that cover tonight. A booking
+ * whose check-out was never recorded (213) is not counted: the guest has gone, only the system still
+ * holds the room. The kroner the room check finds are extra only if tonight sells out (jury round 4,
+ * the founder juror), so the screen shows this beside them. TODO(phase-3): read from the PMS.
+ */
+export function bookedTonight(today: string = osloToday()): number {
+  return stays(today).filter((stay) => stay.arrival <= today && stay.departure > today).length;
 }
 
 export type RoomRevenue = {

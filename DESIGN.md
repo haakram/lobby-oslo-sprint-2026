@@ -1,11 +1,11 @@
-# Design system: Lobby
+# Design system: Fettero
 
 > Every screen reuses these values; components never hard-code a colour, font or size that isn't
 > here. Changing a token is a team decision (it changes every screen). The tokens live in
 > `src/app/globals.css` (CSS variables + Tailwind `@theme`); Tailwind's own colour and radius
 > palettes are switched off there, so only these names exist.
 
-Character: **a calm, precise operations tool for a hotel you trust at 06:00.** Lobby is one place to
+Character: **a calm, precise operations tool for a hotel you trust at 06:00.** Fettero is one place to
 see and run the whole hotel, with AI: a robot that works the night, a receptionist that answers the
 phone, and the rooms, guests, requests, work orders, stores and shifts around them. Industrial, not
 playful: concrete and white paper for the working screens, night steel for the robot's world, one
@@ -14,6 +14,29 @@ sometimes in gloves.
 
 (Team lead 2026-11-07 21:30: the "night desk" redesign of the evening is retired; this is the look the
 code has. Everything below is read from `globals.css`, `layout.tsx` and `src/ui/`.)
+
+## Name and line
+
+One name, one line, the same everywhere a person reads them (jury round 1 counted three names and four
+taglines). The words live in `src/ui/brand.ts`; the rail, the phone's top bar, the login page, every
+page title (`Rom og renhold | Fettero`) and the meta description read them from there.
+
+- **Name: Fettero.** The product, the app and its AI ("Fettero foreslår å si ja", "Snakk med Fettero").
+  *Lobby* was the working name until 2026-11-08; it is retired in everything people read, because a funded
+  Zurich hotel-AI company already trades as Lobby on the same PMS channel (Apaleo). Code identifiers keep
+  the old name (`LOBBY_USERS`, `lobby:` storage keys, `scripts/lobby-hash.mjs`); renaming them buys nothing
+  on screen. The team lead decides whether `main` follows this branch.
+- **The line: *Natten, ærlig overlevert.*** In English: *The night, handed over honestly.* It names the
+  differentiator: the morning gets the night as it was, every "done" confirmed by the server. Login lede,
+  meta description, README top, first slide and last spoken line; nowhere a second tagline.
+- **What it is, in one sentence:** *Roboten tar natten, og morgenvakten får hele hotellet på én side kl.
+  06:00.* Goes after the line (login, meta description).
+- **The hotel is *Hotell Nattskift*:** only the demo hotel's name, under the product's name in the rail and
+  in Oversikt's top bar. The host sees *Korttidsutleie i Oslo* there instead.
+- **The robot is *roboten*,** lower case, in running text ("Roboten fullførte 73 av 77 oppdrag"). It is
+  not called Fettero: Fettero is the product the robot works for.
+- The name is set in Schibsted Grotesk 700, tight (−0.02 em in the rail, −0.03 em on login); no logo mark,
+  no orange in the name (orange is the one action and the robot).
 
 ## Character, one decision per axis
 
@@ -91,8 +114,14 @@ AI-resepsjonisten."
 
 ### Navigation groups
 
-The rail and the Meny sheet show the modules in five labelled groups, in registry order; a role
-sees only the modules it may open, and a group with nothing left in it is dropped.
+The rail and the Meny sheet show the modules in labelled groups, in registry order (`groupsFor` in
+`src/ui/nav.ts`); a role sees only the modules it may open, and a group with nothing left in it is dropped.
+Two cuts keep the demo rail short (jury round 1: 18 entries was too many): the admin's rail is the hotel's
+(Utleie is not in it; the user plate's menu links to it under *Andre visninger* · *Utleie for verter*, and
+the group shows while an admin is on one of its screens), and a screen whose service the server lacks is
+left out for every role (`needs` in the registry: *Snakk gjennom roboten* without `ELEVENLABS_AGENT_ID`;
+opened by its address, the screen says what is missing). Entries per role, without the voice agent:
+admin 13 (was 18), robotansvarlig 9 (was 10), resepsjonist 8, vert 4.
 
 - **Hotellet:** Oversikt · Rom og renhold · Gjester og bookinger · Ruter
 - **Drift:** Overlevering 06:00 · Forespørsler · Vedlikehold · Lager og lin · Ansatte og vakter
@@ -103,10 +132,10 @@ sees only the modules it may open, and a group with nothing left in it is droppe
   needs the host sits in the bell; amber and red appear only there, on the items that need action.
 
 The bell (`NotificationBell`) is part of the navigation, so it is on every hotel page for every hotel
-role: at the top of the rail beside the name on desktop, and on a phone in a slim dark top bar (*Lobby*,
+role: at the top of the rail beside the name on desktop, and on a phone in a slim dark top bar (*Fettero*,
 the hotel, the bell) above the page. The host's screens carry their own bell in their top bar, so the
 hotel's bell is never shown to the host, nor on /vert to an admin: one bell per screen. For the host the
-slim bar reads *Lobby* and *Korttidsutleie i Oslo*, and the name links to /vert. On Oversikt that bar runs straight into the dark top bar, so the
+slim bar reads *Fettero* and *Korttidsutleie i Oslo*, and the name links to /vert. On Oversikt that bar runs straight into the dark top bar, so the
 phone reads one dark header.
 
 The phone bar holds the role's first four *pinned* modules (Oversikt, Rom, then Gjester / Forespørsler
@@ -176,7 +205,7 @@ Both families are self-hosted through `next/font/google` in `src/app/layout.tsx`
 |---|---|---|---|---|
 | Titles | Schibsted Grotesk | 700 | 32 (phone) · 48 (desktop) for a screen's name; 20 for a panel's | A grotesk drawn for a Norwegian publisher: plain, sturdy, with real æ ø å. Tight tracking as size grows: −0.01 em at 20, −0.02 em at 32, −0.03 em at 48. |
 | Text | Schibsted Grotesk | 400, 500, 600 | 12 · 14 · 16 · 20 | Body 16/24; dense lists 14/20; labels, hints and source notes 12/16. 600 for the name in a row, 500 for group labels. |
-| Figures and identifiers | Martian Mono | 400, 500 | 12 (room numbers on tiles, ids) · 24 (figures, the clock) · 32 (a large figure) | Only for data people compare: counts, percentages, the clock, room numbers, request ids. Wide and even, reads like a shelf label. Always `tabular-nums`. |
+| Figures and identifiers | Martian Mono | 400, 500 | 12 (room numbers on tiles, ids) · 24 (figures, the clock) · 32 (a large figure) | Only for data people compare: counts, percentages, the clock, room numbers, request ids. Wide and even, reads like a shelf label. Always `tabular-nums`. A figure's separators and words (the decimal comma, the thousands space, "ca.", " %") are set in the text face by `Figure` (`src/ui/Figure.tsx`, used by `Stat`), or a monospace reads "4,7" as "4 , 7". |
 
 Type scale (Tailwind names, `globals.css`): `xs` 12/16 · `sm` 14/20 · `base` 16/24 · `lg` 20/28 ·
 `xl` 24/30 · `2xl` 32/38 · `3xl` 48/52 · `display` 72/72. Under 640 px a screen's title steps down
@@ -226,6 +255,11 @@ Ikke sjekket dashed `line-strong`. *Avvik is not a status:* it is a quiet ink ma
 left edge and the word, with a count; a `muted` icon on Oversikt's small tiles) drawn over whatever
 status the room has; what it needs is on Vedlikehold and in the bell. A legend icon for a status no
 room is in stays `muted`. The robot is `accent`.
+One look per state, from the same file: `tag` (the key tag beside the word) and `tile` (the rack's
+pigeonhole); `RoomStatusTag` draws tag + word for lists, sheets and panels instead of a coloured badge;
+`AvvikMark` draws the ink marker with its count ("1 åpent avvik", never a red badge); `roomPaint(status,
+avvik)` tells plans and the 3D hotel the fill token and an ink outline for an avvik (a room known only by its
+avvik is painted *Ikke sjekket* with the outline, never a red fill).
 
 ## Spacing and radii
 

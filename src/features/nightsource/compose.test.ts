@@ -11,7 +11,7 @@ import { demoCalls } from "@/features/reception/demoCalls";
 import { phoneTasks } from "@/features/requests/phoneTasks";
 import { selectRequests } from "@/features/requests/select";
 import type { RoomCheckMark } from "@/features/rooms/reconcile";
-import { CLERK_SAMPLE, hazardLine, retractLine, roomLine } from "@/features/staffinput/entries";
+import { acknowledgeLine, CLERK_SAMPLE, hazardLine, retractLine, roomLine, signPlacedLine } from "@/features/staffinput/entries";
 import { clerkNoteOf, composeWithoutRobot } from "./compose";
 
 const TODAY = "2026-11-08";
@@ -51,15 +51,17 @@ describe("Overlevering without a robot", () => {
     expect(sale?.text).toMatch(/^Rom 213 kan selges fra kl. 06:00/);
     expect(sale?.text).toContain("hvis natten blir utsolgt");
     expect(sale?.text).toContain("Ola Nygård skulle reist 7.11, men utsjekken ble aldri registrert");
-    expect(sale?.text).toContain("Dørlåsen: ingen kort i energibryteren siden 22:10. Kjersti Lund så rommet tomt og ryddig kl. 04:24.");
+    expect(sale?.text).toContain("Dørlåsen: ingen kort i energibryteren siden kl. 18:00. Kjersti Lund så rommet tomt og ryddig kl. 04:24.");
+    // No guest's clock from the lock: the window, never a time a card went in.
+    expect(sale?.text).not.toContain("22:10");
     expect(sale?.text).toMatch(/Bekreftet av to kilder\.$/);
     expect(result.evidence.get("room-213")).toMatchObject({ verdict: "confirmed", word: "bekreftet" });
   });
 
-  it("puts the clerk's safety items first, each with an owner and the safety deadline", () => {
+  it("puts the clerk's safety items first, each with an owner, the safety deadline and whether a sign is out", () => {
     const { handover, safety } = withoutRobot();
     expect(handover.open[0]).toMatchObject({ safety: true, owner: WET_FLOOR_OWNER, due: SAFETY_DUE, href: "/natt" });
-    expect(handover.open[0].text).toBe("Vått gulv i lobbyen, meldt av Kjersti Lund kl. 02:15. Ved inngangen, etter regnet. Sett ut skilt eller tørk opp før gjestene står opp.");
+    expect(handover.open[0].text).toBe("Vått gulv i lobbyen, meldt av Kjersti Lund kl. 02:15, skilt satt ut 02:16. Ved inngangen, etter regnet. Tørk opp før gjestene står opp.");
     expect(handover.figures.safety).toEqual({ wetFloors: 1, stranger: false });
     expect(safety).toEqual({ count: 1, detail: "1 vått gulv, meldt av nattevakten" });
   });
@@ -67,7 +69,7 @@ describe("Overlevering without a robot", () => {
   it("names a guest the booking system doesn't have, from the lock's card and the clerk's knock", () => {
     const guest = withoutRobot().handover.open.find((item) => item.id === "guest-room-210");
     expect(guest?.text).toContain("Rom 210: en gjest uten booking");
-    expect(guest?.text).toContain("Dørlåsen: kort i energibryteren siden 23:05. Kjersti Lund så gjest eller bagasje i rommet kl. 23:24. Bekreftet av to kilder.");
+    expect(guest?.text).toContain("Dørlåsen: kort i energibryteren. Kjersti Lund så gjest eller bagasje i rommet kl. 23:24. Bekreftet av to kilder.");
   });
 
   it("uses the clerk's note and her entries for what happened, in the night's order, beside the AI receptionist's calls", () => {
@@ -91,10 +93,12 @@ describe("Overlevering without a robot", () => {
     expect(result.handover.figures.money.toSell).toEqual([]);
     expect(result.handover.open.some((item) => item.id === "sellable")).toBe(false);
     const flag = result.handover.open.find((item) => item.id === "lock-room-213");
-    expect(flag?.text).toContain("Rom 213: ingen kort i energibryteren siden 22:10. Ola Nygård skulle reist 7.11");
+    expect(flag?.text).toContain("Rom 213: Ola Nygård skulle reist 7.11");
     expect(flag).toMatchObject({ owner: DESK_OWNER, booking: true });
     expect(flag?.text).toContain("Ingen har sett i rommet: sjekk det før det selges.");
-    expect(flag?.text).toMatch(/Dørlåsen: ingen kort i energibryteren siden 22:10\. Ikke bekreftet\.$/);
+    expect(flag?.text).toMatch(/Dørlåsen: ingen kort i energibryteren siden kl\. 18:00\. Ikke bekreftet\.$/);
+    // The lock's word once per row, not twice.
+    expect(flag?.text.match(/energibryteren/g)).toHaveLength(1);
     expect(result.evidence.get("room-213")?.verdict).toBe("unconfirmed");
   });
 
@@ -129,7 +133,26 @@ describe("Overlevering without a robot", () => {
   it("says an entry typed outside the night (on a demo, by day) without a clock", () => {
     const day = hazardLine("wet", "corridor-2b", "", { by: "Siri Haugen", now: new Date("2026-11-08T17:10:00Z") }); // 18:10 Oslo
     const item = withoutRobot([...CLERK_SAMPLE, day]).handover.open.find((entry) => entry.text.startsWith("Vått gulv i korridor 2B"));
-    expect(item?.text).toBe("Vått gulv i korridor 2B, meldt av Siri Haugen. Sett ut skilt eller tørk opp før gjestene står opp.");
+    expect(item?.text).toBe("Vått gulv i korridor 2B, meldt av Siri Haugen, uten skilt. Sett ut skilt eller tørk opp før gjestene står opp.");
+  });
+
+  it("says a wet floor reported without a sign, and the sign put out later, in the clerk's clock", () => {
+    const at = new Date("2026-11-08T01:40:00Z"); // 02:40 Oslo
+    const wet = hazardLine("wet", "corridor-2b", "", { by: "Kjersti Lund", now: at });
+    const id = String(wet.type === "decision" && wet.data?.id);
+    const bare = withoutRobot([...CLERK_SAMPLE, wet]).handover.open.find((entry) => entry.id === `staff-${id}`);
+    expect(bare?.text).toBe("Vått gulv i korridor 2B, meldt av Kjersti Lund kl. 02:40, uten skilt siden 02:40. Sett ut skilt eller tørk opp før gjestene står opp.");
+    const later = signPlacedLine(id, { by: "Kjersti Lund", now: new Date("2026-11-08T01:52:00Z") }); // 02:52 Oslo
+    const result = withoutRobot([...CLERK_SAMPLE, wet, later]);
+    expect(result.handover.open.find((entry) => entry.id === `staff-${id}`)?.text).toBe("Vått gulv i korridor 2B, meldt av Kjersti Lund kl. 02:40, skilt satt ut 02:52. Tørk opp før gjestene står opp.");
+    expect(result.handover.timeline.some((line) => line.at === "02:52" && line.text === "Kjersti Lund satte ut skilt i korridor 2B.")).toBe(true);
+  });
+
+  it("leaves out a robot hazard she acknowledged: with no robot it is not one of her entries", () => {
+    const ack = acknowledgeLine({ key: "wet:corridor-2b:23:51:33", hazard: "wet", place: "corridor-2b", at: "23:51:33" }, { by: "Kjersti Lund", now: new Date("2026-11-07T22:53:00Z") });
+    const result = withoutRobot([...CLERK_SAMPLE, ack]);
+    expect(result.sources.staffEntries).toBe(4);
+    expect(texts(result).some((text) => /Kvitter/.test(text))).toBe(false);
   });
 
   it("still makes a page when the clerk logged nothing: the door lock's flags and the calls, and an honest note", () => {

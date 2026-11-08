@@ -200,7 +200,8 @@
                   "place": { "type": "string" },
                   "hazard": { "enum": ["wet", "obstacle", "other"] },
                   "since": { "$ref": "#/$defs/clock" },
-                  "signed": { "type": "boolean", "description": "A warning sign stands there." }
+                  "signed": { "type": "boolean", "description": "A warning sign stands there. The night clerk answers it on every wet floor (Skilt satt ut? Ja / Nei)." },
+                  "signedAt": { "description": "When the sign went out (HH:MM:SS), or null; a later `sign_placed` line sets it too.", "anyOf": [{ "$ref": "#/$defs/clock" }, { "type": "null" }] }
                 }
               }
             }
@@ -209,15 +210,15 @@
         {
           "if": { "properties": { "kind": { "const": "room_signal" } } },
           "then": {
-            "description": "The door lock and the energy slot: one derived signal per room at the handover, never who (staff and master cards filtered at the source; no card id, no entry list).",
+            "description": "The door lock and the energy slot: one derived signal per room at the handover, never who and never when (staff and master cards filtered at the source; no card id, no entry list, no guest's clock).",
             "properties": {
               "data": {
                 "type": "object",
                 "required": ["room", "signal", "source"],
                 "properties": {
                   "room": { "type": "string" },
-                  "signal": { "enum": ["no_card", "card_in"], "description": "no_card: no guest card used at the door and none in the energy slot since `since`; card_in: a guest card in the energy slot since `since`." },
-                  "since": { "$ref": "#/$defs/clock", "description": "Null: the whole window from 18:00." },
+                  "signal": { "enum": ["no_card", "card_in"], "description": "no_card: no guest card used at the door and none in the energy slot in the window; card_in: a guest card is in the energy slot (a yes, with no clock)." },
+                  "since": { "$ref": "#/$defs/clock", "description": "no_card only; null (the whole window from 18:00) in the sample. Never on card_in: a time sent there is dropped on read (data minimisation)." },
                   "source": { "const": "door_lock" }
                 }
               }
@@ -242,6 +243,35 @@
             "description": "A correction (Angre): the line with this id no longer counts. Nothing is deleted.",
             "properties": {
               "data": { "type": "object", "required": ["target"], "properties": { "target": { "type": "string" }, "source": { "type": "string" }, "by": { "type": "string" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "sign_placed" } } },
+          "then": {
+            "description": "The night clerk put a sign out later on a wet floor she reported without one. Angre retracts this line.",
+            "properties": {
+              "data": { "type": "object", "required": ["target"], "properties": { "target": { "type": "string", "description": "The wet floor's hazard line id." }, "source": { "type": "string" }, "by": { "type": "string" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "acknowledged" } } },
+          "then": {
+            "description": "The night clerk saw a robot hazard (Kvitter on /natt): who and when, the outside signal the handover times the wait against.",
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": ["target", "hazard"],
+                "properties": {
+                  "target": { "type": "string", "description": "wet:<place>:<since> for a wet floor, person:<first refusal> for the person at the doors." },
+                  "hazard": { "enum": ["wet", "person"] },
+                  "place": { "type": ["string", "null"] },
+                  "robotAt": { "description": "The robot's clock for the hazard.", "anyOf": [{ "$ref": "#/$defs/clock" }, { "type": "null" }] },
+                  "source": { "type": "string" },
+                  "by": { "type": "string" }
+                }
+              }
             }
           }
         },

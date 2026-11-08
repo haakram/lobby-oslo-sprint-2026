@@ -6,14 +6,17 @@ import { hhmm } from "@/features/dashboard/format";
 import { placeLabel } from "@/features/dashboard/labels";
 import type { RoomView } from "@/features/dashboard/selectors";
 import { useNight } from "@/features/dashboard/useNight";
-import { type DoorFlag, type DoorSignal, doorLockFlags, doorLockLines, doorLockSignals, doorSignalText } from "@/features/doorlock/feed";
+import { type DoorFlag, doorLockFlags, doorLockLines, doorLockSignals, doorSignalText } from "@/features/doorlock/feed";
+import { nightSafety } from "@/features/handover/safety";
 import type { HotelMap } from "@/features/hotel";
+import type { RunStatus } from "@/features/nightshift/useRun";
 import { ModulePage, PanelHead } from "@/features/modules/ModulePage";
 import { shortDate } from "@/features/rooms/money";
 import { type PmsRoom, pmsLastNight } from "@/features/rooms/pms";
 import { Badge, Button, Card, cx, ErrorState, RegenIcon, Skeleton } from "@/ui";
 import { actionStamp, useNowMs } from "@/ui/stamp";
 import {
+  acknowledgeLine,
   appendStaffLine,
   HAZARD_CHOICES,
   type HazardKind,
@@ -24,9 +27,12 @@ import {
   retractLine,
   ROOM_CHOICES,
   roomLine,
+  signPlacedLine,
   type StaffRoomStatus,
 } from "./entries";
-import { entryText, placePhrase, readStaffLog, type StaffEntry, staffRooms, statusWord } from "./read";
+import { entryText, placePhrase, readStaffLog, signPhrase, type StaffAck, type StaffEntry, staffAcks, staffRooms, statusWord } from "./read";
+import { RETENTION_DAYS } from "./retention";
+import { type RobotHazard, robotHazardsOf } from "./robotHazards";
 import { useStaffLines } from "./useStaffLines";
 
 const DAY_LABEL = new Intl.DateTimeFormat("nb-NO", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
@@ -46,12 +52,17 @@ function entryStamp(entry: StaffEntry, now: number): string {
   return actionStamp(entry.by, entry.stamp, now);
 }
 
-/** What the booking system says about a room tonight, in the desk's words. */
-function bookingLine(booked: PmsRoom | undefined, day: string): string {
+/**
+ * What the booking system says about a room tonight, in the desk's words. The guest's name only where
+ * the lock and the booking system disagree (`named`): there she is checking his departure; elsewhere
+ * "booket" is all she needs (round 6, legal review: no guest name on an unflagged room).
+ */
+function bookingLine(booked: PmsRoom | undefined, day: string, named: boolean): string {
   if (!booked) return "Systemet: ledig i natt";
-  if (booked.departure < day) return `Systemet: ${booked.guest ?? "en gjest"}, skulle reist ${shortDate(booked.departure)} (utsjekk ikke registrert)`;
-  if (booked.departure === day) return `Systemet: ${booked.guest ?? "en gjest"}, reiser i dag`;
-  return `Systemet: ${booked.guest ?? "en gjest"} til ${shortDate(booked.departure)}`;
+  const who = named ? (booked.guest ?? "en gjest") : "booket";
+  if (booked.departure < day) return `Systemet: ${who}, skulle reist ${shortDate(booked.departure)} (utsjekk ikke registrert)`;
+  if (booked.departure === day) return `Systemet: ${who}, reiser i dag`;
+  return named ? `Systemet: ${who} til ${shortDate(booked.departure)}` : `Systemet: booket til ${shortDate(booked.departure)}`;
 }
 
 /** The places a safety item can be: the hotel's corridors and shared spaces, floor by floor. */
@@ -89,9 +100,15 @@ export function NightClerkScreen({ viewerUrl }: { viewerUrl?: string }) {
   const pms = useMemo(() => pmsLastNight(day), [day]);
   const signals = useMemo(() => doorLockSignals(doorLockLines()), []);
   const flags = useMemo(() => doorLockFlags(signals, pms), [signals, pms]);
+  // The robot's hazards as its run log has them (a live shift grows its log), and which she acknowledged.
+  const safety = useMemo(() => (run.status === "ready" ? nightSafety(run.lines) : null), [run.status, run.lines]);
+  const robotHazards = useMemo(() => robotHazardsOf(safety), [safety]);
+  const acks = useMemo(() => staffAcks(entries), [entries]);
   const [selected, setSelected] = useState<string | null>(null);
   const roomPanel = useRef<HTMLDivElement>(null);
 
+  // No robot that night (an empty log): no box for it.
+  const robotNight = run.status !== "empty";
   const add = (entry: Parameters<typeof appendStaffLine>[1]) => appendStaffLine(day, entry);
   const who = () => ({ by, now: new Date() });
   // From a flag at the top: bring the room's choices into view and to the keyboard once they are drawn.
@@ -110,11 +127,28 @@ export function NightClerkScreen({ viewerUrl }: { viewerUrl?: string }) {
 
   return (
     <ModulePage module="natt" lede="Det du ser i natt, rett inn i overleveringen kl. 06:00." meta={<Badge>Til overleveringen {dayLabel(day)}</Badge>}>
-      {/* Phone: the lock's flags, the rooms, safety, the note, the log. Desktop: the work on the left, the flags and the log on the right. */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] lg:grid-rows-[auto_1fr] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] xl:gap-8">
-        <CheckFirst flags={flags} logged={logged} onChoose={choose} className="lg:col-start-2 lg:row-start-1" />
+      {/* Phone: the robot's hazards, the lock's flags, the rooms, safety, the note, the log. Desktop: the work on the left; the robot, the flags and the log on the right. */}
+      <div
+        className={cx(
+          "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] xl:gap-8",
+          robotNight ? "lg:grid-rows-[auto_auto_1fr]" : "lg:grid-rows-[auto_1fr]",
+        )}
+      >
+        {robotNight && (
+          <FromRobot
+            status={run.status}
+            hazards={robotHazards}
+            acks={acks}
+            now={now}
+            onAck={(hazard) => add(acknowledgeLine(hazard, who()))}
+            onUndo={(id) => add(retractLine(id, who()))}
+            onRetry={run.retry}
+            className="lg:col-start-2 lg:row-start-1"
+          />
+        )}
+        <CheckFirst flags={flags} logged={logged} onChoose={choose} className={cx("lg:col-start-2", robotNight ? "lg:row-start-2" : "lg:row-start-1")} />
 
-        <div className="flex min-w-0 flex-col gap-6 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+        <div className={cx("flex min-w-0 flex-col gap-6 lg:col-start-1 lg:row-start-1", robotNight ? "lg:row-span-3" : "lg:row-span-2")}>
           <section aria-labelledby="rooms-heading" data-enter>
             <Card className="sm:p-6">
               <PanelHead id="rooms-heading" title="Rom" note="Velg rommet, så det du så." />
@@ -149,7 +183,7 @@ export function NightClerkScreen({ viewerUrl }: { viewerUrl?: string }) {
                         ref={roomPanel}
                         room={selected}
                         booked={pms.get(selected)}
-                        door={signals.get(selected)}
+                        flag={flags.find((flag) => flag.room === selected)}
                         current={logged.get(selected)}
                         day={day}
                         now={now}
@@ -163,13 +197,119 @@ export function NightClerkScreen({ viewerUrl }: { viewerUrl?: string }) {
             </Card>
           </section>
 
-          <SafetyForm map={map} onReport={(kind, place, note) => add(hazardLine(kind, place, note, who()))} />
+          <SafetyForm map={map} onReport={(kind, place, note, signed) => add(hazardLine(kind, place, note, who(), signed))} />
           <NoteForm onSave={(text) => add(noteLine(text, who()))} />
         </div>
 
-        <Tonight entries={entries} now={now} onUndo={(id) => add(retractLine(id, who()))} className="lg:col-start-2 lg:row-start-2" />
+        <Tonight
+          entries={entries}
+          now={now}
+          onUndo={(id) => add(retractLine(id, who()))}
+          onSign={(id) => add(signPlacedLine(id, who()))}
+          className={cx("lg:col-start-2", robotNight ? "lg:row-start-3" : "lg:row-start-2")}
+        />
       </div>
     </ModulePage>
+  );
+}
+
+/**
+ * Fra roboten (round 6, domain review: "06:00 is the wrong moment for safety"): what the robot's run log
+ * says can hurt a guest, at the robot's clock, newest first, each with one *Kvitter* tap. The tap is the
+ * outside signal: who saw it and when, stored like her other entries, and Overlevering shows how long each
+ * hazard waited for a person. Once acknowledged, a row folds to one line with *Angre*.
+ */
+function FromRobot({
+  status,
+  hazards,
+  acks,
+  now,
+  onAck,
+  onUndo,
+  onRetry,
+  className,
+}: {
+  status: RunStatus;
+  hazards: readonly RobotHazard[];
+  acks: ReadonlyMap<string, StaffAck>;
+  now: number;
+  onAck: (hazard: RobotHazard) => void;
+  onUndo: (id: string) => void;
+  onRetry: () => void;
+  className?: string;
+}) {
+  const open = hazards.filter((hazard) => !acks.has(hazard.key)).length;
+  const newest = [...hazards].reverse();
+  return (
+    <section aria-labelledby="robot-heading" data-enter className={className}>
+      <Card className="sm:p-6">
+        <PanelHead
+          id="robot-heading"
+          title="Fra roboten"
+          action={status === "ready" && open > 0 ? <Badge tone="danger">{open} ikke kvittert</Badge> : undefined}
+        />
+        <p className="mt-1 text-sm text-muted">Det roboten meldte som kan skade en gjest. Kvitter når du har sett det.</p>
+        {status === "loading" ? (
+          <div role="status" aria-busy="true" className="mt-3 flex flex-col gap-3">
+            <span className="sr-only">Henter det roboten meldte</span>
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+          </div>
+        ) : status === "error" ? (
+          <div className="mt-3 flex flex-col items-start gap-2">
+            <p className="text-sm">Fikk ikke lastet det roboten meldte. Sjekk nettet og prøv igjen.</p>
+            <Button variant="secondary" size="sm" onClick={onRetry}>
+              Prøv igjen
+            </Button>
+          </div>
+        ) : hazards.length === 0 ? (
+          <p className="mt-3 flex items-start gap-2 text-base">
+            <RegenIcon name="circle-check" size={20} className="mt-0.5 shrink-0 text-success" />
+            Roboten har ikke meldt noe som kan skade en gjest.
+          </p>
+        ) : (
+          <ul className="mt-2 divide-y divide-line">
+            {newest.map((hazard) => {
+              const ack = acks.get(hazard.key);
+              const clock = hazard.at ? hhmm(hazard.at) : "–";
+              if (ack) {
+                return (
+                  <li key={hazard.key} className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 py-2.5">
+                    <div className="flex min-w-0 grow basis-48 flex-col gap-0.5">
+                      <p className="text-sm">
+                        <span className="font-mono tabular-nums">{clock}</span> {hazard.title}
+                      </p>
+                      <p className="flex items-center gap-1.5 text-xs text-muted">
+                        <RegenIcon name="circle-check" size={14} className="shrink-0 text-success" />
+                        Kvittert av {entryStamp(ack, now)}
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="sm" className="-mr-3" onClick={() => onUndo(ack.id)} aria-label={`Angre kvitteringen: ${hazard.title}`}>
+                      Angre
+                    </Button>
+                  </li>
+                );
+              }
+              return (
+                <li key={hazard.key} className="flex flex-col gap-2 py-3">
+                  <div className="flex items-baseline gap-3">
+                    <span className="font-mono text-sm font-medium tabular-nums">{clock}</span>
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <p className="text-base font-semibold">{hazard.title}</p>
+                      <p className="text-sm text-muted">{hazard.detail}</p>
+                    </div>
+                  </div>
+                  <Button variant="secondary" size="sm" className="self-start" onClick={() => onAck(hazard)} aria-label={`Kvitter: ${hazard.title}`}>
+                    Kvitter
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="mt-3 text-xs text-muted">Fra robotens natt (kjøringsloggen). Overleveringen viser hvem som kvitterte, og hvor lenge det ventet.</p>
+      </Card>
+    </section>
   );
 }
 
@@ -222,7 +362,7 @@ function CheckFirst({ flags, logged, onChoose, className }: { flags: readonly Do
             )}
           </>
         )}
-        <p className="mt-3 text-xs text-muted">Dørlåsen gir ett signal per rom, aldri hvem. Testdata til låsen er koblet til.</p>
+        <p className="mt-3 text-xs text-muted">Dørlåsen gir ett signal per rom, aldri hvem eller når. Testdata til låsen er koblet til.</p>
       </Card>
     </section>
   );
@@ -311,7 +451,7 @@ function RoomChoices({
   ref,
   room,
   booked,
-  door,
+  flag,
   current,
   day,
   now,
@@ -321,7 +461,8 @@ function RoomChoices({
   ref: Ref<HTMLDivElement>;
   room: string;
   booked: PmsRoom | undefined;
-  door: DoorSignal | undefined;
+  /** Set where the lock and the booking system disagree: only then the lock's line and the guest's name. */
+  flag: DoorFlag | undefined;
   current: (StaffEntry & { kind: "room" }) | undefined;
   day: string;
   now: number;
@@ -334,8 +475,10 @@ function RoomChoices({
         <h3 data-room-heading tabIndex={-1} className="flex items-baseline gap-2 outline-none">
           <span className="text-lg font-semibold">Rom</span> <span className="font-mono text-2xl font-medium tabular-nums">{number(room)}</span>
         </h3>
-        <p className="text-sm">{bookingLine(booked, day)}</p>
-        {door && <p className="text-sm">Dørlåsen: {doorSignalText(door)}</p>}
+        <p className="text-sm">{bookingLine(booked, day, Boolean(flag))}</p>
+        {/* Round 6, legal review: the lock's word only where it and the booking system disagree. */}
+        {flag && <p className="text-sm">Dørlåsen: {doorSignalText(flag.signal)}</p>}
+        {booked && <p className="text-sm text-muted">Rommet er booket: bank på og vent før du går inn.</p>}
       </div>
       <div role="group" aria-label={`Hva du så på rom ${number(room)}`} className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
         {ROOM_CHOICES.map((choice) => {
@@ -379,27 +522,39 @@ function RoomChoices({
   );
 }
 
-function SafetyForm({ map, onReport }: { map: HotelMap; onReport: (kind: HazardKind, place: string, note: string) => void }) {
+function SafetyForm({ map, onReport }: { map: HotelMap; onReport: (kind: HazardKind, place: string, note: string, signed: boolean) => void }) {
   const groups = useMemo(() => placesOf(map), [map]);
   const [kind, setKind] = useState<HazardKind>("wet");
   const [place, setPlace] = useState("");
+  // A wet floor needs an answer: is a sign out (round 6, legal review: the record shows care when there was care).
+  const [signed, setSigned] = useState<boolean | null>(null);
   const [note, setNote] = useState("");
   const [error, setError] = useState(false);
+  const [signError, setSignError] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const select = useRef<HTMLSelectElement>(null);
+  const signYes = useRef<HTMLButtonElement>(null);
+  const wet = kind === "wet";
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!place) {
-      setError(true);
-      select.current?.focus();
+    const missingPlace = !place;
+    const missingSign = wet && signed === null;
+    if (missingPlace || missingSign) {
+      setError(missingPlace);
+      setSignError(missingSign);
+      if (missingPlace) select.current?.focus();
+      else signYes.current?.focus();
       return;
     }
-    onReport(kind, place, note);
-    setDone(`${HAZARD_CHOICES.find((choice) => choice.kind === kind)?.word ?? "Saken"} ${placePhrase(place)} er meldt.`);
+    onReport(kind, place, note, wet && signed === true);
+    const what = `${HAZARD_CHOICES.find((choice) => choice.kind === kind)?.word ?? "Saken"} ${placePhrase(place)}`;
+    setDone(wet ? `${what} er meldt, ${signed ? "skilt satt ut" : "uten skilt"}.` : `${what} er meldt.`);
     setPlace("");
     setNote("");
+    setSigned(null);
     setError(false);
+    setSignError(false);
   };
 
   return (
@@ -416,7 +571,10 @@ function SafetyForm({ map, onReport }: { map: HotelMap; onReport: (kind: HazardK
                   key={choice.kind}
                   type="button"
                   aria-pressed={kind === choice.kind}
-                  onClick={() => setKind(choice.kind)}
+                  onClick={() => {
+                    setKind(choice.kind);
+                    setSignError(false);
+                  }}
                   className={cx(
                     "min-h-11 rounded-sm px-4 text-sm font-semibold whitespace-nowrap transition-colors duration-[120ms] ease-standard",
                     kind === choice.kind ? "bg-surface text-text" : "text-muted hover:text-text",
@@ -463,6 +621,40 @@ function SafetyForm({ map, onReport }: { map: HotelMap; onReport: (kind: HazardK
               </p>
             )}
           </div>
+          {wet && (
+            <fieldset className="flex flex-col gap-2" aria-describedby={signError ? "safety-sign-error" : undefined}>
+              <legend className="mb-2 text-sm font-medium">Skilt satt ut?</legend>
+              {/* Two equal answers: neither is the loud one. */}
+              <div className={cx("inline-flex gap-0.5 self-start rounded-sm bg-sunken p-0.5", signError && "ring-1 ring-danger")}>
+                {[
+                  { value: true, word: "Ja" },
+                  { value: false, word: "Nei" },
+                ].map((choice) => (
+                  <button
+                    key={choice.word}
+                    ref={choice.value ? signYes : undefined}
+                    type="button"
+                    aria-pressed={signed === choice.value}
+                    onClick={() => {
+                      setSigned(choice.value);
+                      setSignError(false);
+                    }}
+                    className={cx(
+                      "min-h-11 min-w-20 rounded-sm px-4 text-sm font-semibold whitespace-nowrap transition-colors duration-[120ms] ease-standard",
+                      signed === choice.value ? "bg-surface text-text" : "text-muted hover:text-text",
+                    )}
+                  >
+                    {choice.word}
+                  </button>
+                ))}
+              </div>
+              {signError && (
+                <p id="safety-sign-error" className="text-sm text-danger">
+                  Svar ja eller nei, så vet morgenvakten om gulvet står uten skilt.
+                </p>
+              )}
+            </fieldset>
+          )}
           <div className="flex flex-col gap-1.5">
             <label htmlFor="safety-note" className="text-sm font-medium">
               Mer om det <span className="font-normal text-muted">(valgfritt)</span>
@@ -474,7 +666,7 @@ function SafetyForm({ map, onReport }: { map: HotelMap; onReport: (kind: HazardK
               maxLength={120}
               enterKeyHint="send"
               autoComplete="off"
-              placeholder="F.eks. skilt satt ut"
+              placeholder="F.eks. ved inngangen"
               className="min-h-12 w-full max-w-xl rounded-md border border-line-strong bg-sunken px-3 text-base text-text placeholder:text-muted"
             />
           </div>
@@ -560,7 +752,20 @@ function NoteForm({ onSave }: { onSave: (text: string) => void }) {
   );
 }
 
-function Tonight({ entries, now, onUndo, className }: { entries: readonly StaffEntry[]; now: number; onUndo: (id: string) => void; className?: string }) {
+function Tonight({
+  entries,
+  now,
+  onUndo,
+  onSign,
+  className,
+}: {
+  entries: readonly StaffEntry[];
+  now: number;
+  onUndo: (id: string) => void;
+  /** The sign is out now on a wet floor she reported without one. */
+  onSign: (id: string) => void;
+  className?: string;
+}) {
   const newest = [...entries].reverse();
   const active = entries.filter((entry) => !entry.retracted).length;
   const samples = entries.some((entry) => entry.sample);
@@ -578,21 +783,29 @@ function Tonight({ entries, now, onUndo, className }: { entries: readonly StaffE
                   <p className={cx("text-sm", entry.retracted && "text-muted line-through")}>{entryText(entry)}</p>
                   <p className="text-xs text-muted">
                     {entryStamp(entry, now)}
+                    {entry.kind === "hazard" && !entry.retracted && signPhrase(entry) ? ` · ${signPhrase(entry)}` : ""}
                     {entry.sample ? " · eksempel" : ""}
                     {entry.retracted ? " · angret" : ""}
                   </p>
                 </div>
                 {!entry.retracted && (
-                  <Button variant="ghost" size="sm" className="-mr-3" onClick={() => onUndo(entry.id)} aria-label={`Angre: ${entryText(entry)}`}>
-                    Angre
-                  </Button>
+                  <div className="-mr-3 flex items-center gap-1">
+                    {entry.kind === "hazard" && entry.signed === false && (
+                      <Button variant="secondary" size="sm" onClick={() => onSign(entry.id)} aria-label={`Skilt satt ut: ${entryText(entry)}`}>
+                        Skilt satt ut
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={() => onUndo(entry.id)} aria-label={`Angre: ${entryText(entry)}`}>
+                      Angre
+                    </Button>
+                  </div>
                 )}
               </li>
             ))}
           </ul>
         )}
         <p className="mt-3 text-xs text-muted">
-          Lagres på denne enheten i piloten.{samples ? " Eksemplene er testdata: en nattevakts natt, skrevet av teamet." : ""} Angre legger til en linje, den sletter ingenting.
+          Lagres på denne enheten i {RETENTION_DAYS} dager.{samples ? " Eksemplene er testdata: en nattevakts natt, skrevet av teamet." : ""} Angre legger til en linje, den sletter ingenting.
         </p>
       </Card>
     </section>

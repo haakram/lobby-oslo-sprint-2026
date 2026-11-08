@@ -2,16 +2,19 @@ import { type RunLine, parseRunLog } from "@/features/nightshift/runlog";
 import type { PmsRoom } from "@/features/rooms/pms";
 
 /**
- * The door lock and the energy slot as a run-log producer (jury round 5, the law juror/the product juror/the founder juror): the
- * lock vendor's room-management system gives Fettero ONE derived signal per room at 06:00, never who.
- * Staff and master cards are filtered out at the source; no card id, no name, no entry list ever
- * reaches the app (docs/PRIVACY.md). A `room_signal` decision per room (docs/runlog.schema.json):
+ * The door lock and the energy slot as a run-log producer (jury round 5): the lock vendor's
+ * room-management system gives Fettero ONE derived signal per room at 06:00, never who and never when.
+ * Staff and master cards are filtered out at the source; no card id, no name, no entry list and no
+ * guest's clock ever reaches the app (docs/PRIVACY.md). A `room_signal` decision per room
+ * (docs/runlog.schema.json):
  *
- *   {"v":1,"type":"decision","kind":"room_signal","data":{"room":"room-213","signal":"no_card","since":"22:10:00","source":"door_lock"}}
+ *   {"v":1,"type":"decision","kind":"room_signal","data":{"room":"room-213","signal":"no_card","since":null,"source":"door_lock"}}
+ *   {"v":1,"type":"decision","kind":"room_signal","data":{"room":"room-210","signal":"card_in","source":"door_lock"}}
  *
- * - `no_card`: no guest card used at the door and none in the energy slot since `since` (null: not in
- *   the whole window from 18:00).
- * - `card_in`: a guest card has been in the energy slot since `since`.
+ * - `no_card`: no guest card used at the door and none in the energy slot in the window (`since` null:
+ *   the whole window from 18:00, the only clock the feed carries).
+ * - `card_in`: a guest card is in the energy slot, a yes with no clock (round 6, legal review: data
+ *   minimisation, Art. 5(1)(c) and 25). A time a feed sends anyway is dropped on read.
  *
  * Read as evidence, never as a sale: a booked room with no card is a room worth a look, and only a person
  * (the night clerk, then reception) turns it into a room to sell. Pure; no I/O.
@@ -28,49 +31,47 @@ export const SIGNAL_WINDOW_FROM = "18:00";
 export const DOOR_LOCK_IS_TEST_DATA = true;
 export const DOOR_LOCK_TEST_LABEL = "Testdata: dørlåsens signal er skrevet av teamet";
 
-const card = (room: number, since: string) =>
-  `{"v":1,"type":"decision","kind":"room_signal","data":{"room":"room-${room}","signal":"card_in","since":"${since}:00","source":"door_lock"}}`;
-const none = (room: number, since: string | null) =>
-  `{"v":1,"type":"decision","kind":"room_signal","data":{"room":"room-${room}","signal":"no_card","since":${since ? `"${since}:00"` : "null"},"source":"door_lock"}}`;
+const card = (room: number) => `{"v":1,"type":"decision","kind":"room_signal","data":{"room":"room-${room}","signal":"card_in","source":"door_lock"}}`;
+const none = (room: number) => `{"v":1,"type":"decision","kind":"room_signal","data":{"room":"room-${room}","signal":"no_card","since":null,"source":"door_lock"}}`;
 
 /** The sample feed at 06:00, one line per room of the demo hotel, in the run-log format (JSONL). */
 export const DOOR_LOCK_SAMPLE = [
-  card(131, "22:40"),
-  none(132, null),
-  card(133, "21:15"),
-  card(134, "20:05"),
-  card(135, "23:30"),
-  card(136, "22:55"),
-  none(137, null),
-  card(138, "00:20"),
-  card(201, "21:50"),
-  card(202, "23:10"),
-  card(203, "20:40"),
-  card(204, "22:20"),
-  card(205, "23:45"),
-  card(206, "21:30"),
-  card(207, "22:05"),
-  card(208, "19:50"),
-  card(209, "23:58"),
-  card(210, "23:05"),
-  card(211, "21:00"),
-  card(212, "00:35"),
-  none(213, "22:10"),
-  card(214, "22:45"),
-  card(301, "20:30"),
-  card(302, "23:20"),
-  card(303, "21:40"),
-  card(304, "00:05"),
-  card(305, "22:15"),
-  card(306, "23:00"),
-  card(307, "21:25"),
-  card(308, "22:50"),
-  card(309, "19:30"),
-  card(310, "00:50"),
-  card(311, "23:35"),
-  none(312, null),
-  card(313, "22:30"),
-  none(314, null),
+  card(131),
+  none(132),
+  card(133),
+  card(134),
+  card(135),
+  card(136),
+  none(137),
+  card(138),
+  card(201),
+  card(202),
+  card(203),
+  card(204),
+  card(205),
+  card(206),
+  card(207),
+  card(208),
+  card(209),
+  card(210),
+  card(211),
+  card(212),
+  none(213),
+  card(214),
+  card(301),
+  card(302),
+  card(303),
+  card(304),
+  card(305),
+  card(306),
+  card(307),
+  card(308),
+  card(309),
+  card(310),
+  card(311),
+  none(312),
+  card(313),
+  none(314),
 ].join("\n");
 
 /** The sample feed's lines (parsed like any run log; a line the app can't read is dropped). */
@@ -81,7 +82,7 @@ export function doorLockLines(text: string = DOOR_LOCK_SAMPLE): RunLine[] {
 export type DoorSignal = {
   room: string;
   signal: "no_card" | "card_in";
-  /** HH:MM:SS, or null: the whole window from 18:00. */
+  /** `no_card` only: HH:MM:SS, or null for the whole window from 18:00. Always null on `card_in`: a yes with no clock. */
   since: string | null;
 };
 
@@ -99,17 +100,18 @@ export function doorLockSignals(lines: readonly RunLine[]): Map<string, DoorSign
     const room = str(data.room);
     const signal = data.signal === "no_card" || data.signal === "card_in" ? data.signal : null;
     if (!room?.startsWith("room-") || !signal) continue;
-    signals.set(room, { room, signal, since: str(data.since) });
+    // A card in the slot is a yes, never a time a guest came in (a feed that sends one anyway loses it here).
+    signals.set(room, { room, signal, since: signal === "card_in" ? null : str(data.since) });
   }
   return signals;
 }
 
 const hhmm = (clock: string) => clock.slice(0, 5);
 
-/** "ingen kort i energibryteren siden 22:10" · "ingen kort siden kl. 18:00" · "kort i energibryteren siden 23:05". */
+/** "ingen kort i energibryteren siden kl. 18:00" (the window, not a guest's time) · "kort i energibryteren" (a yes, no clock). */
 export function doorSignalText(signal: DoorSignal): string {
-  if (signal.signal === "card_in") return `kort i energibryteren siden ${signal.since ? hhmm(signal.since) : SIGNAL_WINDOW_FROM}`;
-  return signal.since ? `ingen kort i energibryteren siden ${hhmm(signal.since)}` : `ingen kort siden kl. ${SIGNAL_WINDOW_FROM}`;
+  if (signal.signal === "card_in") return "kort i energibryteren";
+  return `ingen kort i energibryteren siden kl. ${signal.since ? hhmm(signal.since) : SIGNAL_WINDOW_FROM}`;
 }
 
 /**

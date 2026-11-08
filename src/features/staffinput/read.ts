@@ -4,7 +4,8 @@ import type { HazardKind, StaffRoomStatus } from "./entries";
 
 /**
  * Reads the night clerk's lines back (entries.ts writes them): what she logged, in order, with the
- * corrections applied. Lines from other producers are ignored. Pure.
+ * corrections applied (a retracted line no longer counts; a sign put out later marks its wet floor
+ * signed). Lines from other producers are ignored. Pure.
  */
 
 type Base = {
@@ -22,10 +23,44 @@ type Base = {
 
 export type StaffEntry =
   | (Base & { kind: "room"; room: string; status: StaffRoomStatus })
-  | (Base & { kind: "hazard"; hazard: HazardKind; place: string; note: string | null })
+  | (Base & {
+      kind: "hazard";
+      hazard: HazardKind;
+      place: string;
+      note: string | null;
+      /** HH:MM:SS: wet since (the report's clock when the line has none). Null for a door or a person. */
+      since: string | null;
+      /** A wet floor: is a sign out (her answer, or a sign put out later). Null for a door or a person. */
+      signed: boolean | null;
+      /** HH:MM:SS when the sign went out, or null. */
+      signedAt: string | null;
+    })
+  | (Base & {
+      kind: "sign";
+      /** The wet floor's line id. */
+      target: string;
+      /** Where that wet floor is (null when its line is not in the log). */
+      place: string | null;
+    })
+  | (Base & {
+      kind: "ack";
+      /** The robot hazard's key (robotHazards.ts `robotHazardKey`). */
+      target: string;
+      hazard: "wet" | "person";
+      place: string | null;
+      /** The robot's clock for the hazard, HH:MM:SS. */
+      robotAt: string | null;
+    })
   | (Base & { kind: "note"; text: string });
 
 const STATUSES = new Set<string>(["klar", "opptatt", "ma_vaskes"]);
+
+/** The night clerk's hours (21:00–06:59): a clock outside them was typed by day (on a demo) and is said without a clock. */
+export function inNightHours(clock: string | null | undefined): clock is string {
+  if (!clock || !/^\d{2}:\d{2}/.test(clock)) return false;
+  const hour = Number(clock.slice(0, 2));
+  return hour >= 21 || hour < 7;
+}
 
 function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -53,18 +88,51 @@ export function readStaffLog(lines: readonly RunLine[]): StaffEntry[] {
       const place = str(data.place);
       const hazard: HazardKind | null =
         line.kind === "hazard" ? (data.hazard === "wet" ? "wet" : null) : data.event === "door_open" ? "door" : data.event === "unknown_person" ? "person" : null;
-      if (place && hazard) entries.push({ ...base, kind: "hazard", hazard, place, note: str(data.note) });
+      if (place && hazard) {
+        const wet = hazard === "wet";
+        const signed = wet ? data.signed === true : null;
+        entries.push({
+          ...base,
+          kind: "hazard",
+          hazard,
+          place,
+          note: str(data.note),
+          since: wet ? (str(data.since) ?? base.at) : null,
+          signed,
+          signedAt: signed ? (str(data.signedAt) ?? base.at) : null,
+        });
+      }
+    } else if (line.kind === "sign_placed") {
+      const target = str(data.target);
+      if (target) entries.push({ ...base, kind: "sign", target, place: null });
+    } else if (line.kind === "acknowledged") {
+      const target = str(data.target);
+      const hazard = data.hazard === "wet" || data.hazard === "person" ? data.hazard : null;
+      if (target && hazard) entries.push({ ...base, kind: "ack", target, hazard, place: str(data.place), robotAt: str(data.robotAt) });
     } else if (line.kind === "note") {
       const text = str(data.text);
       if (text) entries.push({ ...base, kind: "note", text });
     }
   }
-  return entries.map((entry) => (retracted.has(entry.id) ? { ...entry, retracted: true } : entry));
+  const marked = entries.map((entry) => (retracted.has(entry.id) ? { ...entry, retracted: true } : entry));
+  // A sign put out later (and not taken back) marks its wet floor signed, at the sign's clock.
+  const signs = new Map<string, Base>();
+  for (const entry of marked) if (entry.kind === "sign" && !entry.retracted && !signs.has(entry.target)) signs.set(entry.target, entry);
+  const places = new Map<string, string>();
+  for (const entry of marked) if (entry.kind === "hazard") places.set(entry.id, entry.place);
+  return marked.map((entry) => {
+    if (entry.kind === "sign") return { ...entry, place: places.get(entry.target) ?? null };
+    if (entry.kind !== "hazard" || entry.signed !== false) return entry;
+    const sign = signs.get(entry.id);
+    return sign ? { ...entry, signed: true, signedAt: sign.at } : entry;
+  });
 }
 
 export type StaffRoom = Extract<StaffEntry, { kind: "room" }>;
 export type StaffHazard = Extract<StaffEntry, { kind: "hazard" }>;
 export type StaffNote = Extract<StaffEntry, { kind: "note" }>;
+export type StaffSign = Extract<StaffEntry, { kind: "sign" }>;
+export type StaffAck = Extract<StaffEntry, { kind: "ack" }>;
 
 const active = (entries: readonly StaffEntry[]) => entries.filter((entry) => !entry.retracted);
 
@@ -83,6 +151,25 @@ export function staffNotes(entries: readonly StaffEntry[]): StaffNote[] {
   return active(entries).filter((entry): entry is StaffNote => entry.kind === "note");
 }
 
+/** The robot hazards she acknowledged, by the hazard's key: the first acknowledgement in force for each. */
+export function staffAcks(entries: readonly StaffEntry[]): Map<string, StaffAck> {
+  const acks = new Map<string, StaffAck>();
+  for (const entry of active(entries)) if (entry.kind === "ack" && !acks.has(entry.target)) acks.set(entry.target, entry);
+  return acks;
+}
+
+const hm = (clock: string) => clock.slice(0, 5);
+
+/**
+ * A wet floor's sign in the handover's words: "skilt satt ut 02:16" · "uten skilt siden 02:15" ("skilt
+ * satt ut" / "uten skilt" when the clock was typed by day). Null for a door or a person.
+ */
+export function signPhrase(hazard: StaffHazard): string | null {
+  if (hazard.hazard !== "wet") return null;
+  if (hazard.signed) return inNightHours(hazard.signedAt) ? `skilt satt ut ${hm(hazard.signedAt)}` : "skilt satt ut";
+  return inNightHours(hazard.since) ? `uten skilt siden ${hm(hazard.since)}` : "uten skilt";
+}
+
 const STATUS_WORD: Record<StaffRoomStatus, string> = { klar: "tomt og ryddig", opptatt: "ikke tomt", ma_vaskes: "trenger vask" };
 const HAZARD_WORD: Record<HazardKind, string> = { wet: "Vått gulv", door: "Dør", person: "Person" };
 
@@ -98,10 +185,17 @@ export function placePhrase(place: string): string {
   return place.startsWith("room-") ? `på ${lower}` : `i ${lower}`;
 }
 
-/** "Rom 213: tomt og ryddig" · "Vått gulv i lobbyen: Ved inngangen, etter regnet." · the note itself. */
+const ROBOT_HAZARD_WORD: Record<StaffAck["hazard"], string> = { wet: "vått gulv", person: "en person ved dørene" };
+
+/**
+ * "Rom 213: tomt og ryddig" · "Vått gulv i lobbyen: Ved inngangen, etter regnet." · "Skilt satt ut i
+ * lobbyen" · "Kvitterte robotens melding: vått gulv i korridor 2B" · the note itself.
+ */
 export function entryText(entry: StaffEntry): string {
   if (entry.kind === "room") return `Rom ${entry.room.replace(/^room-/, "")}: ${STATUS_WORD[entry.status]}`;
   if (entry.kind === "note") return entry.text;
+  if (entry.kind === "sign") return entry.place ? `Skilt satt ut ${placePhrase(entry.place)}` : "Skilt satt ut";
+  if (entry.kind === "ack") return `Kvitterte robotens melding: ${ROBOT_HAZARD_WORD[entry.hazard]}${entry.place ? ` ${placePhrase(entry.place)}` : ""}`;
   return `${HAZARD_WORD[entry.hazard]} ${placePhrase(entry.place)}${entry.note ? `: ${entry.note}` : ""}`;
 }
 

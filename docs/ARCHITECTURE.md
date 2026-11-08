@@ -156,14 +156,19 @@ ignore fields they do not know. Schema for every line type: `docs/runlog.schema.
 - Two producers without a robot (jury round 5, owner B; Overlevering's *Uten robot* builds the page from them
   and the booking system only, `src/features/nightsource/compose.ts`):
   - the night clerk (`src/features/staffinput/entries.ts`, Nattevaktens logg on `/natt`): `room_status`
-    (`source: "staff"`, status `klar` | `opptatt` | `ma_vaskes`), `hazard` (`wet`), `security_event`
-    (`door_open` | `unknown_person`), `note` and `retracted` (`{"target": id}`: Angre adds a line, it never
-    deletes one); every line carries `source: "staff"`, `id`, `by`, `at` (Oslo clock) and `stamp` (ISO),
-    and `sample: true` on the test night. Kept on the device in the pilot (localStorage
-    `lobby:nattevakt-logg`, per handover day; from 21:00 an entry belongs to the next morning);
-    `TODO(phase-3)` a server store;
+    (`source: "staff"`, status `klar` | `opptatt` | `ma_vaskes`), `hazard` (`wet`, with `signed` and
+    `signedAt`: *Skilt satt ut?* is a required yes or no, round 6), `sign_placed` (`{"target": id}`: a sign
+    put out later), `acknowledged` (`{"target", "hazard": "wet" | "person", "place", "robotAt"}`: *Kvitter*
+    on a robot hazard in *Fra roboten*; the target is `robotHazardKey` in `staffinput/robotHazards.ts`),
+    `security_event` (`door_open` | `unknown_person`), `note` and `retracted` (`{"target": id}`: Angre adds a
+    line, it never deletes one); every line carries `source: "staff"`, `id`, `by`, `at` (Oslo clock) and
+    `stamp` (ISO), and `sample: true` on the test night. Kept on the device in the pilot (localStorage
+    `lobby:nattevakt-logg`, per handover day; from 21:00 an entry belongs to the next morning), 30 days
+    (`RETENTION_DAYS`, `staffinput/retention.ts`), pruned on load; `TODO(phase-3)` a server store;
   - the door lock (`src/features/doorlock/feed.ts`, test data): one `room_signal` per room,
-    `{"room", "signal": "no_card" | "card_in", "since", "source": "door_lock"}`, never who.
+    `{"room", "signal": "no_card" | "card_in", "source": "door_lock"}` plus `"since": null` on `no_card`
+    (the window from 18:00), never who and never when: `card_in` carries no clock (a time sent there is
+    dropped on read).
 
 **Read by the app (Lobby), additive, jury branch.** Rom og renhold compares the last `room_status` per
 room with the booking system's test snapshot (`src/features/rooms/pms.ts`, `TODO(phase-3)`):

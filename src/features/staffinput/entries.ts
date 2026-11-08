@@ -1,6 +1,7 @@
 import { createLocalStore, recordOf } from "@/features/modules/localStore";
 import { type RunLine, parseRunValues } from "@/features/nightshift/runlog";
 import { addDays, osloToday } from "@/features/reception/dates";
+import { hasExpiredDays, keepRecentDays } from "./retention";
 
 /**
  * The night clerk as a run-log producer (jury round 5, the founder juror/the product juror/the marketing juror: "hotel number one needs no
@@ -9,14 +10,19 @@ import { addDays, osloToday } from "@/features/reception/dates";
  * name, so the handover reads a night with no robot exactly as it reads one with:
  *
  * - a room: `room_status` {room, status: klar | opptatt | ma_vaskes, source: "staff", by, at}
- * - a safety item: `hazard` {place, hazard: "wet"} for a wet floor, `security_event` {place, event:
- *   door_open | unknown_person} for a door or a person
+ * - a safety item: `hazard` {place, hazard: "wet", since, signed, signedAt} for a wet floor (round 6,
+ *   legal review: "Skilt satt ut?" is a required yes or no, so the record shows care when there was
+ *   care), `security_event` {place, event: door_open | unknown_person} for a door or a person
+ * - a sign put out later on a wet floor she reported without one: `sign_placed` {target}
+ * - a robot hazard she saw (round 6, the robot's hazards reach her as they happen): `acknowledged`
+ *   {target: robotHazardKey, hazard, place, robotAt}
  * - a note: `note` {text}
  * - a correction: `retracted` {id}: Angre adds a line, it never deletes one, so the log stays a record.
  *
  * Every line carries `id`, `by`, `at` (Oslo clock, HH:MM:SS) and `stamp` (ISO). Stored on this device for
- * the pilot (TODO(phase-3): a server store, so the morning manager's PC sees what the clerk typed on her
- * phone). Pure builders; the store is the shared localStorage helper.
+ * the pilot, RETENTION_DAYS (30) per handover day, pruned on load (TODO(phase-3): a server store, so the
+ * morning manager's PC sees what the clerk typed on her phone). Pure builders; the store is the shared
+ * localStorage helper.
  */
 
 export type StaffRoomStatus = "klar" | "opptatt" | "ma_vaskes";
@@ -76,9 +82,16 @@ export function roomLine(room: string, status: StaffRoomStatus, who: Who): RunLi
   return line("room_status", { room, status }, who);
 }
 
-export function hazardLine(kind: HazardKind, place: string, note: string, who: Who): RunLine {
+/**
+ * A safety item. A wet floor carries the clerk's answer to "Skilt satt ut?": `signed` true sets
+ * `signedAt` to the moment she reported it; false is a wet floor without a sign since then.
+ */
+export function hazardLine(kind: HazardKind, place: string, note: string, who: Who, signed = false): RunLine {
   const extra = note.trim() ? { note: note.trim() } : {};
-  if (kind === "wet") return line("hazard", { place, hazard: "wet", since: osloClock(who.now), signed: false, ...extra }, who);
+  if (kind === "wet") {
+    const at = osloClock(who.now);
+    return line("hazard", { place, hazard: "wet", since: at, signed, signedAt: signed ? at : null, ...extra }, who);
+  }
   return line("security_event", { place, event: kind === "door" ? "door_open" : "unknown_person", room: place.startsWith("room-") ? place : null, ...extra }, who);
 }
 
@@ -88,6 +101,16 @@ export function noteLine(text: string, who: Who): RunLine {
 
 export function retractLine(target: string, who: Who): RunLine {
   return line("retracted", { target }, who);
+}
+
+/** The sign is out now on a wet floor she reported without one (`target`: that hazard line's id). */
+export function signPlacedLine(target: string, who: Who): RunLine {
+  return line("sign_placed", { target }, who);
+}
+
+/** She saw a robot hazard: who and when, under the hazard's key (robotHazards.ts `robotHazardKey`). */
+export function acknowledgeLine(hazard: { key: string; hazard: "wet" | "person"; place: string | null; at: string | null }, who: Who): RunLine {
+  return line("acknowledged", { target: hazard.key, hazard: hazard.hazard, place: hazard.place, robotAt: hazard.at }, who);
 }
 
 /** Lines per handover day (YYYY-MM-DD), oldest first. */
@@ -100,7 +123,16 @@ export const STAFF_LOG = createLocalStore<StaffLog>(
 );
 
 export function appendStaffLine(day: string, entry: RunLine) {
-  STAFF_LOG.set((current) => ({ ...current, [day]: [...(current[day] ?? []), entry] }));
+  STAFF_LOG.set((current) => ({ ...keepRecentDays(current, day), [day]: [...(current[day] ?? []), entry] }));
+}
+
+/**
+ * Retention as code: the handover days older than RETENTION_DAYS go from this device, run when a screen
+ * that reads the log loads (and on every write). Writes only when something expired.
+ */
+export function pruneStaffLog(now: Date = new Date()) {
+  const today = handoverDay(now);
+  if (hasExpiredDays(STAFF_LOG.read(), today)) STAFF_LOG.set((current) => keepRecentDays(current, today));
 }
 
 /** The stored lines for one handover day that read as run-log v1 staff lines (anything else is dropped). */
@@ -118,14 +150,16 @@ const sample = (at: string, kind: string, data: Record<string, unknown>): RunLin
 /**
  * TODO(phase-3): off once a hotel's night clerk uses the screen. Test data: one night clerk's sample
  * night, so the robot-free handover can be shown without typing on stage. It follows the door lock's
- * sample: 213 flagged (no card since 22:10), checked and found empty; a card in 210, which the booking
- * system has free; a wet floor at the entrance. Real entries on this device come on top of it.
+ * sample: 213 flagged (no guest card all evening), checked and found empty; a card in 210, which the
+ * booking system has free; a wet floor at the entrance, the sign out a minute later. No robot hazard is
+ * acknowledged in it: the robot night's own record ("nobody was told") stays as it was. Real entries on
+ * this device come on top of it.
  */
 export const CLERK_SAMPLE_IS_ON = true;
 
 export const CLERK_SAMPLE: readonly RunLine[] = [
   sample("23:24:00", "room_status", { room: "room-210", status: "opptatt" }),
-  sample("02:15:00", "hazard", { place: "lobby", hazard: "wet", since: "02:15:00", signed: false, note: "Ved inngangen, etter regnet." }),
+  sample("02:15:00", "hazard", { place: "lobby", hazard: "wet", since: "02:15:00", signed: true, signedAt: "02:16:00", note: "Ved inngangen, etter regnet." }),
   sample("04:24:00", "room_status", { room: "room-213", status: "klar" }),
   sample("05:48:00", "note", {
     text: "Rolig natt. Støy fra rom 210 rundt 23:20; det var en gjest der, men rommet står ledig i systemet. Radiatoren på 134 bør sees på tidlig; familien fikk et ekstra pledd.",

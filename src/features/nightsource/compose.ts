@@ -10,7 +10,20 @@ import type { RequestView } from "@/features/requests/select";
 import { shortDate } from "@/features/rooms/money";
 import { type PmsRoom, pmsLastNight, revenueLastNight } from "@/features/rooms/pms";
 import { type Reconciliation, type RoomCheck, type RoomCheckMark, reconcileRooms } from "@/features/rooms/reconcile";
-import { entryText, placePhrase, readStaffLog, type StaffEntry, type StaffHazard, type StaffRoom, staffHazards, staffNotes, staffRooms, statusWord } from "@/features/staffinput/read";
+import {
+  entryText,
+  inNightHours,
+  placePhrase,
+  readStaffLog,
+  signPhrase,
+  type StaffEntry,
+  type StaffHazard,
+  type StaffRoom,
+  staffHazards,
+  staffNotes,
+  staffRooms,
+  statusWord,
+} from "@/features/staffinput/read";
 
 /**
  * "Uten robot" (jury round 5, the founder juror/the product juror/the marketing juror): the same Overlevering, built from the sources a hotel
@@ -27,7 +40,7 @@ import { entryText, placePhrase, readStaffLog, type StaffEntry, type StaffHazard
 
 export type RoomEvidence = {
   room: string;
-  /** What each source said about the room, one sentence each ("Dørlåsen: ingen kort i energibryteren siden 22:10."). */
+  /** What each source said about the room, one sentence each ("Dørlåsen: ingen kort i energibryteren siden kl. 18:00."). */
   lines: string[];
   verdict: EvidenceVerdict;
   /** "bekreftet" · "ikke bekreftet". */
@@ -53,11 +66,7 @@ export type WithoutRobot = {
 };
 
 /** The night clerk's own hours: an entry outside them (typed by day, on a demo) is said without a clock. */
-const inNight = (clock: string | null): clock is string => {
-  if (!clock) return false;
-  const hour = Number(clock.slice(0, 2));
-  return hour >= 21 || hour < 7;
-};
+const inNight = inNightHours;
 
 const NIGHT_ORDER = (clock: string) => {
   const hour = Number(clock.slice(0, 2));
@@ -94,7 +103,7 @@ function roomEvidence(room: string, door: DoorSignal | undefined, staff: StaffRo
 /** What the clerk saw, after "Kjersti Lund så …". */
 const SAW: Record<StaffRoom["status"], string> = { klar: "rommet tomt og ryddig", opptatt: "gjest eller bagasje i rommet", ma_vaskes: "at rommet trenger vask" };
 
-/** "Dørlåsen: ingen kort … siden 22:10. Kjersti Lund så rommet tomt og ryddig kl. 04:24. Bekreftet av to kilder." */
+/** "Dørlåsen: ingen kort … siden kl. 18:00. Kjersti Lund så rommet tomt og ryddig kl. 04:24. Bekreftet av to kilder." */
 function evidenceSentence(evidence: RoomEvidence): string {
   const word = evidence.word.charAt(0).toUpperCase() + evidence.word.slice(1);
   return `${evidence.lines.join(" ")} ${word}${evidence.verdict === "confirmed" ? " av to kilder" : ""}.`;
@@ -107,6 +116,8 @@ function guestReason(row: { guest: string | null; departure: string | null }, to
 }
 
 const WET_ACTION = "Sett ut skilt eller tørk opp før gjestene står opp.";
+/** A sign is out already: what is left is drying it. */
+const WET_ACTION_SIGNED = "Tørk opp før gjestene står opp.";
 /** The robot night's last sentence on the sale ("Roboten fant det tomt og ryddig kl. 04:24."). */
 const ROBOT_SENTENCE = /\s*Roboten fant\b.*$/s;
 
@@ -115,7 +126,17 @@ function hazardItem(hazard: StaffHazard, canOpen: (route: string) => boolean): O
   const note = hazard.note ? ` ${hazard.note.replace(/[.!]?$/, ".")}` : "";
   const link = { href: canOpen("/natt") ? "/natt" : null, linkLabel: "Åpne nattevaktens logg" };
   if (hazard.hazard === "wet") {
-    return { id: `staff-${hazard.id}`, text: `Vått gulv ${placePhrase(hazard.place)}, ${told}.${note} ${WET_ACTION}`, owner: WET_FLOOR_OWNER, due: SAFETY_DUE, ...link, urgent: false, safety: true };
+    // "skilt satt ut 02:16" or "uten skilt siden 02:15": the clerk's answer to "Skilt satt ut?" (round 6, legal review).
+    const sign = signPhrase(hazard);
+    return {
+      id: `staff-${hazard.id}`,
+      text: `Vått gulv ${placePhrase(hazard.place)}, ${told}${sign ? `, ${sign}` : ""}.${note} ${hazard.signed ? WET_ACTION_SIGNED : WET_ACTION}`,
+      owner: WET_FLOOR_OWNER,
+      due: SAFETY_DUE,
+      ...link,
+      urgent: false,
+      safety: true,
+    };
   }
   if (hazard.hazard === "door") {
     return { id: `staff-${hazard.id}`, text: `Dør ${placePhrase(hazard.place)}, ${told}.${note} Sjekk at den er lukket og låst.`, owner: STRANGER_OWNER, due: SAFETY_DUE, ...link, urgent: false, safety: true };
@@ -132,8 +153,9 @@ function hazardItem(hazard: StaffHazard, canOpen: (route: string) => boolean): O
   };
 }
 
-/** "Kjersti Lund så rom 213 tomt og ryddig." · "Kjersti Lund meldte vått gulv i lobbyen: Ved inngangen." */
+/** "Kjersti Lund så rom 213 tomt og ryddig." · "Kjersti Lund meldte vått gulv i lobbyen: Ved inngangen." · "Kjersti Lund satte ut skilt i lobbyen." */
 function timelineText(entry: StaffEntry): string {
+  if (entry.kind === "sign") return `${entry.by} satte ut skilt${entry.place ? ` ${placePhrase(entry.place)}` : ""}.`;
   if (entry.kind === "room") {
     const room = `rom ${number(entry.room)}`;
     if (entry.status === "klar") return `${entry.by} så ${room} tomt og ryddig.`;
@@ -186,7 +208,8 @@ export function composeWithoutRobot({
   pms?: ReadonlyMap<string, PmsRoom>;
   canOpen?: (route: string) => boolean;
 }): WithoutRobot {
-  const entries = readStaffLog(staff);
+  // A robot hazard she acknowledged belongs to the robot night; with no robot, it is not one of her entries.
+  const entries = readStaffLog(staff).filter((entry) => entry.kind !== "ack");
   const clerkRooms = staffRooms(entries);
   const hazards = staffHazards(entries).sort((a, b) => NIGHT_ORDER(a.at ?? "22:00") - NIGHT_ORDER(b.at ?? "22:00"));
   const signals = doorLockSignals(doorLock);
@@ -256,7 +279,8 @@ export function composeWithoutRobot({
     if (flag.kind !== "empty" || clerkRooms.has(flag.room)) continue;
     roomItems.push({
       id: `lock-${flag.room}`,
-      text: `Rom ${number(flag.room)}: ${doorSignalText(flag.signal)}. ${guestReason(flag, today)} Ingen har sett i rommet: sjekk det før det selges. ${evidenceSentence(evidenceOf(flag.room))}`,
+      // The lock's word once, in the evidence at the end (round 6: a third fewer words on the page).
+      text: `Rom ${number(flag.room)}: ${guestReason(flag, today)} Ingen har sett i rommet: sjekk det før det selges. ${evidenceSentence(evidenceOf(flag.room))}`,
       owner: DESK_OWNER,
       due: "09:00",
       ...lookLink,

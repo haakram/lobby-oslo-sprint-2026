@@ -181,6 +181,16 @@ describe("AppNav on a desktop (the rail)", () => {
     expect(screen.getAllByRole("button", { name: /^Varsler/ })).toHaveLength(1);
   });
 
+  it("shows the host no hotel bell (their pages carry their own); the admin keeps it on /vert", () => {
+    path.current = "/vert";
+    const bell = <button type="button">Varsler, 2 nye</button>;
+    const { unmount } = render(as("host", <AppNav bell={bell} />));
+    expect(screen.queryByRole("button", { name: /^Varsler/ })).not.toBeInTheDocument();
+    unmount();
+    render(as("admin", <AppNav bell={bell} />));
+    expect(screen.getByRole("button", { name: "Varsler, 2 nye" })).toBeInTheDocument();
+  });
+
   it("hides itself on the login pages and when nobody is logged in", () => {
     path.current = "/login";
     expect(render(as("admin", <AppNav />)).container).toBeEmptyDOMElement();
@@ -212,6 +222,19 @@ describe("AppNav on a phone (the bar and Meny)", () => {
     expect(top.getByRole("link", { name: /^Lobby/ })).toHaveAttribute("href", "/");
     expect(top.getByRole("button", { name: "Varsler, 4 nye" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Varsler/ })).toHaveLength(1);
+  });
+
+  it("gives the host a top bar with their place, linking home to /vert, and no hotel bell", () => {
+    onAPhone();
+    path.current = "/vert/bookinger";
+    render(as("host", <AppNav bell={<button type="button">Varsler, 4 nye</button>} />));
+    const top = within(screen.getByRole("banner"));
+    expect(top.getByRole("link", { name: /^Lobby/ })).toHaveAttribute("href", "/vert");
+    expect(top.getByText("Korttidsutleie i Oslo")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Varsler/ })).not.toBeInTheDocument();
+    const bar = within(screen.getByRole("navigation", { name: "Hovedmeny" }));
+    expect(bar.getAllByRole("link").map((link) => link.textContent)).toEqual(["Boliger", "Meldinger", "Bookinger", "Drift"]);
+    expect(bar.getByRole("link", { name: "Bookinger" })).toHaveAttribute("aria-current", "page");
   });
 
   it("opens every group in a sheet from Meny, with a line on each screen and the user plate", () => {

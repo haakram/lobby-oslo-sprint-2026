@@ -36,11 +36,12 @@ function readDesktop() {
 }
 
 /**
- * The navigation, grouped by job (Hotellet · Drift · Roboten · Resepsjon, from the module registry)
- * and filtered by what the effective role may open. Desktop: a rail on the Natt surface with the user plate bottom-left.
+ * The navigation, grouped by job (Hotellet · Drift · Roboten · Resepsjon · Utleie, from the module
+ * registry) and filtered by what the effective role may open. Desktop: a rail on the Natt surface with the user plate bottom-left.
  * Phone: a slim top bar (the name and the bell) and a bottom bar with the first screens and Meny,
- * which opens the whole list as a sheet. `bell` (the notifications, from the layout) sits at the top
- * of the rail on desktop and in the top bar on a phone: on every page, for every role.
+ * which opens the whole list as a sheet. `bell` (the hotel's notifications, from the layout) sits at the top
+ * of the rail on desktop and in the top bar on a phone: on every page, for every hotel role (the host's
+ * pages carry their own). The name links to the role's home (the host: /vert).
  * Hidden on the login page.
  */
 export function AppNav({ bell }: { bell?: ReactNode }) {
@@ -53,10 +54,12 @@ export function AppNav({ bell }: { bell?: ReactNode }) {
   const groups = groupsFor(effectiveRole);
   // The host's pages carry their own bell (the apartments' items), so the hotel's bell is not shown to a host.
   const hotelBell = effectiveRole === "host" ? undefined : bell;
+  const home = homeFor(effectiveRole);
+  const place = placeFor(effectiveRole);
   return desktop ? (
-    <Rail groups={groups} pathname={pathname} bell={hotelBell} home={homeFor(effectiveRole)} place={placeFor(effectiveRole)} />
+    <Rail groups={groups} pathname={pathname} bell={hotelBell} home={home} place={place} />
   ) : (
-    <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} bell={hotelBell} place={placeFor(effectiveRole)} />
+    <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} bell={hotelBell} home={home} place={place} />
   );
 }
 
@@ -116,7 +119,21 @@ function RailLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-function Bar({ groups, shown, pathname, bell, place }: { groups: NavGroup[]; shown: NavItem[]; pathname: string; bell?: ReactNode; place: string }) {
+function Bar({
+  groups,
+  shown,
+  pathname,
+  bell,
+  home,
+  place,
+}: {
+  groups: NavGroup[];
+  shown: NavItem[];
+  pathname: string;
+  bell?: ReactNode;
+  home: string;
+  place: string;
+}) {
   const [menu, setMenu] = useState(false);
   const rest = groups.flatMap((group) => group.items).filter((item) => !shown.includes(item));
   const restActive = rest.some((item) => isActive(item.href, pathname));
@@ -126,7 +143,7 @@ function Bar({ groups, shown, pathname, bell, place }: { groups: NavGroup[]; sho
       {/* The phone's top edge: the name, and the bell where people look for it. */}
       <header data-surface="dark" className="bg-bg pt-[env(safe-area-inset-top)] text-text lg:hidden">
         <div className="flex min-h-14 items-center justify-between gap-3 pr-2 pl-4">
-          <Link href="/" className="flex min-h-11 min-w-0 items-baseline gap-2 focus-visible:outline-offset-[-2px]">
+          <Link href={home} className="flex min-h-11 min-w-0 items-baseline gap-2 focus-visible:outline-offset-[-2px]">
             <span className="text-lg font-bold tracking-[-0.02em]">Lobby</span>
             <span className="truncate text-xs text-muted">{place}</span>
           </Link>

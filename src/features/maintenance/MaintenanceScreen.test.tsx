@@ -39,11 +39,12 @@ describe("MaintenanceScreen (Vedlikehold)", () => {
   it("resolves a pre-assigned order with the first click on Marker løst", async () => {
     render(<MaintenanceScreen />);
     await screen.findByText(/Nobody is here/);
-    expect(figure("Rom ute av drift")).toBe("2");
+    // One room is closed today (the shower in 107); the thermostat in 213 was fixed this morning.
+    expect(figure("Rom ute av drift")).toBe("1");
     // Rom 107 came in from staff with a name on it: it shows Tildelt, so the button is Marker løst.
     fireEvent.click(screen.getByRole("button", { name: "Marker løst: Teknisk, Rom 107" }));
     expect(screen.queryByRole("button", { name: "Marker løst: Teknisk, Rom 107" })).not.toBeInTheDocument();
-    expect(figure("Rom ute av drift")).toBe("1");
+    expect(figure("Rom ute av drift")).toBe("0");
   });
 
   it("says the order is resolved and gives Angre the focus, which reopens it", async () => {
@@ -57,7 +58,7 @@ describe("MaintenanceScreen (Vedlikehold)", () => {
     fireEvent.click(undo);
     const back = screen.getByRole("button", { name: "Marker løst: Teknisk, Rom 107" });
     expect(back).toHaveFocus();
-    expect(figure("Rom ute av drift")).toBe("2");
+    expect(figure("Rom ute av drift")).toBe("1");
   });
 
   it("keeps the focus on the row when Tildel leaves it in place, and Angre takes the assignment back", async () => {

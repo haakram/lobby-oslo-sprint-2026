@@ -1,4 +1,4 @@
-import { Badge, cx, RegenIcon, Skeleton } from "@/ui";
+import { Badge, RegenIcon, Skeleton } from "@/ui";
 import { hhmm, percent } from "./format";
 import { placeLabel, requestKindLabel } from "./labels";
 import type { RobotView } from "./selectors";
@@ -55,7 +55,8 @@ export function TopBar({
     <header data-surface="dark" className="border-b border-line bg-bg">
       <div className="mx-auto flex min-h-16 w-full max-w-[1600px] flex-wrap items-center justify-between gap-x-8 gap-y-2 px-4 py-2 sm:px-6 lg:px-10">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          <span className="text-base font-semibold">{HOTEL_NAME}</span>
+          {/* The phone's app bar already names the hotel. */}
+          <span className="hidden text-base font-semibold lg:inline">{HOTEL_NAME}</span>
           <span className="text-sm text-muted">{night ?? "Natten"} · overlevering 06:00</span>
         </div>
 
@@ -73,12 +74,12 @@ export function TopBar({
                 </span>
                 {robotDoing(robot)}
               </span>
-              <span className={cx("inline-flex items-center gap-1 tabular-nums", low ? "font-semibold text-warning" : "text-muted")}>
-                <span aria-hidden="true" className="text-muted">
-                  ·
-                </span>
+              {/* Plain, in the bar's own grey: a low battery is an alert in the bell for whoever runs the robot. */}
+              <span className="inline-flex items-center gap-1 text-muted tabular-nums">
+                <span aria-hidden="true">·</span>
                 <RegenIcon name={low ? "battery-low" : "battery"} size={16} />
-                {low ? `Lavt batteri ${percent(robot.battery)}` : percent(robot.battery)}
+                <span className="sr-only">Batteri </span>
+                {percent(robot.battery)}
               </span>
             </div>
           ) : (

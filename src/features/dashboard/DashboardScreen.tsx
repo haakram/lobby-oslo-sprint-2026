@@ -1,68 +1,26 @@
 "use client";
 
-import { useMemo, useRef } from "react";
-import { canAccess, type Role } from "@/features/auth/roles";
-import { useSession } from "@/features/auth/SessionProvider";
-import { selectGuestDay } from "@/features/guests/testData";
-import { lowStock } from "@/features/inventory/testData";
-import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
+import { useRef } from "react";
+import { canAccess } from "@/features/auth/roles";
 import { MODULES } from "@/features/modules/registry";
-import { useOsloHour } from "@/features/modules/useNow";
-import { selectRequests } from "@/features/requests/select";
-import { byRole, onShift, shiftAt } from "@/features/staff/testData";
 import { Button, Card, cx, ErrorState } from "@/ui";
 import { nightLabel } from "./format";
+import { Greeting } from "./Greeting";
 import { KpiStrip } from "./KpiStrip";
-import { type DashboardData, selectNow } from "./now";
-import { NowBand } from "./NowBand";
 import { TopBar } from "./TopBar";
 import { useEntrance } from "./useEntrance";
-import { useNight } from "./useNight";
-import { useOrderStatuses } from "./useOrderStatuses";
-import { useReceptionCalls } from "./useReceptionCalls";
+import { useHotelData } from "./useHotelData";
 import { WIDE, WIDGETS } from "./widgets";
 
 /**
- * Oversikt: the whole hotel at a glance, for whoever is logged in. The top bar, what needs a person
- * now across every module (with the one primary action), the hotel's figures, then one widget per
- * module the role may open, in registry order. The robot is one widget among them.
+ * Oversikt: the whole hotel at a glance, good news first (team lead 2026-11-08). The top bar, a
+ * greeting with how the night went and the one primary action, the hotel's figures, then one widget
+ * per module the role may open, in registry order. What needs a person is in the bell in the
+ * navigation, not on this page.
  */
 export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
-  const { effectiveRole } = useSession();
-  const role: Role = effectiveRole ?? "admin";
-  const { resolved, statusOf } = useOrderStatuses();
-  const { run, night, rooms, orders, robot } = useNight(viewerUrl, resolved);
-  const { state: calls, retry: retryCalls } = useReceptionCalls();
-  const hour = useOsloHour();
-
-  const technician = byRole("Vedlikehold").find((member) => member.shift === "dag") ?? null;
-  const maintenance = useMemo(() => selectMaintenance({ orders, statusOf, assignee: technician?.name ?? null }), [orders, statusOf, technician]);
-  const requests = useMemo(() => selectRequests({ night, calls: calls.kind === "ready" ? calls.calls : null, statusOf }), [night, calls, statusOf]);
-  const guests = useMemo(() => selectGuestDay(), []);
-  const shift = shiftAt(hour);
-
-  const data: DashboardData = useMemo(
-    () => ({
-      role,
-      loading: run.status === "loading",
-      nightStatus: run.status,
-      night,
-      rooms,
-      robot,
-      requests,
-      maintenance,
-      outOfOrder: outOfOrderRooms(maintenance),
-      guests,
-      calls,
-      retryCalls,
-      lowStock: lowStock(),
-      shift,
-      onShift: onShift(shift),
-    }),
-    [role, run.status, night, rooms, robot, requests, maintenance, guests, calls, retryCalls, shift],
-  );
-  const now = useMemo(() => selectNow(data), [data]);
-  const widgets = MODULES.filter((module) => module.widget && canAccess(role, module.route));
+  const { data, run, night, robot } = useHotelData(viewerUrl);
+  const widgets = MODULES.filter((module) => module.widget && canAccess(data.role, module.route));
 
   const ready = run.status !== "loading";
   const scope = useRef<HTMLDivElement>(null);
@@ -77,7 +35,7 @@ export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
       </p>
 
       <div ref={scope} className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:gap-8 lg:px-10 lg:py-8">
-        <NowBand items={now} loading={!ready} />
+        <Greeting data={data} />
 
         {run.status === "error" && (
           <Card className="sm:p-6">

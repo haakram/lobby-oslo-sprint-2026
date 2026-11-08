@@ -24,7 +24,8 @@ type StatusLook = {
 };
 
 const TILE: Record<RoomStatus, string> = {
-  klar: "bg-sunken",
+  // Ready to sell reads green at a glance: the good news on the rack (team lead 2026-11-08).
+  klar: "bg-success-soft",
   ma_vaskes: "bg-warning-soft",
   opptatt: "bg-sunken",
   ikke_forstyrr: "bg-sunken ring-1 ring-inset ring-text/70",

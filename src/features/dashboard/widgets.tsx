@@ -1,17 +1,17 @@
 import Link from "next/link";
 import type { ComponentType } from "react";
-import { isLow, storeName } from "@/features/inventory/testData";
-import { PRIORITY } from "@/features/maintenance/select";
+import { LAST_COUNT, storeName } from "@/features/inventory/testData";
+import type { WorkOrderView } from "@/features/maintenance/select";
 import { type ModuleId, moduleById } from "@/features/modules/registry";
 import { SourceNote } from "@/features/modules/SourceNote";
-import { REQUEST_STATUS, SOURCE_WORD, waiting } from "@/features/requests/select";
+import { type RequestView, SOURCE_WORD, waiting } from "@/features/requests/select";
 import { SHIFTS } from "@/features/staff/testData";
 import type { RunStatus } from "@/features/nightshift/useRun";
 import { Badge, Card, cx, Monogram, RegenIcon, Skeleton } from "@/ui";
 import { AVVIK, ROOM_STATUS } from "@/ui/roomStatus";
 import { percent } from "./format";
-import { placeLabel, STATUS_LOOK, STATUS_ORDER } from "./labels";
-import type { DashboardData } from "./now";
+import { placeLabel, type RoomStatus, STATUS_LOOK } from "./labels";
+import type { DashboardData } from "./data";
 import { ReceptionPanelView } from "./ReceptionPanel";
 import { countRooms, floorsOfRooms } from "./selectors";
 import { batteryLow, robotDoing } from "./TopBar";
@@ -22,6 +22,35 @@ import { batteryLow, robotDoing } from "./TopBar";
  */
 
 const SHOWN = 4;
+
+/** Oversikt reads the good news first: ready rooms lead the legend, the rooms to clean follow. */
+const LEGEND_ORDER: readonly RoomStatus[] = ["klar", "opptatt", "ma_vaskes", "ikke_forstyrr", "ukjent"];
+
+/**
+ * Minutes from noon, so a night and the morning after sort in the order they happened: 22:00 before
+ * 05:40 before 07:12. For "latest first" lists that mix the robot's night with the day's work.
+ */
+function sinceNoon(clock: string | null): number {
+  if (!clock) return -1;
+  const [hours, minutes] = clock.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return -1;
+  return (hours * 60 + minutes - 12 * 60 + 24 * 60) % (24 * 60);
+}
+
+/** The widget's good news, first under its name: a green check and the figure that went well. */
+function GoodLine({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-2 flex items-start gap-1.5 text-sm text-muted">
+      <RegenIcon name="circle-check" size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-success" />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+/** A figure inside a GoodLine. */
+function Good({ children }: { children: React.ReactNode }) {
+  return <span className="font-semibold text-success tabular-nums">{children}</span>;
+}
 
 export type WidgetProps = { data: DashboardData; className?: string };
 
@@ -103,15 +132,17 @@ function RoomsWidget({ data, className }: WidgetProps) {
       ) : (
         <>
           <ul aria-label="Rom per status" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            {STATUS_ORDER.map((status) => (
+            {LEGEND_ORDER.map((status) => (
               <li key={status} className="flex items-center gap-1.5">
-                <RegenIcon name={ROOM_STATUS[status].icon} size={14} strokeWidth={2} className={cx("shrink-0", STATUS_LOOK[status].word_class)} />
+                {/* A status nobody is in stays grey: "Må vaskes 0" is not a warning. */}
+                <RegenIcon name={ROOM_STATUS[status].icon} size={14} strokeWidth={2} className={cx("shrink-0", counts[status] > 0 ? STATUS_LOOK[status].word_class : "text-muted")} />
                 <span className="text-muted">{STATUS_LOOK[status].word}</span>
                 <span className="font-semibold tabular-nums">{counts[status]}</span>
               </li>
             ))}
             <li className="flex items-center gap-1.5">
-              <RegenIcon name={AVVIK.icon} size={14} strokeWidth={2} className={cx("shrink-0", AVVIK.ink)} />
+              {/* Quiet here: what an avvik needs is on Vedlikehold and in the bell, not in red on Oversikt. */}
+              <RegenIcon name={AVVIK.icon} size={14} strokeWidth={2} className="shrink-0 text-muted" />
               <span className="text-muted">Avvik</span>
               <span className="font-semibold tabular-nums">{counts.avvik}</span>
             </li>
@@ -135,13 +166,12 @@ function RoomsWidget({ data, className }: WidgetProps) {
                             className={cx(
                               "flex h-11 flex-col justify-between rounded-sm p-1 transition-[filter] duration-[120ms] ease-standard hover:brightness-110 focus-visible:outline-offset-[-2px]",
                               look.tile,
-                              avvik && "shadow-[inset_2px_0_0_0_var(--danger)]",
                             )}
                           >
                             {/* The status as a shape too, not only a colour (WCAG 1.4.1): the legend above maps each icon. */}
                             <span aria-hidden="true" className="flex items-center gap-0.5">
                               <RegenIcon name={ROOM_STATUS[room.status].icon} size={12} strokeWidth={2} className={look.word_class} />
-                              {avvik && <RegenIcon name={AVVIK.icon} size={12} strokeWidth={2} className={AVVIK.ink} />}
+                              {avvik && <RegenIcon name={AVVIK.icon} size={12} strokeWidth={2} className="text-muted" />}
                             </span>
                             <span className={cx("font-mono text-xs leading-none tabular-nums", look.loud && "font-semibold")}>{room.number}</span>
                           </Link>
@@ -173,12 +203,10 @@ function GuestsWidget({ data, className }: WidgetProps) {
             <span className="min-w-0">
               <span className="font-semibold">{stay.name}</span>
               {stay.notes.length > 0 && (
-                <Badge tone="warning" className="ml-2">
-                  {stay.notes[0]}
-                </Badge>
+                <Badge className="ml-2">{stay.notes[0]}</Badge>
               )}
             </span>
-            <span className={stay.room ? "font-mono text-xs tabular-nums" : "text-xs font-semibold text-warning"}>{stay.room ? stay.room.replace(/^room-/, "") : "Uten rom"}</span>
+            <span className={stay.room ? "font-mono text-xs tabular-nums" : "text-xs font-semibold"}>{stay.room ? stay.room.replace(/^room-/, "") : "Uten rom"}</span>
           </li>
         ))}
       </ol>
@@ -188,81 +216,139 @@ function GuestsWidget({ data, className }: WidgetProps) {
   );
 }
 
+/** Requests: what got done first, the latest of it, and how many wait (those are in the bell). */
 function RequestsWidget({ data, className }: WidgetProps) {
   const waits = waiting(data.requests);
+  const done = data.requests.filter((request) => request.status === "fullfort");
+  const latest = [...done].sort((a, b) => sinceNoon(b.at) - sinceNoon(a.at)).slice(0, SHOWN);
   return (
-    <Frame module="foresporsler" className={className} count={waits.length} countLabel="venter">
+    <Frame module="foresporsler" className={className}>
       {data.loading && data.requests.length === 0 ? (
         <Rows />
-      ) : waits.length === 0 ? (
-        <p className="mt-3 text-sm text-muted">Ingen forespørsler venter på noen.</p>
+      ) : data.requests.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">Ingen forespørsler ennå i dag.</p>
       ) : (
-        <ol className="mt-2 divide-y divide-line">
-          {waits.slice(0, SHOWN).map((request) => (
-            <li key={request.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
-              <span className="min-w-0 truncate">
-                <span className="font-semibold">{request.kind}</span>
-                {request.room && <span className="text-muted"> · {placeLabel(request.room)}</span>}
-                <span className="text-muted"> · {SOURCE_WORD[request.source]}</span>
-              </span>
-              <Badge tone={REQUEST_STATUS[request.status].tone}>{REQUEST_STATUS[request.status].word}</Badge>
-            </li>
-          ))}
-        </ol>
+        <>
+          <GoodLine>
+            <Good>{done.length}</Good> av {data.requests.length} fullført
+            {waits.length > 0 && ` · ${waits.length} ${waits.length === 1 ? "venter" : "venter"} på en person`}
+          </GoodLine>
+          {latest.length > 0 && (
+            <ol aria-label="Sist fullført" className="mt-2 divide-y divide-line">
+              {latest.map((request) => (
+                <RequestDone key={request.id} request={request} />
+              ))}
+            </ol>
+          )}
+        </>
       )}
-      {waits.length > SHOWN && <p className="mt-1 text-sm text-muted">og {waits.length - SHOWN} til</p>}
       <SourceNote className="mt-3" sources={["run-log", "reception", "test"]} />
     </Frame>
   );
 }
 
+function RequestDone({ request }: { request: RequestView }) {
+  return (
+    <li className="flex items-baseline justify-between gap-3 py-2 text-sm">
+      <span className="min-w-0 truncate">
+        <span className="font-semibold">{request.kind}</span>
+        {request.room && <span className="text-muted"> · {placeLabel(request.room)}</span>}
+        <span className="text-muted"> · {SOURCE_WORD[request.source]}</span>
+      </span>
+      <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-success">
+        <RegenIcon name="check" size={14} strokeWidth={2} />
+        {request.at ?? "Fullført"}
+        <span className="sr-only"> fullført</span>
+      </span>
+    </li>
+  );
+}
+
+/** Maintenance: what is fixed first, latest first; the open ones are counted and live on Vedlikehold. */
 function MaintenanceWidget({ data, className }: WidgetProps) {
   const open = data.maintenance.filter((order) => order.status !== "lost");
+  const fixed = data.maintenance.filter((order) => order.status === "lost").sort((a, b) => sinceNoon(b.at) - sinceNoon(a.at));
+  const found = data.maintenance.filter((order) => order.origin === "robot").length;
   return (
-    <Frame module="vedlikehold" className={className} count={open.length} countLabel="åpne">
-      {data.loading && open.length === 0 ? (
+    <Frame module="vedlikehold" className={className}>
+      {data.loading && data.maintenance.length === 0 ? (
         <Rows />
-      ) : open.length === 0 ? (
-        <p className="mt-3 text-sm text-muted">Ingen åpne arbeidsordre.</p>
+      ) : data.maintenance.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">Ingen arbeidsordre i dag.</p>
       ) : (
-        <ol className="mt-2 divide-y divide-line">
-          {open.slice(0, SHOWN).map((order) => (
-            <li key={order.id} className="flex items-baseline gap-2 py-2 text-sm">
-              <Badge tone={PRIORITY[order.priority].tone}>{PRIORITY[order.priority].word}</Badge>
-              <span className="min-w-0 flex-1 truncate">
-                <span className="font-semibold">{order.room ? placeLabel(order.room) : placeLabel(order.place)}</span>
-                <span className="text-muted"> · {order.text}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
+        <>
+          <GoodLine>
+            <Good>{fixed.length}</Good> løst i dag
+            {found > 0 && (
+              <>
+                {" · roboten meldte "}
+                <span className="font-semibold text-text tabular-nums">{found}</span> avvik i natt
+              </>
+            )}
+          </GoodLine>
+          {fixed.length > 0 && (
+            <ol aria-label="Sist løst" className="mt-2 divide-y divide-line">
+              {fixed.slice(0, SHOWN).map((order) => (
+                <OrderFixed key={order.id} order={order} />
+              ))}
+            </ol>
+          )}
+          {open.length > 0 && (
+            <p className="mt-2 text-sm text-muted">
+              <span className="font-semibold text-text tabular-nums">{open.length}</span> åpne, sortert etter prioritet på Vedlikehold.
+            </p>
+          )}
+        </>
       )}
-      {open.length > SHOWN && <p className="mt-1 text-sm text-muted">og {open.length - SHOWN} til</p>}
       <SourceNote className="mt-3" sources={["run-log", "test"]} />
     </Frame>
   );
 }
 
+function OrderFixed({ order }: { order: WorkOrderView }) {
+  return (
+    <li className="flex items-baseline gap-2 py-2 text-sm">
+      <RegenIcon name="check" size={14} strokeWidth={2} className="shrink-0 self-center text-success" />
+      <span className="sr-only">Løst: </span>
+      <span className="min-w-0 flex-1 truncate">
+        <span className="font-semibold">{placeLabel(order.room ?? order.place)}</span>
+        <span className="text-muted"> · {order.text}</span>
+      </span>
+      {order.assignee && <span className="hidden shrink-0 text-xs text-muted sm:inline">{order.assignee}</span>}
+    </li>
+  );
+}
+
+/** Stores: how much is above minimum first; the item under it is listed plainly (its alert is in the bell). */
 function InventoryWidget({ data, className }: WidgetProps) {
   const low = data.lowStock;
+  const above = data.stock.length - low.length;
   return (
-    <Frame module="lager" className={className} count={low.length} countLabel="under minimum">
+    <Frame module="lager" className={className}>
+      <GoodLine>
+        <Good>{above}</Good> av {data.stock.length} varer over minimum · talt {LAST_COUNT}
+      </GoodLine>
       {low.length === 0 ? (
-        <p className="mt-3 text-sm text-muted">Alt er over minimum.</p>
+        <p className="mt-2 text-sm text-muted">Alt er over minimum.</p>
       ) : (
-        <ol className="mt-2 divide-y divide-line">
-          {low.slice(0, SHOWN).map((item) => (
-            <li key={`${item.store}-${item.item}`} className="flex items-baseline justify-between gap-3 py-2 text-sm">
-              <span className="min-w-0 truncate">
-                <span className="font-semibold">{item.item}</span>
-                <span className="text-muted"> · {storeName(item.store)}</span>
-              </span>
-              <span className={cx("font-mono text-xs whitespace-nowrap tabular-nums", isLow(item) && "font-semibold text-danger")}>
-                {item.count} / {item.expected}
-              </span>
-            </li>
-          ))}
-        </ol>
+        <>
+          <p id="widget-lager-low" className="mt-3 text-xs text-muted">
+            Under minimum
+          </p>
+          <ol aria-labelledby="widget-lager-low" className="divide-y divide-line">
+            {low.slice(0, SHOWN).map((item) => (
+              <li key={`${item.store}-${item.item}`} className="flex items-baseline justify-between gap-3 py-2 text-sm">
+                <span className="min-w-0 truncate">
+                  <span className="font-semibold">{item.item}</span>
+                  <span className="text-muted"> · {storeName(item.store)}</span>
+                </span>
+                <span className="font-mono text-xs whitespace-nowrap tabular-nums">
+                  {item.count} / {item.expected}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </>
       )}
       <SourceNote className="mt-3" sources="test" />
     </Frame>
@@ -297,6 +383,7 @@ function StaffWidget({ data, className }: WidgetProps) {
 function RobotWidget({ data, className }: WidgetProps) {
   const robot = data.robot;
   const low = batteryLow(robot);
+  const robotTotal = data.night ? Math.max(data.night.tasks.size, data.night.tasksDone + data.night.tasksFailed) : 0;
   const state = !robot
     ? null
     : robot.ended
@@ -324,15 +411,15 @@ function RobotWidget({ data, className }: WidgetProps) {
             <dt className="text-muted">Gjør</dt>
             <dd>{robotDoing(robot)}</dd>
             <dt className="text-muted">Batteri</dt>
-            <dd className={cx("flex items-center gap-1 tabular-nums", low && "font-semibold text-warning")}>
-              {low && <RegenIcon name="battery-low" size={16} />}
+            {/* Plain here: a low battery is the robot manager's alert in the bell. */}
+            <dd className="flex items-center gap-1 tabular-nums">
+              <RegenIcon name={low ? "battery-low" : "battery"} size={16} className="text-muted" />
               {percent(robot.battery)}
-              {low && " · lavt"}
             </dd>
             <dt className="text-muted">I natt</dt>
             <dd className="tabular-nums">
-              {data.night?.tasksDone ?? 0} oppgaver fullført
-              {data.night && data.night.tasksFailed > 0 && <span className="font-semibold text-danger"> · {data.night.tasksFailed} feilet</span>}
+              <span className="font-semibold text-success">{data.night?.tasksDone ?? 0}</span>
+              {robotTotal > 0 && ` av ${robotTotal}`} oppgaver fullført
             </dd>
           </dl>
         )}

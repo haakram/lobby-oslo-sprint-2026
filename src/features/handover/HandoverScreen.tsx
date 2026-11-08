@@ -283,7 +283,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
         {/* The evidence: the robot's judgement calls (owner C's card, the whole night). On paper, one line instead. */}
         {ready && run.lines.length > 0 && (
           <div data-enter className="lg:col-span-2 lg:row-start-2 print:hidden">
-            <RobotJudgementCard lines={run.lines} id="vurderinger-overlevering" />
+            <RobotJudgementCard lines={run.lines} id="vurderinger-overlevering" compact />
           </div>
         )}
         {/* On paper (the card is left off; its figures are in the row above): the booking note once, not under every room. */}

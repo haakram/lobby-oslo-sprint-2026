@@ -17,6 +17,7 @@ import { SourceNote } from "@/features/modules/SourceNote";
 import { byRole, cleanersToday } from "@/features/staff/testData";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, Monogram, Skeleton, Stat } from "@/ui";
 import { assignRooms } from "./housekeeping";
+import { RoomChecksPanel } from "./RoomChecksPanel";
 
 /**
  * Rom og renhold: the key rack (every room's status as the robot last saw it), today's cleaning
@@ -78,7 +79,7 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
     <ModulePage
       module="rom"
       ready={ready}
-      lede="Slik roboten sist så rommene, hvem som vasker i dag, og rommene som ikke kan selges."
+      lede="Slik roboten sist så rommene, hva som kan selges i dag, og hvem som vasker."
       meta={run.source === "live" ? <RunBadge run={run} /> : undefined}
       actions={
         dirty.length > 0 ? (
@@ -98,6 +99,9 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
         <Figure label="Ikke sjekket" value={counts?.ukjent} />
         <Figure label="Ute av drift" value={rooms ? outOfOrder.length : undefined} tone={outOfOrder.length > 0 ? "danger" : "default"} />
       </FigureRow>
+
+      {/* Good news first: rooms the booking system thought were taken that can be sold today. */}
+      <RoomChecksPanel lines={ready ? run.lines : null} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] lg:items-start lg:gap-8">
         <RoomBoard rooms={rooms} clock={robot?.clock ?? null} onOpen={openRoom} />

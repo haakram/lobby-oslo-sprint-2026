@@ -90,7 +90,7 @@ AI-resepsjonisten."
 
 ### Navigation groups
 
-The rail and the Meny sheet show the modules in four labelled groups, in registry order; a role
+The rail and the Meny sheet show the modules in five labelled groups, in registry order; a role
 sees only the modules it may open, and a group with nothing left in it is dropped.
 
 - **Hotellet:** Oversikt · Rom og renhold · Gjester og bookinger · Ruter
@@ -101,9 +101,11 @@ sees only the modules it may open, and a group with nothing left in it is droppe
   Every host screen opens with a 64 px dark bar (the host, the date, the clock, the *Varsler* bell). What
   needs the host sits in the bell; amber and red appear only there, on the items that need action.
 
-The bell (`NotificationBell`) is part of the navigation, so it is on every page for every role: at
-the top of the rail beside the name on desktop, and on a phone in a slim dark top bar (*Lobby*, the
-hotel, the bell) above the page. On Oversikt that bar runs straight into the dark top bar, so the
+The bell (`NotificationBell`) is part of the navigation, so it is on every hotel page for every hotel
+role: at the top of the rail beside the name on desktop, and on a phone in a slim dark top bar (*Lobby*,
+the hotel, the bell) above the page. The host's screens carry their own bell in their top bar, so the
+hotel's bell is never shown to the host, nor on /vert to an admin: one bell per screen. For the host the
+slim bar reads *Lobby* and *Korttidsutleie i Oslo*, and the name links to /vert. On Oversikt that bar runs straight into the dark top bar, so the
 phone reads one dark header.
 
 The phone bar holds the role's first four *pinned* modules (Oversikt, Rom, then Gjester / Forespørsler
@@ -296,7 +298,7 @@ All in `src/ui/`, exported from `src/ui/index.ts`. The module frame lives in
 | `Sheet` | `open`, `onClose`, `title` | Bottom sheet, `role="dialog"`, Escape and scrim close it, focus returns to the opener. |
 | `Skeleton` | `className` | `sunken`, pulse, `aria-hidden`. |
 | `EmptyState` / `ErrorState` | `title`, `body`, `action` | As above. |
-| `AppNav` | `bell` | Desktop (≥ 1024 px): a 232 px dark rail with the bell beside the name at the top, the four labelled groups and the user plate bottom-left. Phone: a 56 px dark top bar (name, bell) and a 64 px dark bottom bar with the role's first four pinned screens and *Meny*, which opens a sheet with every group, each screen's hint and the user plate. Filtered by `canAccess(effectiveRole, path)`. The active item carries a 2 px `accent` mark on its left (rail) or top (bar) that fades in, and its icon in `accent-text`. |
+| `AppNav` | `bell` | Desktop (≥ 1024 px): a 232 px dark rail with the bell beside the name at the top (not for the host, nor on the host's screens), the labelled groups and the user plate bottom-left. Phone: a 56 px dark top bar (name, bell) and a 64 px dark bottom bar with the role's first four pinned screens and *Meny*, which opens a sheet with every group, each screen's hint and the user plate. Filtered by `canAccess(effectiveRole, path)`. The active item carries a 2 px `accent` mark on its left (rail) or top (bar) that fades in, and its icon in `accent-text`. |
 | `UserPlate` | — | Generated monogram (no photos), name, role; opens a menu with the view switcher for admins (Admin · Resepsjonist · Robotansvarlig, calls `switchView`) and *Logg ut*. |
 | `Monogram` | `name`, `size` | Initials on `accent-soft`, `accent-text`; the robot's is `accent` with `on-accent`. |
 | `ViewAsBanner` (auth) | — | The band under the top edge while an admin views as another role: "Viser som Resepsjonist · Tilbake til admin". |

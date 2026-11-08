@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { homeFor, type Role } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
+import { MODULES } from "@/features/modules/registry";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
 import { barItemsFor, groupsFor, isActive, type NavGroup, type NavItem } from "./nav";
@@ -16,6 +17,11 @@ export const HOTEL_NAME = "Hotell Nattskift";
 /** The line under "Lobby": the hotel, or for the host (an Airbnb host) their own apartments. */
 function placeFor(role: Role): string {
   return role === "host" ? "Korttidsutleie i Oslo" : HOTEL_NAME;
+}
+
+/** The host's screens (Utleie, under /vert) carry their own bell in their top bar. */
+function onHostScreen(pathname: string): boolean {
+  return MODULES.some((module) => module.group === "utleie" && (pathname === module.route || pathname.startsWith(`${module.route}/`)));
 }
 
 /** How many of the role's screens fit on the phone bar before the rest go into Meny. */
@@ -40,8 +46,9 @@ function readDesktop() {
  * registry) and filtered by what the effective role may open. Desktop: a rail on the Natt surface with the user plate bottom-left.
  * Phone: a slim top bar (the name and the bell) and a bottom bar with the first screens and Meny,
  * which opens the whole list as a sheet. `bell` (the hotel's notifications, from the layout) sits at the top
- * of the rail on desktop and in the top bar on a phone: on every page, for every hotel role (the host's
- * pages carry their own). The name links to the role's home (the host: /vert).
+ * of the rail on desktop and in the top bar on a phone: on every hotel page, for every hotel role (the
+ * host's pages carry their own bell, so the host and an admin on /vert see only that one). The name links
+ * to the role's home (the host: /vert).
  * Hidden on the login page.
  */
 export function AppNav({ bell }: { bell?: ReactNode }) {
@@ -52,8 +59,9 @@ export function AppNav({ bell }: { bell?: ReactNode }) {
   // Nobody logged in (the login page, the no-access page): no navigation.
   if (!effectiveRole || pathname.startsWith("/login")) return null;
   const groups = groupsFor(effectiveRole);
-  // The host's pages carry their own bell (the apartments' items), so the hotel's bell is not shown to a host.
-  const hotelBell = effectiveRole === "host" ? undefined : bell;
+  // The host's pages carry their own bell (the apartments' items), so the hotel's bell is not shown to a host,
+  // nor beside the host's bell when an admin opens /vert: one bell per screen.
+  const hotelBell = effectiveRole === "host" || onHostScreen(pathname) ? undefined : bell;
   const home = homeFor(effectiveRole);
   const place = placeFor(effectiveRole);
   return desktop ? (

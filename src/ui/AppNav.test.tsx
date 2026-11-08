@@ -181,12 +181,17 @@ describe("AppNav on a desktop (the rail)", () => {
     expect(screen.getAllByRole("button", { name: /^Varsler/ })).toHaveLength(1);
   });
 
-  it("shows the host no hotel bell (their pages carry their own); the admin keeps it on /vert", () => {
+  it("shows the host no hotel bell, and an admin none on the host's screens (they carry their own)", () => {
     path.current = "/vert";
     const bell = <button type="button">Varsler, 2 nye</button>;
-    const { unmount } = render(as("host", <AppNav bell={bell} />));
+    const host = render(as("host", <AppNav bell={bell} />));
     expect(screen.queryByRole("button", { name: /^Varsler/ })).not.toBeInTheDocument();
-    unmount();
+    host.unmount();
+    path.current = "/vert/meldinger";
+    const onVert = render(as("admin", <AppNav bell={bell} />));
+    expect(screen.queryByRole("button", { name: /^Varsler/ })).not.toBeInTheDocument();
+    onVert.unmount();
+    path.current = "/rom";
     render(as("admin", <AppNav bell={bell} />));
     expect(screen.getByRole("button", { name: "Varsler, 2 nye" })).toBeInTheDocument();
   });

@@ -92,7 +92,7 @@ One registry, `src/features/modules/registry.ts`, lists the hotel's modules. The
 | Rom og renhold | `/rom` | Hotellet | both | run log + test | The key rack (every room's status), today's round per cleaner, rooms out of order; *Lag renholdsrute* Above the rack: the robot's room checks against the booking system (rooms to sell today, guests without a booking; *Merk som ledig for salg*, *Lag oppgave for resepsjonen*), the key rack (every room's status), today's round per cleaner, rooms out of order; *Lag renholdsrute* |
 | Gjester og bookinger | `/gjester` | Hotellet | resepsjonist | test + reception | Arrivals, departures, in house tonight, the receptionist's bookings and callbacks, special cases |
 | Ruter | `/ruter` | Hotellet | both | run log | Shortest route between floors: cleaning round, pick list, the robot's own walk |
-| Overlevering 06:00 | `/overlevering` | Drift | resepsjonist | run log + reception + test | The night on one page for the morning manager: four good-news figures, what is open (owner, due time), what happened, the night shift's note, *Kvitter mottatt* (who and when, per day); prints |
+| Overlevering 06:00 | `/overlevering` | Drift | resepsjonist | run log + reception + test | The night on one page for the morning manager: one factual line, four figures with the money first (*Kan selges etter bekreftelse · ca. kr*, held back, *Frigitt i dag*), what is open with safety first (each unsigned wet floor, the stranger; then the rest by due time, the sale in two steps inline), what happened, the night shift's note, *Kvitter mottatt* (*Kvittert av … · nå*, kept on this device until a server store exists); prints with a Fettero footer |
 | Forespørsler | `/foresporsler` | Drift | both | run log + reception + test | Every guest request from phone, robot, staff and voice. What the robot handed back first and pinned (calls that arrive later can't push it down), then the phone's calls in their own group (its place held while they load), then the rest; `?filter=robot` opens on the robot's. A call the AI receptionist took that names a room is a task (*Telefon (AI)*, *Se samtalen*, one tap: *Send roboten* / *Gi til …*); a room the hotel doesn't have is *Ukjent rom*, for reception. Each refusal is a decision (*Gi det likevel*), with the referee's verdict. A tapped row stays put with its *Angre*; actions are stamped "Siri Haugen tok saken · nå", never a clock |
 | Vedlikehold | `/vedlikehold` | Drift | robotansvarlig | run log + test | Work orders by priority: the robot's findings and what staff reported; *Tildel*, *Marker løst* |
 | Lager og lin | `/lager` | Drift | robotansvarlig | test | Linen and amenities per store room against what the rooms need; *Lag påfyllingsliste* |
@@ -151,31 +151,41 @@ What needs a person moved into the bell.
 1. **TopBar** (dark, 64 px): hotel name (from `lg`; the phone's top bar names it), the night ("Natt
    til søndag 8. november · overlevering 06:00"), the robot's chip (place · doing · battery, in the
    bar's grey even when low), the *Opptak* / *Direkte* badge, the shift clock in Martian Mono.
-2. **Greeting** (`Greeting`, the h1): "God morgen / God dag / God kveld / Hei, Hamad" by the Oslo
-   hour (a shared login greets its desk: "God dag, resepsjonen"), then one sentence: the verdict
-   ("Natten gikk fint." in `success` with a check when at least 80 % of the night's tasks were done,
-   plain otherwise) and the night's work and what the day starts with ("Roboten og nattevakten
-   fullførte 71 av 81 oppgaver, og 3 rom skal vaskes før innsjekk."). On the right the screen's one
-   primary action: *Lag renholdsrute* when rooms must be cleaned (a normal primary button, not an
-   alarm), else *Lag sjekkrunde for N rom* (secondary).
+2. **Greeting** (`Greeting`, the h1): "God morgen / God dag / God kveld / Hei, Siri" by the shift
+   clock of the night on screen (the recorded night ends at 06:00, so "God morgen" at any wall-clock
+   hour; the Oslo hour only before a night is in; a shared login greets its desk: "God dag,
+   resepsjonen"), then one factual line, not a verdict (jury round 2: no "Natten gikk fint." beside
+   unsigned wet floors): what is done in `success` with a check ("73 oppgaver bekreftet"), what needs
+   a person in plain ink ("· 3 våte gulv og 1 ukjent person trenger en eier."), then what the night
+   staff did and what the day starts with ("Før innsjekk skal ett rom vaskes."). On the right the
+   screen's one primary action: *Se overleveringen 06:00* (the product's front door, for every role
+   that may open Overlevering; first on a phone), with *Lag renholdsrute* beside it as a secondary
+   button when rooms must be cleaned (primary for a role without Overlevering), else *Lag sjekkrunde
+   for N rom* (secondary).
 3. **Hotellet i tall** (`KpiStrip`, figures from `highlights.ts`): six figures at most on one rule,
    `Stat size="lg"`, `success` where the figure is good, neutral otherwise, never amber or red. In
    order, filtered by what the role may open: nye bookinger i dag, belegg i natt (%), oppgaver
    fullført i natt ("71 av 81": the misses are part of the total, not a red count), timer spart av
-   roboten (an estimate per finished task, `MINUTES_PER_TASK`), rom klare til salg ("6 av 9 ledige"),
+   roboten (an estimate per finished task, `MINUTES_PER_TASK`), rom klare til salg ("1 av 36": ready,
+   and free in the booking system or released today; the same figure Rom shows, from
+   `rooms/money.ts`, with the money line under it),
    gjester fornøyd ("4,7 av 5"); the robot manager gets rom sjekket av roboten and varer over
    minimum instead of the guest figures.
 4. **Widgets**, one per module the role may open, in registry order, in a 1 / 2 / 3 column grid (Rom
    spans two). A widget is a `Card` with the module's name, the *Åpne* link, its good news first (a
    green check and the figure: "73 av 87 fullført", "5 løst i dag", "15 av 16 varer over minimum"),
    then a dense list of at most four rows, completed first (*Sist fullført*, *Sist løst*), and its
-   `SourceNote`. Ready rooms are green tiles; an avvik is a quiet mark. The robot is one small
+   `SourceNote`. Ready rooms are green tiles; a room the room check held back is a taken tile
+   ("Holdt tilbake"), never green; an avvik is a quiet mark. Rom's widget opens with the money line
+   ("1 rom kan selges etter bekreftelse · ca. 1 500 kr · 1 holdt tilbake", *Se romsjekken*). The robot is one small
    widget (place, doing, battery, "68 av 78 oppgaver fullført", *Vis i 3D-kartet*), not the 3D hotel.
 
 ### The bell (`NotificationBell`)
 
 Everything that needs a person, from every module the role may open (`selectAlerts`), in one place
-on every page. Only what is actionable: a request the robot handed over (*Haster*), a staff-reported
+on every page. Only what is actionable, safety first: each wet floor without a sign (*Haster*, its own
+alert: since when, the robot's slip or the sign it moved, *Vaktmester / renhold, innen 06:30*), the
+stranger the robot refused at door after door (*Haster*, *Sikkerhet / resepsjon*), a request the robot handed over (*Haster*), a staff-reported
 urgent order, callers waiting for a call back, an arrival without a room, a room out of order, stock
 under minimum, the robot's low battery. Routine work stays out (the cleaning route is Oversikt's
 primary action).

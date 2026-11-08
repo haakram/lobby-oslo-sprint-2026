@@ -117,8 +117,14 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   same 291 "done" reports as the sighted build `c3801e0` (the same score on three seeds, +6 on the
   fourth), and the referee
   credited 290. Its own check never said "not done" on those nights (0 of 265 checks), so this shows
-  the score wasn't needed there, **not how well the robot catches a failure**; a test with injected
-  failures measures that (PENDING: the result goes behind *Slik vet vi det* when it is in). Over every
+  the score wasn't needed there, **not how well the robot catches a failure**. **That was measured
+  separately, offline, with failures injected** (side branch `hamad/faults`, `4571de3`; 20 rebuilt real
+  nights × 5 draws, 13 kinds of fault, 640 nights): the score-blind check's precision and recall on
+  "done" were **98.5 % / 99.8 % with 5 % of actions failing**, 95.5 % / 99.7 % at 15 % and 91.0 % /
+  99.7 % at 30 % (the sighted build: 98.8 / 99.5, 96.4 / 99.0, 92.0 / 98.3). It said "not done" 256,
+  734 and 1,578 times, against once with no faults. What it misses: a guest asleep in a room it checked,
+  a polite reply that doesn't answer, music that starts again, a look-alike lost item. The fault
+  wordings are ours, so this measures the kinds of failure, not how often a real robot meets them. Over every
   live night with a log, every version, the app's judgement card recomputes the plain credited share
   from the ledger, so it moves as nights are logged. It declined 112 requests as false or impossible; the referee credited 93 of those declines
   and gave 19 nothing.
@@ -139,8 +145,14 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
 - **What hotel rules cost** (the Wybe juror, the Wybe engineer): a knock before every keycard entry, no sign moved off a
   wet floor, known wet corridors avoided. The build that plays still does all three for Wybe's game
   (`sign_move` is on, the bags flow enters with the master key, a known wet corridor is priced at its
-  sim cost); a pilot runs with them off. **The cost in Wybe's sim: PENDING** (being measured on a side
-  branch; filled in only with the measured number).
+  sim cost); a pilot runs with them off. **The cost in Wybe's sim, measured in the replay bed** (164
+  real nights, side branch `hamad/hotelrules`, `70d5be4`): all four rules together **−125.8 points a
+  night** (−100.4 weighted per seed), no strands. Most of it is one rule: never moving a sign off a wet
+  floor costs −105.2, because the store holds three signs, so across the 164 nights the robot declined
+  415 spill reports for "no sign left"; a knock before every keycard entry costs −12.4; signing a patch nobody reported
+  −30.1; avoiding a known wet corridor 0 (with the cart there is no dry way round). So the safe rule is
+  nearly free with a stock of signs on every floor, which is what a hotel would do. A live check on four
+  seeds is queued (numbers follow).
 - **How we test a change before a live shift:** a replay bed (`agent/replaybed.py` on `hamad/final`)
   rebuilds every full live night offline from its log (72 when we ran it at 02:55 Sun). Replayed with the code
   that played them, 50 nights land within 61 points of live on average (**3.2 %**, 48 of 50 within

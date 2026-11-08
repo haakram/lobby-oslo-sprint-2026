@@ -218,8 +218,10 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
     `hamad/blind`, four live nights at 04:26 Sun on seeds 10, 16, 23 and 5), the agent decided "done"
     only from what it saw (the place reply, the guest's answer, the sign over the spill): the same 291
     decisions as the sighted build, 290 credited; its own check never said "not done" (0 of 265), so
-    the run shows the score wasn't needed on those nights, not how well the robot catches a failure
-    (`docs/DEMO.md` § 6.1, the data juror and the Wybe juror).
+    the run shows the score wasn't needed on those nights, not how well the robot catches a failure.
+    That was measured offline with failures injected (`hamad/faults`, 640 nights, 13 kinds of fault):
+    precision 98.5 % and recall 99.8 % with 5 % of actions failing, 91.0 % and 99.7 % at 30 %; the
+    fault wordings are ours, so it measures kinds of failure, not their frequency (`docs/DEMO.md` § 1.1).
   - **The simulator's room check is a text oracle, and 209 shows its limit:** at 01:29 the robot placed
     luggage-209 inside room 209; at 03:47 its look said "Nobody is here. The room is tidy." and the
     referee credited the report. A real occupancy check has false negatives (a guest under the duvet,
@@ -235,7 +237,10 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
     when there is no order (the guest still has no water), running the battery to 8.6 % before 06:00,
     and moving a wet-floor sign to a newer spill when the robot is out of signs (`sign_move`, still on in
     the agent). Fettero turns those into decisions and open items for a person; a real deployment keeps a
-    battery reserve and never takes a sign off a wet floor.
+    battery reserve and never takes a sign off a wet floor. What the hotel's rules cost in the sim,
+    measured in the replay bed on 164 real nights (`hamad/hotelrules`): −125.8 points a night for all
+    four, almost all of it (−105.2) from never moving a sign with only three in store; the knock costs
+    −12.4. A sign stock per floor makes the safe rule nearly free.
   - Lifts and doors need a per-building integration with the lift maker's API: the pilot's hard part,
     not "only the API adapter changes".
 - **Linen counting by camera** (Drift spec "should"): cut for time; Lager og lin shows test stock.

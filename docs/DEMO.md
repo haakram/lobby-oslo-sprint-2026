@@ -96,8 +96,9 @@ with the same result.
 | **Forecast against the dress rehearsal** (out of sample) | The forecast committed at **04:08**, before the rehearsal (`b57e4c1`, for `c3801e0`: final median 2,035, 80 % 1,898–2,186), expected a **mean night of 1,989** on unseen seeds. The four rehearsal nights complete at 05:30 average **2,218: +11 %** (+5 % against the forecast without the penalty). Practice seeds go to 999 (`docs/research/wybe-api.md`), so a holdout was always available; "the final is the only true holdout", which we wrote at 04:08, was wrong | `docs/runs/forecast.txt`, section *Out-of-sample check* |
 | "Done" credited, 18 nights of these four builds | **1,263 of 1,267 (99.7 %)**; the 4 not credited were all on seed 23, one per build | `builds.csv`: `done_reports`, `done_credited` |
 | What each "done" rested on, same 18 nights | **1,078** sent after the agent had seen the score rise during the task (credited by construction: the simulator's verifier, not trust). **189 on the robot's own judgement, 185 credited (97.9 %)**: room checks **117 of 117**, spill reports **68 of 72**. The 4 misses are one probe (R-037 on seed 23, a sign on another request's patch) repeated in all four builds, because what the agent learns resets every shift. **Counted once per (seed, request), the 189 are 65 distinct claims: 64 credited, 95 % (Wilson) interval 92–99.7 %**; the only miss is 23/R-037 | `builds.csv`/`ledger.csv`: `done_after_rise`, `done_own`, `done_own_credited`, `done_room_check*`, `done_spill*`; the distinct count in `ledger.json` (`distinct_own`); the rule in `scripts/ledger.py`, which the app's `doneBasis` runs too |
-| "Done" with the score hidden (the Wybe juror, the data juror) | Side branch `hamad/blind` (`NS_SCORE_BLIND=1`), four live nights started 04:26 Sun, seeds 10/16/23/5: the agent decides "done" only from what it saw, never from the score or the reply's wording. **The same 291 "done" reports as the sighted build, 290 credited**; the miss is R-037 on seed 23, the same spill the sighted build misses. Scores 2,760 · 2,748 · 2,304 · 2,559: the sighted `c3801e0`'s on 10, 16 and 5, +6 on 23. **Its own check said "not done" 0 times in 265** (D recounted the four logs): no action failed, so the run shows the score wasn't needed on those nights, **not how well the robot catches a failure**. We no longer quote a false-done rate from it. A test with failures injected at known rates in the offline fake measures that: **PENDING** | the four logs (`flags.score_blind`), `kind=experiment` and `blind_checks`/`blind_said_no` in `ledger.csv`; § 6.1 |
-| What hotel rules cost (the Wybe juror, the Wybe engineer) | A knock before every keycard entry, no sign moved off a wet floor, known wet corridors avoided, a sign where it slipped: **PENDING** (being measured on a side branch). Until the number is in, say "not measured" | — |
+| "Done" with the score hidden (the Wybe juror, the data juror) | Side branch `hamad/blind` (`NS_SCORE_BLIND=1`), four live nights started 04:26 Sun, seeds 10/16/23/5: the agent decides "done" only from what it saw, never from the score or the reply's wording. **The same 291 "done" reports as the sighted build, 290 credited**; the miss is R-037 on seed 23, the same spill the sighted build misses. Scores 2,760 · 2,748 · 2,304 · 2,559: the sighted `c3801e0`'s on 10, 16 and 5, +6 on 23. **Its own check said "not done" 0 times in 265** (D recounted the four logs): no action failed, so the run shows the score wasn't needed on those nights, **not how well the robot catches a failure**. We no longer quote a false-done rate from it | the four logs (`flags.score_blind`), `kind=experiment` and `blind_checks`/`blind_said_no` in `ledger.csv`; § 6.1 |
+| **The verifier with failures injected** (the data juror, the Wybe juror) | Offline, side branch `hamad/faults` (`4571de3`): 20 rebuilt real nights × 5 draws, 13 kinds of fault (a place that lands outside the room, a reply that doesn't answer, a sign beside the spill …), 640 nights. The score-blind "done" check: **precision 98.5 %, recall 99.8 % with 5 % of actions failing**; 95.5 / 99.7 % at 15 %; 91.0 / 99.7 % at 30 % (the sighted build: 98.8 / 99.5, 96.4 / 99.0, 92.0 / 98.3). It said "not done" **256, 734 and 1,578 times**, against once with no faults. Misses: a guest asleep in a room it checked, a polite off-topic reply, music that starts again, a look-alike lost item. **Caveat:** the fault wordings are ours, so it measures the kinds of failure, not how often a real robot meets them | `hamad/faults` `4571de3` (from the controller's message, Sun 8 Nov; not on this branch) |
+| **What hotel rules cost** (the Wybe juror, the Wybe engineer) | Replay bed, 164 real nights, side branch `hamad/hotelrules` (`70d5be4`): all four rules **−125.8 points a night** (−100.4 weighted per seed), 0 strands. Per rule: knock before every keycard entry **−12.4**; never move a sign off a wet floor **−105.2** (the store holds three signs, so 415 spill reports declined for "no sign left" across the 164 nights); avoid a known wet corridor **0** (with the cart there is no dry way round); sign a patch nobody reported **−30.1**. A stock of signs per floor would make the safe rule nearly free. The live check on four seeds is queued: **PENDING** | `hamad/hotelrules` `70d5be4` (controller's message; not on this branch) |
 | Declines, same 18 nights | 112 declined; the referee credited **93** (+5 each) and gave **19** nothing | `builds.csv`: `declines_credited`, `declines_not_credited` |
 | Best practice score on the board | **2,807**, **#8 of 20** at 04:10 Sun, level with the team below us (top 3,448; we played 242 practice shifts, the leader 1,556). It came from a board test (the `lottery` checkout, `d7040b7`, seed 10, 03:38), so it is **not** the final build; the final branch's best (2,760, `8eac151` and `c3801e0`) would rank #11 | `nightshift-board.wybe.me/data`; `ledger.csv`, `kind` `board-test` |
 | All full live nights, every version | **120** nights that ran to 06:00 by 04:08 (4 more stranded). Builds: **67**, Sat 13:15 – Sun 03:26, median **1,960**, mean **2,030**, most from earlier, weaker builds. Board tests: **53**, Sun 02:37–04:02, mean **2,753**, best **2,807**, on the seeds they were tuned for (42 on seed 10). Moves as nights are logged | `ledger.csv`, `end_reason` "server ended: time", `kind` |
@@ -393,11 +394,13 @@ action really fails?"* (Hamad)
 
 > "Zero: 0 of 265 checks on those four nights. You're right, so it shows the score wasn't needed on
 > those nights, not that the robot catches a failure, and we've stopped quoting a false-done rate from
-> it. [if the fault-injection result is in: 'We measured that separately: in the offline fake we
-> injected failures at known rates, a place that lands outside the room, a message nobody heard, a sign
-> beside the spill, and the score-blind gate caught [X of Y], with [Z] false dones and [M] false
-> refusals; it's behind Slik vet vi det and in docs/runs.'] [if not: 'The test with injected failures
-> is next; until it exists, one signal on the handover reads ikke bekreftet.'] Counting distinct
+> it. We measured that separately: offline, on 20 rebuilt real nights, five draws each, we injected
+> 13 kinds of failure, a place that lands outside the room, a reply that doesn't answer, a sign beside
+> the spill. With 5 % of actions failing the score-blind check's precision was 98.5 % and its recall
+> 99.8 %; at 30 % failing, 91 and 99.7. It said 'not done' 256 times at 5 %, against once with no
+> faults. It misses a guest asleep in a checked room, a polite off-topic reply, music that starts again,
+> a look-alike lost item. The fault wordings are ours, so it measures the kinds, not the frequency.
+> Counting distinct
 > claims, not the same seed replayed, the final branch's own-judgement record is 64 of 65, a 95 %
 > interval of 92 to 99.7 %. The demo night's 9 of 9 has a lower bound of 70 %, and its own log
 > contradicts one of the 9, 209, so the card says 8 of 9. The forecast is for the build that plays at
@@ -449,17 +452,21 @@ without knocking, moved a sign off a floor that was still wet, and crossed a cor
 27 times. Your final build still does all three. What does following hotel rules cost you on our
 server, which build plays at noon, and which one would you put in a real hotel on Monday?"* (Hamad)
 
-> "[if measured: 'We measured it this morning. A hotel-rules switch, a knock before every keycard
-> entry, no sign moves, known wet corridors avoided and a sign where it slipped, played seeds [..] on
-> your server: [N] points a night, [X] % less, with zero entries without a knock and zero signs moved
-> off a wet floor.'] [if not: 'We haven't measured it, so I won't give you a number.'] At noon
+> "We measured it this morning in our replay bed, on 164 real nights: all four rules together, a
+> knock before every keycard entry, no sign moved off a wet floor, known wet corridors avoided and a
+> sign on patches nobody reported, cost 126 points a night, with no strands. Almost all of it is the
+> signs: the store holds three, so the robot declined 415 spill reports for 'no sign left'. The knock
+> costs 12 points, and avoiding the wet corridor costs nothing, because with the cart there is no dry
+> way round. So the safe rule is nearly free with a stock of signs on every floor, which is what a
+> hotel would do. [if the live check is in: 'Live on your server, on four seeds: [N].'] At noon
 > [fill: the team's decision; the forecast's target is `8de9ffc`, the head of `hamad/final`] plays,
 > because [fill]. In a hotel only the hotel-rules build runs, and the knock isn't politeness: it's a
 > sensor. A voice behind the door stops the entry and goes to the desk; that's how the robot itself
 > would have caught 209. On the verifier: live on your server its own check never disagreed with your
-> score, 0 of 265 times, so the live run alone doesn't prove it. [if in: 'The injected faults do:
-> [X of Y] caught, [M] false refusals.'] And at 06:00 our page tells the manager the robot is not docked
-> and still holds the master keycard, because that's the first thing a hotel wants back."
+> score, 0 of 265 times, so the live run alone doesn't prove it. The injected faults do: with 5 % of
+> actions failing, 98.5 % precision and 99.8 % recall, offline, on fault wordings we wrote. And at 06:00
+> our page tells the manager the robot is not docked and still holds the master keycard, because that's
+> the first thing a hotel wants back."
 
 Don't say "we switched off the sign move": `sign_move` is still in `DEFAULT_EXPERIMENTS` on
 `hamad/final`. Sim-to-real gaps to name before he does: in a pilot the robot doesn't open booked rooms
@@ -613,8 +620,9 @@ with our simulator? And on a real robot, which signal would have caught it?"* (H
 > robot's own log, not 9 of 9. On a real robot perception comes last: the lock trail shows the 01:29
 > delivery entry, the PMS shows the assignment, and a person confirms before any sale. A 'done' counts as
 > confirmed only when at least one signal didn't come from the robot; two of its own read *robotens egen
-> observasjon*. [if measured: 'We also measured what hotel rules cost in your sim: [X] points a night,
-> [Y] %.'] And at 06:00 our handover says the robot is not docked, at 20 %, holding the master keycard,
+> observasjon*. We also measured what hotel rules cost in your sim, in our replay bed: 126 points a
+> night, almost all of it from never moving a sign off a wet floor with only three in store. And at
+> 06:00 our handover says the robot is not docked, at 20 %, holding the master keycard,
 > because that's the first thing a hotel wants back."
 
 If he follows with "what's next if you win": the Wybe-stand answer as given **[fill]**, the number of

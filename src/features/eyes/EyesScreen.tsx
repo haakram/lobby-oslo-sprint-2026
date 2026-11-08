@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, EmptyState, ErrorState, RegenIcon, Sheet, Skeleton, cx } from "@/ui";
 import { BoxOverlay, type BoxLabel } from "./BoxOverlay";
 import { cocoLabel, isProductClass } from "./cocoLabels";
-import { cropFrame } from "./cropFrame";
+import { cropFrame, personBoxes } from "./cropFrame";
 import { PermissionState } from "./PermissionState";
 import { ProductCard } from "./ProductCard";
 import { IdentifyError, QUOTA_COPY } from "./requestIdentify";
@@ -37,13 +37,20 @@ export function EyesScreen() {
   const [sheet, setSheet] = useState<SheetContent | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [autoOn, setAutoOn] = useState(true);
-  const [sceneOn, setSceneOn] = useState(true);
+  // Off by default: a scene scan sends the whole frame, so it runs only when someone switches it on.
+  const [sceneOn, setSceneOn] = useState(false);
   // Identify and scene share one budget: a 429 from either stops both.
   const [quotaReached, setQuotaReached] = useState(false);
   const onQuota = useCallback(() => setQuotaReached(true), []);
   const request = useRef<AbortController | null>(null);
 
   const detector = useDetector(video, cameraStatus === "ready" && !sheetOpen);
+  // The people in view, painted over on the phone before any whole frame is sent.
+  const latestBoxes = useRef<Box[]>([]);
+  useEffect(() => {
+    latestBoxes.current = detector.boxes;
+  }, [detector.boxes]);
+  const peopleInView = useCallback(() => personBoxes(latestBoxes.current), []);
   const { results, busy, send } = useLiveIdentify(video, detector.boxes, {
     auto: autoOn,
     paused: sheetOpen,
@@ -55,6 +62,7 @@ export function EyesScreen() {
     paused: sheetOpen,
     stopped: quotaReached,
     onQuota,
+    cover: peopleInView,
   });
 
   useEffect(() => () => request.current?.abort(), []);
@@ -77,7 +85,8 @@ export function EyesScreen() {
     async (box: Box | null) => {
       const element = video.current;
       if (!element || cameraStatus !== "ready") return;
-      const image = cropFrame(element, box);
+      // A tapped box is a product crop; the whole frame (the shutter) goes with the people in it painted over.
+      const image = box ? cropFrame(element, box) : cropFrame(element, null, undefined, peopleInView());
       request.current?.abort();
       const controller = new AbortController();
       request.current = controller;
@@ -92,7 +101,7 @@ export function EyesScreen() {
         setSheet((current) => current && { ...current, error: { title: known.title, quota: known.quota } });
       }
     },
-    [video, cameraStatus, send],
+    [video, cameraStatus, send, peopleInView],
   );
 
   const select = useCallback(
@@ -214,6 +223,11 @@ export function EyesScreen() {
             <p aria-live="polite" className="rounded-md bg-bg/75 px-3 py-1 text-sm text-text backdrop-blur-sm">
               {hint}
             </p>
+            {sceneOn && !quotaReached && (
+              <p className="rounded-md bg-bg/75 px-3 py-1 text-sm text-text backdrop-blur-sm">
+                Omgivelser sender hele bildet hvert 10. sekund. Personer kameraet finner, dekkes til først.
+              </p>
+            )}
             {seenLabels.length > 0 && (
               <p className="rounded-md border border-dashed border-text bg-bg/75 px-3 py-1 text-sm backdrop-blur-sm">
                 <span className="text-muted">Ser: </span>
@@ -265,20 +279,27 @@ export function EyesScreen() {
   );
 }
 
-/** Before the browser is asked: what the camera is for, and the one tap that asks. */
+/** Before the browser is asked: what the camera is for, what leaves the phone, and the one tap that asks. */
 function CameraStart({ onStart }: { onStart: () => void }) {
   return (
     <div className="flex flex-1 items-center px-4 py-12 sm:px-8 lg:px-12">
-      <EmptyState
-        icon={<RegenIcon name="eye" size={32} />}
-        title="Se det roboten ser"
-        body="Roboten ser gjennom kameraet og kjenner igjen varer og omgivelser. Nettleseren spør om lov første gang."
-        action={
-          <Button size="lg" onClick={onStart}>
-            Slå på kameraet
-          </Button>
-        }
-      />
+      <div className="flex max-w-md flex-col gap-5">
+        <EmptyState
+          icon={<RegenIcon name="eye" size={32} />}
+          title="Se det roboten ser"
+          body="Roboten ser gjennom kameraet og kjenner igjen varer og omgivelser. Nettleseren spør om lov første gang."
+          action={
+            <Button size="lg" onClick={onStart}>
+              Slå på kameraet
+            </Button>
+          }
+        />
+        <p className="border-t border-line pt-4 text-sm text-muted">
+          Utsnitt av varer sendes til Claude (Anthropic, USA) for å kjennes igjen. Personer sendes aldri som utsnitt.
+          Hele bildet sendes bare når du slår på Omgivelser eller trykker Identifiser hele bildet, og personer kameraet
+          finner, dekkes til på telefonen først. Ingenting lagres hos oss.
+        </p>
+      </div>
     </div>
   );
 }
@@ -290,7 +311,8 @@ function ObjectCard({ label }: { label: string }) {
       <Badge>Ikke en vare</Badge>
       <p className="text-2xl font-bold tracking-[-0.02em]">{label}</p>
       <p className="text-base text-muted">
-        Fettero kjenner igjen dette selv. Bare varer sendes til gjenkjenning, så dette kostet ingenting.
+        Fettero kjenner igjen dette selv, så det kostet ingenting. Bare utsnitt av varer sendes til gjenkjenning. Hele
+        bildet sendes bare med Omgivelser eller Identifiser hele bildet, og da dekkes personer kameraet finner, til først.
       </p>
     </div>
   );

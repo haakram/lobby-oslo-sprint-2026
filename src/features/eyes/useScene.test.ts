@@ -84,4 +84,11 @@ describe("useScene", () => {
     expect(cropFrame.mock.calls.length).toBeGreaterThan(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+  it("paints the people in view over before the frame is sent", async () => {
+    const person = { id: "p1", x: 10, y: 10, w: 50, h: 120, label: "person", score: 0.9 };
+    const cover = vi.fn(() => [person]);
+    renderHook(() => useScene(video, { on: true, paused: false, stopped: false, onQuota, cover }));
+    await advance(1_000);
+    expect(cropFrame).toHaveBeenCalledWith(video.current, null, 640, [person]);
+  });
 });

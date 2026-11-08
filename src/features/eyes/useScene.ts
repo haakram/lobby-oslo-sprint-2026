@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { cropFrame } from "./cropFrame";
 import { IdentifyError, requestScene } from "./requestIdentify";
 import { freshLandmarks, shouldScan, type SeenLandmark } from "./sceneSchedule";
+import type { Box } from "./smoothBoxes";
+
+const NOTHING_TO_COVER = (): readonly Box[] => [];
 
 const TICK_MS = 1000;
 /** Landmarks need the room, not detail: a smaller frame is cheaper. */
@@ -12,6 +15,7 @@ const SCAN_MAX_SIDE = 640;
 /**
  * Scans the whole frame for doors, lifts and signs every 10 s while `on` and not `paused`.
  * Returns the landmarks still fresh (they fade over 12 s), and `now` to fade them by.
+ * `cover` gives the boxes (the people in view) to paint over on the phone before the frame is sent.
  */
 export function useScene(
   video: RefObject<HTMLVideoElement | null>,
@@ -20,16 +24,17 @@ export function useScene(
     paused,
     stopped,
     onQuota,
-  }: { on: boolean; paused: boolean; stopped: boolean; onQuota: () => void },
+    cover = NOTHING_TO_COVER,
+  }: { on: boolean; paused: boolean; stopped: boolean; onQuota: () => void; cover?: () => readonly Box[] },
 ) {
   const [landmarks, setLandmarks] = useState<SeenLandmark[]>([]);
   const [now, setNow] = useState(0);
 
   // Latest options for the timer. `stopped`: the shared quota ran out (here or in identify).
-  const outside = useRef({ paused: paused || !on, stopped, onQuota });
+  const outside = useRef({ paused: paused || !on, stopped, onQuota, cover });
   useEffect(() => {
-    outside.current = { paused: paused || !on, stopped, onQuota };
-  }, [on, paused, stopped, onQuota]);
+    outside.current = { paused: paused || !on, stopped, onQuota, cover };
+  }, [on, paused, stopped, onQuota, cover]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -56,7 +61,7 @@ export function useScene(
       // Crop before marking the scan as started: a throw here costs nothing and the next tick retries.
       let image: string;
       try {
-        image = cropFrame(element, null, SCAN_MAX_SIDE);
+        image = cropFrame(element, null, SCAN_MAX_SIDE, outside.current.cover());
       } catch {
         return;
       }

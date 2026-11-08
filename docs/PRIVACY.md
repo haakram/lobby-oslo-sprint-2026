@@ -324,7 +324,8 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
 - The per-user limits on the paid routes, like the login limiter, live in memory per server instance:
   on serverless, N instances allow N times the limit. The provider-side spend limits are the hard cap.
 - The team's accounts share one password (team lead's choice; `docs/checks/threat-model.md`); the jury
-  has its own. Sessions can't be revoked one by one.
+  has its own. Sessions can't be revoked one by one. **The named security step before a pilot:** one
+  account per person with its own password, and sessions revocable one by one (`TODO(phase-3)`).
 - Booking requests sit in the staff browser's `localStorage` (names, phone numbers) until settled.
 - The phone receptionist's webhook tools (`/api/reception/tools/*`, no login, a shared secret) have no
   per-route limit; they fail closed today because no secret is set. Add a limit before a pilot sets it.

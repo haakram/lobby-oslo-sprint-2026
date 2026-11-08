@@ -3,7 +3,7 @@
 > **Draft for team review (Hamad, ShirazIQ), updated Sun 8 Nov morning from what is built on
 > `hamad/jury-loop` (app) and `hamad/final` (agent).** It describes the product as it stands, not a
 > wish list. Changes only by team agreement (AI_RULES R2); an AI that wants to add something not listed
-> here stops and asks. The team's open decisions were settled on Sun 8 Nov morning (jury round 4):
+> here stops and asks. The team's open decisions were settled on Sun 8 Nov morning (after the fourth review round):
 > the wedge, its reason, the commitment and the stop rule (§ 8). The product trades as **Fettero** on this
 > branch (the team lead decides whether `main` follows); code identifiers keep the old `lobby` names.
 
@@ -77,7 +77,7 @@ fallback (about USD 0.001 spent all weekend). For deliveries it reports "done" o
 the server's score rise, so those are credited by construction; room checks and spill reports rest on
 its own judgement. Numbers per build, pinned to commits on `hamad/final`, not a best night: the branch
 head at 03:30 (`c3801e0`) averaged 2,591 on its four tuned seeds (best 2,760, seed 10; `8eac151` before
-it, 2,560). Our forecast for the final's unseen seeds, from a build-plus-seed model fitted on every complete live build night (`scripts/forecast.py`, `docs/runs/forecast.txt`), is **a median of 2,035, 80 % between 1,898 and 2,186**: lower than the tuned nights mostly because those seeds are easier (about −19 %), plus a measured tuning penalty of about −6 % (from two nights). Over the 18 live nights of the last four builds the referee credited 1,263 of
+it, 2,560). The build that plays at 12:00 is `8de9ffc` (the head of `hamad/final`, on `main` since 05:59). Our forecast for the final's unseen seeds, from a build-plus-seed model fitted on every complete live build night (`scripts/forecast.py`, `docs/runs/forecast.txt`), is **a median of 2,050, 80 % between 1,759 and 2,393**: lower than the tuned nights mostly because those seeds are easier (about −19 %), plus a measured tuning penalty of about −5 % (from two nights). Out of sample: the forecast committed at 04:08 (median 2,035, 80 % 1,898–2,186) held, because the dress rehearsal on ten never-played seeds came in at 2,176 (best 9 of 10). Over the 18 live nights of the last four builds the referee credited 1,263 of
 1,267 "done" reports (99.7 %); taking out the ones sent after the score rose, **185 of 189 claims on its
 own judgement were credited (97.9 %), room checks 117 of 117**; those 189 are 65 distinct claims
 (seed, request) replayed across near-identical builds, so the honest count is **64 of 65 (95 %
@@ -217,7 +217,10 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 - **PMS, inventory, staff-planning and maintenance integrations.** Test data stands in, marked
   `TODO(phase-3)` in code and with a `SourceNote` on screen. The PMS test data was written after we saw
   the robot's log, to show what the join does; in a pilot it reads the hotel's PMS. Integration is pilot
-  work, not demo work. No lock system is connected either: the door-lock and energy-slot signal in the
+  work, not demo work. **The first hurdle may be a contract, not the GDPR** (legal review): a lock
+  vendor's licence may forbid exporting audit data to a third party or charge for its API, and a PMS
+  vendor's read-only API (Mews, Apaleo, Visma) needs a marketplace or partner agreement and that
+  vendor's DPA chain. No vendor has been asked yet. No lock system is connected either: the door-lock and energy-slot signal in the
   demo is a team-written sample, and many hotels run offline locks with no signal at night, where the
   night clerk's room check is the evidence (`docs/PRIVACY.md` § 10).
 - **A database or shared backend.** Statuses, sign-offs and receptionist records live in the browser
@@ -303,6 +306,14 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
   makers. The ceiling: Norway's 92,678 hotel rooms ≈ NOK 33 M a year at full share; the four big Nordic
   countries ≈ 359,000 rooms ≈ NOK 129 M (Eurostat); the next price lever is a robot connector per
   robot per month (`docs/DEMO.md` § 7).
+- **Proposed Sun 8 Nov after the fifth review round (team to confirm; `docs/DEMO.md` § 7):** the pilot
+  converts **on usage**, the handover signed in Fettero on 5 of 7 mornings in 3 of the 4 weeks plus the
+  general manager's yes, with rooms found before the housekeeping round reported beside it, not as the
+  gate. Measuring it needs the sign-off as an append-only server event (hotel, role, date; no guest
+  data), `TODO(phase-3)`, the first week's build task. Hotel 1 goes live on 16 November, before the
+  julebord peak, and the stop rule counts the first 10 hotels we actually spoke to, not the calendar,
+  because 8 December falls inside the season. The named security step before hotel 1: one account per
+  person with its own password, and sessions revocable one by one (`docs/checks/threat-model.md`).
 - Have we any hotel person to quote? None so far. The phone round and hallway test (`docs/DEMO.md`
   § 8) are planned for Sunday morning, run by ShirazIQ while Hamad is at the Wybe final (team to
   confirm). The night desks are reachable before 06:45, the buyers 08:00–09:30 (§ 8.1).

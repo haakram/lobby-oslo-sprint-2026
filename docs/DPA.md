@@ -65,8 +65,8 @@ Innlogging med roller kontrollert på serveren; passord som scrypt-hasher; signe
 (HttpOnly, SameSite=Lax, 12 timer); en innholdssikkerhetspolicy som starter fra bare egen opprinnelse (`default-src 'self'`); nøkler
 bare på serveren; ingen analyseverktøy eller sporing; hemmeligheter skannes bort fra git; ingen
 database i dag. Detaljer med filstier: `docs/PRIVACY.md` § 8. For piloten i tillegg: signalet reduseres
-hos hotellet (punkt 4); egen brukerkonto per person i stedet for felles passord; tilgang fjernes samme
-dag en ansatt slutter. Kjente hull som må lukkes før piloten: `docs/PRIVACY.md` § 8, *Known gaps*.
+hos hotellet (punkt 4); egen brukerkonto per person i stedet for felles passord; sesjoner som kan trekkes tilbake én og én;
+tilgang fjernes samme dag en ansatt slutter. Kjente hull som må lukkes før piloten: `docs/PRIVACY.md` § 8, *Known gaps*.
 
 ## Vedlegg IV: Underdatabehandlere
 

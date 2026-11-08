@@ -1,7 +1,8 @@
 import { type KeyboardEvent, useMemo } from "react";
 import { BASE_HOTEL, floorsOf, type HotelMap, type HotelNode } from "@/features/hotel/mapFromRun";
-import { placeName, ROOM_STATUS_LABEL, roomNumber, type Snapshot } from "@/features/replay";
+import { placeName, roomNumber, type Snapshot } from "@/features/replay";
 import { cx } from "@/ui";
+import { roomWord } from "./held";
 import { STATUS_CSS_VAR } from "./tokens";
 
 /**
@@ -150,7 +151,7 @@ export function HotelPlan2D({
                   const highlighted = robot?.attention === node.id;
                   const isSelected = selectedRoom === node.id;
                   const avvik = snapshot?.rooms[node.id]?.avvik ?? false;
-                  const name = `Rom ${roomNumber(node.id)}: ${ROOM_STATUS_LABEL[status]}${avvik ? ", åpent avvik" : ""}`;
+                  const name = `Rom ${roomNumber(node.id)}: ${roomWord(snapshot?.rooms[node.id])}${avvik ? ", åpent avvik" : ""}`;
                   return (
                     <g
                       key={node.id}

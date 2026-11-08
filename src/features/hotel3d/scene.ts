@@ -14,6 +14,7 @@ import {
   type Timeline,
 } from "@/features/replay";
 import { roomPaint } from "@/ui/roomStatus";
+import { HELD_WORD, heldOf } from "./held";
 import { type SceneTokens, STATUS_TOKEN, tokenKey } from "./tokens";
 
 /**
@@ -60,6 +61,8 @@ type RoomSlot = {
   /** The quiet ink frame of an open avvik, drawn over the room's own status colour (never red). */
   avvikFrame: THREE.LineSegments;
   avvik: boolean;
+  /** Held back by the room check (held.ts): painted as taken, and the hover says "Holdt tilbake". */
+  held: boolean;
 };
 type Link = { line: THREE.Line; base: THREE.Vector3[] };
 export type Pick = { kind: "room" | "place"; id: string; floor: number };
@@ -416,7 +419,7 @@ export class HotelScene {
         avvikFrame.position.set(room.x, y + ROOM_HEIGHT / 2, room.z);
         avvikFrame.visible = false;
         group.add(avvikFrame);
-        this.rooms.set(room.id, { index, floor, colour, status: "ukjent", mesh: roomMesh, tag: tag.element, avvikFrame, avvik: false });
+        this.rooms.set(room.id, { index, floor, colour, status: "ukjent", mesh: roomMesh, tag: tag.element, avvikFrame, avvik: false, held: false });
       });
       roomMesh.instanceMatrix.needsUpdate = true;
       if (roomMesh.instanceColor) roomMesh.instanceColor.needsUpdate = true;
@@ -684,6 +687,7 @@ export class HotelScene {
       const view = snapshot?.rooms[id];
       const status = view?.status ?? "ukjent";
       const avvik = view?.avvik ?? false;
+      slot.held = heldOf(view) !== null;
       if (avvik !== slot.avvik) {
         slot.avvik = avvik;
         slot.avvikFrame.visible = avvik;
@@ -857,8 +861,8 @@ export class HotelScene {
       this.renderer.domElement.style.cursor = this.down ? "grabbing" : "grab";
       return;
     }
-    const text =
-      hit.kind === "room" ? `${placeName(hit.id)} · ${ROOM_STATUS_LABEL[this.rooms.get(hit.id)?.status ?? "ukjent"]}` : placeName(hit.id);
+    const slot = hit.kind === "room" ? this.rooms.get(hit.id) : undefined;
+    const text = hit.kind === "room" ? `${placeName(hit.id)} · ${slot?.held ? HELD_WORD : ROOM_STATUS_LABEL[slot?.status ?? "ukjent"]}` : placeName(hit.id);
     if (this.hover.textContent !== text) this.hover.textContent = text;
     this.hover.style.transform = `translate(${Math.round(this.pointerPx.x + 14)}px, ${Math.round(this.pointerPx.y + 16)}px)`;
     this.hover.hidden = false;

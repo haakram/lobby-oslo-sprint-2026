@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HotelScreen } from "./HotelScreen";
 
 const SAMPLE = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
+const DEMO = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
 
 beforeEach(() => {
   // The demo night only; the local viewer server is not running.
@@ -79,5 +80,26 @@ describe("HotelScreen", () => {
     render(<HotelScreen viewerUrl="http://127.0.0.1:8765" />);
     expect(await screen.findByRole("button", { name: "Direkte" })).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.map(([input]) => String(input))).toContain("http://127.0.0.1:8765/api/runs");
+  });
+});
+
+describe("HotelScreen on the demo night: the map says what the room check says", () => {
+  it("shows 209 (an arriving guest's bags in a room booked to tomorrow) as Holdt tilbake, never a green Klar, on the map, in the list and on its card", async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/runs/demo.jsonl")) return new Response(DEMO);
+      throw new TypeError("Failed to fetch");
+    });
+    const select = await renderReady();
+    expect(within(select).getAllByRole("option").find((option) => option.getAttribute("value") === "room-209")).toHaveTextContent("Rom 209 · Holdt tilbake");
+    const tile = screen.getByRole("button", { name: "Rom 209: Holdt tilbake" });
+    expect(tile.querySelector("rect")?.getAttribute("fill")).not.toBe("var(--success)");
+    // 213, the room to sell after reception confirms, stays Klar.
+    expect(screen.getByRole("button", { name: "Rom 213: Klar" }).querySelector("rect")).toHaveAttribute("fill", "var(--success)");
+
+    fireEvent.change(select, { target: { value: "room-209" } });
+    const card = within(screen.getByRole("complementary", { name: "Status nå" }));
+    expect(card.getByText("Holdt tilbake")).toBeInTheDocument();
+    expect(card.queryByText("Klar")).not.toBeInTheDocument();
+    expect(card.getByText(/^Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til .+\. Dobbelt tildelt\?$/)).toBeInTheDocument();
   });
 });

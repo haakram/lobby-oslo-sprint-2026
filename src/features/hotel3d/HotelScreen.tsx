@@ -8,6 +8,7 @@ import { PlaybackControls } from "./PlaybackControls";
 import { forManagers } from "@/features/nightshift/eventFilter";
 import { EventFeed, RoomCard, TaskCard } from "./ReplayPanels";
 import { RoomPicker } from "./RoomPicker";
+import { useHeldReplay } from "./useHeldReplay";
 
 /** Where the robot's events a manager can read come from; the full log lives on Natteskift. */
 const RECENT_SHOWN = 8;
@@ -56,7 +57,8 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
     };
   }, [base, configured]);
 
-  const replay = useHotelReplay(source, { viewerUrl: base });
+  // The room check applied once for the map and the drawer: a room held back reads "Holdt tilbake" in both.
+  const replay = useHeldReplay(useHotelReplay(source, { viewerUrl: base }));
   const ready = replay.status === "ready";
   const snapshot = replay.snapshot;
 

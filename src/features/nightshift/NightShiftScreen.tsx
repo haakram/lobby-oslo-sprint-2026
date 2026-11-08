@@ -6,6 +6,7 @@ import { Hotel3D, StatusLegend } from "@/features/hotel3d/Hotel3D";
 import { PlaybackControls } from "@/features/hotel3d/PlaybackControls";
 import { EventFeed, RoomCard, TaskCard, WorkOrderList } from "@/features/hotel3d/ReplayPanels";
 import { RoomPicker } from "@/features/hotel3d/RoomPicker";
+import { useHeldReplay } from "@/features/hotel3d/useHeldReplay";
 import { type HotelReplay, itemName, placeName, type ReplaySource, roomNumber, simToClock, type Task, taskKindName, useHotelReplay } from "@/features/replay";
 import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, PageHeader, RegenIcon, Skeleton, Stat } from "@/ui";
 import { forManagers } from "./eventFilter";
@@ -24,7 +25,8 @@ const MAX_EVENTS = 40;
 export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   const base = viewerBase(viewerUrl);
   const [source, setSource] = useState<ReplaySource>("demo");
-  const replay = useHotelReplay(source, { viewerUrl: base });
+  // The room check applied to the map and the room card (hotel3d/held.ts): 209, held back, never a green Klar.
+  const replay = useHeldReplay(useHotelReplay(source, { viewerUrl: base }));
   const ready = replay.status === "ready";
   const snapshot = replay.snapshot;
   const [room, setRoom] = useState<string | null>(null);

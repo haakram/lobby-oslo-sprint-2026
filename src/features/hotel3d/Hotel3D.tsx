@@ -8,6 +8,7 @@ import { AVVIK, cx, RegenIcon, Skeleton } from "@/ui";
 import { HotelPlan2D } from "./HotelPlan2D";
 import type { HotelScene } from "./scene";
 import { readTokens, STATUS_CSS_VAR } from "./tokens";
+import { useHeldReplay } from "./useHeldReplay";
 import "./hotel3d.css";
 
 /**
@@ -76,7 +77,9 @@ function hasWebGL(): boolean {
 const noSubscribe = () => () => {};
 const serverWebGL = () => null;
 
-export function Hotel3D({ replay, variant = "full", className, selectedRoom, onSelectRoom, onSelectPlace }: Hotel3DProps) {
+export function Hotel3D({ replay: played, variant = "full", className, selectedRoom, onSelectRoom, onSelectPlace }: Hotel3DProps) {
+  // The room check holds what the robot found tidy but carried an arrival's bags into: taken, never a green Klar.
+  const replay = useHeldReplay(played);
   const reduced = useReducedMotion();
   const rootRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);

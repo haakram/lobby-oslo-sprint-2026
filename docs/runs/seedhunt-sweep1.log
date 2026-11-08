@@ -1,0 +1,168 @@
+live shifts now 2; using 2 workers
+[w0] seed 22 shift w2-2378f9830bbc808310a6f0ad2ffe4e90
+[w1] seed 23 shift w2-d5d951537aa6d57de010424185f38144
+[w0] seed 22: 67 req, est 2886 pts, fup 5 skips 4 unk 0 calls 408 secs 176 end 05:55:18 
+[w0] seed 24 shift w2-eedd8c45ff04f4bcaf5233c6565016d0
+[w1] seed 23: 82 req, est 3483 pts, fup 4 skips 2 unk 0 calls 429 secs 187 end 05:59:14 
+[w1] seed 25 shift w2-3bf9e994951a1f8655ffeb130a00aaf3
+[w0] seed 24: 62 req, est 2385 pts, fup 9 skips 5 unk 0 calls 404 secs 162 end 05:55:35 
+[w0] seed 26 shift w2-a139209b8a740c0e1d2a5dcc4a937b5e
+[w1] seed 25: 73 req, est 2845 pts, fup 3 skips 3 unk 0 calls 412 secs 165 end 05:59:54 
+[w1] seed 27 shift w2-98fbfc9e7b1ae85b3ec61fb5aea30218
+[w0] seed 26: 58 req, est 2147 pts, fup 4 skips 3 unk 0 calls 396 secs 166 end 05:59:23 
+[w0] seed 28 shift w2-67699d9b6c19bc387515945995018241
+[w1] seed 27: 78 req, est 2698 pts, fup 13 skips 3 unk 0 calls 422 secs 178 end 05:55:10 
+[w1] seed 29 shift w2-2521e32baef9e2bb4e6c75032e0808ad
+[w0] seed 28: 68 req, est 2824 pts, fup 4 skips 5 unk 0 calls 418 secs 168 end 05:58:54 
+[w0] seed 30 shift w2-27e659a92f214ddb2f779348cf78a334
+[w1] seed 29: 68 req, est 2730 pts, fup 5 skips 2 unk 0 calls 406 secs 163 end 05:55:08 
+[w1] seed 31 shift w2-b19544e8facfac65bf7d25714cfcc224
+[w0] seed 30: 73 req, est 3003 pts, fup 9 skips 4 unk 0 calls 415 secs 177 end 05:56:16 
+[w0] seed 32 shift w2-002e6095c950ce49e24af08a65755ec3
+[w1] seed 31: 84 req, est 3319 pts, fup 9 skips 4 unk 0 calls 432 secs 184 end 05:55:05 
+[w1] seed 33 shift w2-311ed36b805e09f46c876920cedd9002
+[w0] seed 32: 81 req, est 3318 pts, fup 4 skips 6 unk 0 calls 434 secs 174 end 05:55:55 
+[w0] seed 34 shift w2-c37926c8ab39d76ddf7af4468ef90d95
+[w1] seed 33: 56 req, est 2210 pts, fup 6 skips 2 unk 0 calls 396 secs 159 end 05:56:43 
+[w1] seed 35 shift w2-89c1a336d60d91a7434fe3994073398d
+[w0] seed 34: 71 req, est 2924 pts, fup 7 skips 2 unk 0 calls 416 secs 177 end 05:58:33 
+[w0] seed 36 shift w2-6307ee65fe0cba2d92b1828bef20aa73
+[w1] seed 35: 71 req, est 3015 pts, fup 7 skips 4 unk 0 calls 413 secs 175 end 05:55:19 
+[w1] seed 37 shift w2-aa12b927f9238541bd0a21ee7c35f0b2
+[w0] seed 36: 70 req, est 3002 pts, fup 4 skips 8 unk 0 calls 418 secs 171 end 05:55:33 
+[w0] seed 38 shift w2-10de158b3f35f04be03f3aeed60d9ac9
+[w1] seed 37: 61 req, est 2597 pts, fup 4 skips 9 unk 0 calls 410 secs 171 end 05:55:01 
+[w1] seed 39 shift w2-30b7bbcdb7c35934c3ae8cc2c06a4a5b
+[w0] seed 38: 73 req, est 2815 pts, fup 9 skips 6 unk 0 calls 415 secs 168 end 05:55:21 
+[w0] seed 40 shift w2-ed109609744a6a5e71822915f788262a
+[w1] seed 39: 75 req, est 3209 pts, fup 8 skips 9 unk 0 calls 433 secs 174 end 05:59:28 
+[w1] seed 41 shift w2-dab0cd796172a2b63de6f57af6167f2e
+[w0] seed 40: 82 req, est 3270 pts, fup 4 skips 9 unk 0 calls 432 secs 187 end 05:55:06 
+[w0] seed 42 shift w2-adfbce86ef428de5ef187e482b0b7a76
+[w1] seed 41: 78 req, est 3306 pts, fup 8 skips 7 unk 0 calls 429 secs 187 end 05:57:35 
+[w1] seed 43 shift w2-d607b9422ee4eb33aefd6e5eb8ac5435
+[w0] seed 42: 69 req, est 2914 pts, fup 7 skips 8 unk 0 calls 421 secs 169 end 05:56:04 
+[w0] seed 44 shift w2-fd396d62470e155b4cf7f509b883bb80
+[w1] seed 43: 71 req, est 2987 pts, fup 3 skips 6 unk 0 calls 427 secs 171 end 05:55:05 
+[w1] seed 45 shift w2-4940ecada667968a97164ecaf0edb42c
+[w0] seed 44: 61 req, est 2628 pts, fup 4 skips 3 unk 0 calls 408 secs 177 end 05:55:23 
+[w0] seed 46 shift w2-09390a4b0cc91f18da9d12f3976ecf79
+[w1] seed 45: 81 req, est 3332 pts, fup 6 skips 6 unk 0 calls 428 secs 185 end 05:57:10 
+[w1] seed 47 shift w2-d24d0a60c86df2acaa5c1f2c7e26da53
+[w0] seed 46: 63 req, est 2331 pts, fup 4 skips 2 unk 0 calls 406 secs 163 end 05:56:52 
+[w0] seed 48 shift w2-81855fcb6a74096639f4340242aa1cf7
+[w1] seed 47: 67 req, est 2629 pts, fup 5 skips 5 unk 0 calls 412 secs 178 end 05:55:58 
+[w1] seed 49 shift w2-9bc36fbaf12c7973e50e6d6a9ef91646
+[w0] seed 48: 66 req, est 2512 pts, fup 6 skips 5 unk 0 calls 413 secs 180 end 05:54:06 server ended: time
+[w0] seed 50 shift w2-ccbfab744e2b19a5a58bdf5a513c2947
+[w1] seed 49: 73 req, est 3060 pts, fup 8 skips 5 unk 0 calls 420 secs 170 end 05:55:02 
+[w1] seed 51 shift w2-c550c524ee35912cb84f45b3645bd2db
+[w0] seed 50: 69 req, est 2823 pts, fup 7 skips 6 unk 0 calls 412 secs 166 end 05:58:12 
+[w0] seed 52 shift w2-24f9c1a0ecf04ec99ab503eaa7575244
+[w1] seed 51: 69 req, est 2722 pts, fup 9 skips 5 unk 0 calls 421 secs 169 end 05:56:21 
+[w1] seed 53 shift w2-7de4c2f8ea86cf0591feca74a225b4ec
+[w0] seed 52: 73 req, est 2759 pts, fup 7 skips 5 unk 0 calls 419 secs 168 end 05:56:43 
+[w0] seed 54 shift w2-a0ebb361bbc3cab89073ef65decfab1e
+[w1] seed 53: 74 req, est 3218 pts, fup 6 skips 6 unk 0 calls 420 secs 169 end 05:55:04 
+[w1] seed 55 shift w2-8c86587cec93cb4344153eabe34aafb3
+[w0] seed 54: 76 req, est 3398 pts, fup 7 skips 9 unk 0 calls 425 secs 170 end 05:55:10 
+[w0] seed 56 shift w2-b7fdaf9fa58a38ac5ed4562e7c91e40b
+[w1] seed 55: 66 req, est 2580 pts, fup 5 skips 1 unk 0 calls 403 secs 162 end 05:58:01 
+[w1] seed 57 shift w2-ba35080b1ccb9acc9e1ec8f3c6cc444f
+[w0] seed 56: 77 req, est 3381 pts, fup 6 skips 6 unk 0 calls 432 secs 173 end 05:55:06 
+[w0] seed 58 shift w2-908841837e2b5b3ecb6a4c58c7f4496a
+[w1] seed 57: 68 req, est 2652 pts, fup 5 skips 3 unk 0 calls 410 secs 164 end 05:54:38 server ended: time
+[w1] seed 59 shift w2-6046292a3d72a8caa2061b92cc88e411
+[w0] seed 58: 87 req, est 3394 pts, fup 9 skips 3 unk 0 calls 435 secs 174 end 05:56:24 
+[w0] seed 60 shift w2-0a7634a9ea44a46df196eee9a4807844
+[w1] seed 59: 76 req, est 3115 pts, fup 8 skips 5 unk 0 calls 425 secs 172 end 05:54:35 server ended: time
+[w1] seed 61 shift w2-74762bd3a2d573750d385d0933d0795f
+[w0] seed 60: 62 req, est 2387 pts, fup 7 skips 10 unk 0 calls 409 secs 164 end 05:57:48 
+[w0] seed 62 shift w2-be94350196165c10242719fe03c56dad
+[w1] seed 61: 50 req, est 2063 pts, fup 5 skips 6 unk 0 calls 394 secs 158 end 05:58:17 
+[w1] seed 63 start refused/failed (start_shift refused: Four practice shifts are already running for your team. End); waiting 20 s
+[w1] seed 63 start refused/failed (start_shift refused: Four practice shifts are already running for your team. End); waiting 20 s
+[w1] seed 63 start refused/failed (start_shift refused: Four practice shifts are already running for your team. End); waiting 20 s
+[w1] seed 63 start refused/failed (start_shift refused: Four practice shifts are already running for your team. End); waiting 20 s
+[w0] seed 62: 62 req, est 2492 pts, fup 6 skips 5 unk 0 calls 413 secs 90 end 05:54:00 server ended: time
+[w0] seed 64 shift w2-a8d26a8cde8090110a941bd3f9af10d8
+[w1] seed 63 start refused/failed (start_shift refused: Four practice shifts are already running for your team. End); waiting 20 s
+[w1] seed 63 start refused/failed (start_shift refused: Four practice shifts are already running for your team. End); waiting 20 s
+[w1] seed 63 start refused/failed (start_shift refused: Four practice shifts are already running for your team. End); waiting 20 s
+[w1] seed 63 start refused/failed (start_shift refused: Four practice shifts are already running for your team. End); waiting 20 s
+[w0] seed 64: 69 req, est 2974 pts, fup 3 skips 6 unk 0 calls 421 secs 85 end 05:55:03 
+[w0] seed 65 shift w2-0e0c4d18115d89a320fd7554692b3412
+[w1] seed 63 shift w2-9cfe4b51f48034e94ca2d5fffade7005
+[w0] seed 65: 79 req, est 2977 pts, fup 8 skips 3 unk 0 calls 419 secs 173 end 05:54:18 server ended: time
+[w0] seed 66 shift w2-96fd52d1586fc6f6b783efa25e523600
+[w1] seed 63: 84 req, est 3151 pts, fup 11 skips 6 unk 0 calls 435 secs 185 end 05:54:41 server ended: time
+[w1] seed 67 shift w2-2c7ba017b4b502bdd1add0d84b0fb2ae
+[w0] seed 66: 60 req, est 2545 pts, fup 6 skips 4 unk 0 calls 403 secs 163 end 05:56:11 
+[w0] seed 68 shift w2-67c1d88905a4f10359e9dcd854fd1287
+[w1] seed 67: 67 req, est 2794 pts, fup 4 skips 8 unk 0 calls 417 secs 167 end 05:56:42 
+[w1] seed 69 shift w2-048e84ae91470cfa01c28569c5c74ddc
+[w0] seed 68: 53 req, est 2322 pts, fup 1 skips 4 unk 0 calls 390 secs 164 end 05:56:42 
+[w0] seed 70 shift w2-6ca34f67fb42b61808a0326703c35901
+[w1] seed 69: 63 req, est 2357 pts, fup 4 skips 3 unk 0 calls 403 secs 168 end 05:55:27 
+[w1] seed 71 shift w2-1a3edda85899ab18e9cdd2e13407029e
+[w0] seed 70: 76 req, est 2997 pts, fup 6 skips 3 unk 0 calls 424 secs 170 end 05:55:50 
+[w0] seed 72 shift w2-41aaafede63734c483fa81fa83bf2e73
+[w1] seed 71: 68 req, est 3068 pts, fup 2 skips 5 unk 0 calls 421 secs 169 end 05:57:04 
+[w1] seed 73 shift w2-18cbe44b1832ac0f849f5845ffb3d2f9
+[w0] seed 72: 55 req, est 2340 pts, fup 3 skips 7 unk 0 calls 400 secs 167 end 05:56:49 
+[w0] seed 74 shift w2-abea1e6f0af8638fc9bb0453a335d4ae
+[w1] seed 73: 57 req, est 2135 pts, fup 6 skips 2 unk 0 calls 406 secs 170 end 05:58:48 
+[w1] seed 75 shift w2-9cee7fe3eece4d9e6222583e4a5ca683
+[w0] seed 74: 70 req, est 2725 pts, fup 9 skips 2 unk 0 calls 415 secs 166 end 05:59:02 
+[w0] seed 76 shift w2-b754813953c3e86c213212ec88e78ec1
+[w1] seed 75: 69 req, est 2765 pts, fup 9 skips 3 unk 0 calls 409 secs 164 end 05:56:10 
+[w1] seed 77 shift w2-9dfedaa818c4c925bc0a0cce79a06e11
+[w0] seed 76: 62 req, est 2740 pts, fup 3 skips 7 unk 0 calls 405 secs 169 end 05:56:19 
+[w0] seed 78 shift w2-cf26b19c50ece0994df1d74582bf3eeb
+[w1] seed 77: 77 req, est 3150 pts, fup 8 skips 0 unk 0 calls 418 secs 175 end 05:57:01 
+[w1] seed 79 shift w2-d3277f24330412b0de891644fa69e965
+[w0] seed 78: 64 req, est 2496 pts, fup 3 skips 4 unk 0 calls 406 secs 163 end 05:54:26 server ended: time
+[w0] seed 80 shift w2-e72227acf20bf0513a357dde0fe3ff63
+[w1] seed 79: 96 req, est 3604 pts, fup 9 skips 3 unk 0 calls 445 secs 185 end 05:59:06 
+[w1] seed 81 shift w2-71c5f810de4f3d247cf9e970a5487ef9
+[w0] seed 80: 51 req, est 2179 pts, fup 2 skips 6 unk 0 calls 392 secs 164 end 05:57:59 
+[w0] seed 82 shift w2-256dc6947ca63443cb507185d5c2ef6f
+[w1] seed 81: 68 req, est 3049 pts, fup 4 skips 5 unk 0 calls 427 secs 171 end 05:58:27 
+[w1] seed 83 shift w2-deb46a5b5b7476c0a9f805fb504383dd
+[w0] seed 82: 76 req, est 3163 pts, fup 7 skips 4 unk 0 calls 424 secs 181 end 05:56:56 
+[w0] seed 84 shift w2-0cac078a6d9a0f73121c6735c212260b
+[w1] seed 83: 64 req, est 2936 pts, fup 1 skips 3 unk 0 calls 409 secs 174 end 05:58:47 
+[w1] seed 85 shift w2-10d9a62e09aa22789067c0cd3e8663f3
+[w0] seed 84: 75 req, est 3057 pts, fup 8 skips 8 unk 0 calls 426 secs 171 end 05:56:25 
+[w0] seed 86 shift w2-62e05116c2da68299a23bdb16a064f28
+[w1] seed 85: 72 req, est 2866 pts, fup 4 skips 11 unk 0 calls 425 secs 171 end 05:57:00 
+[w1] seed 87 shift w2-7f3824e669ba3cd312fd52acdd4271ff
+[w0] seed 86: 58 req, est 2221 pts, fup 5 skips 2 unk 0 calls 391 secs 163 end 05:58:10 
+[w0] seed 88 shift w2-69e6a114dc2ed120ad21084ebfb8c864
+[w1] seed 87: 79 req, est 3245 pts, fup 7 skips 9 unk 0 calls 428 secs 179 end 05:57:22 
+[w1] seed 89 shift w2-e57ccf1f8a16a561c1f969e7cdb09f18
+[w0] seed 88: 72 req, est 2921 pts, fup 4 skips 5 unk 0 calls 417 secs 167 end 05:56:53 
+[w0] seed 90 shift w2-bc21f57fff636b75a389c97a886e39fb
+[w1] seed 89: 59 req, est 2435 pts, fup 5 skips 5 unk 0 calls 402 secs 161 end 05:54:13 server ended: time
+[w1] seed 91 shift w2-a600f9832d4cac6fe9522abbf632f9b3
+[w0] seed 90: 53 req, est 2120 pts, fup 3 skips 1 unk 0 calls 388 secs 173 end 05:56:27 
+[w0] seed 92 shift w2-d71690757ba3d8f7d47733b63be735a3
+[w1] seed 91: 60 req, est 2348 pts, fup 9 skips 3 unk 0 calls 395 secs 174 end 05:56:02 
+[w1] seed 93 shift w2-7c3c633d47c8aab6a5ed37543d6c1803
+[w0] seed 92: 73 req, est 3181 pts, fup 3 skips 6 unk 0 calls 414 secs 166 end 05:55:22 
+[w0] seed 94 shift w2-1087f4634a85f50939277a7d7d457cfe
+[w1] seed 93: 63 req, est 2299 pts, fup 6 skips 5 unk 0 calls 405 secs 165 end 05:55:16 
+[w1] seed 95 shift w2-48d84ed73af4ec13cbac90578abef7bf
+[w0] seed 94: 75 req, est 3130 pts, fup 5 skips 5 unk 0 calls 425 secs 173 end 05:56:39 
+[w0] seed 96 shift w2-532f58c3d6c528de77056a2ee4a50788
+[w1] seed 95: 61 req, est 2625 pts, fup 6 skips 4 unk 0 calls 408 secs 164 end 05:56:20 
+[w1] seed 97 shift w2-3bb970f8527867ac597b5122161aa588
+[w0] seed 96: 70 req, est 2893 pts, fup 6 skips 5 unk 0 calls 409 secs 166 end 05:55:06 
+[w0] seed 98 shift w2-fdc4434f5cd15de460b6971fdeb52aa3
+[w1] seed 97: 65 req, est 2425 pts, fup 6 skips 3 unk 0 calls 408 secs 166 end 05:58:36 
+[w1] seed 99 shift w2-895107ecafe6e20d5987faf0a28c96eb
+[w0] seed 98: 64 req, est 2789 pts, fup 4 skips 9 unk 0 calls 410 secs 167 end 05:56:04 
+[w0] stop time reached
+[w1] seed 99: 71 req, est 3077 pts, fup 2 skips 6 unk 0 calls 420 secs 144 end 05:55:49 
+[w1] stop time reached
+done

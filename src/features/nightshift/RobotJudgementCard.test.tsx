@@ -150,6 +150,12 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(disclosure).toHaveTextContent(
       "Generalprøven (bygget som spiller finalen, 8de9ffc, 10 netter på seeds ingen bygg hadde spilt): 101 av 101 på egen vurdering godkjent av simulatoren, 88 av 101 holder mot egen logg (95 %-intervall 79–92 %). 13 av 64 romsjekker motsagt, på 8 av 10 netter, og simulatoren godkjente alle 13.",
     );
+    // Two forecasts committed before 12:00 (scripts/forecast.py) and the final's slot, filled in after 13:05.
+    expect(disclosure).toHaveTextContent(
+      text(
+        "Prognose for finalen (snitt av de 9 beste av 10 netter), begge låst før kl. 12: modellen 2 050 (80 %: 1 759–2 393), generalprøven alene 2 170 (80 %: 2 055–2 301). Finalen: fylles inn etter kl. 13:05.",
+      ),
+    );
     expect(disclosure).toHaveTextContent(/Kilde: docs\/runs\/ledger\.csv \(\d+ live-starter, siste \d\d\.11 \d\d:\d\d\), regnet ut av scripts\/ledger\.py/);
   });
 

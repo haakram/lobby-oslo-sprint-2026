@@ -33,9 +33,21 @@ build (``013f90d`` and ``8de9ffc`` differ only in a test).
    (``REHEARSAL_SEEDS``), started Sun 05:02. It is compared with the forecast committed before it (the
    last commit of ``docs/runs/forecast.txt`` before the first rehearsal start, read from git), and the
    rehearsal's own nights give a second forecast (a bootstrap of its scores, best 9 of 10).
+4. **The second forecast** (jury round 6, the data review), committed before 12:00 next to the first: the
+   rehearsal's posterior predictive. A 10-point bootstrap ignores the uncertainty in the mean and spread it
+   rests on, so it is too narrow; this draws them. Log scores, flat prior on the mean and the log SD: per
+   simulated final, sigma^2 = (n - 1) s^2 / chi^2(n - 1), mu ~ N(mean, sigma^2 / n), ten new nights
+   ~ exp(N(mu, sigma^2)), the best nine averaged. No model, no tuned seed, no tuning penalty in it.
+   How the ten rehearsal seeds were chosen is not recorded; against the seed hunt's estimates of every
+   probed seed (``docs/runs/seedhunt-sweep1.log``, Sat 21:40-23:38: requests and estimated points per seed,
+   no work done) the output says whether they were typical or easy.
+5. **The final** (12:00-13:00): ``FINAL_RESULT`` is filled in by hand after 13:05 (the mean of the best 9
+   of 10, read off the server's board) and the output puts it next to both forecasts. Until then it says
+   so.
 
-Writes ``docs/runs/forecast.txt`` (README and DEMO quote it). Read-only on the ledger; it never calls
-the Wybe server.
+Writes ``docs/runs/forecast.txt`` (README and DEMO quote it) and
+``src/features/nightshift/data/forecast.json`` (the judgement card's two forecasts and the final's slot).
+Read-only on the ledger; it never calls the Wybe server.
 
 Usage::
 
@@ -49,6 +61,7 @@ from __future__ import annotations
 import argparse
 import csv
 import functools
+import json
 import math
 import random
 import re
@@ -62,6 +75,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 LEDGER_CSV = REPO / "docs" / "runs" / "ledger.csv"
 FORECAST_TXT = REPO / "docs" / "runs" / "forecast.txt"
+FORECAST_JSON = REPO / "src" / "features" / "nightshift" / "data" / "forecast.json"
+SEEDHUNT_LOG = REPO / "docs" / "runs" / "seedhunt-sweep1.log"
+# The final's result, filled in by hand after 13:05 and regenerated: (mean of the best 9 of 10, where it was read).
+# None until then; the output keeps a slot for it next to both forecasts.
+FINAL_RESULT: tuple[float, str] | None = None
 
 FINAL_BRANCH = "hamad/final"  # the build that plays at 12:00 is this branch's head
 TARGET_FALLBACK = "8de9ffc"  # when git cannot say (a clone without the branch)
@@ -416,6 +434,93 @@ def rehearsal_check(path: Path, target: str) -> list[str]:
     return out
 
 
+def predictive(played: list[int]) -> list[float]:
+    """Simulated finals from the rehearsal's nights alone: the posterior predictive of a log-normal with a flat prior
+    on the mean and the log SD (the mean's and the spread's uncertainty drawn per final), best 9 of 10."""
+    logs = [math.log(score) for score in played]
+    n, mean, sd = len(logs), statistics.fmean(logs), statistics.stdev(logs)
+    rng = random.Random(RNG_SEED)
+    finals = []
+    for _ in range(SIMULATIONS):
+        sigma = sd * math.sqrt((n - 1) / (2 * rng.gammavariate((n - 1) / 2, 1.0)))
+        mu = rng.gauss(mean, sigma / math.sqrt(n))
+        finals.append(best_mean([math.exp(rng.gauss(mu, sigma)) for _ in range(FINAL_SHIFTS)]))
+    return finals
+
+
+def seedhunt(path: Path = SEEDHUNT_LOG) -> dict[int, int]:
+    """Estimated points per seed from the seed hunt's log ("seed 22: 67 req, est 2886 pts, ...")."""
+    if not path.is_file():
+        return {}
+    found = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.search(r"seed (\d+): \d+ req, est (\d+) pts", line)
+        if match:
+            found[int(match.group(1))] = int(match.group(2))
+    return found
+
+
+def rehearsal_scores(path: Path, target: str) -> list[int]:
+    """The target's complete rehearsal nights, in REHEARSAL_SEEDS order."""
+    by_seed = {int(r["seed"]): int(r["score"]) for r in read_rows(path, target)
+               if r["commit"] == target and int(r["seed"]) in REHEARSAL_SEEDS}
+    return [by_seed[s] for s in REHEARSAL_SEEDS if s in by_seed]
+
+
+def headline(text: str) -> tuple[int, int, int] | None:
+    """(median, low, high) of the first forecast in a forecast.txt."""
+    match = re.search(r"FORECAST, the final .*?\n  median ([\d,]+), 80 % interval ([\d,]+) - ([\d,]+)", text)
+    return tuple(int(v.replace(",", "")) for v in match.groups()) if match else None  # type: ignore[return-value]
+
+
+def second_forecast(path: Path, target: str, first: tuple[int, int, int] | None) -> tuple[list[str], dict]:
+    """The second forecast from the rehearsal, how its seeds compare with the seed hunt's, and the final's slot."""
+    played = rehearsal_scores(path, target)
+    out = ["", f"SECOND FORECAST, the final (mean of the best {FINAL_SHIFTS - DROPPED} of {FINAL_SHIFTS}), from the dress "
+           f"rehearsal alone ({target}, committed before 12:00):"]
+    doc: dict = {"target": target, "first": None, "second": None, "final": None}
+    if first:
+        doc["first"] = {"median": first[0], "low": first[1], "high": first[2], "basis": "model: build + seed effects, rehearsal kept out"}
+    if len(played) < len(REHEARSAL_SEEDS):
+        out.append(f"  waits for all {len(REHEARSAL_SEEDS)} rehearsal nights ({len(played)} so far)")
+        return out, doc
+    finals = predictive(played)
+    mid, low, high = (round(quantile(finals, q)) for q in (0.5, *INTERVAL))
+    doc["second"] = {"median": mid, "low": low, "high": high, "basis": "dress rehearsal: posterior predictive of its 10 nights"}
+    out.append(f"  median {thousands(mid)}, 80 % interval {thousands(low)} - {thousands(high)}")
+    out.append(f"  (posterior predictive of its {len(played)} nights: log scores, mean and SD drawn per final from their "
+               f"posterior (flat prior), {FINAL_SHIFTS} new nights, the best {FINAL_SHIFTS - DROPPED}; {SIMULATIONS:,} finals, "
+               f"random seed {RNG_SEED}; no model, no tuned seed, no tuning penalty)")
+    hunt = seedhunt()
+    if hunt and all(seed in hunt for seed in REHEARSAL_SEEDS):
+        mine = [hunt[seed] for seed in REHEARSAL_SEEDS]
+        ranks = sorted(round(100 * sum(1 for v in hunt.values() if v < hunt[seed]) / len(hunt)) for seed in REHEARSAL_SEEDS)
+        out.append(f"  How the ten seeds were chosen is not recorded. The seed hunt (docs/runs/seedhunt-sweep1.log, Sat "
+                   f"21:40-23:38, no work done) estimated each seed's points: the ten average {thousands(statistics.fmean(mine))} "
+                   f"(median {thousands(statistics.median(mine))}) against {thousands(statistics.fmean(hunt.values()))} "
+                   f"(median {thousands(statistics.median(hunt.values()))}) over the {len(hunt)} seeds it probed, percentile "
+                   f"ranks {ranks[0]}-{ranks[-1]}: typical seeds, not easy ones.")
+    out.append("")
+    if first:
+        out.append(f"Both forecasts, committed before the final: the model {thousands(first[0])} "
+                   f"(80 %: {thousands(first[1])} - {thousands(first[2])}); the rehearsal {thousands(mid)} "
+                   f"(80 %: {thousands(low)} - {thousands(high)})")
+    if FINAL_RESULT is None:
+        out.append(f"THE FINAL (12:00-13:00, mean of the best {FINAL_SHIFTS - DROPPED} of {FINAL_SHIFTS}): not played yet; "
+                   "filled in after 13:05 (FINAL_RESULT in scripts/forecast.py)")
+    else:
+        actual, where = FINAL_RESULT
+        doc["final"] = {"score": actual, "source": where}
+
+        def verdict(band: tuple[int, int, int]) -> str:
+            return "inside" if band[1] <= actual <= band[2] else ("above" if actual > band[2] else "below")
+
+        parts = [f"the model's 80 % interval: {verdict(first)}"] if first else []
+        parts.append(f"the rehearsal's: {verdict((mid, low, high))}")
+        out.append(f"THE FINAL: {thousands(actual)} ({where}); " + "; ".join(parts))
+    return out, doc
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--ledger", type=Path, default=LEDGER_CSV)
@@ -423,16 +528,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="exit 1 if docs/runs/forecast.txt is out of date")
     parser.add_argument("--stdout", action="store_true", help="print only, write nothing")
     args = parser.parse_args(argv)
-    text = report(args.ledger, args.build or final_head())
+    target = args.build or final_head()
+    text = report(args.ledger, target)
+    second, doc = second_forecast(args.ledger, target, headline(text))
+    text = text + "\n".join(second) + "\n"
+    data = json.dumps({"_doc": "Generated by scripts/forecast.py; do not edit. The two forecasts for the final, both "
+                       "committed before 12:00, and the final's result once FINAL_RESULT is filled in after 13:05.",
+                       **doc}, ensure_ascii=False, indent=1) + "\n"
+    outputs = {FORECAST_TXT: text, FORECAST_JSON: data}
     if args.check:
-        if not FORECAST_TXT.is_file() or FORECAST_TXT.read_text(encoding="utf-8") != text:
-            print(f"out of date: {FORECAST_TXT.relative_to(REPO)}", file=sys.stderr)
-            return 1
-        return 0
+        stale = [p for p, t in outputs.items() if not p.is_file() or p.read_text(encoding="utf-8") != t]
+        for path in stale:
+            print(f"out of date: {path.relative_to(REPO)}", file=sys.stderr)
+        return 1 if stale else 0
     sys.stdout.write(text)
     if not args.stdout:
-        FORECAST_TXT.write_text(text, encoding="utf-8")
-        print(f"wrote {FORECAST_TXT.relative_to(REPO)}")
+        for path, content in outputs.items():
+            path.write_text(content, encoding="utf-8")
+            print(f"wrote {path.relative_to(REPO)}")
     return 0
 
 

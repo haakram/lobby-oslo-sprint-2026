@@ -1,4 +1,5 @@
 import faults from "./data/fault-bed.json";
+import forecastData from "./data/forecast.json";
 import hotelRules from "./data/hotel-rules.json";
 import data from "./data/ledger.json";
 import type { RunLine } from "./runlog";
@@ -301,6 +302,15 @@ export const HOTEL_RULES: {
   finalKeycard: { entries: number; knockedFirst: number };
   replay: { nights: number; plain: number; seedWeighted: number; signsInStore: number };
 } = hotelRules;
+
+export type ForecastBand = { median: number; low: number; high: number; basis: string };
+
+/**
+ * The two forecasts for the final, both committed before 12:00 (scripts/forecast.py: the model, and the dress
+ * rehearsal's posterior predictive), and the final's result once it is filled in after 13:05 (null until then).
+ */
+export const FORECAST: { target: string; first: ForecastBand | null; second: ForecastBand | null; final: { score: number; source: string } | null } =
+  forecastData as { target: string; first: ForecastBand | null; second: ForecastBand | null; final: { score: number; source: string } | null };
 
 /** The mean of a few scores, rounded to a whole point. */
 export function meanScore(scores: readonly number[]): number {

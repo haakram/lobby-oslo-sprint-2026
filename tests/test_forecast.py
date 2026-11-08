@@ -101,3 +101,38 @@ def test_the_rehearsal_is_kept_out_of_the_fit_and_compared_with_the_forecast_com
     assert "final median 2,035 (80 %: 1,898 - 2,186), mean night 1,989" in text
     best9 = sum(sorted(2000 + 10 * i for i in range(10))[1:]) / 9
     assert f"RESULT, mean of the best 9 of 10: {round(best9):,} against the committed median 2,035: inside the committed 80 % interval" in text
+
+
+def test_the_second_forecast_is_the_rehearsals_posterior_predictive_with_a_slot_for_the_final(tmp_path: Path, monkeypatch) -> None:
+    """Round 6 (the data review): the rehearsal alone, its mean's and spread's uncertainty drawn; then the final's slot."""
+    played = [2085, 2166, 2481, 2138, 2312, 2186, 2008, 2236, 1786, 1969]  # 8de9ffc's ten rehearsal nights
+    finals = forecast.predictive(played)
+    assert finals == forecast.predictive(played)  # a fixed random seed: the same every run
+    band = [round(forecast.quantile(finals, q)) for q in (0.5, 0.1, 0.9)]
+    assert band == [2170, 2055, 2301]
+    # Wider than a 10-point bootstrap, which ignores that uncertainty.
+    rng = forecast.random.Random(forecast.RNG_SEED)
+    boots = [forecast.best_mean([rng.choice(played) for _ in range(10)]) for _ in range(forecast.SIMULATIONS)]
+    assert band[2] - band[1] > forecast.quantile(boots, 0.9) - forecast.quantile(boots, 0.1)
+
+    path = tmp_path / "ledger.csv"
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=["shift", "kind", "complete", "commit", "seed", "score"])
+        writer.writeheader()
+        for seed, score in zip(forecast.REHEARSAL_SEEDS, played):
+            writer.writerow({"shift": f"w2-r{seed}", "kind": "build", "complete": "True", "commit": "8de9ffc", "seed": seed, "score": score})
+    hunt = tmp_path / "hunt.log"
+    hunt.write_text("".join(f"[w0] seed {s}: 70 req, est {2000 + 10 * s} pts, fup 1\n" for s in range(20, 100)), encoding="utf-8")
+    monkeypatch.setattr(forecast, "SEEDHUNT_LOG", hunt)
+    monkeypatch.setattr(forecast.seedhunt, "__defaults__", (hunt,))
+    lines, doc = forecast.second_forecast(path, "8de9ffc", (2050, 1759, 2393))
+    text = "\n".join(lines)
+    assert "median 2,170, 80 % interval 2,055 - 2,301" in text
+    assert "over the 80 seeds it probed" in text
+    assert "Both forecasts, committed before the final: the model 2,050 (80 %: 1,759 - 2,393); the rehearsal 2,170 (80 %: 2,055 - 2,301)" in text
+    assert "THE FINAL (12:00-13:00, mean of the best 9 of 10): not played yet" in text
+    assert doc["second"]["median"] == 2170 and doc["final"] is None
+    monkeypatch.setattr(forecast, "FINAL_RESULT", (2200.0, "the server's board, 13:05"))
+    lines, doc = forecast.second_forecast(path, "8de9ffc", (2050, 1759, 2393))
+    assert "THE FINAL: 2,200 (the server's board, 13:05); the model's 80 % interval: inside; the rehearsal's: inside" in "\n".join(lines)
+    assert doc["final"] == {"score": 2200.0, "source": "the server's board, 13:05"}

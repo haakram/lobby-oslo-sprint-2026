@@ -29,6 +29,7 @@ import {
   DISTINCT_OWN,
   type DistinctClaims,
   FAULT_BED,
+  FORECAST,
   grouped,
   HOTEL_RULES,
   intervalText,
@@ -677,6 +678,7 @@ function HowWeKnow({
         )}
         {distinct && distinct.claims > 0 && <OwnLogAcrossNights distinct={distinct} roomChecks={finalRoomChecks} />}
         {rehearsal && <RehearsalAgainstLog rehearsal={rehearsal} />}
+        {FORECAST.first && FORECAST.second && <Forecasts />}
         {hidden && (
           <p>
             Med poengsummen skjult ({hidden.nights} live-netter der agenten aldri leste poengsummen eller svaret når den avgjorde «ferdig»: score-blind,{" "}
@@ -758,6 +760,19 @@ function RehearsalAgainstLog({ rehearsal }: { rehearsal: Rehearsal }) {
       {rc.contradicted > 0
         ? `, og simulatoren godkjente ${rc.contradicted_credited === rc.contradicted ? `alle ${rc.contradicted}` : `${rc.contradicted_credited} av dem`}.`
         : "."}
+    </p>
+  );
+}
+
+/** The two forecasts committed before the final, and the final's slot (scripts/forecast.py, round 6). */
+function Forecasts() {
+  const { first, second, final } = FORECAST;
+  const band = (b: NonNullable<typeof first>) => `${grouped(b.median)} (80 %: ${grouped(b.low)}–${grouped(b.high)})`;
+  return (
+    <p>
+      Prognose for finalen (snitt av de 9 beste av 10 netter), begge låst før kl. 12: modellen {band(first!)}, generalprøven alene {band(second!)}. Finalen:{" "}
+      {final ? `${grouped(Math.round(final.score))} (${final.source}).` : "fylles inn etter kl. 13:05."} Kilde:{" "}
+      <span className="font-mono text-xs">docs/runs/forecast.txt</span>.
     </p>
   );
 }

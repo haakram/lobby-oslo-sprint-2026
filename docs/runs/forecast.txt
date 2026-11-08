@@ -63,3 +63,11 @@ practice seeds (9 and 11 included), so no ledger seed is truly untuned for this 
 assumes a seed is equally much harder for every build (no build-by-seed term beyond the residual). The
 final may use a different map and other tasks (docs/research/wybe-api.md § 1): that distribution shift is
 not in any band here and is a larger risk than the tuning penalty.
+
+SECOND FORECAST, the final (mean of the best 9 of 10), from the dress rehearsal alone (8de9ffc, committed before 12:00):
+  median 2,170, 80 % interval 2,055 - 2,301
+  (posterior predictive of its 10 nights: log scores, mean and SD drawn per final from their posterior (flat prior), 10 new nights, the best 9; 20,000 finals, random seed 20261108; no model, no tuned seed, no tuning penalty)
+  How the ten seeds were chosen is not recorded. The seed hunt (docs/runs/seedhunt-sweep1.log, Sat 21:40-23:38, no work done) estimated each seed's points: the ten average 2,735 (median 2,840) against 2,814 (median 2,834) over the 78 seeds it probed, percentile ranks 8-85: typical seeds, not easy ones.
+
+Both forecasts, committed before the final: the model 2,050 (80 %: 1,759 - 2,393); the rehearsal 2,170 (80 %: 2,055 - 2,301)
+THE FINAL (12:00-13:00, mean of the best 9 of 10): not played yet; filled in after 13:05 (FINAL_RESULT in scripts/forecast.py)

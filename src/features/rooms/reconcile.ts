@@ -1,6 +1,8 @@
 import { type SelfContradiction, selfContradictions } from "@/features/nightshift/conduct";
 import type { RunLine } from "@/features/nightshift/runlog";
 import { createLocalStore, recordOf } from "@/features/modules/localStore";
+import { osloToday } from "@/features/reception/dates";
+import { keepRecentDays } from "@/features/staffinput/retention";
 import type { PmsRoom } from "./pms";
 
 /**
@@ -10,19 +12,19 @@ import type { PmsRoom } from "./pms";
  *   never recorded, or a stay-over), and the robot's room check found it empty and tidy. Released, it
  *   is a room-night that would otherwise stand unsold.
  * - **Reiser i dag**: empty and tidy, but the guest is due out today: the room is already in tonight's
- *   inventory in every booking system (jury round 3, the founder juror/the Wybe engineer/the Wybe juror), so it is no extra sale, only
+ *   inventory in every booking system (round 3, founders and domain review), so it is no extra sale, only
  *   an early clean and an early check-in.
  * - **Gjest uten booking**: the system says vacant, the robot met a guest (a knock answered) or a
  *   Do-Not-Disturb sign. Reception checks the registration.
  * - **Holdt tilbake**: the system says occupied and the room check found it empty, but the robot put
  *   something in the room tonight that says it is taken: an arriving guest's bags ("the guest checks
- *   in later"), or anything delivered after the check. Never offered for sale (jury round 2, 209: the
+ *   in later"), or anything delivered after the check. Never offered for sale (round 2, 209: the
  *   robot carried a late arrival's bags in at 01:29, 04:35 and 05:16 while the booking has another
  *   guest there until tomorrow, a double allocation).
  * - **Flere ankomster**: the robot carried bags for two or more arrivals into one room tonight (jury
- *   round 3, the Wybe juror: 212 got three, 304 two). Read from the robot's own log, no booking system needed.
+ *   round 3, domain review: 212 got three, 304 two). Read from the robot's own log, no booking system needed.
  * - **Motsier seg selv**: the robot's room check reported the room empty and tidy after it had itself
- *   put something inside earlier that night (jury round 4, the Wybe engineer: luggage-209 placed at 01:29, "Nobody
+ *   put something inside earlier that night (round 4, domain review: luggage-209 placed at 01:29, "Nobody
  *   is here. The room is tidy." at 03:47). The camera and the task log disagree, so the room is never
  *   offered, with or without a booking system. The rule is owner C's `selfContradictions`
  *   (nightshift/conduct.ts), the same one the judgement card's "8 av 9 holder mot egen logg" counts.
@@ -299,7 +301,7 @@ export function reconcileNight(lines: readonly RunLine[], pms: ReadonlyMap<strin
 // ---------------------------------------------------------------------------------------------
 // What staff did about each one today: released for sale, or a task for reception.
 
-/** What reception checked before a room the robot found empty is sold (jury round 4, the law juror): all three, each a tick. */
+/** What reception checked before a room the robot found empty is sold (round 4, legal review): all three, each a tick. */
 export const CONFIRM_CHECKS = [
   { id: "folio", label: "Folioen er gjort opp", short: "folio" },
   { id: "bagasje", label: "Ingen bagasje på rommet", short: "bagasje" },
@@ -314,7 +316,7 @@ export type Confirmation = {
   /** Who recorded it (the logged-in name). */
   by: string | null;
   stamp?: string;
-  /** The receptionist who confirmed (jury round 4: a name, not the person tapping). */
+  /** The receptionist who confirmed (round 4: a name, not the person tapping). */
   receptionist?: string;
   /** What reception checked: every one of CONFIRM_CHECKS before step 2 opens. */
   checks?: ConfirmCheck[];
@@ -374,9 +376,13 @@ const isMark = (value: unknown): value is RoomCheckMark => {
 
 const isDay = (value: unknown): value is Record<string, RoomCheckMark> => !!value && typeof value === "object" && !Array.isArray(value);
 
+/**
+ * Today's marks per day (YYYY-MM-DD). They name receptionists, so they are kept 30 days on this device,
+ * pruned on load and on write (round 6, legal review: retention as code, the night clerk's RETENTION_DAYS).
+ */
 export const ROOM_CHECK_MARKS = createLocalStore<RoomCheckMarks>(
   "lobby:room-check-marks",
-  (raw) => Object.fromEntries(Object.entries(recordOf(raw, isDay)).map(([day, marks]) => [day, recordOf(marks, isMark)])),
+  (raw) => keepRecentDays(Object.fromEntries(Object.entries(recordOf(raw, isDay)).map(([day, marks]) => [day, recordOf(marks, isMark)])), osloToday()),
   {},
 );
 
@@ -385,6 +391,6 @@ export function markRoom(day: string, room: string, mark: RoomCheckMark | null) 
     const today = { ...(current[day] ?? {}) };
     if (mark) today[room] = mark;
     else delete today[room];
-    return { ...current, [day]: today };
+    return { ...keepRecentDays(current, day), [day]: today };
   });
 }

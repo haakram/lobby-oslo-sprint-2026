@@ -11,18 +11,18 @@ import { stays } from "@/features/guests/testData";
 
 /**
  * The booking system behind the room check is the team's test data, written after the night to show
- * the join (jury round 3, the Wybe engineer/the Wybe juror): every row the room check derives from it says so on screen.
+ * the join (round 3, domain review): every row the room check derives from it says so on screen.
  * False once the PMS integration reads a real hotel's bookings.
  */
 export const PMS_IS_TEST_DATA = true;
-/** The page-level line while the bookings are test data (one quiet band, jury round 4, the creative juror). */
+/** The page-level line while the bookings are test data (one quiet band, round 4, design review). */
 export const TEST_BOOKING_LABEL = "Bookingene er testdata lagt inn av teamet";
 /** The small word on a row that rests on a test booking, in the text face (never a mono chip). */
 export const TEST_BOOKING_WORD = "testbooking";
 /**
- * Where a pilot gets the same evidence without the robot opening a booked room (jury round 3,
- * the law juror/the Holio juror; PRD § 6: in a pilot the robot only checks rooms the system has as vacant), said as
- * the minimised signal it is (jury round 4, the law juror: one derived signal per room, never who).
+ * Where a pilot gets the same evidence without the robot opening a booked room (round 3,
+ * legal and security review; PRD § 6: in a pilot the robot only checks rooms the system has as vacant), said as
+ * the minimised signal it is (round 4, legal review: one derived signal per room, never who).
  */
 export const PILOT_EVIDENCE = "I en pilot: ett signal per rom fra dørlåsen (gjestekort brukt siden kl. 18), aldri hvem. Roboten går ikke inn i rom som er booket.";
 
@@ -74,8 +74,8 @@ export function pmsLastNight(today: string = osloToday()): ReadonlyMap<string, P
 /**
  * Tonight's bookings on the books (the night after the handover): stays that cover tonight. A booking
  * whose check-out was never recorded (213) is not counted: the guest has gone, only the system still
- * holds the room. The kroner the room check finds are extra only if tonight sells out (jury round 4,
- * the founder juror), so the screen shows this beside them. TODO(phase-3): read from the PMS.
+ * holds the room. The kroner the room check finds are extra only if tonight sells out (round 4,
+ * founders review), so the screen shows this beside them. TODO(phase-3): read from the PMS.
  */
 export function bookedTonight(today: string = osloToday()): number {
   return stays(today).filter((stay) => stay.arrival <= today && stay.departure > today).length;

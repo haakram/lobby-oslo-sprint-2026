@@ -5,7 +5,7 @@ import { type PmsRoom, type RoomRevenue, sellableValue } from "./pms";
 import type { Held, Reconciliation, RoomCheckMark, Sellable } from "./reconcile";
 
 /**
- * The room check's money, read the same way on Oversikt, Rom and Overlevering (jury round 2: three
+ * The room check's money, read the same way on Oversikt, Rom and Overlevering (round 2: three
  * screens showed three figures, and the headline stayed at "2 rom … ca. 2 900 kr" after a release).
  * Pure: the screens pass the reconciliation, today's marks and the booking system in, so a release
  * recomputes every screen that reads it.
@@ -14,8 +14,8 @@ import type { Held, Reconciliation, RoomCheckMark, Sellable } from "./reconcile"
  *   robot found empty and tidy after 01:00, not sent on yet. A guest due out today is not one: that
  *   room is already in tonight's inventory. Selling takes two steps: reception confirms the guest has
  *   left (who, and three checks), then the room is sent to reception to check the guest out in the PMS.
- * - **Released** (sent to reception): the pilot reads the PMS and never writes it (jury round 4,
- *   the product juror), so a sent room is pending ("Venter på PMS-en") until the booking system shows it free;
+ * - **Released** (sent to reception): the pilot reads the PMS and never writes it (round 4,
+ *   product review), so a sent room is pending ("Venter på PMS-en") until the booking system shows it free;
  *   never "done" before that. TODO(phase-3): the PMS connector reads the check-out back.
  * - **Held**: the robot delivered into the room tonight (bags for an arrival), so it is never offered;
  *   nor is a room whose room check contradicts the robot's own log (`caught` counts both).
@@ -24,7 +24,7 @@ import type { Held, Reconciliation, RoomCheckMark, Sellable } from "./reconcile"
  *   room is not ready to sell until the booking system has it free, sent to reception or not.
  *
  * The kroner are gross room revenue: rooms × last night's average rate (ADR), to the hundred, so
- * "ca. 1 500 kr". What the room check buys is time (jury round 4, the founder juror/the Wybe engineer): the room can be sold
+ * "ca. 1 500 kr". What the room check buys is time (round 4, founders and domain review): the room can be sold
  * from the 06:00 handover instead of after the morning round finds it. The kroner are extra money for
  * the hotel only if tonight sells out, so the screens show tonight's bookings beside them.
  */
@@ -141,6 +141,15 @@ export function moneyMethod(money: RoomMoney, tonight?: { booked: number; rooms:
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/**
+ * "Rom i bruk uten booking: 1 × snittprisen i natt, 1 467 kr (testdata). …": how the certain cost is
+ * made (round 6, product review): the night was used and nobody bills it, and the booking system still
+ * has the room free, so it can be sold again today. Not conditional on a sold-out night.
+ */
+export function unbilledMethod(rooms: number, adr: number): string {
+  return `I bruk uten booking: ${rooms} × snittprisen i natt, ${formatKroner(adr)} kr (testdata). Natten er brukt, men ingen fakturerer den, og systemet har rommet ledig, så det kan bli solgt igjen.`;
 }
 
 /** "8.11" from "2026-11-08": a date the way a front desk writes it. */

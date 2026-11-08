@@ -76,7 +76,7 @@ describe("the room check's money: one reading for Oversikt, Rom and Overlevering
     expect(moneyMethod(money(), { booked: bookedTonight(TODAY), rooms: 36 })).toMatch(
       /^Brutto romsinntekt: 1 × snittprisen i natt, .+ kr \(testdata\)\. Systemet holder rommet til resepsjonen registrerer at gjesten har reist\. Uten romsjekken finner renholdet det etter utsjekk kl\. 11:00; med den kan det selges fra kl\. 06:00, 5 timer tidligere\. Det er ekstra inntekt bare hvis natten blir utsolgt: 31 av 36 booket i kveld \(testdata\)\. Til sammenligning solgte hotellene i Oslo 72 % av rommene i 2025, til snittpris 1 631 kr \(SSB, tabell 14169\)\.$/,
     );
-    // Never the counterfactual the product cannot prove (jury round 4, the founder juror).
+    // Never the counterfactual the product cannot prove (round 4, founders review).
     expect(moneyMethod(money())).not.toMatch(/usolgt i natt|ellers/);
   });
 

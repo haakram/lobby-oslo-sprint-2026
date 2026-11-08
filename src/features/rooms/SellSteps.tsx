@@ -10,7 +10,7 @@ import { allChecked, CONFIRM_CHECKS, type ConfirmCheck, type Confirmation, markR
 
 const number = (room: string) => room.replace(/^room-/, "");
 
-/** Reception's names for the field's suggestions; the night receptionist first, who knows at 06:00. */
+/** Reception's names for the field's suggestions (never a default): the night receptionist first, who knows at 06:00. */
 const RECEPTION = byRole("Resepsjon")
   .slice()
   .sort((a, b) => Number(b.shift === "natt") - Number(a.shift === "natt"))
@@ -31,11 +31,12 @@ export function confirmationLine(confirmation: Pick<Confirmation, "receptionist"
 }
 
 /**
- * Selling a room the robot found empty takes two steps, never one tap (jury round 2, the law juror: a guest
- * still holds a room they paid for), and each leaves evidence (jury round 4, the law juror/the product juror):
- * 1. *Bekreft med resepsjonen*: WHICH receptionist confirmed (a name, default the night receptionist),
- *    and three ticks, folio settled, no bags in the room, key card blocked. The button opens only with
- *    all three; the mark stores the name, the ticks, who recorded it and when.
+ * Selling a room the robot found empty takes two steps, never one tap (round 2, legal review: a guest
+ * still holds a room they paid for), and each leaves evidence (round 4, legal and product review):
+ * 1. *Bekreft med resepsjonen*: WHICH receptionist confirmed (a name the reader types or picks; the field
+ *    starts empty, round 6, legal review: a prefilled name on an accountability record is a claim nobody
+ *    made), and three ticks, folio settled, no bags in the room, key card blocked. The button opens only
+ *    with a name and all three; the mark stores the name, the ticks, who recorded it and when.
  * 2. *Send til resepsjonen*: the pilot reads the booking system and never writes it, so the check-out in
  *    the PMS is reception's. The room then reads *Venter på PMS-en*, never "done", until the booking
  *    system shows it free. TODO(phase-3): the PMS connector reads the check-out back and turns it green.
@@ -62,7 +63,7 @@ export function SellSteps({
   const moved = useRef(false);
   const id = useId();
   const step = mark?.action === "released" ? "released" : mark?.action === "confirmed" && mark.receptionist && allChecked(mark.checks) ? "confirmed" : "open";
-  const [receptionist, setReceptionist] = useState(() => mark?.receptionist ?? mark?.confirmed?.receptionist ?? RECEPTION[0] ?? "");
+  const [receptionist, setReceptionist] = useState(() => mark?.receptionist ?? mark?.confirmed?.receptionist ?? "");
   const [checks, setChecks] = useState<ConfirmCheck[]>(() => mark?.checks ?? mark?.confirmed?.checks ?? []);
   const [tried, setTried] = useState(false);
   const ready = receptionist.trim().length > 0 && allChecked(checks);
@@ -113,7 +114,7 @@ export function SellSteps({
           Angre
         </Button>
         <span className="basis-full text-xs text-muted">
-          {evidence ? `${evidence}. ` : ""}Resepsjonen sjekker ut gjesten i PMS-en; raden blir grønn når bookingsystemet viser rommet ledig. PMS-koblingen er ikke bygget ennå.
+          {evidence ? `${evidence}. ` : ""}Resepsjonen sjekker ut gjesten i PMS-en. PMS-koblingen er ikke bygget ennå.
         </span>
       </div>
     );
@@ -131,7 +132,7 @@ export function SellSteps({
             data-step
             data-room-action={room}
             onClick={() => set({ action: "released", ...stamped(), confirmed: { at: mark.at, by: mark.by, stamp: mark.stamp, receptionist: mark.receptionist, checks: mark.checks } })}
-            aria-label={`Send rom ${n} til resepsjonen`}
+            aria-label={`Send til resepsjonen: rom ${n}`}
           >
             <RegenIcon name="send" size={18} />
             Send til resepsjonen
@@ -148,7 +149,7 @@ export function SellSteps({
   return (
     <div ref={box} className={cx("min-w-0", className)}>
       <fieldset className="flex min-w-0 flex-col gap-2">
-        <legend className="text-xs text-muted">Steg 1 av 2: resepsjonen bekrefter at gjesten har reist.</legend>
+        <legend className="text-xs text-muted">Steg 1 av 2: har gjesten reist?</legend>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <label htmlFor={`${id}-who`} className="text-sm font-semibold">
             Hvem i resepsjonen bekreftet?
@@ -158,10 +159,11 @@ export function SellSteps({
             name="receptionist"
             list={`${id}-names`}
             autoComplete="off"
+            placeholder="Velg eller skriv navnet"
             value={receptionist}
             onChange={(event) => setReceptionist(event.target.value)}
             aria-invalid={(tried && receptionist.trim().length === 0) || undefined}
-            className="min-h-11 w-full max-w-[16rem] rounded-md border border-line-strong bg-surface px-3 text-base text-text transition-colors duration-150 ease-standard aria-[invalid=true]:border-danger"
+            className="min-h-11 w-full max-w-[16rem] rounded-md border border-line-strong bg-surface px-3 text-base text-text placeholder:text-muted transition-colors duration-150 ease-standard aria-[invalid=true]:border-danger"
           />
           <datalist id={`${id}-names`}>
             {RECEPTION.map((name) => (
@@ -204,7 +206,7 @@ export function SellSteps({
           </Button>
           {/* Never a grey button without the reason beside it. */}
           <span id={`${id}-why`} aria-live="polite" className={cx("text-xs", tried && !ready ? "font-semibold text-danger" : "text-muted")}>
-            {ready ? "Lagres med navnet, de tre sjekkene, hvem som registrerte og når." : receptionist.trim().length === 0 ? "Skriv hvem i resepsjonen som bekreftet." : "Kryss av alle tre før du bekrefter."}
+            {ready ? "Lagres med navnet, sjekkene, hvem og når." : receptionist.trim().length === 0 ? "Skriv navnet først." : "Kryss av alle tre."}
           </span>
         </div>
       </fieldset>

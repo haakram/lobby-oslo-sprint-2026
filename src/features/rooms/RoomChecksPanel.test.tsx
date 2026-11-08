@@ -19,7 +19,7 @@ const plain = (text: string) => text.replace(/\s/g, " ");
 const REVENUE = revenueLastNight(36, pmsLastNight(TODAY));
 const ONE_ROOM = plain(formatKroner(sellableValue(1, REVENUE)));
 
-/** Step 1 with its evidence: the receptionist's name (Hanne Vold, the night receptionist, by default) and the three ticks. */
+/** Step 1 with its evidence: the receptionist's name (typed or picked; the field starts empty) and the three ticks. */
 function tickAll(row: HTMLElement) {
   for (const label of ["Folioen er gjort opp", "Ingen bagasje på rommet", "Nøkkelkortet er sperret"]) fireEvent.click(within(row).getByLabelText(label));
 }
@@ -57,13 +57,18 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
 
   it("sells a room in two steps that leave evidence: who at reception confirmed and three ticks, then sent to reception; never sold before the PMS says so; Angre steps back", () => {
     const { unmount } = render(asDesk(<RoomChecksPanel lines={TEST_NIGHT} today={TODAY} />));
-    expect(screen.queryByRole("button", { name: "Send rom 311 til resepsjonen" })).not.toBeInTheDocument();
-    // Without the three ticks the confirmation does not go through, and the reason stands beside the button.
+    expect(screen.queryByRole("button", { name: "Send til resepsjonen: rom 311" })).not.toBeInTheDocument();
+    // Without a name and the three ticks the confirmation does not go through, and the reason stands beside the button.
     fireEvent.click(screen.getByRole("button", { name: "Bekreft med resepsjonen: rom 311" }));
-    expect(screen.getByText("Kryss av alle tre før du bekrefter.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Send rom 311 til resepsjonen" })).not.toBeInTheDocument();
+    expect(screen.getByText("Skriv navnet først.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send til resepsjonen: rom 311" })).not.toBeInTheDocument();
     let sell = rowOf("311");
-    expect(within(sell).getByLabelText("Hvem i resepsjonen bekreftet?")).toHaveValue("Hanne Vold");
+    // Never a prefilled name on an accountability record (round 6, legal review): the reception names are suggestions only.
+    const who = within(sell).getByLabelText("Hvem i resepsjonen bekreftet?");
+    expect(who).toHaveValue("");
+    fireEvent.change(who, { target: { value: "Hanne Vold" } });
+    fireEvent.click(within(sell).getByRole("button", { name: "Bekreft med resepsjonen: rom 311" }));
+    expect(screen.getByText("Kryss av alle tre.")).toBeInTheDocument();
     tickAll(sell);
     fireEvent.click(within(sell).getByRole("button", { name: "Bekreft med resepsjonen: rom 311" }));
     sell = rowOf("311");
@@ -71,7 +76,7 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
     expect(within(sell).getByText("Registrert av Ana Pereira · nå")).toBeInTheDocument();
     // Confirmed is not sold: the headline still offers the room.
     expect(screen.getByText(`1 rom kan selges etter bekreftelse · ca. ${ONE_ROOM} kr hvis utsolgt`)).toBeInTheDocument();
-    const send = within(sell).getByRole("button", { name: "Send rom 311 til resepsjonen" });
+    const send = within(sell).getByRole("button", { name: "Send til resepsjonen: rom 311" });
     expect(send).toHaveFocus();
     const stored = JSON.parse(localStorage.getItem("lobby:room-check-marks") ?? "{}")[TODAY]["room-311"];
     expect(stored).toMatchObject({ action: "confirmed", by: "Ana Pereira", receptionist: "Hanne Vold", checks: ["folio", "bagasje", "kort"] });
@@ -91,7 +96,7 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
     render(asDesk(<RoomChecksPanel lines={TEST_NIGHT} today={TODAY} />));
     fireEvent.click(within(rowOf("311")).getByRole("button", { name: "Angre: rom 311" }));
     expect(within(rowOf("311")).getByText("Bekreftet av Hanne Vold (resepsjon) · folio, bagasje, kort")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send rom 311 til resepsjonen" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Send til resepsjonen: rom 311" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "Angre bekreftelsen: rom 311" }));
     expect(screen.getByRole("button", { name: "Bekreft med resepsjonen: rom 311" })).toHaveFocus();
     // The ticks it stood on are still there, so a slip of the finger costs one tap.
@@ -104,7 +109,7 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
     expect(screen.getByText("Ingen rom å selge i dag · 1 holdt tilbake")).toBeInTheDocument();
     const held = rowOf("311");
     expect(within(held).getByText("Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til 9.11. Dobbelt tildelt?")).toBeInTheDocument();
-    // What the join did, not the robot (jury round 3, the Wybe engineer): Fettero held the room back.
+    // What the join did, not the robot (round 3, domain review): Fettero held the room back.
     expect(within(held).getByText("Fettero holdt rommet tilbake")).toBeInTheDocument();
     expect(within(held).queryByText("Roboten stoppet salget")).not.toBeInTheDocument();
     expect(within(held).queryByRole("button")).not.toBeInTheDocument();

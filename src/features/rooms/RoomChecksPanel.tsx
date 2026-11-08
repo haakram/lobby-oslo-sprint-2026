@@ -101,7 +101,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
           <div ref={list} className="mt-4 flex flex-col gap-5">
             {headline && (
               <div className="flex items-start gap-2">
-                {/* Never green here: a room sent to reception waits for the booking system (jury round 4, the product juror). */}
+                {/* Never green here: a room sent to reception waits for the booking system (round 4, product review). */}
                 <RegenIcon name="key" size={22} className="mt-0.5 shrink-0 text-muted" />
                 <div className="flex flex-col gap-0.5">
                   <p aria-live="polite" className="text-lg font-semibold tracking-[-0.01em]">
@@ -205,7 +205,7 @@ export function crowdedLine(row: Crowded): string {
   return `Bagasje for ${row.arrivals} ankomster i natt${at ? ` (${at})` : ""}.`;
 }
 
-/** "Meldt tomt og ryddig kl. 03:47, men roboten satte inn bagasje her kl. 01:29.": the robot's own log against its check (the Wybe engineer). */
+/** "Meldt tomt og ryddig kl. 03:47, men roboten satte inn bagasje her kl. 01:29.": the robot's own log against its check (domain review). */
 export function contradictionLine(row: Contradiction): string {
   return `Meldt tomt og ryddig kl. ${hhmm(row.checkedAt)}, men roboten satte inn ${row.arrival ? "bagasje" : "noe"} her kl. ${hhmm(row.placedAt)}.`;
 }
@@ -281,7 +281,7 @@ function OwnContradictionRow({ row }: { row: Contradiction }) {
   );
 }
 
-/** From the robot's log alone: more arrivals' bags in one room than it holds (jury round 3, the Wybe juror). */
+/** From the robot's log alone: more arrivals' bags in one room than it holds (round 3, domain review). */
 function CrowdedRow({ row, guestsLink }: { row: Crowded; guestsLink: boolean }) {
   return (
     <RowFrame

@@ -5,6 +5,7 @@ import type { WorkOrderView } from "@/features/maintenance/select";
 import { type ModuleId, moduleById } from "@/features/modules/registry";
 import { SourceNote } from "@/features/modules/SourceNote";
 import { type RequestView, requestTotals, SOURCE_WORD } from "@/features/requests/select";
+import { moneyHeadline } from "@/features/rooms/money";
 import { SHIFTS } from "@/features/staff/testData";
 import type { RunStatus } from "@/features/nightshift/useRun";
 import { Badge, Card, cx, Monogram, RegenIcon, Skeleton } from "@/ui";
@@ -120,17 +121,33 @@ function NightMissing({ status }: { status: RunStatus }) {
   );
 }
 
-/** Rom og renhold: the key rack in small, every room a tile with its status icon (the word is in its name). */
+/**
+ * Rom og renhold: the room check's money first (jury round 2, the design juror: the hallway test starts here and
+ * the money line was missing), then the key rack in small, every room a tile with its status icon.
+ */
 function RoomsWidget({ data, className }: WidgetProps) {
   const rooms = data.rooms;
   const counts = rooms ? countRooms(rooms) : null;
   const floorsDown = rooms ? [...floorsOfRooms(rooms)].reverse() : [];
+  const money = data.money ? moneyHeadline(data.money) : null;
+  const released = data.money ? data.money.toSell.length === 0 && data.money.released.length > 0 : false;
   return (
     <Frame module="rom" className={className}>
       {!rooms || !counts ? (
         <NightMissing status={data.nightStatus} />
       ) : (
         <>
+          {money && (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 rounded-md bg-sunken px-3 py-1">
+              <p aria-live="polite" className="flex items-start gap-1.5 text-base font-semibold">
+                <RegenIcon name={released ? "circle-check" : "key"} size={18} strokeWidth={2} className={cx("mt-0.5 shrink-0", released ? "text-success" : "text-muted")} />
+                <span>{money}</span>
+              </p>
+              <Link href="/rom" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
+                Se romsjekken
+              </Link>
+            </div>
+          )}
           <ul aria-label="Rom per status" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {LEGEND_ORDER.map((status) => (
               <li key={status} className="flex items-center gap-1.5">
@@ -427,7 +444,7 @@ function RobotWidget({ data, className }: WidgetProps) {
               <>
                 <dt className="text-muted">Godkjent</dt>
                 <dd className="tabular-nums">
-                  {tally.done} av {tally.reported} av Wybe-serveren
+                  {tally.done} av {tally.reported} av dommeren (Wybe-simulatoren)
                 </dd>
               </>
             )}

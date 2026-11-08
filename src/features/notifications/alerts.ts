@@ -1,8 +1,9 @@
 import { canAccess } from "@/features/auth/roles";
 import type { DashboardData } from "@/features/dashboard/data";
-import { percent } from "@/features/dashboard/format";
+import { hhmm, percent } from "@/features/dashboard/format";
 import { placeLabel } from "@/features/dashboard/labels";
 import { batteryLow } from "@/features/dashboard/TopBar";
+import { corridorName, openWetFloors, SAFETY_DUE, STRANGER_OWNER, WET_FLOOR_OWNER } from "@/features/handover/safety";
 import { storeName } from "@/features/inventory/testData";
 import { type ModuleId, moduleById } from "@/features/modules/registry";
 import type { RegenName } from "@/ui/icons/regenPaths";
@@ -33,7 +34,8 @@ export type Alert = {
 /** The bell lists this many; anything after it is named in one line, never dropped silently. */
 export const MAX_ALERTS = 5;
 
-export type AlertData = Pick<DashboardData, "role" | "requests" | "maintenance" | "outOfOrder" | "guests" | "calls" | "lowStock" | "robot">;
+export type AlertData = Pick<DashboardData, "role" | "requests" | "maintenance" | "outOfOrder" | "guests" | "calls" | "lowStock" | "robot"> &
+  Partial<Pick<DashboardData, "safety">>;
 
 function open(module: ModuleId) {
   const definition = moduleById(module);
@@ -56,23 +58,63 @@ export function selectAlerts(data: AlertData): Alert[] {
   const alerts: Alert[] = [];
   const may = (route: string) => canAccess(data.role, route);
 
-  // Safety first: a wet floor the robot found that nobody has signed yet goes to the top.
+  // Safety first (jury round 3): each wet floor nobody has signed is its own Haster, with an owner and
+  // a time, then the stranger the robot refused all night. Overlevering's Åpent nå opens with the same.
   const wet = data.maintenance.filter((order) => order.safety && order.status !== "lost");
-  if (wet.length > 0) {
+  const wetScreen: ModuleId = may("/vedlikehold") ? "vedlikehold" : "hotell3d";
+  const wetAction = wetScreen === "vedlikehold" ? open("vedlikehold") : { label: "Vis i 3D-kartet", href: "/hotell" };
+  const lost = new Set(data.maintenance.filter((order) => order.status === "lost").map((order) => order.id));
+  const floors = data.safety ? openWetFloors(data.safety.wetFloors, (id) => lost.has(id)) : null;
+  if (floors) {
+    for (const floor of floors) {
+      const why = floor.signMoved
+        ? ` Skiltet ble flyttet til ${floor.signMoved.to ? corridorName(floor.signMoved.to) : "et nytt søl"}.`
+        : floor.slippedAt
+          ? " Roboten skled der."
+          : "";
+      alerts.push({
+        id: `wet-floor:${floor.place}`,
+        level: 1,
+        module: wetScreen,
+        priority: "hoy",
+        icon: "alert-triangle",
+        title: `Vått gulv uten skilt i ${corridorName(floor.place)}`,
+        detail: `${floor.since ? `Siden ${hhmm(floor.since)}.` : "I natt."}${why} ${WET_FLOOR_OWNER}, innen ${SAFETY_DUE}.`,
+        action: wetAction,
+      });
+    }
+  } else if (wet.length > 0) {
+    // Without the run log's safety reading (a test, an old caller): one alert from Vedlikehold's orders.
     const places = wet.map((order) => {
       const label = placeLabel(order.place ?? order.room);
       return label.charAt(0).toLowerCase() + label.slice(1);
     });
-    const screen: ModuleId = may("/vedlikehold") ? "vedlikehold" : "hotell3d";
     alerts.push({
       id: "wet-floor",
       level: wet.length,
-      module: screen,
+      module: wetScreen,
       priority: "hoy",
       icon: "alert-triangle",
       title: wet.length === 1 ? `Vått gulv uten skilt i ${places[0]}` : `${wet.length} våte gulv uten skilt`,
       detail: `${wet.length === 1 ? `Siden ${wet[0].at ?? "i natt"}` : `I ${list(places)}`}. Sett ut et varselskilt eller tørk opp før gjestene står opp.`,
-      action: screen === "vedlikehold" ? open("vedlikehold") : { label: "Vis i 3D-kartet", href: "/hotell" },
+      action: wetAction,
+    });
+  }
+
+  // The robot refused a stranger at door after door and told no one (jury round 2, the Wybe engineer): a person must know.
+  const stranger = data.safety?.stranger;
+  if (stranger) {
+    const rooms = stranger.rooms.length || stranger.refusals.length;
+    const screen: ModuleId = may("/overlevering") ? "overlevering" : "natteskift";
+    alerts.push({
+      id: "stranger",
+      level: stranger.refusals.length,
+      module: screen,
+      priority: "hoy",
+      icon: "shield",
+      title: `En ukjent person ba om å komme inn på ${rooms === 1 ? "ett rom" : `${rooms} rom`}`,
+      detail: `${stranger.refusals.length > 1 ? `${hhmm(stranger.first)}–${hhmm(stranger.last)}. Roboten sa nei hver gang.` : `Kl. ${hhmm(stranger.first)}. Roboten sa nei.`} ${STRANGER_OWNER}: se på kamera og skriv en avviksmelding.`,
+      action: open(screen),
     });
   }
 

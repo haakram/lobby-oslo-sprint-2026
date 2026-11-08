@@ -16,6 +16,12 @@ import { placeLabel } from "@/features/dashboard/labels";
  *   judgement card), one incident with its first and last time and the doors.
  */
 
+/** Who owns what can hurt a guest (jury round 3): a role, so the page holds whoever is on. */
+export const WET_FLOOR_OWNER = "Vaktmester / renhold";
+export const STRANGER_OWNER = "Sikkerhet / resepsjon";
+/** Before the breakfast traffic: the first guests are in the corridors from 06:30. */
+export const SAFETY_DUE = "06:30";
+
 export type WetFloor = {
   /** "corridor-2b". */
   place: string;

@@ -1,4 +1,5 @@
 import { canAccess } from "@/features/auth/roles";
+import { moneyHeadline } from "@/features/rooms/money";
 import { occupancy, revenueLastNight } from "@/features/rooms/pms";
 import type { DashboardData } from "./data";
 import { formatKroner } from "./format";
@@ -79,7 +80,7 @@ export function timeSavedMethod(saved: TimeSaved): string[] {
     .map(([kind, minutes]) => `${requestKindLabel(kind).toLowerCase()} ${minutes}`)
     .join(", ");
   return [
-    `Et anslag, ikke en måling. Hver oppgave roboten fullførte og Wybe-serveren godkjente, regnet i minutter en ansatt ville brukt: ${kinds} (annet ${MINUTES_OTHER}).`,
+    `Et anslag, ikke en måling. Hver oppgave roboten fullførte og dommeren i Wybe-simulatoren godkjente, regnet i minutter en ansatt ville brukt: ${kinds} (annet ${MINUTES_OTHER}).`,
     `${saved.tasks} oppgaver = ${saved.gross} min. Minus ${MINUTES_PER_HANDBACK} min for hver av de ${saved.handedBack} roboten ga videre til en person (${saved.handback} min).`,
     `Til sammen ${saved.net} min, ca. ${hoursLabel(saved.net)} t.`,
   ];
@@ -142,9 +143,6 @@ export function greeting(hour: number, name: string | null): string {
   return desk ? `${word}, ${desk}` : word;
 }
 
-/** A night counts as gone well when at least this share of its tasks were done. */
-export const WENT_WELL = 0.8;
-
 export type Verdict = { text: string; good: boolean };
 
 /** One honest sentence on the night, before any figure. */
@@ -153,7 +151,7 @@ export function nightVerdict(data: Pick<DashboardData, "nightStatus" | "robot">,
   if (data.nightStatus === "error") return { text: "Natten er ikke lastet ennå.", good: false };
   if (!totals || data.nightStatus === "empty") return { text: "Ingen natt å vise ennå.", good: false };
   if (data.robot && !data.robot.ended) return { text: "Natten er i gang.", good: true };
-  if (totals.total === 0 || totals.done / totals.total >= WENT_WELL) return { text: "Natten gikk fint.", good: true };
+  // No "Natten gikk fint." (jury round 2): a verdict can't weigh a wet floor; the facts line (nightFacts) says what happened.
   return { text: "Natten er over.", good: false };
 }
 
@@ -176,15 +174,27 @@ export function nightFacts({ confirmed, wetFloors, stranger }: { confirmed: numb
   return { done, attention: `${needs.join(" og ")} trenger en eier` };
 }
 
+/** What the day starts with: the rooms to clean before check-in (null for a role without Rom). */
+export function daySummary(data: Pick<DashboardData, "rooms" | "role">): string | null {
+  if (!data.rooms || !canAccess(data.role, "/rom")) return null;
+  const dirty = data.rooms.filter((room) => room.status === "ma_vaskes").length;
+  // A sentence never starts with a digit.
+  return dirty === 0 ? "Ingen rom venter på renhold." : `Før innsjekk skal ${dirty === 1 ? "ett" : dirty} rom vaskes.`;
+}
+
 /** The line after the verdict: the night's work, then what the day starts with. */
 export function nightSummary(data: Pick<DashboardData, "rooms" | "role">, totals: NightTotals | null): string | null {
   if (!totals) return null;
   const staff = totals.staffDone > 0 ? ` Nattevakten ordnet ${totals.staffDone} til.` : "";
   const work = `Roboten fullførte ${totals.done} av ${totals.total} oppdrag.${staff}`;
-  if (!data.rooms || !canAccess(data.role, "/rom")) return work;
-  const dirty = data.rooms.filter((room) => room.status === "ma_vaskes").length;
-  // A sentence never starts with a digit.
-  return dirty === 0 ? `${work} Ingen rom venter på renhold.` : `${work} Før innsjekk skal ${dirty === 1 ? "ett" : dirty} rom vaskes.`;
+  const day = daySummary(data);
+  return day ? `${work} ${day}` : work;
+}
+
+/** The hour of the night on screen (its shift clock), so the greeting matches it: "God morgen" at 05:58, whatever the wall says. */
+export function shiftHour(night: Pick<Night, "clock"> | null): number | null {
+  const hour = night?.clock ? Number(night.clock.slice(0, 2)) : Number.NaN;
+  return Number.isFinite(hour) ? hour : null;
 }
 
 /** Where a figure comes from, said under the row: the robot's log, test data, or our estimate. */
@@ -224,8 +234,9 @@ export function selectHighlights(data: DashboardData): Highlight[] {
   const totals = nightTotals(data);
   const night = data.night;
   const rooms = data.rooms;
-  const ready = rooms?.filter((room) => room.status === "klar" && !room.closed).length ?? null;
-  const free = rooms ? rooms.filter((room) => room.status === "klar" || room.status === "ma_vaskes").length : null;
+  // Klare til salg: the one figure Rom and Overlevering show too (rooms/money.ts), "av 36" everywhere.
+  const ready = data.money?.readyToSell ?? null;
+  const moneyLine = data.money ? moneyHeadline(data.money) : null;
   const checked = rooms ? rooms.filter((room) => room.status !== "ukjent").length : null;
   const total = rooms?.length ?? ROOMS_IN_HOTEL;
   const revenue = revenueLastNight(total);
@@ -296,7 +307,8 @@ export function selectHighlights(data: DashboardData): Highlight[] {
       id: "klare",
       label: "Rom klare til salg",
       value: ready,
-      unit: free !== null ? `av ${free} ledige` : undefined,
+      unit: ready !== null ? `av ${total}` : undefined,
+      detail: moneyLine ?? undefined,
       source: "run-log",
       tone: ready ? "success" : "default",
       route: "/rom",
@@ -320,10 +332,10 @@ export function selectHighlights(data: DashboardData): Highlight[] {
   return all.filter((figure) => canAccess(data.role, figure.route)).slice(0, MAX_HIGHLIGHTS);
 }
 
-/** "Godkjent av Wybe-serveren: 73 av 73 · 8 avvist uten bestilling": the robot figure's line. */
+/** "Godkjent av dommeren (Wybe-simulatoren): 73 av 73 · 8 avvist uten bestilling": the robot figure's line. */
 export function robotDetail(night: Night): string {
   const { tally } = night;
-  const parts = [`Godkjent av Wybe-serveren: ${tally.done} av ${tally.reported}`];
+  const parts = [`Godkjent av dommeren (Wybe-simulatoren): ${tally.done} av ${tally.reported}`];
   if (tally.declined > 0) parts.push(`${tally.declined} avvist uten bestilling`);
   if (tally.cancelled > 0) parts.push(`${tally.cancelled} avlyst`);
   return parts.join(" · ");

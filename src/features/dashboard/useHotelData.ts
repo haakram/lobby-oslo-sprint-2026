@@ -4,12 +4,14 @@ import { useMemo } from "react";
 import type { Role } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { reviewScore, selectGuestDay } from "@/features/guests/testData";
+import { nightSafety } from "@/features/handover/safety";
 import { lowStock, STOCK } from "@/features/inventory/testData";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
 import { useOsloHour } from "@/features/modules/useNow";
 import { osloToday } from "@/features/reception/dates";
 import { selectRequests } from "@/features/requests/select";
 import { useRequestInputs } from "@/features/requests/useRequestInputs";
+import { useRoomCheck } from "@/features/rooms/useRoomCheck";
 import { byRole, onShift, shiftAt } from "@/features/staff/testData";
 import type { DashboardData } from "./data";
 import { withClosed } from "./selectors";
@@ -43,6 +45,10 @@ export function useHotelData(viewerUrl?: string) {
   // The rack reads the same closed rooms as the bell: a room out of order says so on its tile.
   const rackRooms = useMemo(() => (rooms ? withClosed(rooms, outOfOrder) : null), [rooms, outOfOrder]);
   const guests = useMemo(() => selectGuestDay(), []);
+  const lines = run.status === "ready" ? run.lines : null;
+  const safety = useMemo(() => (lines ? nightSafety(lines) : null), [lines]);
+  // The same room check as Rom and Overlevering: a release on either moves Oversikt's figure and the money line.
+  const { money } = useRoomCheck(lines, rackRooms, osloToday());
   const shift = shiftAt(hour);
 
   const data: DashboardData = useMemo(
@@ -54,6 +60,8 @@ export function useHotelData(viewerUrl?: string) {
       nightStatus: run.status,
       night,
       rooms: rackRooms,
+      safety,
+      money,
       robot,
       requests,
       maintenance,
@@ -67,7 +75,7 @@ export function useHotelData(viewerUrl?: string) {
       shift,
       onShift: onShift(shift),
     }),
-    [role, user, hour, run.status, night, rackRooms, robot, requests, maintenance, outOfOrder, guests, calls, retryCalls, shift],
+    [role, user, hour, run.status, night, rackRooms, safety, money, robot, requests, maintenance, outOfOrder, guests, calls, retryCalls, shift],
   );
 
   return { data, run, night, robot };

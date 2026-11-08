@@ -93,7 +93,12 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
 
     // Good news first: the greeting is the page's heading, honest about the time of day.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^(God morgen|God dag|God kveld|Hei), Test$/);
-    expect(screen.getByText(`Roboten fullførte ${DONE} av ${TOTAL} oppdrag. Nattevakten ordnet ${STAFF_DONE} til. Ingen rom venter på renhold.`, { exact: false })).toBeInTheDocument();
+    // One factual line, not a verdict: green only for what the referee confirmed, then what the day starts with.
+    expect(screen.getByText(`${DONE} oppgaver bekreftet`)).toBeInTheDocument();
+    expect(screen.getByText(`Nattevakten ordnet ${STAFF_DONE} til. Ingen rom venter på renhold.`, { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText(/Natten gikk fint/)).not.toBeInTheDocument();
+    // The product's front door is the one primary action.
+    expect(screen.getByRole("link", { name: "Se overleveringen 06:00" })).toHaveAttribute("href", "/overlevering");
 
     // Six figures along one rule: last night's rooms and money, the robot's night, the rooms, the guests.
     for (const label of ADMIN_FIGURES) expect(figures().getByText(label)).toBeInTheDocument();
@@ -104,7 +109,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(figures().getByText(/^Snittpris [\d\s\u00a0]+ kr · RevPAR [\d\s\u00a0]+ kr$/)).toBeInTheDocument();
     // The night's misses are part of its total, not a red count of their own; the server's verdict is said.
     expect(figure("Robotens oppdrag i natt")).toBe(`${DONE}av ${TOTAL}`);
-    expect(figures().getByText(new RegExp(`^Godkjent av Wybe-serveren: ${NIGHT.tally.done} av ${NIGHT.tally.reported}`))).toBeInTheDocument();
+    expect(figures().getByText(new RegExp(`^Godkjent av dommeren \\(Wybe-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`))).toBeInTheDocument();
     expect(screen.queryByText(/feilet/)).not.toBeInTheDocument();
     // The estimate says it is one, and how it is made.
     expect(figure("Timer spart, anslag")).toMatch(/^ca\./);
@@ -160,7 +165,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(stock.getByText(/av 16 varer over minimum/)).toBeInTheDocument();
   });
 
-  it("makes the cleaning route the primary action when the night found rooms to clean", async () => {
+  it("offers the cleaning route beside the handover when the night found rooms to clean (the handover stays primary)", async () => {
     const night = [
       { v: 1, type: "start", shift: "w2-3fa94c1d07be4e2a9c55d1e8b6a0f217", mode: "practice", seed: 1, t: 1794058477 },
       { v: 1, type: "call", cmd: "status", ok: true, clock: "23:10:00" },
@@ -174,8 +179,10 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     // Ruter opens on Dagens renhold (the night's dirty rooms and today's departures), where the saving shows.
     expect(send).toHaveAttribute("href", "/ruter");
     expect(screen.getByText(/Før innsjekk skal 2 rom vaskes\.$/)).toBeInTheDocument();
-    // One primary action on the page, and it is this one.
+    // One primary action on the page: the handover; the route is secondary beside it.
     expect(screen.getAllByRole("link", { name: /^Lag / })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Se overleveringen 06:00" }).className).toMatch(/bg-accent/);
+    expect(send.className).not.toMatch(/bg-accent/);
     expect(rooms().getByRole("link", { name: /^Rom 201: Må vaskes/ })).toBeInTheDocument();
   });
 

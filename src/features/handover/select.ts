@@ -10,7 +10,7 @@ import { type PmsRoom, pmsLastNight, type RoomRevenue } from "@/features/rooms/p
 import type { Reconciliation, RoomCheckMark } from "@/features/rooms/reconcile";
 import { osloToday } from "@/features/reception/dates";
 import { byRole, cleanersToday } from "@/features/staff/testData";
-import { corridorName, type NightSafety, openWetFloors, type WetFloor } from "./safety";
+import { corridorName, type NightSafety, openWetFloors, SAFETY_DUE, STRANGER_OWNER, WET_FLOOR_OWNER, type WetFloor } from "./safety";
 
 /**
  * Overlevering 06:00: the night on one page for the morning manager, composed from what the other
@@ -87,11 +87,7 @@ function joinNb(items: readonly string[]): string {
 
 export const MAX_HIGHLIGHTS = 7;
 
-/** Who owns what can hurt a guest (jury round 3): a role, so the page holds whoever is on. */
-export const WET_FLOOR_OWNER = "Vaktmester / renhold";
-export const STRANGER_OWNER = "Sikkerhet / resepsjon";
-/** Before the breakfast traffic: the first guests are in the corridors from 06:30. */
-export const SAFETY_DUE = "06:30";
+export { SAFETY_DUE, STRANGER_OWNER, WET_FLOOR_OWNER } from "./safety";
 
 /** "Vått gulv uten skilt i korridor 2B siden 23:51. Roboten skled der." */
 export function wetFloorText(floor: WetFloor): string {

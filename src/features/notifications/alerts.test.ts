@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RobotView } from "@/features/dashboard/selectors";
+import { nightSafety } from "@/features/handover/safety";
+import { parseRunLog } from "@/features/nightshift/runlog";
 import type { WorkOrderView } from "@/features/maintenance/select";
 import type { RequestView } from "@/features/requests/select";
 import { type AlertData, MAX_ALERTS, selectAlerts } from "./alerts";
@@ -127,5 +131,32 @@ describe("selectAlerts (the bell)", () => {
     const one = selectAlerts(data({ requests: [request("r1", "feilet")] }))[0];
     expect([two.id, two.level]).toEqual(["handover", 2]);
     expect([one.id, one.level]).toEqual(["handover", 1]);
+  });
+
+  it("on the demo night: each unsigned wet floor is its own Haster with an owner and 06:30, then the stranger, before anything else", () => {
+    const safety = nightSafety(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
+    const alerts = selectAlerts({ ...busy(), safety });
+    expect(alerts.slice(0, 5).map((alert) => [alert.id, alert.priority])).toEqual([
+      ["wet-floor:corridor-2b", "hoy"],
+      ["wet-floor:corridor-3d", "hoy"],
+      ["wet-floor:corridor-1c", "hoy"],
+      ["stranger", "hoy"],
+      ["handover", "hoy"],
+    ]);
+    expect(alerts[0]).toMatchObject({ title: "Vått gulv uten skilt i korridor 2B", detail: "Siden 23:51. Roboten skled der. Vaktmester / renhold, innen 06:30.", action: { href: "/vedlikehold" } });
+    expect(alerts[1].detail).toBe("Siden 04:38. Skiltet ble flyttet til korridor 3C. Vaktmester / renhold, innen 06:30.");
+    expect(alerts[3]).toMatchObject({
+      level: 7,
+      icon: "shield",
+      title: "En ukjent person ba om å komme inn på 7 rom",
+      detail: "01:17–05:11. Roboten sa nei hver gang. Sikkerhet / resepsjon: se på kamera og skriv en avviksmelding.",
+      action: { label: "Åpne Overlevering", href: "/overlevering" },
+    });
+    // The robot manager can't open Overlevering: the stranger opens Natteskift for them.
+    expect(selectAlerts({ ...busy("robot"), safety }).find((alert) => alert.id === "stranger")?.action.href).toBe("/natteskift");
+    // A floor Vedlikehold marked Løst leaves the bell.
+    const twoB = safety.wetFloors.find((floor) => floor.place === "corridor-2b")?.orderIds ?? [];
+    const lost = twoB.map((id) => order(id, { origin: "robot", status: "lost", safety: true }));
+    expect(selectAlerts({ ...busy(), maintenance: lost, safety }).some((alert) => alert.id === "wet-floor:corridor-2b")).toBe(false);
   });
 });

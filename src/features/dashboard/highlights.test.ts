@@ -6,27 +6,35 @@ import { lowStock, STOCK } from "@/features/inventory/testData";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import type { RequestView } from "@/features/requests/select";
 import type { DashboardData } from "./data";
-import { occupancy, revenueLastNight } from "@/features/rooms/pms";
+import { moneyHeadline, roomMoney } from "@/features/rooms/money";
+import { occupancy, pmsLastNight, revenueLastNight } from "@/features/rooms/pms";
+import { reconcileNight } from "@/features/rooms/reconcile";
 import {
   atNight,
   figureSources,
   greeting,
   greetingWord,
+  daySummary,
   hoursLabel,
   MAX_HIGHLIGHTS,
   MINUTES_PER_HANDBACK,
   minutesSaved,
+  nightFacts,
   nightSummary,
   nightTotals,
   nightVerdict,
   selectHighlights,
+  shiftHour,
   timeSaved,
   timeSavedMethod,
 } from "./highlights";
 import { foldNight, selectRobot, selectRooms } from "./selectors";
 
 // Oversikt's good news: the greeting, the night in one sentence and the figures, from the demo data.
-const NIGHT = foldNight(parseRunLog(readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8")).lines);
+const LINES = parseRunLog(readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8")).lines;
+const NIGHT = foldNight(LINES);
+const PMS = pmsLastNight("2026-11-08");
+const MONEY = roomMoney({ reconciliation: reconcileNight(LINES, PMS), marks: {}, revenue: revenueLastNight(36, PMS), rooms: selectRooms(NIGHT), pms: PMS });
 
 function staff(id: string, at: string, status: RequestView["status"]): RequestView {
   return { id, source: "personale", kind: "Utstyr", room: "room-104", text: null, lang: "nb", at, handler: "Kjersti Lund", status, actionable: true, tonight: false };
@@ -41,6 +49,8 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
     nightStatus: "ready",
     night: NIGHT,
     rooms: selectRooms(NIGHT),
+    safety: null,
+    money: MONEY,
     robot: selectRobot(NIGHT),
     requests: [staff("m5", "23:40", "fullfort"), staff("m6", "01:15", "fullfort"), staff("m1", "07:12", "fullfort")],
     maintenance: [],
@@ -76,12 +86,29 @@ describe("the greeting", () => {
     expect(nightSummary(data({ rooms: dirty }), totals)).toMatch(/ Før innsjekk skal 3 rom vaskes\.$/);
   });
 
-  it("calls a night that went well fine, and is plain about the rest", () => {
-    expect(nightVerdict(data(), { done: 71, total: 81 })).toEqual({ text: "Natten gikk fint.", good: true });
+  it("never calls a night fine: an ended night is plain, and the facts line says what happened", () => {
+    expect(nightVerdict(data(), { done: 71, total: 81 })).toEqual({ text: "Natten er over.", good: false });
     expect(nightVerdict(data(), { done: 49, total: 71 })).toEqual({ text: "Natten er over.", good: false });
     expect(nightVerdict(data({ nightStatus: "loading" }), null).text).toBe("Henter natten …");
     expect(nightVerdict(data({ nightStatus: "error" }), null).text).toBe("Natten er ikke lastet ennå.");
     expect(nightVerdict(data({ robot: { ...selectRobot(NIGHT), ended: false } }), { done: 3, total: 9 })).toEqual({ text: "Natten er i gang.", good: true });
+  });
+});
+
+describe("the night in facts, by its own clock", () => {
+  it("says in green only what is done, and names what needs a person", () => {
+    expect(nightFacts({ confirmed: 73, wetFloors: 3, stranger: true })).toEqual({ done: "73 oppgaver bekreftet", attention: "3 våte gulv og 1 ukjent person trenger en eier" });
+    expect(nightFacts({ confirmed: 1, wetFloors: 1, stranger: false })).toEqual({ done: "1 oppgave bekreftet", attention: "1 vått gulv trenger en eier" });
+    expect(nightFacts({ confirmed: 40, wetFloors: 0, stranger: false })).toEqual({ done: "40 oppgaver bekreftet", attention: null });
+  });
+
+  it("greets by the shift clock of the night on screen, and says what the day starts with", () => {
+    expect(shiftHour({ clock: "05:58:07" })).toBe(5);
+    expect(greeting(shiftHour({ clock: "05:58:07" }) ?? 14, "Siri Haugen")).toBe("God morgen, Siri Haugen");
+    expect(shiftHour({ clock: null })).toBeNull();
+    expect(shiftHour(null)).toBeNull();
+    expect(daySummary(data())).toBe("Ingen rom venter på renhold.");
+    expect(daySummary(data({ role: "robot", rooms: null }))).toBeNull();
   });
 });
 
@@ -97,12 +124,13 @@ describe("selectHighlights (the figures)", () => {
     expect(by.inntekt).toMatchObject({ unit: "kr", source: "test" });
     expect(by.inntekt.detail).toMatch(/^Snittpris .+ kr · RevPAR .+ kr$/);
     expect(by.oppgaver).toMatchObject({ value: NIGHT.tally.done, unit: `av ${NIGHT.tally.total}`, tone: "success", source: "run-log" });
-    expect(by.oppgaver.detail).toMatch(new RegExp(`^Godkjent av Wybe-serveren: ${NIGHT.tally.done} av ${NIGHT.tally.reported}`));
+    expect(by.oppgaver.detail).toMatch(new RegExp(`^Godkjent av dommeren \\(Wybe-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`));
     expect(by.spart).toMatchObject({ prefix: "ca.", source: "estimate" });
     expect(by.spart.method?.join(" ")).toMatch(/Et anslag, ikke en måling/);
     expect(by.fornoyd).toMatchObject({ value: "4,7", unit: "av 5", tone: "success" });
-    const ready = data().rooms!.filter((room) => room.status === "klar").length;
-    expect(by.klare).toMatchObject({ value: ready, unit: `av ${ready} ledige`, tone: "success" });
+    // One Klare til salg on every screen: ready and free in the booking system (or released), "av 36", with the money line.
+    expect(by.klare).toMatchObject({ value: MONEY.readyToSell, unit: `av ${data().rooms!.length}` });
+    expect(by.klare.detail).toBe(moneyHeadline(MONEY) ?? undefined);
     // Nothing on the row is a warning or a danger.
     expect(figures.every((figure) => figure.tone === "success" || figure.tone === "default")).toBe(true);
   });
@@ -114,7 +142,7 @@ describe("selectHighlights (the figures)", () => {
   });
 
   it("leaves the night's figures empty until the night is in, and keeps today's", () => {
-    const figures = selectHighlights(data({ night: null, rooms: null, robot: null, loading: true, nightStatus: "loading" }));
+    const figures = selectHighlights(data({ night: null, rooms: null, money: null, robot: null, loading: true, nightStatus: "loading" }));
     expect(figures.filter((figure) => figure.fromNight).every((figure) => figure.value === null)).toBe(true);
     expect(figures.find((figure) => figure.id === "belegg")?.value).toEqual(expect.any(Number));
   });

@@ -6,6 +6,8 @@
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  /* The renderer gives each label a z-index; kept inside this layer, so the HUD (floors, legend) stays on top (round 6). */
+  isolation: isolate;
 }
 
 .h3d-labels > div {
@@ -82,10 +84,23 @@
   white-space: nowrap;
 }
 
+/* Near the view's right edge the label sits on the robot's left, anchored by its right edge (scene.ts placeRobotLabel). */
+.h3d-robot[data-flip] {
+  margin-left: -22px;
+}
+
 .h3d-robot > div {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* No side holds the whole label: it narrows to the room there is and each line wraps, two lines at most. */
+.h3d-robot[data-narrow] > div {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
 }
 
 .h3d-robot:empty {

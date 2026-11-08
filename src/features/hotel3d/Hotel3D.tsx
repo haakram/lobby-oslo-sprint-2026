@@ -306,7 +306,8 @@ export function Hotel3D({ replay: played, variant = "full", className, selectedR
           </div>
 
           <div className="flex flex-wrap items-end justify-between gap-2">
-            <div className="flex flex-col gap-1">
+            {/* A quiet panel under the legend, as under the robot's place: map labels pass beneath it, never through it (round 6). */}
+            <div className="flex flex-col gap-1 rounded-md bg-surface/90 px-2.5 py-1.5 backdrop-blur-sm max-sm:hidden">
               <StatusLegend className="max-sm:hidden" />
               {webgl && !compact && (
                 <p className="text-xs text-muted max-sm:hidden">Dra for å snu · rull for å zoome · piltaster flytter · klikk et rom</p>

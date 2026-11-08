@@ -94,6 +94,9 @@ function label(text: string, className: string): CSS2DObject {
   return object;
 }
 
+/** Above every depth-sorted label the renderer stacks (one per room and place), under the HUD (`.h3d-labels` is isolated). */
+const ROBOT_LABEL_Z = "100000";
+
 export class HotelScene {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly labelRenderer: CSS2DRenderer;
@@ -117,6 +120,12 @@ export class HotelScene {
   private readonly robotLabel: HTMLElement;
   private readonly robotTask: HTMLElement;
   private readonly robotCarry: HTMLElement;
+  private readonly robotTag: CSS2DObject;
+  /** The robot label's width (measured on the first frame after its text changes; -1: not yet), the view's width (at resize). */
+  private robotLabelWidth = -1;
+  private viewWidth = 1;
+  private robotLabelFlipped = false;
+  private robotLabelCap = 0;
   private readonly hover: HTMLElement;
   private readonly attention: THREE.Mesh;
   private readonly selection: THREE.LineSegments;
@@ -268,10 +277,12 @@ export class HotelScene {
     this.robotLabel.append(this.robotTask, this.robotCarry);
     const robotTag = new CSS2DObject(this.robotLabel);
     // Beside the robot, not on it (jury round 1: the tooltip hid the robot): its left edge at the
-    // robot's middle, pushed right in CSS (.h3d-robot margin).
+    // robot's middle, pushed right in CSS (.h3d-robot margin). Near the view's right edge it flips to the
+    // robot's left (round 6: at 1152 px the side panel clipped it), see `placeRobotLabel`.
     robotTag.center.set(0, 0.5);
     robotTag.position.y = 0.9;
     this.robot.add(robotTag);
+    this.robotTag = robotTag;
     this.scene.add(this.robot);
 
     this.attention = new THREE.Mesh(
@@ -717,6 +728,7 @@ export class HotelScene {
     const carrying = snapshot?.robot.carrying ?? [];
     this.robotCarry.textContent = carrying.length ? `Har med: ${summariseItems(carrying)}` : "";
     this.robotCarry.hidden = carrying.length === 0;
+    this.robotLabelWidth = -1;
     this.cart.visible = snapshot?.robot.cart ?? false;
 
     const room = snapshot?.robot.attention ?? null;
@@ -756,6 +768,7 @@ export class HotelScene {
     // setSize also sets the canvas's CSS size, so a 2× screen draws at 2× and still fits the box.
     this.renderer.setSize(width, height);
     this.labelRenderer.setSize(width, height);
+    this.viewWidth = width;
     this.camera.aspect = width / height;
     // A portrait canvas (phone) sees less sideways, so it opens the lens a little.
     this.camera.fov = this.camera.aspect < 1 ? this.baseFov + 10 : this.baseFov;
@@ -904,8 +917,46 @@ export class HotelScene {
     this.controls.update();
     if (this.pointerDirty) this.updateHover();
     this.renderer.render(this.scene, this.camera);
+    this.placeRobotLabel();
     this.labelRenderer.render(this.scene, this.camera);
+    // The renderer stacks labels by depth; the robot's own label stays over the room numbers it passes (round 6).
+    this.robotLabel.style.zIndex = ROBOT_LABEL_Z;
   };
+
+  /**
+   * Keep the robot's label inside the view (round 6: at 1152 px the side panel clipped it). Its natural width is
+   * measured once per text; each frame it goes on the side with room (right by default, the robot's left when the
+   * right is short and the left has more, with 16 px of slack so it never flickers), and when neither side holds it,
+   * it narrows to the room there is and its lines wrap (`data-narrow`, two lines at most).
+   */
+  private placeRobotLabel() {
+    if (this.robotLabelWidth < 0 && this.robotLabel.isConnected) {
+      this.robotLabel.style.maxWidth = "";
+      this.robotLabel.removeAttribute("data-narrow");
+      this.robotLabelCap = 0;
+      this.robotLabelWidth = this.robotLabel.offsetWidth;
+    }
+    const width = this.robotLabelWidth;
+    if (width <= 0) return;
+    this.tmp.setFromMatrixPosition(this.robotTag.matrixWorld).project(this.camera);
+    const x = ((this.tmp.x + 1) / 2) * this.viewWidth;
+    const gap = 22;
+    const margin = 8;
+    const right = this.viewWidth - margin - x - gap;
+    const left = x - gap - margin;
+    const flip = width <= right ? false : this.robotLabelFlipped ? left + 16 >= Math.min(width, right) : left > right + 16;
+    if (flip !== this.robotLabelFlipped) {
+      this.robotLabelFlipped = flip;
+      this.robotTag.center.set(flip ? 1 : 0, 0.5);
+      this.robotLabel.toggleAttribute("data-flip", flip);
+    }
+    const room = Math.floor((flip ? left : right) / 8) * 8;
+    const cap = room >= width ? 0 : Math.max(120, room);
+    if (cap === this.robotLabelCap) return;
+    this.robotLabelCap = cap;
+    this.robotLabel.style.maxWidth = cap ? `${cap}px` : "";
+    this.robotLabel.toggleAttribute("data-narrow", cap > 0);
+  }
 
   dispose() {
     if (this.disposed) return;

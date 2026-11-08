@@ -4,7 +4,8 @@ Where the right handling is unknown, each routine implements the stated hypothes
 `hypothesis` decision ({id, request, action, score_before, score_after, ...}) so one exploratory
 live run shows from score deltas what is right. Every run of a hypothesis flow logs exactly one such
 line, however it ends (see Hyp). The safety rules of flows.py hold everywhere: a door is looked at
-before any knock or keycard, and "done" needs an observed score rise.
+before any knock or keycard, and "done" needs an observed score rise (score-blind, NS_SCORE_BLIND=1:
+the robot's own observation, Executor.done_gate; the scores are then log fields only).
 """
 
 from __future__ import annotations
@@ -15,7 +16,17 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from agent.client import ShiftEnded, WybeError
-from agent.executor import ActionFailed, Declined, Executor, OutOfStock, night_seconds
+from agent.executor import (
+    NOISE_ACK,
+    ActionFailed,
+    Declined,
+    Executor,
+    OutOfStock,
+    answered,
+    heard,
+    night_seconds,
+    placed_inside,
+)
 from agent.flows import HANDLERS as BASE_HANDLERS
 from agent.flows import (
     Result,
@@ -197,8 +208,10 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
         ex.take(name)
     after = ex.score_now()
     h.log(f"placed {name} inside {room} after a keycard: {placed.result}", mid, after, score_at_start=h.before)
-    if placed.ok and _rose(mid, after):
+    if placed.ok and ex.done_gate("place", placed_inside(placed, name, room), str(placed.result), mid, after):
         return f"{name} taken up to {room}", None
+    if ex.blind:
+        raise ActionFailed(f"placed {name} at {room} ({placed.result}) but the reply did not put it inside")
     raise ActionFailed(f"placed {name} in {room} ({placed.result}) but the score did not rise")
 
 
@@ -268,13 +281,15 @@ def noise(ex: Executor, task: Task, h: Hyp) -> Result:
             raise ActionFailed(f"Do Not Disturb sign on {target}; did not knock. Saw {seen}")
         raise ActionFailed(f"no answer at {target}; saw {seen}")
     mid = ex.score_before()
-    ex.cmd("say", text=NOISE_SAY)
+    said = ex.cmd("say", text=NOISE_SAY)
     after = ex.score_now()
     ex.work_order("stoy", f"Støyklage nær rom {num}: ba rom {target.removeprefix('room-')} dempe seg",
                   room=target, place=corridor, request=task.request)
     h.log(f"knocked on {target} and asked for quiet", mid, after, seen=seen, score_at_start=h.before)
-    if _rose(mid, after):
+    if ex.done_gate("say", answered(said, NOISE_ACK), heard(said) or "nothing heard", mid, after):
         return f"asked {target} to keep the noise down", None
+    if ex.blind:
+        raise ActionFailed(f"asked {target} to keep the noise down but heard no answer; saw {seen}")
     raise ActionFailed(f"asked {target} to keep the noise down but the score did not rise; saw {seen}")
 
 
@@ -423,13 +438,19 @@ def spill(ex: Executor, task: Task, h: Hyp) -> Result:
         raise Declined(f"Could not place the wet-floor sign at {spot}: {placed.result}")
     if ex.state.location != spot:  # the report is verified with the sign under the robot
         raise Declined(f"Placed the wet-floor sign at {spot}, but the robot is at {ex.state.location} now.")
-    rose = _rose(mid, after)
-    if not rose and not ex.experiment("spill_done"):
+    if ex.blind:  # score-blind: the place's own reply says whether the sign stands over a spill
+        confirmed = ex.done_gate("sign", "over the spill" in str(placed.result).lower(), str(placed.result), mid, after)
+        if not confirmed:
+            raise ActionFailed(f"placed a wet-floor sign at {spot} but the reply did not put it over a spill: "
+                               f"{placed.result}")
+    else:
+        confirmed = _rose(mid, after)
+    if not confirmed and not ex.experiment("spill_done"):
         raise ActionFailed(f"placed a wet-floor sign at {spot} but the score did not rise")
     if moved_from is not None:
         ex.exp_claim("sign_move")  # one unverified report ends the moves for the night
         return f"wet-floor sign moved from {moved_from} to the wet patch at {spot}", None
-    if rose:
+    if confirmed:
         return f"wet-floor sign placed over the spill at {spot}", None
     ex.exp_claim("spill_done")
     return f"wet-floor sign placed over the wet patch at {spot}", None

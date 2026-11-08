@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -17,18 +18,19 @@ from pathlib import Path
 
 import httpx
 
-from agent import flows
+from agent import flows, price
 from agent.client import ShiftEnded, ShiftSession, WybeClient, WybeError
 from agent.config import Settings
 from agent.executor import NOTE_MAX, ActionFailed, Executor
 from agent.offline import FakeWybe
-from agent.planner import Params, choose_next, opening_plan
-from agent.tasks import Kind, Task, parse_request, vet_brain_task
+from agent.planner import Params, backlog_seconds, choose_next, opening_plan, overloaded
+from agent.tasks import Kind, Task, is_override, parse_request, vet_brain_task
 from agent.world import Hotel, RobotState, clock_to_seconds
 
 PARAMS_FILE = Path(__file__).parent / "data" / "params_best.json"
 LIVE_RUNS = Path("temp/live_runs.jsonl")
-MAX_CONSECUTIVE_ERRORS = 25  # practice only: a final shift backs off and keeps trying instead
+MAX_CONSECUTIVE_ERRORS = 25  # practice, agent bugs: a final shift backs off and keeps trying instead
+MAX_SERVER_ERRORS = 60  # practice, server/network errors: back off like the final for ~30 real minutes
 ERROR_BACKOFF_MAX_S = 30.0
 FINAL_START_RETRY_S = 120.0  # a final start that fails is retried for about this long
 START_BACKOFF_MAX_S = 15.0
@@ -204,6 +206,65 @@ def _vet_brain(ex: Executor, original: Task, better: Task) -> Task:
     return vetted
 
 
+_SKIP = re.compile(r"^\s*Skip (R-\d+)\b")
+_CHECKED_OUT = re.compile(r"(?<!\d)(\d{3}) checked out\b", re.IGNORECASE)  # "309" or "room-309"
+
+
+def _skip(ex: Executor, rid: str, text: str, seen: set[str], pending: list[Task]) -> None:
+    """The manager's "Skip R-NNN, 327 checked out. Don't bother with it.": the request is dropped
+    from the queue and marked skipped. Live: a skipped request scores 0 even when done and verified
+    (seed 4 R-019), so the trip is pure loss. The inbox is read between tasks and, through the
+    executor's hook (Executor.read_inbox), mid-task: a running task stops at its next walk step
+    (Executor.skip_checkpoint), and a running request skipped during a charge block inside its flow
+    ends declined after the block (Executor._decline_if_skipped)."""
+    dropped = [t for t in pending if t.request == rid]
+    for task in dropped:
+        pending.remove(task)
+    seen.add(rid)
+    ex.skipped.add(rid)  # a task running it stops at its next checkpoint (Executor.skip_checkpoint)
+    ex.ledger.set_status(rid, "skipped")
+    # Live (scout, seed 4 R-019): reporting the skipped request `cancelled` scores +5; a request
+    # already reported is refused ("already reported"), which costs nothing.
+    reply = ex.cmd("report", request=rid, outcome="cancelled",
+                   note="Skipped as instructed: the guest checked out.")
+    ex.log("request_skipped", request=rid, text=text[:120], was_queued=bool(dropped),
+           reported=reply.ok, reply=str(reply.result)[:80])
+    if m := _CHECKED_OUT.search(text):
+        _checked_out(ex, f"room-{m[1]}", rid, pending)
+
+
+def _checked_out(ex: Executor, room: str, rid: str, pending: list[Task]) -> None:
+    """Live seed 16: after "Skip R-053, 309 checked out" the robot knocked on 309 for another request
+    (-10); every task for a checked-out room is worth 0. The room is remembered (the flows decline a
+    later request for it before any knock), and its other queued tasks are dropped and reported
+    declined (costs nothing). A task already running finishes; only queued ones are dropped."""
+    ex.checked_out.add(room)
+    dropped = []
+    for task in [t for t in pending if t.room == room and t.request != rid]:
+        ex.cmd("report", request=task.request, outcome="declined",
+               note=f"Guest checked out (manager's skip of {rid})")
+        pending.remove(task)  # after the report: a server error leaves it queued (the flows decline it)
+        ex.ledger.set_status(task.request, "declined")
+        dropped.append(task.request)
+    ex.log("room_checked_out", room=room, request=rid, dropped=dropped)
+
+
+def _plan_mode(ex: Executor, pending: list[Task], params: Params, battery: float | None,
+               was_overloaded: bool) -> bool:
+    """The planner's mode for this choice: True ("overload") when the queue cannot all be served
+    before 06:00 or on the battery left, else shortest-first ("spt"). One `plan_mode` decision when
+    the mode flips, with the queue length, backlog minutes and battery."""
+    signs = ex.movable_signs()  # a spill out of signs is priced with a movable one (Task 6)
+    over = params.order != "ratio" and overloaded(pending, ex.state, ex.hotel, params, battery,
+                                                   movable_signs=signs)
+    if over != was_overloaded:
+        backlog = backlog_seconds(pending, ex.state, ex.hotel, params, movable_signs=signs)
+        extra = {"price": round(ex.robot_price(), 2)} if price.on("overload") else {}
+        ex.log("plan_mode", mode="overload" if over else "spt", queue=len(pending),
+               backlog_min=round(backlog / 60, 1), battery=None if battery is None else round(battery, 1), **extra)
+    return over
+
+
 def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> None:
     reply = ex.cmd("inbox")
     ex.inbox_waiting = False
@@ -212,11 +273,19 @@ def _read_inbox(ex: Executor, brain, seen: set[str], pending: list[Task]) -> Non
         if not isinstance(msg, dict) or not isinstance(msg.get("request"), str):
             continue
         rid = msg["request"]
+        text = str(msg.get("text", ""))
+        sender = str(msg.get("from", "")).lower()
+        if rid in seen and "manager" in sender:  # the manager's answer, skip or follow-up on a known
+            ex.answers.setdefault(rid, []).append(text)  # request: kept for the flows
+        if (m := _SKIP.match(text)) and "manager" in sender:  # only the manager's inbox instructs
+            _skip(ex, m.group(1), text, seen, pending)
+            continue
         if rid in seen:
             continue
         seen.add(rid)
         task = parse_request(rid, str(msg.get("text", "")), str(msg.get("at") or ex.state.clock))
-        if task.kind is Kind.UNKNOWN and brain is not None and getattr(brain, "enabled", False):
+        if (task.kind is Kind.UNKNOWN and brain is not None and getattr(brain, "enabled", False)
+                and not is_override(task.text)):  # a guest's countermand is never reclassified
             better = brain.classify(task.request, task.text, task.arrived)
             if better is not None and better.kind is not Kind.UNKNOWN:
                 task = _vet_brain(ex, task, flows.normalize(better))
@@ -256,7 +325,7 @@ def run_shift(
     try:
         state = RobotState()
         # Claude classifies unknown requests in ONE place (here), so the executor gets no brain.
-        ex = Executor(session, hotel, state, max_scans=params.max_scans)
+        ex = Executor(session, hotel, state, max_scans=params.max_scans, params=params)
         deadline = clock() + real_time_limit_s if real_time_limit_s else None
         pause = sleep or (stop.wait if stop is not None else time.sleep)
         sim_end_s = clock_to_seconds(sim_end) if sim_end else None
@@ -266,12 +335,19 @@ def run_shift(
     def out_of_time() -> bool:
         return (stop is not None and stop.is_set()) or (deadline is not None and clock() >= deadline)
 
-    def hold_on(errors: int) -> bool:
-        """After an error: True to keep going (after a backoff in the final), False to stop."""
+    def hold_on(errors: int, *, server: bool = False) -> bool:
+        """After an error: True to keep going (after a backoff), False to stop. The final never
+        stops. A practice shift stops after MAX_CONSECUTIVE_ERRORS agent bugs at once, and after
+        MAX_SERVER_ERRORS server/network errors: the sim clock only moves with actions, so an
+        outage costs nothing as long as the shift is still played when the server is back."""
         if deadline is None:
-            return errors < MAX_CONSECUTIVE_ERRORS
+            if not server:
+                return errors < MAX_CONSECUTIVE_ERRORS
+            if errors >= MAX_SERVER_ERRORS:
+                return False
         delay = min(ERROR_BACKOFF_MAX_S, 2.0 ** (errors - 1))
-        delay = min(delay, max(0.0, deadline - clock()))
+        if deadline is not None:
+            delay = min(delay, max(0.0, deadline - clock()))
         if delay > 0:
             pause(delay)
         return True
@@ -280,10 +356,14 @@ def run_shift(
                     "requests_served": None, "reason": ""}
     pending: list[Task] = []
     ex.queue = pending  # the same list: a follow-up that runs its original removes it here
+    ex.read_inbox = lambda: _read_inbox(ex, brain, seen, pending)
     seen: set[str] = set()
+    # The executor's inbox hook: mid-task skip checkpoints and the forced charge block read through it.
+    ex.read_inbox = lambda: _read_inbox(ex, brain, seen, pending)
     retried: set[str] = set()  # tasks put back once after a mid-task server error
     errors = 0
     opened = False
+    plan_overload = False  # the planner's mode (Task 4), logged when it flips
     try:
         while True:
             task = None
@@ -294,7 +374,7 @@ def run_shift(
                 result["reason"] = "real time limit"
                 break
             try:
-                status = ex.refresh()
+                status = ex.loop_status()  # a status call only when the robot's own record won't do
                 if sim_end_s is not None and clock_to_seconds(state.clock) >= sim_end_s:
                     result["reason"] = "sim end"
                     break
@@ -306,13 +386,20 @@ def run_shift(
                         try:
                             if step == "get_cart":
                                 ex.get_cart()
+                            elif step == "stock_cart" and ex.loadout_on():
+                                ex.stock_loadout()  # Variant 2: the night's likeliest items
                             elif step == "stock_cart":
                                 ex.stock_cart(params.cart_stock)
                         except ActionFailed as exc:
                             ex.log("opening_failed", step=step, reason=str(exc))
                     continue
                 ex.ensure_battery()  # below 25 %: charge at the dock before the next task or wait
-                task = choose_next(pending, state, hotel, params)
+                # No close-out before 06:00: a declined real request pays 0 and a request still open
+                # at 06:00 costs nothing (live), so the best task is tried to the end.
+                battery = ex._battery()
+                plan_overload = _plan_mode(ex, pending, params, battery, plan_overload)
+                task = choose_next(pending, state, hotel, params, battery=battery, overload=plan_overload,
+                                   movable_signs=ex.movable_signs())
                 if task is None:
                     ex.wait_for_request(should_stop=out_of_time)
                 else:
@@ -326,7 +413,7 @@ def run_shift(
                 session.log_decision("wybe_error", {"error": str(exc)[:200], "streak": errors})
                 if task is not None:
                     _rescue(ex, task, pending, retried, str(exc), time_left=not out_of_time())
-                if not hold_on(errors):
+                if not hold_on(errors, server=True):
                     result["reason"] = "too many errors"
                     break
             except Exception as exc:  # noqa: BLE001 - one odd bug must not kill the shift
@@ -350,10 +437,14 @@ def run_shift(
             session.log_decision("wybe_error", {"error": str(exc)[:200], "during": "end_shift"})
         except Exception as exc:  # noqa: BLE001 - the end line below must still be written
             session.log_decision("end_failed", {"error": type(exc).__name__})
-        result["score"] = state.score
+        final = session.final_score  # the server's own score when it ended the shift (stranded: -200)
+        result["score"] = final if isinstance(final, int | float) and not isinstance(final, bool) else state.score
         result["calls"] = session.calls
         result["at_cap"] = session.at_cap  # (score, clock) when calls reached call_cap, else None
         result["requests_served"] = ex.ledger.served()  # also originals a follow-up ran or redelivered
+        result["requests"] = len(ex.ledger.entries)  # requests received this shift
+        result["min_battery"] = session.min_battery
+        result["dock_calls"] = session.cmd_counts.get("dock", 0)
         session.log_end(result)
     return result
 

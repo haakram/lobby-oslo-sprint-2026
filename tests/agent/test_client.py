@@ -298,13 +298,29 @@ def test_429_without_retry_after_uses_the_backoff_and_a_long_header_is_capped(tm
     client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
                         sleep=delays.append)
     session = client.start_shift("practice", seed=1)
-    assert session.cmd("status").ok and delays == [0.5, 1]
+    assert session.cmd("status").ok and delays == [1, 2]  # no header: 1 s, growing
     replies, _ = _rate_limited(1, retry_after=600)
     delays = []
     client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler([], replies)),
                         sleep=delays.append)
     session = client.start_shift("practice", seed=1)
     assert session.cmd("status").ok and delays == [30]
+
+
+def test_a_429_retries_the_same_call_after_1_s_and_counts_it_once(tmp_path):
+    # Measured live 2026-11-07: 20 req/s clean, "Too many requests. Slow down." above ~22 req/s.
+    replies, state = _rate_limited(1)
+    reqs, delays = [], []
+    client = WybeClient(make_settings(tmp_path), transport=httpx.MockTransport(recording_handler(reqs, replies)),
+                        sleep=delays.append)
+    session = client.start_shift("practice", seed=1)
+    reply = session.cmd("move", to="corridor-1a")
+    assert reply.ok and reply.status == 200 and state["n"] == 2 and delays == [1]
+    sent = [json.loads(r.content) for r in reqs[1:]]
+    assert sent == [{"cmd": "move", "args": {"to": "corridor-1a"}}] * 2  # the same call, resent
+    assert session.calls == 1 and session.cmd_counts == {"move": 1}  # one game action, not two
+    logged = [json.loads(line) for line in session.log_path.read_text().splitlines()]
+    assert [e["cmd"] for e in logged if e["type"] == "call"] == ["move"]
 
 
 def test_persistent_429_raises_wybe_error_after_the_retries(tmp_path):
@@ -352,3 +368,31 @@ def test_start_shift_is_retried_after_a_connect_error(tmp_path):
     client = make_client(tmp_path, handler)
     assert client.start_shift("practice", seed=1).shift_id == "w2-abc"
     assert len(reqs) == 2
+
+
+def test_start_line_names_the_commit_dirty_flag_and_experiment_flags(tmp_path, monkeypatch):
+    # Every run log says which code played and with which flags: a night is then traceable to a commit
+    # (dirty: uncommitted changes ran, not the commit) and a blind night is told from a sighted one.
+    monkeypatch.delenv("NS_SCORE_BLIND", raising=False)
+    monkeypatch.delenv("NS_EXPERIMENTS", raising=False)
+    monkeypatch.setenv("NS_SECRET_TOKEN", "do-not-log")
+    client = make_client(tmp_path, recording_handler([]))
+    start = json.loads(client.start_shift("practice", seed=1).log_path.read_text().splitlines()[0])
+    assert start["type"] == "start" and start["seed"] == 1
+    assert isinstance(start["build"]["commit"], str) and len(start["build"]["commit"]) >= 7
+    assert isinstance(start["build"]["dirty"], bool)
+    flags = start["flags"]
+    assert flags["score_blind"] is False
+    assert flags["experiments"] == ["spill_done", "sign_move"]
+    assert "wet" in flags["price_switches"]
+    assert "NS_SECRET_TOKEN" not in flags["env"] and "do-not-log" not in json.dumps(start)
+
+
+def test_start_line_marks_a_score_blind_run(tmp_path, monkeypatch):
+    monkeypatch.setenv("NS_SCORE_BLIND", "1")
+    monkeypatch.setenv("NS_EXPERIMENTS", "spill_done")
+    client = make_client(tmp_path, recording_handler([]))
+    start = json.loads(client.start_shift("practice", seed=1).log_path.read_text().splitlines()[0])
+    assert start["flags"]["score_blind"] is True
+    assert start["flags"]["experiments"] == ["spill_done"]
+    assert start["flags"]["env"].items() >= {"NS_EXPERIMENTS": "spill_done", "NS_SCORE_BLIND": "1"}.items()

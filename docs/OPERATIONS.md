@@ -107,7 +107,7 @@ TBD at the rehearsal: platform, how `main` deploys, preview URLs per PR, how to 
 ### Night Shift final runbook (Sun 8 Nov, 12:00 Oslo)
 
 The final is `FINAL_ARMED=1 .venv/bin/python -m agent final`: 10 scored shifts in parallel threads
-sharing one rate limiter (5 req/s), each stopping itself after 44 real minutes. It refuses to start,
+sharing one rate limiter (`NIGHTSHIFT_MAX_RPS`, default 16 req/s, so 1.6 req/s per shift), each stopping itself after 44 real minutes. It refuses to start,
 printing why, unless `FINAL_ARMED=1` is in the shell environment (a `.env` file does not count) and
 the Oslo time is 11:59-13:00 on 8 Nov. It never falls back to practice.
 
@@ -126,20 +126,39 @@ same live shifts and drive one robot from two places, which breaks the score-ris
 every "done". The lockfile stops a second one on the same machine; nothing stops one on another
 laptop, so: one person, one terminal.
 
-1. 11:45: last `git pull`, `./scripts/check.sh --fast` green, `.env` has `WYBE_NIGHTSHIFT_KEY`
-   (and `ANTHROPIC_API_KEY` if the Brain is used), no practice shift running, no stale
-   `temp/final.lock` from a test run (`rm -f temp/final.lock`).
+**Rate and calls.** `NIGHTSHIFT_MAX_RPS` (default 16; the server is clean to 20 req/s per key and
+answers HTTP 429 above ~22) is shared by all 10 shifts: 1.6 req/s each, so about 4,200 calls per shift in
+44 minutes (`default_max_calls`: 4,224), enough for a full night. The old 5 req/s (0.5 each) cut rich
+nights at 04:16-05:02. A 429 is never fatal: the client waits the `Retry-After` (max 30 s; else 1, 2,
+4 s) and sends the same call again. Do not raise the variable above 18.
+
+1. **Pre-flight, 11:45** (all in the repo root, in this order):
+   - `git pull` on `main`, then `./scripts/check.sh --fast` green.
+   - `.env` has `WYBE_NIGHTSHIFT_KEY` (and `ANTHROPIC_API_KEY` if the Brain is used).
+   - Stop every practice run (`pgrep -fl "agent (run|bench|rehearse)"`, then kill): practice shifts
+     count against the server's 4-at-once limit and its rate, and must not run into the final.
+   - `whoami` on the live server shows `live_shifts 0` (nothing of ours still running).
+   - `rm -f temp/final.lock` (a stale lock from a test run).
 2. 11:59-12:00: Hamad runs the command above in a fresh terminal. ShirazIQ opens
-   `.venv/bin/python -m agent viewer` and watches (http://127.0.0.1:8765/).
-3. If one shift stops or crashes, do nothing: no hand-steering, no second `final` while the first
-   runs. The other shifts continue; Ctrl-C stops all of them cleanly (each still writes its `end`
-   line; a thread still retrying its start makes no further start).
+   `.venv/bin/python -m agent viewer` (http://127.0.0.1:8765/) and only watches: ten shifts moving,
+   scores rising, no shift frozen. Nobody types commands against the server.
+3. If one shift stops or crashes (`… ended … (crashed: …)`), do nothing: no hand-steering, no second
+   `final` while the first runs. The other shifts continue; Ctrl-C stops all of them cleanly (each
+   still writes its `end` line; a thread still retrying its start makes no further start).
 4. **Restart, only if the process itself is gone** (laptop sleep, crash, Ctrl-C by mistake): run the
    same command again, once. It adopts this team's live final shifts, starts only the missing ones,
    and never passes 10 final shifts in total (the server's own list is the count, so a lost reply
    cannot add an eleventh). An adopted shift keeps the server's 45-minute clock from its original
    start, so it may end earlier than the new 44-minute timer.
 5. Afterwards the run logs are in `temp/runs/`; the summary of all shifts is printed at the end.
+
+**Dress rehearsal (morning, practice only):**
+`.venv/bin/python -m agent rehearse --seeds 1-10` runs those practice seeds through the final's own path
+(call cap 4,224, 44 real minutes, 1.6 req/s per shift), at most 4 at once (the server's practice limit;
+10 seeds run as 4 + 4 + 2, so it takes about 2.2 hours of real time: use fewer seeds or `--minutes`).
+It prints each score, the mean, the mean with the worst dropped, calls and real minutes per shift and
+any shift that stopped early. Every seed is a counted live practice shift (`temp/live_runs.jsonl`),
+so check the budget first. It refuses `--mode final`.
 
 ## 8. Demo day
 

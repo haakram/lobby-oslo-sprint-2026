@@ -10,6 +10,7 @@ import inspect
 import json
 import math
 import random
+import re
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -57,6 +58,10 @@ class BenchResult:
     cap_clocks: dict[int, str] = field(default_factory=dict)  # sim clock at the cap
     mean_capped: float = field(init=False)
     mean_drop_worst_capped: float = field(init=False)
+    requests: dict[int, int] = field(default_factory=dict)  # seed -> requests the agent received
+    served: dict[int, int] = field(default_factory=dict)  # seed -> requests served (reported done)
+    min_battery: dict[int, float | None] = field(default_factory=dict)  # lowest battery seen; 0 = stranded
+    dock_calls: dict[int, int] = field(default_factory=dict)  # seed -> dock commands sent
 
     def __post_init__(self) -> None:
         vals = sorted(self.scores.values())
@@ -81,12 +86,18 @@ def parse_seeds(spec: str) -> list[int]:
     return out
 
 
-def _make(factory: ClientFactory, seed: int) -> WybeClient:
+def _arity(factory: ClientFactory) -> int:
     try:
-        takes_seed = len(inspect.signature(factory).parameters) >= 1
+        return len(inspect.signature(factory).parameters)
     except (TypeError, ValueError):
-        takes_seed = False
-    return factory(seed) if takes_seed else factory()
+        return 0
+
+
+def _make(factory: ClientFactory, seed: int, hourly_scale: float = 1.0) -> WybeClient:
+    n = _arity(factory)
+    if n >= 2:
+        return factory(seed, hourly_scale)
+    return factory(seed) if n >= 1 else factory()
 
 
 def run_bench(
@@ -97,12 +108,16 @@ def run_bench(
     params: Params | None = None,
     sim_end: str | None = OFFLINE_END,
     max_calls: int = 0,
+    hourly_scale: float = 1.0,
 ) -> BenchResult:
     """One shift per seed, `parallel` at a time. A crashed shift scores 0.
 
-    The factory may take the seed (offline: one fresh fake per night) or nothing (live: one
-    client, so its RateLimiter is shared by every thread).
+    The factory may take the seed and the hourly scale (offline: one fresh fake per night, see
+    offline_scenario), the seed only, or nothing (live: one client, so its RateLimiter is shared by
+    every thread). A scale other than 1.0 needs the two-argument form.
     """
+    if hourly_scale != 1.0 and _arity(client_factory) < 2:
+        raise ValueError("hourly_scale needs a client factory that takes (seed, hourly_scale)")
     used = params or load_params()
     scores: dict[int, int] = {}
     lock = threading.Lock()
@@ -110,11 +125,15 @@ def run_bench(
     calls: dict[int, int] = {}
     capped: dict[int, int] = {}
     cap_clocks: dict[int, str] = {}
+    requests: dict[int, int] = {}
+    served: dict[int, int] = {}
+    min_battery: dict[int, float | None] = {}
+    dock_calls: dict[int, int] = {}
 
     def work(seed: int) -> None:
         result: dict = {}
         try:
-            client = _make(client_factory, seed)
+            client = _make(client_factory, seed, hourly_scale)
             result = run_shift(
                 client, mode="practice", seed=seed, params=used, sim_end=sim_end, call_cap=max_calls
             )
@@ -131,12 +150,17 @@ def run_bench(
             capped[seed] = int(at_cap[0] or 0) if at_cap else score  # cap not reached: the full score
             if at_cap and at_cap[1]:
                 cap_clocks[seed] = at_cap[1]
+            requests[seed] = int(result.get("requests") or 0)
+            served[seed] = int(result.get("requests_served") or 0)
+            min_battery[seed] = result.get("min_battery")
+            dock_calls[seed] = int(result.get("dock_calls") or 0)
 
     with ThreadPoolExecutor(max_workers=max(1, parallel)) as pool:
         list(pool.map(work, seeds))
     return BenchResult(
         scores={s: scores[s] for s in seeds}, params=used, errors=errors, calls=calls,
         capped_scores={s: capped[s] for s in seeds}, cap_clocks=cap_clocks,
+        requests=requests, served=served, min_battery=min_battery, dock_calls=dock_calls,
     )
 
 
@@ -178,6 +202,16 @@ _FOLLOW = "Front desk passed on a call from {}: the guest says the {} they order
 _BAGS = "Take the bags at the desk up to {}. The room is empty, the guest checks in later."
 _WET_JITTER_S = 15 * 60  # [hyp] the five spots keep their places; their clocks move +-15 min
 _PEOPLE_JITTER_S = 20 * 60
+# The manager's "Skip R-NNN, <room> checked out. Don't bother with it." (the fake sends it only while
+# the request is unreported). Seed 1: the five skips the scout's slow seed-1 runs saw, at their clocks.
+SEED1_SKIPS = [("22:57:58", "R-002", "317"), ("01:42:32", "R-027", "319"),  # [obs]
+               ("03:22:24", "R-039", "206"), ("03:46:48", "R-040", "211"), ("04:54:02", "R-050", "204")]
+# Skips per night: the most any live run of seeds 1-12 saw ([obs] a lower bound: a request served in
+# time never shows its skip), one drawn per generated seed.
+_SKIPS_PER_NIGHT = [5, 0, 1, 1, 3, 1, 0, 0, 2, 3, 0, 0]
+_SKIP_DELAY_S = (8 * 60 + 23, 29 * 60 + 24)  # [obs] 16 live skips: 8:23 to 29:24 after the request
+_NO_SKIP = ("Front desk passed on", "Complaint about noise")  # [obs] none of the 16 was either kind
+SKIP_TEXT = "Skip {}, {} checked out. Don't bother with it."  # [obs] "that one" when there is no room
 
 # [obs] Practice seed 2 (live map check): the same floor-1 topology and names, other metres and shelves.
 SEED2_FLOOR1_METRES = {
@@ -234,12 +268,13 @@ def hotel_for_seed(seed: int, rng: random.Random | None = None) -> dict | None:
     return data
 
 
-def _arrivals(rng: random.Random, end_s: int) -> list[int]:
-    """Arrival clocks (sim seconds) for one night: the live hourly counts jittered, a quiet opening,
-    then same-second pairs."""
+def _arrivals(rng: random.Random, end_s: int, hourly_scale: float = 1.0) -> list[int]:
+    """Arrival clocks (sim seconds) for one night: the live hourly counts (x hourly_scale) jittered, a
+    quiet opening, then same-second pairs."""
     night = clock_to_seconds("22:00:00")
     times: list[int] = []
     for hour, want in enumerate(_HOURLY):
+        want = want * hourly_scale
         n = max(1 if hour == 0 else 0, round(want * rng.uniform(1 - _HOUR_JITTER, 1 + _HOUR_JITTER)))
         if hour == 0:  # [obs] 22:03 and then nothing until ~22:45
             times.append(clock_to_seconds("22:03:30") + rng.randint(-60, 60))
@@ -253,17 +288,39 @@ def _arrivals(rng: random.Random, end_s: int) -> list[int]:
     return [t for t in times if t < end_s - 120]
 
 
-def offline_scenario(seed: int, end_clock: str = OFFLINE_END) -> dict:
+def skip_specs(seed: int, requests: list[tuple[str, str, str]], end_s: int) -> list[tuple[str, str, str]]:
+    """The night's "Skip R-NNN" messages as request specs. Seed 1: the observed five. Other seeds: a
+    count from _SKIPS_PER_NIGHT, on requests other than follow-ups and noise ([hyp] picked uniformly),
+    8-29 min after each. Own random stream: the night's requests are the same with or without skips."""
+    if seed == 1:
+        return [(clock, "skip", SKIP_TEXT.format(rid, room)) for clock, rid, room in SEED1_SKIPS]
+    rng = random.Random(seed * 6151 + 3)
+    want = rng.choice(_SKIPS_PER_NIGHT)
+    pool = [r for r in requests if not r[2].startswith(_NO_SKIP)
+            and clock_to_seconds(r[0]) + _SKIP_DELAY_S[1] < end_s]
+    out = []
+    for clock, rid, text in sorted(rng.sample(pool, min(want, len(pool))), key=lambda r: r[1]):
+        room = m.group(1) if (m := re.search(r"\b(\d{3})\b", text)) else "that one"
+        at = clock_to_seconds(clock) + rng.randint(*_SKIP_DELAY_S)
+        out.append((_hms(at), "skip", SKIP_TEXT.format(rid, room)))
+    return out
+
+
+def offline_scenario(seed: int, end_clock: str = OFFLINE_END, hourly_scale: float = 1.0) -> dict:
     """FakeWybe kwargs for one night. Seed 1 is the live night replayed exactly; other seeds are
     generated to its measured rate, burstiness, kind mix by hour, room concentration (the DND rooms take
     ~10 %), false-follow-up and named-guest shares, with the five wet spots and two bathrobe events
-    jittered in time and a per-seed map (metres, shelves). Deterministic per seed."""
+    jittered in time and a per-seed map (metres, shelves). Deterministic per seed.
+
+    `hourly_scale` multiplies every hour's request count before the jitter (1.3: ~88 requests, as rich
+    as live seeds 10/16/23 with 82-85); seed 1, the live replay, ignores it."""
     if seed == 1:
         return {
             "requests": list(LIVE_REQUESTS), "dnd_rooms": set(DEFAULT_DND), "absent_rooms": set(DEFAULT_ABSENT),
             "wet": set(), "hidden": dict(DEFAULT_HIDDEN), "guests": dict(DEFAULT_GUESTS),
             "spill_spots": dict(DEFAULT_SPILL_SPOTS), "wet_spots": list(DEFAULT_WET_SPOTS),
             "people_events": list(DEFAULT_PEOPLE), "end_clock": end_clock, "hotel": None,
+            "skips": skip_specs(1, LIVE_REQUESTS, clock_to_seconds(end_clock)),
         }
     rng = random.Random(seed * 7919 + 13)
     end_s = clock_to_seconds(end_clock)
@@ -286,7 +343,7 @@ def offline_scenario(seed: int, end_clock: str = OFFLINE_END) -> dict:
         lost_count[base] = lost_count.get(base, 0) + 1
         return base if lost_count[base] == 1 else f"{base}-{lost_count[base]}"
 
-    for t in _arrivals(rng, end_s):
+    for t in _arrivals(rng, end_s, hourly_scale):
         t = max(t, not_before)
         late = t >= late_s
         kind = _pick(rng, _LATE_WEIGHTS if late else _EARLY_WEIGHTS)
@@ -359,6 +416,7 @@ def offline_scenario(seed: int, end_clock: str = OFFLINE_END) -> dict:
         "people_events": people,
         "end_clock": end_clock,
         "hotel": hotel_for_seed(seed, rng),
+        "skips": skip_specs(seed, requests, end_s),  # own random stream: after everything else
     }
 
 
@@ -400,6 +458,7 @@ def tune(
     out_path: Path = DEFAULT_OUT,
     max_calls: int = 0,
     capped: bool = False,
+    hourly_scale: float = 1.0,
 ) -> tuple[Params, list[BenchResult]]:
     """Random search; the baseline (`base`) is result 0. Keeps the best mean-with-worst-dropped."""
     base = base or Params()
@@ -407,7 +466,8 @@ def tune(
     candidates = [base] + [_random_params(rng, base) for _ in range(trials)]
     results: list[BenchResult] = []
     for i, p in enumerate(candidates):
-        r = run_bench(client_factory, seeds, parallel=parallel, params=p, max_calls=max_calls)
+        r = run_bench(client_factory, seeds, parallel=parallel, params=p, max_calls=max_calls,
+                      hourly_scale=hourly_scale)
         results.append(r)
         print(f"trial {i}: mean {r.mean:.1f}  mean_drop_worst {r.mean_drop_worst:.1f}"
               f"  capped {r.mean_drop_worst_capped:.1f}", flush=True)

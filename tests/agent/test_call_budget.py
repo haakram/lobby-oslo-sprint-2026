@@ -62,6 +62,17 @@ def test_default_cap_is_1320_at_5_rps():
     assert default_max_calls(5) == 1320
 
 
+def test_the_default_rate_gives_a_final_shift_a_cap_past_any_night_s_pace(monkeypatch):
+    from agent.config import load_settings
+
+    monkeypatch.delenv("NIGHTSHIFT_MAX_RPS", raising=False)
+    rps = load_settings(()).max_rps
+    assert rps == 16.0 and default_max_calls(rps) == 4224
+    # the richest live practice nights ran ~1,700-2,000 calls: a final shift capped at 4,224 projects
+    # under its cap all night, so the pace projection never switches navigate on there
+    assert default_max_calls(rps) > 2 * 2000
+
+
 def test_bench_reports_capped_score_and_clock(tmp_path):
     full = run_bench(factory_for(tmp_path), [1], parallel=1, sim_end="23:00:00")
     assert full.calls[1] > 40 and full.capped_scores[1] == full.scores[1]  # unlimited: capped == final

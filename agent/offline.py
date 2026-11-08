@@ -176,9 +176,11 @@ FAILED_DOCK_S = 2
 DOOR_OPEN_S = 300  # [fake] "open for a few minutes"
 
 # --- battery (§ 4): charges 1 %/min on the dock ----------------------------------------------------
-DRAIN_PER_MIN = 0.9  # [obs] active drain ~0.9 %/min over 413 live intervals (never bound live)
+DRAIN_PER_MIN = 0.75  # [obs] active drain 0.70-0.76 %/sim-min, duration-weighted over every full live night
 STAIRS_DRAIN_PER_M = 0.03  # [fake]
 CHARGE_PER_MIN = 1.0
+# [obs] Live seeds 3 and 4 (2026-11-07): the action that emptied the battery still completed, then the
+# shift ended "stranded" and the score dropped by exactly 200 (128 -> -72, 388 -> 188): STRANDED below.
 
 # --- scoring (calibration-spec.md § 2, fitted on the 25 rewards of the live night, rmse 1.5) ---------
 #   gain = round(base[kind] * (1 + GROWTH_PER_HOUR * h) - WAIT_DECAY_PER_MIN * wait_min), floor MIN_POINTS
@@ -189,6 +191,8 @@ GROWTH_PER_HOUR = 0.075  # [obs] the same delivery is worth ~7.5 % more per hour
 WAIT_DECAY_PER_MIN = 0.6  # [obs] fitted; anything in 0-1 fits the 1-5 min waits seen (§ 4 suggests 0.5)
 MIN_POINTS = 5
 VERIFIED_BONUS = 5  # [obs] 20 of 20 verified "done" reports; none for room checks
+JUDGEMENT_BONUS = 5  # [obs] scout: declined on a false follow-up, cancelled on a skipped request
+OUTCOMES = ("done", "failed", "declined", "cancelled")  # [obs] the server's own list
 FALSE_DONE = -35  # [obs] 4 of 4 (all bags); never seen on another kind, applied everywhere
 WRONG_ITEM = -10  # [hyp] a non-matching item into a room with an open request (never observed live)
 DND_KNOCK = 0  # [obs] 6 knocks on the DND door 208 cost nothing (R-023's -30 was two slips)
@@ -198,6 +202,7 @@ SLIP_POINTS = -15  # [obs] each of the 5 slips on the live seed-1 night cost exa
 OFF_DUTY = "The robot is off duty. Start a shift first."
 ENDED = "That shift has already ended. Start a new one."
 INBOX_EVENT = {"type": "inbox", "text": "New message from the night manager."}
+_SKIP_TEXT = re.compile(r"^Skip (R-\d+)\b")  # [obs] "Skip R-040, 323 checked out. Don't bother with it."
 UNDOCK_EVENT = {"type": "dock", "text": "The robot undocks."}
 SLIP_EVENT = {"type": "slip", "text": "The robot slipped on a wet floor and lost a minute."}
 SHIFT_EVENT = {"type": "shift", "text": "Shift ended. The day shift takes over."}
@@ -292,15 +297,78 @@ def seconds_to_clock(s: int) -> str:
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
-def points_for(kind: str, hours_into_night: float, wait_min: float) -> int:
-    """The fitted reward for completing `kind` h hours after 22:00, wait_min after it was asked."""
+def points_for(kind: str, hours_into_night: float, wait_min: float, scoring: dict | None = None) -> int:
+    """The fitted reward for completing `kind` h hours after 22:00, wait_min after it was asked.
+    `scoring` (replaybed's per-kind fit: growth_per_hour, min_points, kinds[kind] = base, decay)
+    replaces the seed-1 constants."""
+    if scoring and kind in scoring.get("kinds", {}) and scoring["kinds"][kind].get("base"):
+        k = scoring["kinds"][kind]
+        gain = round(k["base"] * (1 + scoring.get("growth_per_hour", GROWTH_PER_HOUR) * hours_into_night)
+                     - k.get("decay", WAIT_DECAY_PER_MIN) * wait_min)
+        return max(scoring.get("min_points", MIN_POINTS), gain)
     gain = round(BASE_POINTS[kind] * (1 + GROWTH_PER_HOUR * hours_into_night) - WAIT_DECAY_PER_MIN * wait_min)
     return max(MIN_POINTS, gain)
 
 
+# [obs] live: a false "done" costs the kind's own penalty (amenity -20, follow-up -20, tray -30, spill -30,
+# bags -35, lost item -40); kinds never seen keep FALSE_DONE.
+FALSE_DONE_BY_KIND = {"amenity": -20, "followup": -20, "tray": -30, "spill": -30, "bags": -35, "lost_item": -40,
+                      "room_check": -25}  # room_check [obs] once
+STRANDED = -200  # [obs] two live nights: "The battery is dead ... Shift over."
+CLOSED_OFF = "Closed off: a cleaning crew has blocked that corridor."  # [obs] move refused
+BLOCKED_EXIT = "closed off for cleaning"  # [obs] look's exit flag
+LOCKED_ROOM = "Locked. Guests can open it, staff have keycards."  # [obs] move into a locked room
+CREEP_NOTICE = "The robot creeps carefully over a wet floor."  # [obs]
+SLIP_NOTICE = "The robot slipped on a wet floor."  # [obs]
+ROOM_UNTIDY = "Nobody is here. The bed is unmade and there are towels on the floor."  # [obs]
+
+# --- replay realism (``FakeWybe(live=True)``, used by agent/replaybed.py), measured on the live nights ----
+# Battery: drain is per action, not per minute [obs, least squares on 5,976 status-to-status intervals of
+# 46 live nights (rmse 0.07 %), walking, look, knock and call_elevator refined on 1,923 trips between two
+# charges to 100 % (the dock's minutes give the exact battery; rmse 0.011 %); the fitted values are kept:
+# a 2 % bias strands a night that ran close to 0 %]:
+# walking 0.02 %/m (navigate 0.025 %/m), scan 1 %, look 0.1 %, call_elevator 0.14 %, pick/place 0.2 %,
+# use 0.11 %; say, ask, read, report, inbox and status cost nothing.
+LIVE_DRAIN = {"look": 0.101, "scan": 1.0, "call_elevator": 0.137, "pick": 0.2008, "place": 0.1993,
+              "use": 0.1113, "knock": 0.0095, "drop": 0.2}  # drop [hyp]
+LIVE_WALK_DRAIN_PER_M = 0.0192
+LIVE_MOVE_DRAIN = 0.0091  # per move, on top of the metres
+LIVE_NAV_DRAIN_PER_M = 0.0254
+LIVE_DRAIN_SCALE = float(__import__("os").environ.get("NS_REPLAY_DRAIN_SCALE", "1.0"))  # calibration experiments
+LIVE_STAIRS_DRAIN_PER_M = 0.06  # [hyp] stairs take 3 s/m
+LOW_BATTERY_EVENTS = [(15.0, "Battery below 15%."), (5.0, "Battery below 5%. The robot is slowing down.")]  # [obs]
+SLOW_BELOW = 5.0
+SLOW_WALK_FACTOR = 1.8  # [obs] below 5 % a walk takes ~1.8 s/m (29 live moves); other actions keep their cost
+STRANDED_EVENT = {"type": "stranded", "text": "The battery is dead. Someone has to carry the robot back. Shift over."}
+LIVE_SHIFT_TEXT = "06:00. The day shift takes over."  # [obs]
+FAILED_MOVE_S = 3  # [obs] a refused move (closed off, locked) costs 3 s live
+CHECKED_OUT_KNOCK = -10  # [obs] a knock on a room the manager said checked out
+CHECKED_OUT_DELIVERY = -15  # [obs] seed 16 R-051: a pillow into 309 after "Skip R-051, 309 checked out"
+WRONG_BY_ITEM = {"lost": -20, "luggage": -18, "tray": -15}  # [obs] lost -20 (4), luggage -18 (3); tray [hyp]
+WRONG_DEFAULT = -10  # [obs] an amenity into a room that did not ask (seed 23, 3 of 3)
+DESCRIBED_REPLY = 10  # [obs] reply on a request whose room is only described: +10 and the answer in the inbox
+REPLY_CLEAR = 'Sent. The night manager replies: "{} is exactly as written."'  # [obs]
+REPLY_QUICK = "Sent. The night manager answers quickly."  # [obs]
+CART_TAKEN = "The robot takes hold of the housekeeping cart. Heavy things can ride in it now."  # [obs]
+NOT_IN_SIGHT = "Nothing called '{}' in sight."  # [obs]
+CLERK_ELEVATOR = "The room next to the elevator? For {} that's {}."  # [obs]
+CLERK_PANEL = "Every landing has a call panel. There's a note about it right here on the desk."  # [obs]
+CLERK_NO_ORDER = "I have no order from {} tonight."  # [obs]
+CLERK_ORDER = "Yes, {} asked for something tonight: {}"  # [obs]
+CLERK_LOST = "Nothing handed in yet. Lost things end up under sofas and behind counters. Look properly."  # [obs]
+CLERK_EMPTY = "{} is empty tonight."  # [obs]
+CLERK_CANT = "Sorry, I can't help with that."  # [obs]
+MANAGER = "night manager"
+GUEST_AT_DOOR_S = 170  # [obs] after a knock the guest is listed at the door for <3 min (seen at 150 s, never 180 s)
+MUSIC_LIVE = "Music thumps behind the door of {}."  # [obs]
+SIGN_STANDS = "A sign stands next to it."  # [obs] a wet patch with a wet-floor sign on it
+_DESCRIBED = re.compile(r"the room next to the elevator on floor (\d)", re.IGNORECASE)
+_CHECKED_OUT = re.compile(r"\b(\d{3}) checked out")
+
+
 def _base_item(item: str) -> str:
     """'toy-2' -> 'toy': the server numbers repeated lost items; trays and bags keep their room."""
-    return item if item.startswith(("tray-", "bags-")) else re.sub(r"-\d+$", "", item)
+    return item if item.startswith(("tray-", "bags-", "luggage-")) else re.sub(r"-\d+$", "", item)
 
 
 @dataclass
@@ -317,9 +385,15 @@ class _Request:
     delivered: int = 0
     completed: bool = False
     checked: bool = False  # room check: keycard used on the room, robot inside, look done
-    floor: int | None = None  # spill
+    floor: int | None = None  # spill; the floor of a room described by place
     source: str | None = None  # noise: the room the noise comes from
     dup_of: str | None = None  # [hyp] a repeat of an earlier request (same text and room)
+    skipped: bool = False  # [obs] after "Skip R-NNN" it scores 0, done or not (live seed 4 R-019)
+    sender: str = "night manager"  # [obs] "front desk (forwarded call)" relays a guest's countermand
+    spot: str | None = None  # spill: the wet patch this request is about (live: one new patch per request)
+    described: bool = False  # [obs] "the room next to the elevator on floor 2": the room is per request
+    signed: bool = False  # spill (live): a sign stands on its own patch; credited on the report
+    replied: bool = False  # a reply on a described room was rewarded (once per request [hyp])
 
 
 def _item_in(text: str) -> str | None:
@@ -359,6 +433,16 @@ def parse_request(
     elif guest_room and (m := re.match(r"let .+? know (.+?)\.?$", low)):
         req.kind, req.room = "message", guest_room
         req.keywords = tuple(w for w in re.findall(r"[a-z]+", m[1]) if len(w) >= 4 and w not in STOP_WORDS)
+    elif m := re.match(r"(?:please )?(?:(tell|let) )?the guest in the room next to the elevator "
+                       r"on floor (\d) (?:know )?(?:that )?(.+?)\.?$", low):
+        req.described, req.floor = True, int(m[2])  # its room is set per request (_place_described)
+        if m[1]:
+            req.kind = "message"
+            req.keywords = tuple(w for w in re.findall(r"[a-z]+", m[3])
+                                 if len(w) >= 4 and w not in STOP_WORDS)
+        elif item := _item_in(m[3]):
+            req.kind, req.item = "amenity", item
+            req.count = next((n for word, n in COUNT_WORDS.items() if re.search(rf"\b{word}\b", m[3])), 1)
     elif m := re.search(r"\btray\b.*?\bto (\d{3})\b", low):
         req.kind, req.room, req.item = "tray", room(m[1]), f"tray-{m[1]}"
     elif " lost " in f" {low} ":
@@ -397,7 +481,7 @@ class FakeWybe:
 
     Inspect after a run: ``score``, ``reports`` (request -> outcome as sent), ``false_done`` (requests
     reported done that the fake could not verify), ``wrong_deliveries``, ``unsafe`` (keycard on or
-    entering a Do Not Disturb room), ``log`` (every call), ``final_starts``.
+    entering a Do Not Disturb room), ``log`` (every call), ``final_starts``, ``end_reason``.
     """
 
     def __init__(
@@ -417,8 +501,39 @@ class FakeWybe:
         spill_spots: dict[int, str | None] | None = None,
         wet_spots: list[tuple[str, str]] | None = None,
         people_events: list[tuple[str, str, str]] | None = None,
+        untidy_rooms: set[str] | None = None,
+        blocked_edges: list[tuple] | None = None,
+        elevator_rooms: dict[int, str] | None = None,
+        live_names: bool = False,
+        scoring: dict | None = None,
+        visible: dict[str, str | tuple[str, str]] | None = None,
+        live: bool = False,
+        dnd_windows: dict[str, tuple[str | None, str | None]] | None = None,
+        skips: list[tuple[str, str, str]] | None = None,
+        described_rooms: dict[str, str] | None = None,
     ):
-        """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`."""
+        """Every default is the live seed-1 night; `hotel` (parsed map data) overrides `hotel_path`.
+        `skips` adds the manager's ("03:21:21", "skip", "Skip R-032, ...") lines to `requests`.
+        `described_rooms` names the room of a request whose room is described ("next to the elevator
+        on floor 2"), by request id; otherwise (not `live`) such requests take the rooms on the corridor
+        by that floor's elevator landing in turn [hyp] (live seed 23: R-014's was 201, R-031's was not).
+
+        Replay extras (agent/replaybed.py): `spill_spots` may be keyed by request id ("R-015" -> its
+        own new patch) instead of floor; `blocked_edges` = (a, b, from_clock, to_clock | None) corridors
+        closed off for cleaning; `untidy_rooms` describe themselves unmade; `elevator_rooms` floor -> the
+        room the clerk calls "next to the elevator"; `live_names` spawns objects named as the live server
+        does (luggage-212, luggage-212-28, tray-203-5, toy-2) and a tray per tray request; `scoring` is a
+        per-kind reward fit (see `points_for`); `visible` = lost items lying in plain sight (item ->
+        place or (place, from clock)), listed by `look` instead of found by `scan` (live seed 41: glasses
+        in corridor-1b's look, "Nothing hidden here." from its scan); `elevator_rooms` may also
+        be keyed by request id ("R-014" -> "room-201": live, the room is per request, not per phrase).
+        `requests` entries may carry a 4th field, the sender ("front desk (forwarded call)" is a message only).
+
+        `live=True` switches on everything measured on the live nights that changes the default behaviour
+        (the replay bed uses it): per-action battery drain with the low-battery events, the slowdown and the
+        -200 stranding, the live wordings, per-kind false-done and wrong-delivery penalties, the manager's
+        `reply` answers (+10 on a described room), the clerk's answers, a knock on a checked-out room (-10),
+        spills credited on the report, signed wet patches safe to cross, the 06:00 reply."""
         data = hotel if hotel is not None else json.loads(Path(hotel_path or DEFAULT_MAP).read_text())
         self._nodes: dict[str, dict] = data["nodes"]
         self._adj: dict[str, dict[str, dict]] = {}
@@ -431,7 +546,8 @@ class FakeWybe:
         self._dock = special.get("dock", "charging-dock")
         self._special_desk = special.get("clerk", "front-desk")
         self._kitchen = special.get("kitchen", "kitchen-pass")
-        self._specs = list(DEFAULT_REQUESTS if requests is None else requests)
+        self._specs = [tuple(r) if len(r) == 4 else (*r, MANAGER)
+                       for r in [*(DEFAULT_REQUESTS if requests is None else requests), *(skips or [])]]
         self._dnd = set(DEFAULT_DND if dnd_rooms is None else dnd_rooms)
         self._absent = set(DEFAULT_ABSENT if absent_rooms is None else absent_rooms)
         self._wet = {frozenset(w) for w in wet}
@@ -447,6 +563,19 @@ class FakeWybe:
         self._spill_spots = dict(DEFAULT_SPILL_SPOTS if spill_spots is None else spill_spots)
         self._wet_spots0 = list(DEFAULT_WET_SPOTS if wet_spots is None else wet_spots)
         self._people0 = list(DEFAULT_PEOPLE if people_events is None else people_events)
+        self._described_rooms = dict(described_rooms or {})
+        self._untidy = set(untidy_rooms or ())
+        self._blocked0 = [(a, b, clock_to_seconds(start), clock_to_seconds(end) if end else None)
+                          for a, b, start, end in (blocked_edges or [])]
+        self._elevator_rooms = dict(elevator_rooms or {})
+        self.live = live
+        self.live_names = live_names or live  # trays, bags and lost items named like the live server
+        self.scoring = scoring
+        self._visible0 = dict(visible or {})
+        # [obs] a Do Not Disturb sign can go up during the night (seed 10: room-207 none at 01:51, DND at
+        # 03:09): room -> (from clock or None = start, to clock or None = all night)
+        self._dnd_windows = {room: (clock_to_seconds(a) if a else None, clock_to_seconds(b) if b else None)
+                             for room, (a, b) in (dnd_windows or {}).items()}
         self._lock = threading.Lock()
 
         self.log: list[dict] = []
@@ -563,6 +692,8 @@ class FakeWybe:
         self.dnd_knocks: list[str] = []  # knocks on Do Not Disturb doors: free live, kept for visibility
         self.unsafe: list[str] = []
         self._ended = False
+        self.end_reason: str | None = None  # "time" (06:00), "ended" (end_shift) or "stranded"
+        self._dead = False  # the battery ran out during the current action
         self._now = clock_to_seconds(START_CLOCK)
         self._events: list[dict] = []
         self._location = self._dock
@@ -588,15 +719,73 @@ class FakeWybe:
         self._requests: dict[str, _Request] = {}
         rooms = {n for n, v in self._nodes.items() if v["kind"] == "room"}
         pending = [parse_request(None, self._now, WELCOME, rooms, self._guests)]
-        pending += [parse_request(rid, clock_to_seconds(t), text, rooms, self._guests)
-                    for t, rid, text in self._specs]
+        pending += [self._parse(rid, clock_to_seconds(t), text, sender, rooms) for t, rid, text, sender in self._specs]
         self._pending = sorted(pending, key=lambda r: r.due_s)
+        self._checked_out: set[str] = set()  # rooms the manager said checked out ("Skip R-NNN, 309 ...")
+        self._lost_counts: dict[str, int] = {}  # live names: the Nth lost-item request of a kind is item-N
+        self._tray_count = 0
+        self._named_rooms: set[tuple[str, str]] = set()  # live names: rooms that already got their first tray/bag
+        self._visible_sched = sorted((clock_to_seconds(v[1]) if isinstance(v, tuple | list) else 0,
+                                      v[0] if isinstance(v, tuple | list) else v, item)
+                                     for item, v in self._visible0.items())
+        self._low_warned: set[float] = set()
+        self.stranded = False
+        self.slips = 0
+        self._place_described()
         self._check_rooms = {r.room for r in self._pending  # empty rooms: room checks and bags
                              if r.kind in ("room_check", "bags") and r.room}
+
+    def _place_described(self) -> None:
+        """Each request whose room is described by place gets its own room: the one named in
+        `described_rooms`, else (not live: the replay bed resolves it from the night, `_parse`) the
+        next room on the corridor by that floor's landing [hyp]."""
+        by_lift: dict[int, list[str]] = {}
+        for node, v in self._nodes.items():
+            if v["kind"] == "elevator":
+                corridors = [c for c in self._adj.get(node, {})
+                             if self._nodes.get(c, {}).get("kind") == "corridor"]
+                by_lift[v["floor"]] = sorted(r for c in corridors for r in self._adj.get(c, {})
+                                             if self._nodes.get(r, {}).get("kind") == "room")
+        turn: dict[int, int] = {}
+        for req in self._pending:
+            if not req.described:
+                continue
+            if req.rid in self._described_rooms:
+                req.room = self._described_rooms[req.rid]
+            elif req.room is None and not self.live and (rooms := by_lift.get(req.floor)):
+                req.room = rooms[turn.get(req.floor, 0) % len(rooms)]
+                turn[req.floor] = turn.get(req.floor, 0) + 1
+
+    def _parse(self, rid: str | None, due_s: int, text: str, sender: str, rooms: set[str]) -> _Request:
+        """parse_request, plus the sender and a described room resolved per request (live)."""
+        m = _DESCRIBED.search(text)
+        room = self._elevator_room(rid, int(m[1])) if m and sender == MANAGER else None
+        if m and room:  # read it as if the number were written, keep the real text
+            req = parse_request(rid, due_s, _DESCRIBED.sub(room.removeprefix("room-"), text), rooms, self._guests)
+            req.text = text
+        else:
+            req = parse_request(rid, due_s, text, rooms, self._guests)
+        req.described = bool(m)
+        req.sender = sender
+        return req
+
+    def _is_dnd(self, room: str) -> bool:
+        if room in self._dnd:
+            return True
+        window = self._dnd_windows.get(room)
+        if window is None:
+            return False
+        start, end = window
+        return (start is None or self._now >= start) and (end is None or self._now < end)
+
+    def _elevator_room(self, rid: str | None, floor: int) -> str | None:
+        room = self._elevator_rooms.get(rid) if rid else None
+        return room or self._elevator_rooms.get(floor)
 
     def _robot(self, cmd: str, args: dict) -> dict:
         self._events = []
         self._deliver()
+        battery = self._battery
         if cmd not in ROBOT:
             self._spend(BAD_ARGS_S)
             ok, result = False, f"The robot doesn't know '{cmd}'. Try help."
@@ -605,13 +794,48 @@ class FakeWybe:
             ok, result = False, bad
         else:
             ok, result = getattr(self, f"_cmd_{cmd}")(args)
+        if self.live and not self._ended:
+            if ok and cmd in LIVE_DRAIN:
+                self._battery = max(0.0, self._battery - LIVE_DRAIN[cmd] * LIVE_DRAIN_SCALE)
+            for level, text in LOW_BATTERY_EVENTS:
+                if battery >= level > self._battery and level not in self._low_warned:
+                    self._low_warned.add(level)
+                    self._events.append({"type": "battery", "text": text})
+            if self._battery <= 0:  # [obs] two live nights: -200 and the shift is over
+                self.score += STRANDED
+                self.stranded = True
+                self._finish(event=False, reason="stranded")
+                self._events.append(dict(STRANDED_EVENT))
+                return self._body(ok, self._over(result, "stranded"), self._clock(), self._events)
         self._deliver()
-        if not self._ended and self._now >= self._end_s:
-            self._finish()
+        if self._dead and not self._ended:  # not live (live strands above, per action)
+            result = self._strand(result)
+        elif not self._ended and self._now >= self._end_s:
+            self._finish(event=not self.live)
+            if self.live:  # [obs] the action that reaches 06:00 carries the final result
+                self._events.append({"type": "shift", "text": LIVE_SHIFT_TEXT})
+                return self._body(ok, self._over(result, "time"), self._clock(), self._events)
         return self._body(ok, result, self._clock(), self._events)
 
-    def _finish(self, event: bool = True) -> None:
+    def _over(self, result, reason: str) -> dict:
+        return {"outcome": result, "shift_over": True, "reason": reason, "score": self.score,
+                "requests_served": sum(r.completed for r in self._requests.values()), "clock": self._clock()}
+
+    def _strand(self, outcome: object) -> dict:
+        """[obs] The battery died during this action: -200 and the shift is over. The reply wraps the
+        action's own result, like the live end replies (the client raises ShiftEnded on it); every
+        later call gets HTTP 409."""
+        self.score += STRANDED
+        self.stranded = True
+        served = sum(r.completed for r in self._requests.values())
+        self._events.append(dict(STRANDED_EVENT))
+        self._finish(event=False, reason="stranded")
+        return {"outcome": outcome, "shift_over": True, "reason": "stranded", "score": self.score,
+                "requests_served": served, "clock": self._clock()}
+
+    def _finish(self, event: bool = True, reason: str = "time") -> None:
         self._ended = True
+        self.end_reason = reason
         self._ended_ids.add(self._shift_id)
         for h in self._history:
             if h["shift"] == self._shift_id:
@@ -626,23 +850,63 @@ class FakeWybe:
     def _spend(self, seconds: float, stairs_m: float = 0) -> None:
         s = min(max(0, round(seconds)), max(0, self._end_s - self._now))
         self._now += s
-        self._battery = max(0.0, self._battery - s / 60 * DRAIN_PER_MIN - stairs_m * STAIRS_DRAIN_PER_M)
+        if not self.live:  # live: the drain is per action (_robot, _walk_drain)
+            self._battery = max(0.0, self._battery - s / 60 * DRAIN_PER_MIN - stairs_m * STAIRS_DRAIN_PER_M)
+            if self._battery <= 0 and (s > 0 or stairs_m > 0):
+                self._dead = True  # [obs] stranded once this action is done (_robot)
+
+    def _walk_drain(self, metres: float, stairs_m: float, per_m: float) -> None:
+        if self.live:
+            drain = (metres - stairs_m) * per_m + stairs_m * LIVE_STAIRS_DRAIN_PER_M
+            self._battery = max(0.0, self._battery - drain * LIVE_DRAIN_SCALE)
+
+    def _slow(self) -> float:
+        return SLOW_WALK_FACTOR if self.live and self._battery < SLOW_BELOW else 1.0
+
+    def _blocked(self, a: str, b: str) -> bool:
+        """A corridor closed off for cleaning right now (live: some stay closed all night)."""
+        pair = {a, b}
+        return any({x, y} == pair and start <= self._now and (end is None or self._now < end)
+                   for x, y, start, end in self._blocked0)
 
     def _deliver(self) -> None:
         """Requests become visible on the reply whose action crosses their scheduled time."""
         while self._wet_sched and self._wet_sched[0][0] <= self._now:
             self._spots.add(self._wet_sched.pop(0)[1])  # [obs] spots appear on a clock and stay wet
+        while self._visible_sched and self._visible_sched[0][0] <= self._now:
+            _, place, item = self._visible_sched.pop(0)
+            if item not in self._revealed:
+                self._revealed.add(item)
+                self._add_object(place, item)
         while self._pending and self._pending[0].due_s <= self._now:
             req = self._pending.pop(0)
             req.arrived_s = self._now
             msg = {"from": "night manager", "at": self._clock(),
                    "text": req.text if req.rid is None else f"{req.rid}: {req.text}"}
+            if skip := _SKIP_TEXT.match(req.text):  # a spec like ("22:10:00", "skip", "Skip R-001, ...")
+                if self._skip_dropped(req):
+                    continue
+                msg.update(text=req.text, request=skip.group(1))
+                if (target := self._requests.get(skip.group(1))) is not None:
+                    target.skipped = True
+                    gone = _CHECKED_OUT.search(req.text)
+                    room = f"room-{gone[1]}" if gone else target.room
+                    if room:
+                        self._checked_out.add(room)
+                self._unread.append(msg)
+                self._events.append(dict(INBOX_EVENT))
+                continue
+            if req.sender != MANAGER:  # [obs] a forwarded call is a message about another request, no new task
+                self._unread.append({"from": req.sender, "at": self._clock(), "text": req.text, "request": req.rid})
+                self._events.append({"type": "inbox", "text": f"New message from {req.sender}."})
+                continue
             if req.rid is not None:
                 msg["request"] = req.rid
-                req.dup_of = next((r.rid for r in self._requests.values() if r.text == req.text
-                                   and r.room == req.room and req.due_s - r.due_s <= DUPLICATE_WINDOW_S),
-                                  None)
-                if req.kind == "tray" and req.item in self._trays_spawned:  # [obs] R-019, R-056: no tray
+                if not self.live_names:  # live: every tray and bag request brings its own object
+                    req.dup_of = next((r.rid for r in self._requests.values() if r.text == req.text
+                                       and r.room == req.room and req.due_s - r.due_s <= DUPLICATE_WINDOW_S),
+                                      None)
+                if not self.live_names and req.kind == "tray" and req.item in self._trays_spawned:  # [obs] R-019
                     req.dup_of = req.dup_of or next(r.rid for r in self._requests.values()
                                                     if r.kind == "tray" and r.item == req.item)
                 self._requests[req.rid] = req
@@ -650,18 +914,48 @@ class FakeWybe:
             self._unread.append(msg)
             self._events.append(dict(INBOX_EVENT))
 
+    def _skip_dropped(self, req: _Request) -> bool:
+        """[obs] 30 live runs: a request reported before its "Skip R-NNN" clock never gets the skip."""
+        skip = _SKIP_TEXT.match(req.text)
+        return bool(skip) and skip.group(1) in self.reports
+
     def _arrive(self, req: _Request) -> None:
+        if req.kind == "tray":
+            self._tray_count += 1
         if req.dup_of:  # [hyp] a repeat brings no second tray or bag
             return
-        if req.kind == "tray" and req.item:
+        if self.live_names and req.kind in ("tray", "bags", "lost_item"):
+            self._arrive_named(req)
+        elif req.kind == "tray" and req.item:
             self._trays_spawned.add(req.item)
             self._add_object(self._kitchen, req.item)
         elif req.kind == "bags" and req.item:  # [fake] name; the agent looks for "bag" in the objects
             self._add_object(self._special_desk, req.item)
-        elif req.kind == "spill" and (spot := self._spill_spots.get(req.floor)) in self._nodes:
-            self._spots.add(spot)
+        if req.kind == "spill":
+            spot = self._spill_spots[req.rid] if req.rid in self._spill_spots else self._spill_spots.get(req.floor)
+            if spot in self._nodes:
+                req.spot = spot
+                self._spots.add(spot)
         elif req.kind == "noise" and req.room:
             req.source = self._noise_source(req.room)
+
+    def _arrive_named(self, req: _Request) -> None:
+        """[obs] Live names: tray-104, then tray-104-<nth tray request of the night>; luggage-205, then
+        luggage-205-<request number>; the Nth lost-item request of a kind gets wallet, wallet-2, ..."""
+        if req.kind == "lost_item":
+            base = _base_item(req.item or "glasses")
+            n = self._lost_counts[base] = self._lost_counts.get(base, 0) + 1
+            req.item = base if n == 1 else f"{base}-{n}"
+            return
+        if req.room is None:  # a named guest the scenario does not know: nothing to name it after
+            return
+        num = req.room.removeprefix("room-")
+        prefix = "tray" if req.kind == "tray" else "luggage"
+        first = (prefix, req.room) not in self._named_rooms
+        self._named_rooms.add((prefix, req.room))
+        suffix = self._tray_count if req.kind == "tray" else int(re.sub(r"\D", "", req.rid or "0") or 0)
+        req.item = f"{prefix}-{num}" if first else f"{prefix}-{num}-{suffix}"
+        self._add_object(self._kitchen if req.kind == "tray" else self._special_desk, req.item)
 
     def _noise_source(self, room: str) -> str | None:
         """[hyp] The noise comes from another room on the same corridor (default: the next one)."""
@@ -674,7 +968,7 @@ class FakeWybe:
         i = rooms.index(room)
         for step in range(1, len(rooms)):  # the next room with someone in it
             source = rooms[(i + step) % len(rooms)]
-            if source not in self._absent and source not in self._dnd:
+            if source not in self._absent and not self._is_dnd(source):
                 return source
         return None
 
@@ -711,7 +1005,7 @@ class FakeWybe:
         return b if self._kind(b) in ("room", "service") else a
 
     def _occupied(self, room: str) -> bool:
-        if self._kind(room) != "room" or room in self._dnd or room in self._absent:
+        if self._kind(room) != "room" or self._is_dnd(room) or room in self._absent:
             return False
         return room not in self._check_rooms or room in self._guests.values()
 
@@ -766,7 +1060,9 @@ class FakeWybe:
     def _complete(self, req: _Request) -> None:
         hours = (self._now - clock_to_seconds(START_CLOCK)) / 3600
         req.completed = True
-        self.score += points_for(req.kind, hours, (self._now - req.arrived_s) / 60)
+        if req.skipped:
+            return  # [obs] seed 4 R-019: done and verified after the skip, 0 points
+        self.score += points_for(req.kind, hours, (self._now - req.arrived_s) / 60, self.scoring)
 
     def _undock(self) -> None:
         if self._docked:
@@ -777,6 +1073,8 @@ class FakeWybe:
         """What makes a->b wet: a constructor wet edge (both ways) or a spill spot at b."""
         if frozenset((a, b)) in self._wet:
             return frozenset((a, b))
+        if self.live and self._objects.get(b, {}).get("wet-floor-sign", 0) > 0:
+            return None  # [obs] 1,411 of 1,412 live moves onto a signed patch: no creep, no slip
         return b if b in self._spots else None
 
     def _wet_extra(self, a: str, b: str) -> tuple[int, str | None]:
@@ -784,11 +1082,12 @@ class FakeWybe:
         if key is None:
             return 0, None
         if key in self._wet_known:
-            return WET_KNOWN_S, "The robot creeps carefully over the wet floor."  # [fake] wording
+            return WET_KNOWN_S, CREEP_NOTICE if self.live else "The robot creeps carefully over the wet floor."
         self._wet_known.add(key)
         self._events.append(dict(SLIP_EVENT))
         self.score += SLIP_POINTS
-        return SLIP_S, "The floor here is wet."  # [fake] wording
+        self.slips += 1
+        return SLIP_S, SLIP_NOTICE if self.live else "The floor here is wet."  # [fake] default wording
 
     def _edge_seconds(self, e: dict) -> float:
         return e["m"] * (STAIRS_S_PER_M if e["stairs"] else 1) + (DOOR_S if e["door"] else 0)
@@ -817,16 +1116,30 @@ class FakeWybe:
             return False, f"No request called '{rid}'."
         if rid in self.reports:
             return False, f"{rid} is already reported."
+        if outcome not in OUTCOMES:
+            return False, "Outcome should be done, failed, declined or cancelled."  # [obs] scout probe 1
         self.reports[rid] = outcome
+        if outcome == "declined":  # [obs] scout: +5 for a follow-up with no order (5 of 5); 0 on a DND room
+            if req.kind == "followup" and not self._has_order(req):
+                self.score += JUDGEMENT_BONUS
+            return True, "Noted."
+        if outcome == "cancelled":  # [obs] scout seed 4 R-019: +5 after the manager's "Skip R-NNN"
+            if req.skipped:
+                self.score += JUDGEMENT_BONUS
+            return True, "Noted."
         if outcome != "done":
             return True, "Noted."
         if req.kind == "room_check" and req.checked and not req.completed:
             self._complete(req)  # room checks score only on the report, no separate +5
             return True, "Noted. Thanks."
-        if req.kind != "room_check" and req.completed:
-            self.score += VERIFIED_BONUS
+        if self.live and req.kind == "spill" and req.signed and not req.completed:
+            self._complete(req)  # [obs] live: a spill is credited on the report (31-66), no separate +5
             return True, "Noted. Thanks."
-        self.score += FALSE_DONE
+        if req.kind != "room_check" and req.completed and not (self.live and req.kind == "spill"):
+            if not req.skipped:
+                self.score += VERIFIED_BONUS
+            return True, "Noted. Thanks."
+        self.score += FALSE_DONE_BY_KIND.get(req.kind, FALSE_DONE) if self.live else FALSE_DONE
         self.false_done.append(rid)
         return True, "Noted."
 
@@ -836,13 +1149,24 @@ class FakeWybe:
             return False, 'reply needs request, e.g. {"request": "R-001", "text": "..."}'
         if rid not in self._requests:
             return False, f"No request called '{rid}'."
-        return True, f"{rid} is exactly as written."
+        req = self._requests[rid]
+        if req.described and req.room:  # [obs] seeds 16, 23: +10; the answer in the inbox at once, same clock
+            if not req.replied:
+                req.replied = True
+                self.score += DESCRIBED_REPLY
+            self._unread.append({"from": MANAGER, "at": self._clock(),
+                                 "text": f"{rid}: Sorry: {req.room.removeprefix('room-')}.", "request": rid})
+            self._events.append(dict(INBOX_EVENT))  # [hyp] the live reply's events were not logged
+            return True, REPLY_QUICK
+        if not self.live:
+            return True, f"{rid} is exactly as written."
+        return True, REPLY_CLEAR.format(rid)
 
     def _cmd_end_shift(self, args: dict) -> tuple[bool, dict]:
         served = sum(r.completed for r in self._requests.values())
         result = {"shift_over": True, "reason": "ended", "score": self.score, "requests_served": served,
                   "clock": self._clock()}
-        self._finish()
+        self._finish(reason="ended")
         return True, result
 
     # --- looking ---------------------------------------------------------------------------------------
@@ -860,6 +1184,8 @@ class FakeWybe:
                 ex["door"] = self._door_state(self._door_node(loc, to))
             if e["stairs"]:
                 ex["stairs"] = True
+            if self._blocked(loc, to):
+                ex["blocked"] = BLOCKED_EXIT
             if (key := self._wet_key(loc, to)) is not None:
                 ex["warning"] = WET_WARNING
                 self._wet_known.add(key)
@@ -878,17 +1204,22 @@ class FakeWybe:
         if self._kind(loc) == "room":
             if self._occupied(loc):
                 text = "A guest room. The guest is here."
-            elif loc in self._dnd:
+            elif self._is_dnd(loc):
                 text = "A dark guest room. Someone is asleep."
             else:
-                text = ROOM_TIDY
+                text = ROOM_UNTIDY if loc in self._untidy else ROOM_TIDY
+        elif self.live and self._kind(loc) == "corridor":
+            text = f"A quiet corridor on floor {self._nodes[loc]['floor']}."  # [obs]
         else:
             text = DESCRIPTIONS.get(loc) or KIND_DESCRIPTIONS.get(self._kind(loc), "")
         for r in self._requests.values():
             if r.kind == "noise" and not r.completed and r.source and r.source in self._adj.get(loc, {}):
-                text = f"{text} Loud music thumps behind the door of {r.source}."  # [fake] wording
+                text = f"{text} {MUSIC_LIVE.format(r.source)}" if self.live \
+                    else f"{text} Loud music thumps behind the door of {r.source}."  # [fake] wording
         if loc in self._spots or any(loc in w for w in self._wet):
             text = f"{text} {WET_HERE}"
+            if self.live and self._objects.get(loc, {}).get("wet-floor-sign", 0) > 0:
+                text = f"{text} {SIGN_STANDS}"
         return text
 
     def _look_at(self, at: str) -> tuple[bool, object]:
@@ -896,7 +1227,7 @@ class FakeWybe:
         edge = self._adj.get(loc, {}).get(at)
         if edge and edge["door"]:
             return True, {"door": at, "state": self._door_state(self._door_node(loc, at)),
-                          "sign": "Do Not Disturb" if at in self._dnd else "none"}
+                          "sign": "Do Not Disturb" if self._is_dnd(at) else "none"}
         if self._objects.get(loc, {}).get(at, 0) > 0 or self._carrying(at):
             return True, f"{at}. Heavy." if at.startswith("tray-") else f"{at}."
         if at in self._notes_here():
@@ -904,7 +1235,7 @@ class FakeWybe:
         for p in self._people_here():
             if at.lower() in (p["who"], p["name"].lower()):
                 return True, f"{p['name']}, {p.get('role') or p.get('state')}."
-        return False, f"No {at} here."
+        return False, NOT_IN_SIGHT.format(at) if self.live else f"No {at} here."
 
     # --- moving ------------------------------------------------------------------------------------------
 
@@ -920,7 +1251,7 @@ class FakeWybe:
             self._spend(RIDE_S)
             self._location, self._elevator_ready = to, None
             self._visited.add(to)
-            return True, {"at": to, "metres": 0}
+            return True, {"at": to} if self.live else {"at": to, "metres": 0}
         edge = self._adj.get(self._location, {}).get(to)
         if edge is None:
             self._spend(BAD_ARGS_S)
@@ -928,15 +1259,25 @@ class FakeWybe:
         if edge["stairs"] and self._cart is not None:
             self._spend(BAD_ARGS_S)
             return False, "The cart doesn't do stairs."  # [fake] wording ("Doesn't do stairs.")
+        if self._blocked(self._location, to):
+            self._spend(FAILED_MOVE_S)
+            return False, CLOSED_OFF
         if self._kind(to) == "room" and not self._door_open(to):
-            self._spend(BAD_ARGS_S)
-            return False, f"The door to {to} is locked."
+            self._spend(FAILED_MOVE_S if self.live else BAD_ARGS_S)
+            return False, LOCKED_ROOM if self.live else f"The door to {to} is locked."
         extra, notice = self._wet_extra(self._location, to)
         self._undock()
-        self._spend(self._edge_seconds(edge) + extra, stairs_m=edge["m"] if edge["stairs"] else 0)
+        walk = self._edge_seconds(edge)
+        if self.live and self._kind(to) == "room":
+            walk -= DOOR_S if edge["door"] else 0  # [obs] stepping into a room takes its metres only
+        stairs_m = edge["m"] if edge["stairs"] else 0
+        self._walk_drain(edge["m"], stairs_m, LIVE_WALK_DRAIN_PER_M)
+        if self.live:
+            self._battery = max(0.0, self._battery - LIVE_MOVE_DRAIN * LIVE_DRAIN_SCALE)
+        self._spend(walk * self._slow() + extra, stairs_m=stairs_m)
         self._location, self._elevator_ready = to, None
         self._visited.add(to)
-        if to in self._dnd:
+        if self._is_dnd(to):
             self.unsafe.append(f"entered Do Not Disturb room {to}")
         self._meet_people()
         result = {"at": to, "metres": edge["m"]}
@@ -950,7 +1291,7 @@ class FakeWybe:
             return self._bad_args("navigate", {"to": "lobby"})
         if to == self._location:
             self._spend(BAD_ARGS_S)
-            return False, f"The robot is already at {to}."  # [fake]
+            return False, f"Already at {to}." if self.live else f"The robot is already at {to}."  # [obs] / [fake]
         if to not in self._visited:
             self._spend(BAD_ARGS_S)
             return False, f"The robot hasn't been to {to} yet."  # [fake]
@@ -972,7 +1313,10 @@ class FakeWybe:
             stairs_m += e["m"] if e["stairs"] else 0
             extra += self._wet_extra(a, b)[0]
         self._undock()
-        self._spend(base * NAVIGATE_FACTOR + extra, stairs_m=stairs_m)
+        self._walk_drain(metres, stairs_m, LIVE_NAV_DRAIN_PER_M)
+        if self.live:  # [obs] 1,402 of 1,427 live navigates took 1.25 s per metre (+-1), doors cost nothing
+            base = metres + (STAIRS_S_PER_M - 1) * stairs_m
+        self._spend(base * NAVIGATE_FACTOR * self._slow() + extra, stairs_m=stairs_m)
         self._location, self._elevator_ready = to, None
         self._visited.update(path)
         return True, {"at": to, "path": path, "metres": metres}
@@ -987,7 +1331,8 @@ class FakeWybe:
             if d > dist[node]:
                 continue
             for to, e in self._adj.get(node, {}).items():
-                if (e["stairs"] and self._cart is not None) or (self._kind(to) == "room" and to != dst):
+                if (e["stairs"] and self._cart is not None) or (self._kind(to) == "room" and to != dst) \
+                        or self._blocked(node, to):
                     continue
                 nd = d + self._edge_seconds(e)
                 if nd < dist.get(to, float("inf")):
@@ -1026,9 +1371,16 @@ class FakeWybe:
         if self._battery >= 100:
             self._spend(FAILED_DOCK_S)
             return False, "Battery is already full."
+        if self._unread and not self.live:  # a message already waiting wakes it at once (see below)
+            self._docked = True
+            pct = round(self._battery)
+            return True, f"Docked for 0 min. Battery {pct}% to {pct}%. A new message woke it up."
         # Charges 1 %/min "until full or until a new message arrives" (§ 3), whichever comes first.
         full_at = self._now + math.ceil((100.0 - self._battery) * 60 / CHARGE_PER_MIN)
-        nxt = self._pending[0].due_s if self._pending else None
+        nxt = next((r.due_s for r in self._pending if not self._skip_dropped(r)), None)
+        # Live: "a dock with unread mail returns at once" is not modelled. 98 live docks began with mail
+        # unread and none returned at once (82 lasted a minute or more, until the NEXT message); no live
+        # dock took 0 s. "Docked for 0 min" is a dock under a minute (the minutes are truncated).
         woke = nxt is not None and nxt <= full_at
         until = min(nxt if woke else full_at, self._end_s)
         secs = max(0, until - self._now)
@@ -1036,9 +1388,12 @@ class FakeWybe:
         self._now += secs
         self._battery = min(100.0, before + secs / 60 * CHARGE_PER_MIN)
         self._docked = True
-        text = f"Docked for {round(secs / 60)} min. Battery {round(before)}% to {round(self._battery)}%."
+        mins = secs // 60 if self.live else round(secs / 60)  # [obs] live truncates the minutes
+        text = f"Docked for {mins} min. Battery {round(before)}% to {round(self._battery)}%."
         if woke and until == nxt:
             text += " A new message woke it up."
+        elif self.live:
+            text += " Fully charged."  # [obs], also when 06:00 cuts the charge short
         return True, text
 
     # --- items, doors and people ----------------------------------------------------------------------------
@@ -1053,7 +1408,7 @@ class FakeWybe:
             return False, f"No {item} here."
         if item == "cart":
             return False, "The cart is too big to pick up. Use it instead."  # [fake]
-        if item.startswith(("tray-", "bags-")):
+        if item.startswith(("tray-", "bags-", "luggage-")):
             if self._cart is None:
                 return False, f"{item} is too heavy to carry by hand. It needs the cart."  # [fake]
             if len(self._cart) >= self.cart_capacity:
@@ -1093,19 +1448,41 @@ class FakeWybe:
         if item == "wet-floor-sign" and (target in self._spots or any(target in w for w in self._wet)):
             floor = self._nodes[target]["floor"]
             for r in list(self._requests.values()):  # [hyp] a sign on the spill serves the request
-                if r.kind == "spill" and r.floor == floor and not r.completed and target in self._spots:
+                if self.live:  # [obs] only the request's own patch counts; the credit comes on the report
+                    if r.kind == "spill" and r.spot == target and not r.completed:
+                        r.signed = True
+                elif r.kind == "spill" and r.floor == floor and not r.completed and target in self._spots:
                     self._complete(r)
             return True, "Wet floor sign placed over the spill."
         if self._kind(target) != "room":
+            if self.live:
+                return True, f"Placed {item} at {target}."  # [obs]
             return True, f"Placed {item} here." if target == self._location else f"Placed {item} in {target}."
         self._judge_delivery(target, item)
         return True, f"Placed {item} inside {target}."
 
+    def _has_order(self, claim: _Request) -> bool:
+        """An earlier carried-item request for the claim's room and item (true follow-up)."""
+        return any(r.rid != claim.rid and r.kind in ("amenity", "tray", "lost_item") and r.room == claim.room
+                   and r.item == claim.item and r.due_s <= claim.due_s for r in self._requests.values())
+
     def _judge_delivery(self, room: str, item: str) -> None:
         open_reqs = self._open_requests(room)
         carried = ("amenity", "tray", "lost_item", "bags")
-        match = next((r for r in open_reqs if r.item in (item, _base_item(item)) and r.kind in carried), None)
+        names = (item,) if self.live_names and item != _base_item(item) else (item, _base_item(item))
+        if self.live_names and item.startswith(("tray-", "luggage-")):
+            names = (item,)
+        match = next((r for r in open_reqs if r.item in names and r.kind in carried and not r.skipped), None)
         claim = next((r for r in open_reqs if r.kind == "followup" and r.item == item), None)
+        if self.live and match is None and any(r.item in names and r.skipped for r in open_reqs):
+            self.score += CHECKED_OUT_DELIVERY  # [obs] the guest checked out
+            self.wrong_deliveries.append((room, item))
+            return
+        if self.live and match is None and claim is None:
+            kind = "lost" if _base_item(item) in LOST_WORDS + ("glasses",) else item.split("-")[0]
+            self.score += WRONG_BY_ITEM.get(kind, WRONG_DEFAULT)  # [obs] live: any room that did not ask
+            self.wrong_deliveries.append((room, item))
+            return
         if match:
             match.delivered += 1
             if match.delivered >= match.count:
@@ -1148,7 +1525,7 @@ class FakeWybe:
             if here["cart"] == 0:
                 del here["cart"]
             self._cart = self._parked_carts.pop(self._location, [])
-            return True, "The robot takes hold of the housekeeping cart."
+            return True, CART_TAKEN if self.live else "The robot takes hold of the housekeeping cart."
         if item == "keycard":
             if not self._carrying("keycard"):
                 return False, "The robot has no keycard."  # [fake]
@@ -1158,7 +1535,7 @@ class FakeWybe:
                 return False, f"There's no door called {on} here."  # [fake]
             self._door_open_until[on] = self._now + DOOR_OPEN_S
             self._keycarded.add(on)
-            if on in self._dnd:
+            if self._is_dnd(on):
                 self.unsafe.append(f"keycard on Do Not Disturb room {on}")
             if on in self._strangers and not any(r.kind in ("room_check", "bags") for r in self._open_requests(on)):
                 self.unsafe.append(f"let a stranger into {on}")  # [hyp] the bathrobe man
@@ -1174,13 +1551,17 @@ class FakeWybe:
             self._spend(BAD_ARGS_S)
             return False, f"There's no door called {door} here."  # [fake]
         self._spend(COST_S["knock"])
-        if door in self._dnd:
+        if self.live and door in self._checked_out:
+            self.score += CHECKED_OUT_KNOCK  # [obs] the manager said that guest checked out
+            return True, "No answer."
+        if self._is_dnd(door):
             self.score += DND_KNOCK  # 0 [obs]; the agent still avoids it (judgement), so it is counted
             self.dnd_knocks.append(door)
             return True, "No answer. A Do Not Disturb sign hangs on the handle."
         if not self._occupied(door):
             return True, "No answer."
-        self._door_open_until[door] = self._guest_at_door_until[door] = self._now + DOOR_OPEN_S
+        self._door_open_until[door] = self._now + DOOR_OPEN_S
+        self._guest_at_door_until[door] = self._now + (GUEST_AT_DOOR_S if self.live else DOOR_OPEN_S)
         return True, f"{self._guest_name(door)} opens the door of {door}."
 
     def _cmd_say(self, args: dict) -> tuple[bool, object]:
@@ -1191,7 +1572,7 @@ class FakeWybe:
         heard = []
         low = text.lower()
         for room in self._guests_at_doors():
-            delivered = False
+            delivered = quieted = False
             for r in self._open_requests(room):
                 if r.kind == "message" and all(k in low for k in r.keywords):
                     self._complete(r)
@@ -1200,8 +1581,11 @@ class FakeWybe:
                 if (r.kind == "noise" and not r.completed and r.source == room
                         and any(w in low for w in ("noise", "quiet", "keep it down"))):
                     self._complete(r)
-                    delivered = True
+                    delivered = quieted = True
             reply = "Thanks!" if delivered else "Sorry, what was that?"  # [fake] for the second
+            if self.live and quieted:
+                heard.append('The music stops. A muffled "sorry!"')  # [obs]
+                continue
             heard.append(f'{self._guest_name(room)} calls back: "{reply}"')
         return True, {"said": text, "heard": heard}
 
@@ -1221,6 +1605,8 @@ class FakeWybe:
             return "Dock by the lobby. Don't let it run flat."
         if who != "clerk":
             return "I'm fine, thanks."
+        if self.live:
+            return self._clerk_live(q)
         for name, room in self._guests.items():
             if name.lower() in q or name.split()[-1].lower() in q:
                 return f"{name} is in {room}."
@@ -1230,12 +1616,41 @@ class FakeWybe:
             return "Tonight the pillows went down to the laundry."
         return "I don't know. The night manager might."  # [fake]
 
+    def _clerk_live(self, q: str) -> str:
+        """[obs] The night clerk's live answers (catalogued from every live ask)."""
+        for name, room in self._guests.items():
+            if name.lower() in q:
+                return f"{name} is in {room}."
+        if "next to the elevator" in q:
+            arrived = [r for r in self._requests.values() if r.described and r.room]
+            m = re.search(r"\br-\d+\b", q)
+            req = self._requests.get(m[0].upper()) if m else None
+            if req is None or not req.described or not req.room:
+                floor = re.search(r"floor (\d)", q)
+                on_floor = [r for r in arrived if not floor or self._nodes.get(r.room, {}).get("floor") == int(floor[1])]
+                req = max(on_floor, key=lambda r: r.arrived_s or 0, default=None)
+            if req is None or req.replied:  # [obs] 5 of 5: once the manager was asked, the clerk deflects
+                return CLERK_PANEL
+            return CLERK_ELEVATOR.format(req.rid, req.room.removeprefix("room-"))
+        if (m := re.search(r"\b(\d{3})\b", q)) and "order" in q:
+            room = f"room-{m[1]}"
+            asked = [r for r in self._requests.values() if r.room == room and r.kind != "followup"]
+            return CLERK_ORDER.format(m[1], asked[-1].text) if asked else CLERK_NO_ORDER.format(m[1])
+        if (m := re.search(r"\b(\d{3})\b", q)) and ("who" in q or "empty" in q):
+            room = f"room-{m[1]}"
+            if room in self._absent or room in self._checked_out:
+                return CLERK_EMPTY.format(m[1])
+            return f"{self._guest_name(room)} is in {room}."  # [fake] wording
+        if any(w in q for w in ("lost", "found", "whose", "property")):
+            return CLERK_LOST
+        return CLERK_CANT
+
     def _cmd_scan(self, args: dict) -> tuple[bool, object]:
         self._spend(COST_S["scan"])
         found = [item for item, place in self._hidden.items()
                  if self._hidden_here(place) and item not in self._revealed]
         if not found:
-            return True, "Nothing hidden here."
+            return True, {"found": [], "text": "Nothing hidden here."} if self.live else "Nothing hidden here."
         for item in found:
             self._revealed.add(item)
             self._add_object(self._location, item)

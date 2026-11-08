@@ -26,13 +26,13 @@ describe("a phone call becomes a task", () => {
   it("tells what the robot can carry from what a person must fix", () => {
     expect(classifyRequest("Rom 214 ønsker to ekstra håndklær.")).toEqual({ kind: "Utstyr", robotCan: true });
     expect(classifyRequest("Frokost på rommet kl. 08")).toEqual({ kind: "Romservice", robotCan: true });
-    expect(classifyRequest("Radiatoren på rom 104 virker ikke")).toEqual({ kind: "Teknisk", robotCan: false });
+    expect(classifyRequest("Radiatoren på rom 134 virker ikke")).toEqual({ kind: "Teknisk", robotCan: false });
     expect(classifyRequest("Det er mye støy fra naborommet")).toEqual({ kind: "Støy", robotCan: false });
     expect(classifyRequest("Vekking kl. 06:30")).toEqual({ kind: "Beskjed", robotCan: false });
   });
 
   it("suggests the right person on today's shift: the technician for a fault, the floor's cleaner for things", () => {
-    expect(staffFor("Teknisk", "room-104").name).toBe("Trond Eikeland");
+    expect(staffFor("Teknisk", "room-134").name).toBe("Trond Eikeland");
     expect(staffFor("Utstyr", "room-214")).toEqual({ name: "Mariam Osei", first: "Mariam" });
     expect(staffFor("Beskjed", "room-330").name).toBe("Resepsjonen");
   });
@@ -66,7 +66,7 @@ describe("a phone call becomes a task", () => {
     const tasks = phoneTasks([], demoCalls("2026-11-08"));
     expect(tasks.map((task) => [task.room, task.kind, task.at])).toEqual([
       ["room-214", "Utstyr", "01:47"],
-      ["room-104", "Teknisk", "02:14"],
+      ["room-134", "Teknisk", "02:14"],
       ["room-330", "Beskjed", "04:32"],
     ]);
   });

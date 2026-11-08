@@ -132,6 +132,16 @@ export function robotJudgement(lines: readonly RunLine[], until?: number): Robot
         if (room && data.status === "ikke_forstyrr") dnd.add(room);
         break;
       }
+      case "work_order": {
+        // A wet floor the robot raised as a work order (found by a walk over it or an exit warning, no
+        // "wet patch" in a look): the bell and Vedlikehold list it until a sign is placed after it.
+        const place = str(data.place);
+        if (place && data.type === "sol" && !data.request && !/varselskilt/i.test(str(data.text) ?? "")) {
+          wet.add(place);
+          signNow.set(place, false);
+        }
+        break;
+      }
       case "task_done":
         reported += 1;
         break;

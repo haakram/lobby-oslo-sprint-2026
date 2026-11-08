@@ -48,7 +48,7 @@ describe("Overlevering 06:00, composed from the night", () => {
       ["sellable", "Siri Haugen", "09:00"],
       ["robot", "Siri Haugen", "10:00"],
     ]);
-    expect(open[0]).toMatchObject({ text: "2 saker fra telefonen venter på å bli fordelt (rom 104 og 214).", urgent: true, href: "/foresporsler" });
+    expect(open[0]).toMatchObject({ text: "2 saker fra telefonen venter på å bli fordelt (rom 134 og 214).", urgent: true, href: "/foresporsler" });
   });
 
   it("drops a room once it is marked free to sell, and says when reception already has the guest task", () => {

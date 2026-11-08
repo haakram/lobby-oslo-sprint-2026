@@ -172,9 +172,9 @@ describe("RequestsScreen (Forespørsler)", () => {
     expect(within(row).getByText("Telefon (AI)")).toBeInTheDocument();
     expect(within(row).getByText("Forslag: roboten")).toBeInTheDocument();
     // A radiator is for a person: no robot button, the technician on shift instead.
-    const radiator = rowWith(/Radiatoren på rom 104 virker ikke/);
+    const radiator = rowWith(/Radiatoren på rom 134 virker ikke/);
     expect(within(radiator).queryByRole("button", { name: /^Send roboten/ })).not.toBeInTheDocument();
-    expect(within(radiator).getByRole("button", { name: "Gi til Trond Eikeland: Teknisk, Rom 104" })).toBeInTheDocument();
+    expect(within(radiator).getByRole("button", { name: "Gi til Trond Eikeland: Teknisk, Rom 134" })).toBeInTheDocument();
 
     fireEvent.click(towels);
     const moved = rowWith("Rom 214 ønsker to ekstra håndklær.");

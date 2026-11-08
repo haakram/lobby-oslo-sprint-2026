@@ -32,9 +32,9 @@ describe("robotJudgement on the demo night (seed 16, 2,680 points)", () => {
 
   it("finds the wet floors, the signs placed, and the places still bare at the end", () => {
     expect(judgement.wetFloors.signed).toEqual(["corridor-3d", "corridor-3a", "corridor-2a", "corridor-3c"]);
-    expect(judgement.wetFloors.found).toEqual(["corridor-2a", "corridor-2b", "corridor-3a", "corridor-3c", "corridor-3d"]);
-    // 3d's sign was moved to the newer spill in 3c (R-065); 2b was never asked for.
-    expect(judgement.wetFloors.unsignedAtEnd).toEqual(["corridor-2b", "corridor-3d"]);
+    expect(judgement.wetFloors.found).toEqual(["corridor-1c", "corridor-2a", "corridor-2b", "corridor-3a", "corridor-3c", "corridor-3d"]);
+    // 3d's sign was moved to the newer spill in 3c (R-065); 2b was never asked for; 1c was learnt from an exit warning and raised as a work order (05:52:59), never signed.
+    expect(judgement.wetFloors.unsignedAtEnd).toEqual(["corridor-1c", "corridor-2b", "corridor-3d"]);
   });
 
   it("has no Do-Not-Disturb door this night", () => {

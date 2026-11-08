@@ -1,24 +1,25 @@
 import Link from "next/link";
+import { APP_NAME } from "@/ui/brand";
 import { Button, EmptyState, ErrorState, RegenIcon, buttonClasses } from "@/ui";
 import type { CameraProblem } from "./useCamera";
 
 /** `calm`: a setting on this device, not a fault, so it reads as information (no alert, no red). */
 const COPY: Record<CameraProblem, { title: string; body: string; canRetry: boolean; calm?: boolean }> = {
   denied: {
-    title: "Kameraet er slått av for Lobby",
+    title: `Kameraet er slått av for ${APP_NAME}`,
     body: "Trykk på hengelåsen ved adressen, slå på Kamera, og trykk Slå på kameraet.",
     canRetry: true,
     calm: true,
   },
   notfound: {
     title: "Fant ikke noe kamera",
-    body: "Koble til et kamera, eller åpne Lobby på telefonen.",
+    body: `Koble til et kamera, eller åpne ${APP_NAME} på telefonen.`,
     canRetry: true,
     calm: true,
   },
   insecure: {
     title: "Kameraet krever en sikker adresse",
-    body: "Nettleseren slår av kameraet når siden ikke er sikker. Åpne Lobby over https, eller på localhost.",
+    body: `Nettleseren slår av kameraet når siden ikke er sikker. Åpne ${APP_NAME} over https, eller på localhost.`,
     canRetry: false,
   },
   error: {

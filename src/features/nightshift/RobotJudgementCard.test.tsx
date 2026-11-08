@@ -29,7 +29,7 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(card).toHaveTextContent("8Meldinger avvist etter sjekk");
     expect(card).toHaveTextContent("6 klager på bestillinger som ikke fantes, 1 levering som alt var gjort og 1 søl uten noe nytt å gjøre");
     expect(card).toHaveTextContent("4Skilt for vått gulv satt ut");
-    expect(card).toHaveTextContent("Korridor 3d, 3a, 2a og 3c.Vått uten skilt ved slutten: korridor 2b og 3d.");
+    expect(card).toHaveTextContent("Korridor 3d, 3a, 2a og 3c.Vått uten skilt ved slutten: korridor 1c, 2b og 3d.");
     expect(card).toHaveTextContent("Ingen dører hadde Ikke forstyrr-skilt i natt.");
     // The person's English plea is not shown; only the robot's own reply, as a quote.
     expect(card).not.toHaveTextContent(/bathrobe|locked out/i);

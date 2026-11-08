@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, EmptyState, ErrorState, RegenIcon, Sheet, Skeleton, cx } from "@/ui";
 import { BoxOverlay, type BoxLabel } from "./BoxOverlay";
-import { cocoLabel, isProductClass } from "./cocoLabels";
-import { cropFrame, personBoxes } from "./cropFrame";
+import { cocoLabel, isBelongingClass, isProductClass } from "./cocoLabels";
+import { cropFrame, personBoxes, touchesPerson } from "./cropFrame";
 import { PermissionState } from "./PermissionState";
 import { ProductCard } from "./ProductCard";
 import { IdentifyError, QUOTA_COPY } from "./requestIdentify";
@@ -22,6 +22,8 @@ import { useScene } from "./useScene";
 type SheetContent = {
   /** A box we never send to Claude (person, chair …): the card shows its class name only. */
   objectLabel?: string;
+  /** That box is a guest's belonging (phone, bag, book): the card says why it is never sent. */
+  belonging?: boolean;
   boxId: string | null;
   image: string | null;
   result?: IdentifyResult;
@@ -85,8 +87,9 @@ export function EyesScreen() {
     async (box: Box | null) => {
       const element = video.current;
       if (!element || cameraStatus !== "ready") return;
-      // A tapped box is a product crop; the whole frame (the shutter) goes with the people in it painted over.
-      const image = box ? cropFrame(element, box) : cropFrame(element, null, undefined, peopleInView());
+      // The people in view are painted over on the phone first, on a product crop and on the whole frame
+      // (the shutter) alike; a product crop draws only the product's own box back on top.
+      const image = cropFrame(element, box, undefined, peopleInView());
       request.current?.abort();
       const controller = new AbortController();
       request.current = controller;
@@ -107,8 +110,8 @@ export function EyesScreen() {
   const select = useCallback(
     (box: Box) => {
       if (!isProductClass(box.label) && !results[box.id]) {
-        // People, furniture and the like are never sent: a small card with the class name, for free.
-        setSheet({ boxId: null, image: null, objectLabel: cocoLabel(box.label) });
+        // People, furniture and guests' things are never sent: a small card with the class name, for free.
+        setSheet({ boxId: null, image: null, objectLabel: cocoLabel(box.label), belonging: isBelongingClass(box.label) });
         setSheetOpen(true);
       } else if (results[box.id] || busy[box.id]) {
         // Already recognised (or being recognised live): open the card without a new request.
@@ -139,6 +142,8 @@ export function EyesScreen() {
   if (!ready) hint = "Starter kameraet";
   else if (detector.status === "loading") hint = "Laster gjenkjenning";
   else if (detector.status === "failed") hint = "Live-bokser er av. Ta bilde av varen med utløseren.";
+  else if (detector.boxes.length > 0 && autoActive && productsOnlyNearPeople(detector.boxes))
+    hint = "Trykk på boksen for å kjenne igjen varen. Varer nær en person kjennes ikke igjen automatisk.";
   else if (detector.boxes.length > 0 && autoActive) hint = "Hold varen stille, så kjenner Fettero den igjen.";
   else if (detector.boxes.length > 0) hint = "Trykk på en boks for å kjenne igjen varen.";
 
@@ -261,7 +266,7 @@ export function EyesScreen() {
 
       <Sheet open={sheetOpen} onClose={close} title={sheetTitle}>
         {sheet?.objectLabel ? (
-          <ObjectCard label={sheet.objectLabel} />
+          <ObjectCard label={sheet.objectLabel} belonging={sheet.belonging ?? false} />
         ) : sheetResult ? (
           <ProductCard result={sheetResult} />
         ) : sheetError ? (
@@ -295,9 +300,10 @@ function CameraStart({ onStart }: { onStart: () => void }) {
           }
         />
         <p className="border-t border-line pt-4 text-sm text-muted">
-          Utsnitt av varer sendes til Claude (Anthropic, USA) for å kjennes igjen. Personer sendes aldri som utsnitt.
-          Hele bildet sendes bare når du slår på Omgivelser eller trykker Identifiser hele bildet, og personer kameraet
-          finner, dekkes til på telefonen først. Ingenting lagres hos oss.
+          Utsnitt av varer sendes til Claude (Anthropic, USA) for å kjennes igjen. Personer sendes aldri som utsnitt:
+          personer kameraet finner, dekkes til på telefonen før et bilde sendes, og en vare nær en person sendes bare
+          når du trykker på den. Gjesters ting, som mobil, veske, koffert og bok, sendes aldri. Hele bildet sendes bare
+          når du slår på Omgivelser eller trykker Identifiser hele bildet. Ingenting lagres hos oss.
         </p>
       </div>
     </div>
@@ -305,17 +311,26 @@ function CameraStart({ onStart }: { onStart: () => void }) {
 }
 
 /** A thing the detector names for free, which never goes to Claude. */
-function ObjectCard({ label }: { label: string }) {
+function ObjectCard({ label, belonging }: { label: string; belonging: boolean }) {
   return (
     <div className="flex flex-col items-start gap-3">
       <Badge>Ikke en vare</Badge>
       <p className="text-2xl font-bold tracking-[-0.02em]">{label}</p>
       <p className="text-base text-muted">
-        Fettero kjenner igjen dette selv, så det kostet ingenting. Bare utsnitt av varer sendes til gjenkjenning. Hele
-        bildet sendes bare med Omgivelser eller Identifiser hele bildet, og da dekkes personer kameraet finner, til først.
+        {belonging
+          ? "Gjesters ting sendes aldri til gjenkjenning: Fettero kjenner igjen dette selv, så det kostet ingenting. Er det en vare fra lageret, bruk Identifiser hele bildet."
+          : "Fettero kjenner igjen dette selv, så det kostet ingenting. Bare utsnitt av varer sendes til gjenkjenning."}{" "}
+        Hele bildet sendes bare med Omgivelser eller Identifiser hele bildet, og da dekkes personer kameraet finner, til først.
       </p>
     </div>
   );
+}
+
+/** Every product box in view sits near a person, so live recognition leaves them all to a tap. */
+function productsOnlyNearPeople(boxes: readonly Box[]): boolean {
+  const products = boxes.filter((box) => isProductClass(box.label));
+  const people = personBoxes(boxes);
+  return products.length > 0 && products.every((box) => touchesPerson(box, people));
 }
 
 /** A live feature on or off, so a demo can stop it spending. */

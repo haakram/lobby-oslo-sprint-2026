@@ -1,4 +1,5 @@
 import { isProductClass } from "./cocoLabels";
+import { touchesPerson } from "./cropFrame";
 import type { IdentifyResult } from "./schema";
 import { MIN_IOU, iou, type Box } from "./smoothBoxes";
 
@@ -16,6 +17,8 @@ export type RecentResult = { box: Box; result: IdentifyResult; at: number };
 export type AutoInput = {
   /** Boxes seen in the latest frame. */
   boxes: Box[];
+  /** Every person the detector is tracking: a product box near one is never sent on its own. */
+  people: readonly Box[];
   now: number;
   /** When each box id was first seen (`trackFirstSeen`). */
   firstSeen: ReadonlyMap<string, number>;
@@ -41,14 +44,16 @@ export function trackFirstSeen(prev: ReadonlyMap<string, number>, boxes: Box[], 
 }
 
 /**
- * Which box to recognise now, if any: only product-like classes qualify; reuse a recent nearby
- * match for free, else one request.
+ * Which box to recognise now, if any: only product-like classes qualify, and none whose crop would
+ * hold part of a person (a bottle in a hand waits for a tap); reuse a recent nearby match for free, else
+ * one request.
  */
 export function nextAutoIdentify(input: AutoInput): AutoDecision {
   if (input.paused) return null;
 
   const candidates = input.boxes
     .filter((box) => isProductClass(box.label))
+    .filter((box) => !touchesPerson(box, input.people))
     .filter((box) => !input.attempted.has(box.id))
     .filter((box) => input.now - (input.firstSeen.get(box.id) ?? input.now) >= STABLE_MS)
     .sort((a, b) => b.w * b.h - a.w * a.h);

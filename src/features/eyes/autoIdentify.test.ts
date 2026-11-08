@@ -38,6 +38,7 @@ const NOW = 100_000;
 function input(over: Partial<AutoInput> = {}): AutoInput {
   return {
     boxes: [box("a")],
+    people: [],
     now: NOW,
     firstSeen: new Map([["a", NOW - STABLE_MS]]),
     attempted: new Set(),
@@ -102,6 +103,26 @@ describe("nextAutoIdentify", () => {
     expect(nextAutoIdentify(input({ boxes: [person] }))).toBeNull();
     const chair = box("a", { label: "chair" });
     expect(nextAutoIdentify(input({ boxes: [chair], recent: [{ box: box("old"), result: shampoo, at: NOW }] }))).toBeNull();
+  });
+
+  it("never sends a guest's phone, bag or book on its own", () => {
+    for (const label of ["cell phone", "handbag", "backpack", "suitcase", "book"]) {
+      expect(nextAutoIdentify(input({ boxes: [box("a", { label })] }))).toBeNull();
+    }
+  });
+
+  it("does not auto-send a bottle in a hand: its crop would hold part of the person", () => {
+    const person = box("p", { label: "person", x: 0, y: 0, w: 400, h: 900 });
+    const held = box("a", { x: 260, y: 380, w: 60, h: 150 });
+    expect(nextAutoIdentify(input({ boxes: [person, held], people: [person] }))).toBeNull();
+    // Nor is a recent match reused for it: nothing about a box near a person is decided automatically.
+    expect(nextAutoIdentify(input({ boxes: [held], people: [person], recent: [{ box: held, result: shampoo, at: NOW }] }))).toBeNull();
+  });
+
+  it("still sends a bottle on a shelf while someone stands well away from it", () => {
+    const person = box("p", { label: "person", x: 0, y: 0, w: 200, h: 500 });
+    const shelf = box("a", { x: 600, y: 100, w: 60, h: 150 });
+    expect(nextAutoIdentify(input({ boxes: [person, shelf], people: [person] }))).toEqual({ kind: "identify", box: shelf });
   });
 
   it("skips a large non-product box and takes the product-like one", () => {

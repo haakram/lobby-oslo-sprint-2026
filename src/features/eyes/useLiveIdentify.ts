@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { nextAutoIdentify, trackFirstSeen, type RecentResult } from "./autoIdentify";
-import { cropFrame } from "./cropFrame";
+import { cropFrame, personBoxes } from "./cropFrame";
 import { IdentifyError, requestIdentify } from "./requestIdentify";
 import type { IdentifyResult } from "./schema";
 import { missedFrames, type Box } from "./smoothBoxes";
@@ -90,17 +90,18 @@ export function useLiveIdentify(
     [record, setBusyFor],
   );
 
-
-
   useEffect(() => {
     const controller = new AbortController();
     const timer = setInterval(() => {
       const state = book.current;
       const now = performance.now();
       const seen = latestBoxes.current.filter((box) => missedFrames(box) === 0);
+      // Every tracked person, seen this frame or not: a box near one is not sent, and any crop covers them.
+      const people = personBoxes(latestBoxes.current);
       state.firstSeen = trackFirstSeen(state.firstSeen, seen, now);
       const decision = nextAutoIdentify({
         boxes: seen,
+        people,
         now,
         firstSeen: state.firstSeen,
         attempted: state.attempted,
@@ -112,7 +113,7 @@ export function useLiveIdentify(
       });
       if (decision?.kind === "reuse") record(decision.box, decision.result);
       if (decision?.kind === "identify" && video.current) {
-        const image = cropFrame(video.current, decision.box);
+        const image = cropFrame(video.current, decision.box, undefined, people);
         // A failed live attempt stays quiet: the box keeps its class name and a tap tries again.
         send(image, decision.box, controller.signal).catch(() => {});
       }

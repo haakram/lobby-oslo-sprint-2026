@@ -91,8 +91,8 @@ def test_the_rehearsal_is_kept_out_of_the_fit_and_compared_with_the_forecast_com
                                  "started": "2026-11-08T03:00:00+01:00"})
         writer.writerows(rows)
     committed = ("b57e4c1", "2026-11-08T04:08:43+01:00",
-                 "c3801e0 on the 16 seeds it never played (model, mean night): 2,105 before the tuning penalty, 1,989 after it\n"
-                 "FORECAST, the final (mean of the best 9 of 10 unseen seeds), c3801e0:\n  median 2,035, 80 % interval 1,898 - 2,186\n")
+                 ("c3801e0 on the 16 seeds it never played (model, mean night): 2,105 before the tuning penalty, 1,989 after it\n"
+                 "FORECAST, the final (mean of the best 9 of 10 unseen seeds), c3801e0:\n  median 2,035, 80 % interval 1,898 - 2,186\n"))
     monkeypatch.setattr(forecast, "committed_before", lambda when: committed)
     cells, _ = forecast.read_cells(path, "c3801e0")
     assert not any(seed in seeds for _, seed in cells)

@@ -106,7 +106,7 @@ def final_head() -> str:
     return git("rev-parse", "--short=7", FINAL_BRANCH) or git("rev-parse", "--short=7", f"origin/{FINAL_BRANCH}") or TARGET_FALLBACK
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def same_code(commit: str, target: str) -> bool:
     """True when the agent's code (agent/) is identical in both commits: the same build for the forecast."""
     if commit == target:
@@ -381,8 +381,8 @@ def rehearsal_check(path: Path, target: str) -> list[str]:
         for row in csv.DictReader(fh):
             if row["seed"] and int(row["seed"]) in REHEARSAL_SEEDS and row["commit"] and same_code(row["commit"], target):
                 starts.append(datetime.fromisoformat(row["started"]))
-    out = ["", f"Out-of-sample check: the dress rehearsal, {target} on {len(REHEARSAL_SEEDS)} seeds no build had played "
-           f"({' '.join(map(str, REHEARSAL_SEEDS))})"]
+    out = ["", (f"Out-of-sample check: the dress rehearsal, {target} on {len(REHEARSAL_SEEDS)} seeds no build had played "
+           f"({' '.join(map(str, REHEARSAL_SEEDS))})")]
     if not starts:
         return out + ["  not started yet"]
     first = min(starts)
@@ -476,8 +476,8 @@ def headline(text: str) -> tuple[int, int, int] | None:
 def second_forecast(path: Path, target: str, first: tuple[int, int, int] | None) -> tuple[list[str], dict]:
     """The second forecast from the rehearsal, how its seeds compare with the seed hunt's, and the final's slot."""
     played = rehearsal_scores(path, target)
-    out = ["", f"SECOND FORECAST, the final (mean of the best {FINAL_SHIFTS - DROPPED} of {FINAL_SHIFTS}), from the dress "
-           f"rehearsal alone ({target}, committed before 12:00):"]
+    out = ["", (f"SECOND FORECAST, the final (mean of the best {FINAL_SHIFTS - DROPPED} of {FINAL_SHIFTS}), from the dress "
+           f"rehearsal alone ({target}, committed before 12:00):")]
     doc: dict = {"target": target, "first": None, "second": None, "final": None}
     if first:
         doc["first"] = {"median": first[0], "low": first[1], "high": first[2], "basis": "model: build + seed effects, rehearsal kept out"}

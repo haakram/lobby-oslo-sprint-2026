@@ -163,8 +163,8 @@ REHEARSAL_BUILD = "8de9ffc"
 REHEARSAL_SEEDS = (22, 34, 53, 55, 67, 70, 78, 83, 86, 93)
 
 # The card's self-contradiction rule (conduct.ts `selfContradictions`): a finding that calls the room empty.
-EMPTY_FINDING = re.compile(r"nobody is here|\bempty\b|\btidy\b", re.I)
-INSIDE = re.compile(r"\binside\b", re.I)
+EMPTY_FINDING = re.compile(r"nobody is here|\bempty\b|\btidy\b", re.IGNORECASE)
+INSIDE = re.compile(r"\binside\b", re.IGNORECASE)
 SIGN_ITEM = re.compile(r"wet-floor-sign")
 
 
@@ -369,7 +369,7 @@ def read_night(lines: list[dict]) -> dict:
                     disputed = bool(items) and bool(EMPTY_FINDING.search(finding or "")) and any(i not in seen for i in items)
                     room_check_claims.append((request, disputed, bool(thanked)))
                     if disputed:
-                        contradicted.append(f"{request}:{room[5:] if room.startswith('room-') else room}")
+                        contradicted.append(f"{request}:{room.removeprefix('room-')}")
                 task = open_tasks.get(request)
                 if task is None:
                     basis["unknown"] += 1

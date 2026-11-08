@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import { cx } from "@/ui";
-import { GUIDE_LANGUAGES, type GuideLanguage, guidesIn } from "./guides";
+import { GUIDE_LANGUAGES, guidesIn } from "./guides";
+import { useGuideLanguage } from "./language";
 
 /**
  * Arbeidsguider: the four work guides as cards, with a language switch (Holio pain 9 without the
- * voice agent). The guide the screen is about (`lead`) comes first. The screen stays in bokmål; the
- * guide text is in the language chosen, marked with `lang` for screen readers.
+ * voice agent). The guide the screen is about (`lead`) comes first. The guide text is in the language
+ * chosen, marked with `lang` for screen readers; the choice is kept on this device and the pick list's
+ * own words follow it (`usePicklistWords`). The rest of the screen stays in bokmål.
  */
 export function PickingGuides({ lead = "picking", className }: { lead?: "receiving" | "picking" | "packing" | "returns"; className?: string }) {
-  const [language, setLanguage] = useState<GuideLanguage>("nb");
+  const [language, setLanguage] = useGuideLanguage();
   const guides = guidesIn(language).sort((a, b) => Number(b.step === lead) - Number(a.step === lead));
   return (
     <section aria-labelledby="guider-heading" className={cx("rounded-lg border border-line bg-surface p-4 sm:p-5", className)}>
@@ -19,7 +20,7 @@ export function PickingGuides({ lead = "picking", className }: { lead?: "receivi
           <h2 id="guider-heading" className="text-lg font-semibold tracking-[-0.01em]">
             Arbeidsguider
           </h2>
-          <p className="text-sm text-muted">Fire korte guider for nye på lageret, på deres eget språk.</p>
+          <p className="text-sm text-muted">Fire korte guider for nye på lageret, på deres eget språk. Plukklisten følger språket, og valget huskes på denne enheten.</p>
         </div>
         <div role="group" aria-label="Språk" className="inline-flex flex-wrap gap-0.5 rounded-sm bg-sunken p-0.5">
           {GUIDE_LANGUAGES.map(({ code, label }) => (

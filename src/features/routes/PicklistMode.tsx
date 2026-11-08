@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { productBySku, type Product } from "@/features/catalog/products";
+import type { GuideLanguage, PicklistWords } from "@/features/picklist/guides";
+import { usePicklistWords } from "@/features/picklist/language";
 import { PickingGuides } from "@/features/picklist/PickingGuides";
 import { usePicklist } from "@/features/picklist/PicklistProvider";
-import { UndoStatus } from "@/features/requests/UndoStatus";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, RouteIcon } from "@/ui";
 import { FloorMap } from "./FloorMap";
 import { loadRoutes, type LoadedRoutes } from "./loadRoutes";
@@ -51,6 +52,9 @@ export const EXAMPLE_ORDER: readonly string[] = ["FT-1010", "FT-1004", "FT-1008"
 /** Plukkliste: the shortest walk to every product on the pick list (Øyne and Stemme fill it). */
 export function PicklistMode({ showSku, matrix }: { showSku?: string; matrix?: RouteMatrix }) {
   const { skus, add, remove, clear, seedOnce } = usePicklist();
+  // The pick list's own words follow the work guides' language, kept on this device (Holio pain 9).
+  const { language, words } = usePicklistWords();
+  const lang = language === "nb" ? undefined : language;
   // ?sku= (Øyne's "Vis vei") shows the way to that one shelf until "Se plukklisten" (jury round 4, the Holio juror).
   const [previewClosed, setPreviewClosed] = useState(false);
   const preview = showSku && !previewClosed ? productBySku(showSku) : undefined;
@@ -112,7 +116,7 @@ export function PicklistMode({ showSku, matrix }: { showSku?: string; matrix?: R
     return (
       <div>
         {badge}
-        <ShelfPreview matrix={loaded.matrix} product={preview} inList={skus.includes(preview.sku)} onClose={closePreview} />
+        <ShelfPreview matrix={loaded.matrix} product={preview} inList={skus.includes(preview.sku)} onClose={closePreview} words={words} lang={lang} />
       </div>
     );
   }
@@ -120,21 +124,15 @@ export function PicklistMode({ showSku, matrix }: { showSku?: string; matrix?: R
   if (!result) {
     return (
       <div className="flex flex-col gap-4">
-        {cleared && cleared.length > 0 && (
-          <UndoStatus
-            message={cleared.length === 1 ? "Plukklisten er tømt for 1 vare." : `Plukklisten er tømt for ${cleared.length} varer.`}
-            onUndo={undoEmpty}
-            undoLabel="Angre: legg varene tilbake"
-          />
-        )}
-        <Card className="p-4 sm:p-5">
+        {cleared && cleared.length > 0 && <EmptiedStatus count={cleared.length} onUndo={undoEmpty} words={words} lang={lang} />}
+        <Card className="p-4 sm:p-5" lang={lang}>
           <EmptyState
             icon={<RouteIcon className="size-8" />}
-            title="Plukklisten er tom"
-            body="Legg til varer fra Øyne."
+            title={words.emptyTitle}
+            body={words.emptyBody}
             action={
               <Link href="/oyne" className={buttonClasses("primary")}>
-                Åpne Øyne
+                {words.openEyes}
               </Link>
             }
           />
@@ -164,10 +162,10 @@ export function PicklistMode({ showSku, matrix }: { showSku?: string; matrix?: R
             ) : undefined
           }
         />
-        <Card className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold tracking-[-0.01em]">Plukkliste</h2>
+        <Card className="flex flex-col gap-2" lang={lang}>
+          <h2 className="text-lg font-semibold tracking-[-0.01em]">{words.heading}</h2>
           {products.map((p) => (
-            <ProductRow key={p.sku} product={p} onRemove={remove} />
+            <ProductRow key={p.sku} product={p} onRemove={remove} words={words} />
           ))}
         </Card>
       </div>
@@ -191,27 +189,47 @@ export function PicklistMode({ showSku, matrix }: { showSku?: string; matrix?: R
             <FloorMap matrix={m} legs={result.legs} order={result.tour.order} />
           </Card>
         </div>
-        <Card className="flex flex-col gap-5 animate-rise [animation-delay:60ms]">
-          <h2 className="text-lg font-semibold tracking-[-0.01em]">Plukkrekkefølge</h2>
+        <Card className="flex flex-col gap-5 animate-rise [animation-delay:60ms]" lang={lang}>
+          <h2 className="text-lg font-semibold tracking-[-0.01em]">{words.heading}</h2>
           <StopList
             matrix={m}
             legs={result.legs}
             order={result.tour.order}
             productsAt={result.productsAt}
             onRemove={remove}
+            words={words}
           />
           <div className="flex flex-wrap gap-2 border-t border-line pt-4">
             <Link href="/oyne" className={buttonClasses("secondary")}>
-              Legg til flere varer
+              {words.addMore}
             </Link>
             <Button variant="ghost" onClick={empty}>
-              Tøm plukklisten
+              {words.empty}
             </Button>
           </div>
         </Card>
       </div>
       <PickingGuides className="mt-6" />
     </div>
+  );
+}
+
+/**
+ * After *Tøm plukklisten*: what was emptied and *Angre*, in the pick list's language, with the focus on
+ * *Angre* (as Forespørsler's undo row does).
+ */
+function EmptiedStatus({ count, onUndo, words, lang }: { count: number; onUndo: () => void; words: PicklistWords; lang?: GuideLanguage }) {
+  const box = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    box.current?.querySelector("button")?.focus();
+  }, []);
+  return (
+    <p ref={box} role="status" lang={lang} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-sunken py-1 pr-1 pl-4 text-sm">
+      <span className="min-w-0 flex-1">{words.emptied(count)}</span>
+      <Button variant="ghost" size="sm" onClick={onUndo} aria-label={words.undoLabel}>
+        {words.undo}
+      </Button>
+    </p>
   );
 }
 
@@ -224,16 +242,20 @@ function ShelfPreview({
   product,
   inList,
   onClose,
+  words,
+  lang,
 }: {
   matrix: RouteMatrix;
   product: Product;
   inList: boolean;
   onClose: () => void;
+  words: PicklistWords;
+  lang?: GuideLanguage;
 }) {
   const tour = bestTour(matrix, [product.location]);
   const back = (
-    <Button variant="secondary" onClick={onClose}>
-      Se plukklisten
+    <Button variant="secondary" onClick={onClose} lang={lang}>
+      {words.seeList}
     </Button>
   );
   if ("error" in tour) {

@@ -1,8 +1,16 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { PicklistMode } from "@/features/routes/PicklistMode";
 import { GUIDE_STEPS, GUIDES } from "@/features/voice/guides";
-import { GUIDE_LANGUAGES, guidesIn } from "./guides";
+import { GUIDE_LANGUAGES, guideLanguageOf, guidesIn, PICKLIST_WORDS } from "./guides";
+import { GUIDE_LANGUAGE } from "./language";
 import { PickingGuides } from "./PickingGuides";
+import { PicklistProvider } from "./PicklistProvider";
+
+beforeEach(() => {
+  localStorage.clear();
+  GUIDE_LANGUAGE.set("nb");
+});
 
 describe("the work guides in four languages", () => {
   it("has every guide in every language, step for step with the bokmål the voice agent uses", () => {
@@ -54,5 +62,51 @@ describe("PickingGuides", () => {
     fireEvent.click(screen.getByRole("button", { name: "English" }));
     expect(screen.getByRole("heading", { name: "Picking" })).toBeInTheDocument();
     expect(screen.getByText("Oversatt av teamet, ennå ikke sjekket av noen med språket som morsmål.")).toBeInTheDocument();
+  });
+});
+
+describe("the guide language on this device (Holio pain 9)", () => {
+  it("is remembered: a new visit opens in the language chosen last", () => {
+    const first = render(<PickingGuides />);
+    fireEvent.click(screen.getByRole("button", { name: "Polski" }));
+    first.unmount();
+    expect(localStorage.getItem("lobby:guide-sprak")).toBe(JSON.stringify("pl"));
+    render(<PickingGuides />);
+    expect(screen.getByRole("button", { name: "Polski" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("heading", { name: "Kompletacja" })).toBeInTheDocument();
+  });
+
+  it("reads anything stored that is not one of the four languages as bokmål", () => {
+    expect(guideLanguageOf("de")).toBe("nb");
+    expect(guideLanguageOf(null)).toBe("nb");
+    expect(guideLanguageOf("uk")).toBe("uk");
+  });
+
+  it("has every pick list word in every language", () => {
+    for (const { code } of GUIDE_LANGUAGES) {
+      for (const [key, value] of Object.entries(PICKLIST_WORDS[code])) {
+        const text = typeof value === "function" ? value(2) : value;
+        expect(String(text).length, `${code} ${key}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("puts the pick list's own buttons and stop list in the chosen language, marked with lang", () => {
+    render(
+      <PicklistProvider initial={["FT-1001", "FT-1010"]}>
+        <PicklistMode />
+      </PicklistProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Tøm plukklisten" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "English" }));
+    expect(screen.getByRole("heading", { name: "Pick order" }).closest("[lang]")).toHaveAttribute("lang", "en");
+    expect(screen.getByRole("link", { name: "Add more items" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove Sjampo 250 ml" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Polski" }));
+    expect(screen.getByRole("heading", { name: "Kolejność kompletacji" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Wyczyść listę" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Lista wyczyszczona. Towary: 2.");
+    fireEvent.click(screen.getByRole("button", { name: "Cofnij: przywróć towary" }));
+    expect(screen.getByRole("button", { name: "Usuń Sjampo 250 ml" })).toBeInTheDocument();
   });
 });

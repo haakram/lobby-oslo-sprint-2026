@@ -144,3 +144,124 @@ export function guidesIn(language: GuideLanguage): { step: GuideStep; guide: Gui
   const source = language === "nb" ? GUIDES : TRANSLATED[language];
   return GUIDE_STEPS.map((step) => ({ step, guide: source[step] }));
 }
+
+/**
+ * The pick list's own words in the guide language (Holio pain 9 inside the flow, product review round
+ * 5): the stop list, its buttons, the empty list and Angre. The rest of the screen (the route's figures
+ * for the manager, the tabs, the product names from the catalogue) stays in bokmål.
+ * TODO(phase-3): checked by a native speaker, as the guides.
+ */
+export type PicklistWords = {
+  heading: string;
+  start: string;
+  floor: (floor: number) => string;
+  fromStart: string;
+  fromStop: (stop: number) => string;
+  viaLift: string;
+  viaStairs: string;
+  backToStart: string;
+  remove: string;
+  removeLabel: (name: string) => string;
+  addMore: string;
+  empty: string;
+  emptied: (count: number) => string;
+  undo: string;
+  undoLabel: string;
+  emptyTitle: string;
+  emptyBody: string;
+  openEyes: string;
+  seeList: string;
+};
+
+export const PICKLIST_WORDS: Readonly<Record<GuideLanguage, PicklistWords>> = {
+  nb: {
+    heading: "Plukkrekkefølge",
+    start: "Start",
+    floor: (floor) => `${floor}. etasje`,
+    fromStart: "fra start",
+    fromStop: (stop) => `fra stopp ${stop}`,
+    viaLift: "via heis",
+    viaStairs: "via trapp",
+    backToStart: "Tilbake til start",
+    remove: "Fjern",
+    removeLabel: (name) => `Fjern ${name}`,
+    addMore: "Legg til flere varer",
+    empty: "Tøm plukklisten",
+    emptied: (count) => (count === 1 ? "Plukklisten er tømt for 1 vare." : `Plukklisten er tømt for ${count} varer.`),
+    undo: "Angre",
+    undoLabel: "Angre: legg varene tilbake",
+    emptyTitle: "Plukklisten er tom",
+    emptyBody: "Legg til varer fra Øyne.",
+    openEyes: "Åpne Øyne",
+    seeList: "Se plukklisten",
+  },
+  pl: {
+    heading: "Kolejność kompletacji",
+    start: "Start",
+    // "poziom", not "piętro": a Norwegian 1. etasje is the ground floor, a Polish 1. piętro is not.
+    floor: (floor) => `poziom ${floor}`,
+    fromStart: "od startu",
+    fromStop: (stop) => `od punktu ${stop}`,
+    viaLift: "windą",
+    viaStairs: "schodami",
+    backToStart: "Powrót do startu",
+    remove: "Usuń",
+    removeLabel: (name) => `Usuń ${name}`,
+    addMore: "Dodaj więcej towarów",
+    empty: "Wyczyść listę",
+    emptied: (count) => `Lista wyczyszczona. Towary: ${count}.`,
+    undo: "Cofnij",
+    undoLabel: "Cofnij: przywróć towary",
+    emptyTitle: "Lista kompletacji jest pusta",
+    emptyBody: "Dodaj towary z Øyne.",
+    openEyes: "Otwórz Øyne",
+    seeList: "Zobacz listę kompletacji",
+  },
+  uk: {
+    heading: "Порядок комплектації",
+    start: "Старт",
+    floor: (floor) => `поверх ${floor}`,
+    fromStart: "від старту",
+    fromStop: (stop) => `від зупинки ${stop}`,
+    viaLift: "ліфтом",
+    viaStairs: "сходами",
+    backToStart: "Назад до старту",
+    remove: "Видалити",
+    removeLabel: (name) => `Видалити ${name}`,
+    addMore: "Додати ще товари",
+    empty: "Очистити список",
+    emptied: (count) => `Список очищено. Товарів: ${count}.`,
+    undo: "Скасувати",
+    undoLabel: "Скасувати: повернути товари",
+    emptyTitle: "Список комплектації порожній",
+    emptyBody: "Додайте товари з Øyne.",
+    openEyes: "Відкрити Øyne",
+    seeList: "Переглянути список комплектації",
+  },
+  en: {
+    heading: "Pick order",
+    start: "Start",
+    floor: (floor) => `floor ${floor}`,
+    fromStart: "from start",
+    fromStop: (stop) => `from stop ${stop}`,
+    viaLift: "by lift",
+    viaStairs: "by stairs",
+    backToStart: "Back to start",
+    remove: "Remove",
+    removeLabel: (name) => `Remove ${name}`,
+    addMore: "Add more items",
+    empty: "Clear the pick list",
+    emptied: (count) => (count === 1 ? "Pick list cleared: 1 item." : `Pick list cleared: ${count} items.`),
+    undo: "Undo",
+    undoLabel: "Undo: put the items back",
+    emptyTitle: "The pick list is empty",
+    emptyBody: "Add items from Øyne.",
+    openEyes: "Open Øyne",
+    seeList: "See the pick list",
+  },
+};
+
+/** A stored value read back as a guide language; anything else is bokmål. */
+export function guideLanguageOf(raw: unknown): GuideLanguage {
+  return GUIDE_LANGUAGES.some(({ code }) => code === raw) ? (raw as GuideLanguage) : "nb";
+}

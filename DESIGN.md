@@ -109,7 +109,7 @@ One registry, `src/features/modules/registry.ts`, lists the hotel's modules. The
 | Ansatte og vakter | `/ansatte` | Drift | resepsjonist | test | Who is on which shift today, what they cover, who is off |
 | 3D-kart | `/hotell` | Roboten | robotansvarlig | run log | The hotel in three.js, floors stacked, the robot walking its night |
 | Natteskift | `/natteskift` | Roboten | robotansvarlig | run log | The robot's night step by step |
-| Robotens øyne | `/oyne` | Roboten | robotansvarlig | — | Live camera with boxes, products recognised without a barcode |
+| Robotens øyne | `/oyne` | Roboten | robotansvarlig | — | Live camera with boxes, products recognised without a barcode. On top, in every state, the camera's privacy notice (*Kamera i bruk …*, a tap opens the details; `PrivacyNotice`, PRIVACY § 5) |
 | Snakk gjennom roboten | `/stemme` | Roboten | robotansvarlig | — | Voice: the robot translates between staff and guest |
 | Resepsjon | `/resepsjon` | Resepsjon | resepsjonist | reception | The AI receptionist's calls, bookings and messages |
 | Mine boliger | `/vert` | Utleie | vert (only) | test | The Airbnb host's start page: the month's good numbers, each apartment's status, today's turnovers step by step, newest messages, what the automation did |

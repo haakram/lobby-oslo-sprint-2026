@@ -3,6 +3,8 @@ import { hhmm } from "@/features/dashboard/format";
 import { requestKindLabel } from "@/features/dashboard/labels";
 import type { Night, OrderStatus, Task } from "@/features/dashboard/selectors";
 import { formatClock } from "@/features/reception/format";
+import type { RoomCheckMark } from "@/features/rooms/reconcile";
+import type { PhoneAssignment, PhoneTask } from "./phoneTasks";
 import { type ManualRequest, MANUAL_REQUESTS } from "./testData";
 
 /**
@@ -47,6 +49,10 @@ export type RequestView = {
   actionable: boolean;
   /** Where the night happened: the robot's requests carry the shift clock, not today's time. */
   tonight: boolean;
+  /** The source badge when it says more than the filter's word ("Telefon (AI)", "Romsjekk"). */
+  badge?: string;
+  /** A call the AI receptionist turned into a task: the call, and who can take it in one tap. */
+  phone?: PhoneTask;
 };
 
 function fromTask(task: Task, ended: boolean): RequestView {
@@ -72,6 +78,7 @@ function fromCall(call: CallSummary): RequestView {
   return {
     id: `call:${call.id}`,
     source: "telefon",
+    badge: "Telefon (AI)",
     kind: call.requestType === "booking" ? "Booking" : "Ring tilbake",
     room: null,
     // The caller is the guest, not the one who has the case: their name goes in the text.
@@ -101,10 +108,57 @@ function fromManual(request: ManualRequest): RequestView {
   };
 }
 
+/** A phone call the AI receptionist took down, as a task: waiting until someone takes it in one tap. */
+export function fromPhoneTask(task: PhoneTask, assignment: PhoneAssignment | undefined, staffStatus: OrderStatus = "ny"): RequestView {
+  const handled = task.demo?.handled;
+  const doneBy = assignment ? (assignment.to === "robot" ? "Roboten" : assignment.who) : null;
+  return {
+    id: task.id,
+    source: "telefon",
+    badge: "Telefon (AI)",
+    kind: task.kind,
+    room: task.room,
+    text: task.record.message,
+    lang: "nb",
+    at: task.at || null,
+    handler: doneBy && staffStatus === "lost"
+      ? `${doneBy} ordnet det`
+      : assignment
+      ? assignment.to === "robot"
+        ? "Roboten tar den"
+        : `${assignment.who} har saken`
+      : handled
+        ? `${handled.who} ordnet det ${handled.at}`
+        : `Forslag: ${task.suggested === "robot" ? "roboten" : task.staff.name}`,
+    status: handled && !assignment ? "fullfort" : "venter",
+    actionable: true,
+    tonight: false,
+    phone: task,
+  };
+}
+
+/** The task *Lag oppgave for resepsjonen* made on Rom: the robot met a guest the booking system doesn't have. */
+export function fromRoomCheck(day: string, room: string, mark: RoomCheckMark): RequestView {
+  return {
+    id: `romsjekk:${day}:${room}`,
+    source: "robot",
+    badge: "Romsjekk",
+    kind: "Sjekk registreringen",
+    room,
+    text: "Roboten møtte en gjest på rommet, men bookingsystemet har det som ledig.",
+    lang: "nb",
+    at: mark.at,
+    handler: mark.by ? `Resepsjonen · laget av ${mark.by}` : "Resepsjonen",
+    status: "venter",
+    actionable: true,
+    tonight: false,
+  };
+}
+
 /** A staff-kept status (Ny → Tildelt → Løst) over a request's own: Tildelt is "pågår", Løst "fullført". */
 function withStaffStatus(request: RequestView, status: OrderStatus): RequestView {
   if (!request.actionable || status === "ny") return request;
-  const handler = request.source === "robot" ? "Personalet tok over fra roboten" : request.handler;
+  const handler = request.source === "robot" && !request.badge ? "Personalet tok over fra roboten" : request.handler;
   return { ...request, status: status === "tildelt" ? "pagar" : "fullfort", handler };
 }
 
@@ -118,18 +172,35 @@ export function selectRequests({
   calls,
   statusOf,
   manual = MANUAL_REQUESTS,
+  phone = [],
+  assignments = {},
+  extra = [],
 }: {
   night: Night | null;
   calls: CallSummary[] | null;
   statusOf: (id: string) => OrderStatus;
   manual?: readonly ManualRequest[];
+  /** In-stay requests the AI receptionist took down on the phone (phoneTasks.ts). */
+  phone?: readonly PhoneTask[];
+  assignments?: Readonly<Record<string, PhoneAssignment>>;
+  /** Requests made on other screens (the robot's room checks on Rom). */
+  extra?: readonly RequestView[];
 }): RequestView[] {
   const robot = night ? [...night.tasks.values()].map((task) => fromTask(task, night.ended)) : [];
-  const phone = (calls ?? []).filter((call) => call.needsCallback).map(fromCall);
+  // A callback that became a phone task (it names a room) is listed once, as the task.
+  const asTask = new Set(phone.map((task) => task.id));
+  const callbacks = (calls ?? []).filter((call) => call.needsCallback && !asTask.has(`call:${call.id}`)).map(fromCall);
+  const phoneTasks = phone.map((task) => fromPhoneTask(task, assignments[task.id], statusOf(task.id)));
   const staff = manual.map(fromManual);
-  return [...phone, ...staff, ...robot]
+  return [...phoneTasks, ...callbacks, ...extra, ...staff, ...robot]
     .map((request) => withStaffStatus(request, statusOf(request.id)))
-    .sort((a, b) => REQUEST_ORDER.indexOf(a.status) - REQUEST_ORDER.indexOf(b.status) || (b.at ?? "").localeCompare(a.at ?? ""));
+    // A guest waiting in their room (a phone task) comes first in its group, then the newest.
+    .sort(
+      (a, b) =>
+        REQUEST_ORDER.indexOf(a.status) - REQUEST_ORDER.indexOf(b.status) ||
+        Number(Boolean(b.phone)) - Number(Boolean(a.phone)) ||
+        (b.at ?? "").localeCompare(a.at ?? ""),
+    );
 }
 
 export function countRequests(requests: readonly RequestView[]): Record<RequestStatus, number> {

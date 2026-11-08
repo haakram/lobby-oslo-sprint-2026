@@ -136,7 +136,8 @@ describe("RequestsScreen (Forespørsler)", () => {
     unmount();
 
     route();
-    render(<RequestsScreen />);
+    // No seeded calls: with the receptionist not connected, the phone filter is honestly empty.
+    render(<RequestsScreen demo={[]} />);
     expect(await screen.findByText("Telefonen er ikke med i listen: resepsjonisten er ikke koblet til ennå.")).toBeInTheDocument();
     expect(screen.queryByText(/Fra AI-resepsjonisten/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Telefon" }));
@@ -161,5 +162,61 @@ describe("RequestsScreen (Forespørsler)", () => {
     release(new Response(NIGHT, { status: 200 }));
     expect(await screen.findByRole("button", { name: "Ta over: Utstyr, Rom 108" })).toBeInTheDocument();
     expect(screen.queryByText("Henter robotens natt")).not.toBeInTheDocument();
+  });
+
+  it("files the AI receptionist's calls as tasks (Telefon (AI)) and sends one to the robot in one tap; Angre takes it back", async () => {
+    route();
+    render(<RequestsScreen today="2026-11-08" />);
+    const towels = await screen.findByRole("button", { name: "Send roboten: Utstyr, Rom 214" });
+    const row = rowWith("Rom 214 ønsker to ekstra håndklær.");
+    expect(within(row).getByText("Telefon (AI)")).toBeInTheDocument();
+    expect(within(row).getByText("Forslag: roboten")).toBeInTheDocument();
+    // A radiator is for a person: no robot button, the technician on shift instead.
+    const radiator = rowWith(/Radiatoren på rom 104 virker ikke/);
+    expect(within(radiator).queryByRole("button", { name: /^Send roboten/ })).not.toBeInTheDocument();
+    expect(within(radiator).getByRole("button", { name: "Gi til Trond Eikeland: Teknisk, Rom 104" })).toBeInTheDocument();
+
+    fireEvent.click(towels);
+    const moved = rowWith("Rom 214 ønsker to ekstra håndklær.");
+    expect(within(moved).getByText("Pågår")).toBeInTheDocument();
+    expect(within(moved).getByText("Roboten tar den")).toBeInTheDocument();
+    const status = screen.getByText("Utstyr, Rom 214 er sendt til roboten.").closest("[role=status]") as HTMLElement;
+    fireEvent.click(within(status).getByRole("button", { name: "Angre: Utstyr, Rom 214" }));
+    expect(within(rowWith("Rom 214 ønsker to ekstra håndklær.")).getByText("Forslag: roboten")).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem("lobby:phone-task-assignments") ?? "{}")).toEqual({});
+  });
+
+  it("opens the call a phone task came from: the guest's words, what the receptionist noted, the call's length", async () => {
+    route();
+    render(<RequestsScreen today="2026-11-08" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Se samtalen: Utstyr, Rom 214" }));
+    const sheet = screen.getByRole("dialog", { name: "Samtalen kl. 01:47" });
+    expect(within(sheet).getByText("«Hi, this is room 214. Could we please get two extra towels?»")).toBeInTheDocument();
+    expect(within(sheet).getByText("Camille Rousseau")).toBeInTheDocument();
+    expect(within(sheet).getByText("0:48")).toBeInTheDocument();
+  });
+
+  it("files a message the receptionist took down in this browser when it names a room, with a link to the record", async () => {
+    localStorage.setItem(
+      "resepsjon-records-v1",
+      JSON.stringify([{ kind: "message", id: "rec-7", createdAt: "2026-11-08T05:20:00.000Z", name: "Ola Gjest", phone: "+47 400 00 777", topic: "other", message: "Rom 205 trenger en ekstra pute.", urgent: false }]),
+    );
+    route();
+    render(<RequestsScreen today="2026-11-08" demo={[]} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Se samtalen: Utstyr, Rom 205" }));
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).getByRole("link", { name: "Åpne beskjeden i Resepsjon" })).toHaveAttribute("href", "/resepsjon#record-rec-7");
+    expect(within(sheet).getByText("777")).toBeInTheDocument();
+  });
+
+  it("lists the task Rom made for a guest the booking system doesn't have", async () => {
+    localStorage.setItem("lobby:room-check-marks", JSON.stringify({ "2026-11-08": { "room-328": { action: "task", at: "06:05", by: "Ana Pereira" } } }));
+    route();
+    render(<RequestsScreen today="2026-11-08" demo={[]} />);
+    await screen.findByText("Roboten møtte en gjest på rommet, men bookingsystemet har det som ledig.");
+    const row = rowWith("Roboten møtte en gjest på rommet, men bookingsystemet har det som ledig.");
+    expect(within(row).getByText("Romsjekk")).toBeInTheDocument();
+    expect(within(row).getByText("Resepsjonen · laget av Ana Pereira")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Ta saken: Sjekk registreringen, Rom 328" })).toBeInTheDocument();
   });
 });

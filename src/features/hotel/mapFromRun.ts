@@ -271,19 +271,24 @@ function placeNodes(nodes: Record<string, HotelNode>, edges: HotelEdge[], placed
     const floorCorridors = Object.values(nodes).filter((node) => node.kind === "corridor" && node.floor === c.floor && known(node.id));
     const corridorNeighbours = neighbours(corridor).filter((other) => nodes[other].kind === "corridor" && known(other)).sort();
     const loop = floorCorridors.length >= 3 && floorCorridors.every((node) => neighbours(node.id).filter((o) => nodes[o].kind === "corridor").length >= 2);
-    // Along the segment to the next corridor (a→b→c→d→a), or the only neighbour; else east.
-    const next = corridorNeighbours.find((other) => other > corridor) ?? corridorNeighbours[0];
+    // Along the segment to the next corridor (a→b→c→d→a). The last corridor of a straight hall
+    // (1a–1b–1c) has no next one: its rooms sit around it, on the line from its neighbour, so they
+    // never land on the previous corridor's rooms (seed 16's 137/138 did, on top of 133).
+    const end = corridorNeighbours.length === 1 && corridorNeighbours[0] < corridor ? corridorNeighbours[0] : null;
+    const next = end ? undefined : (corridorNeighbours.find((other) => other > corridor) ?? corridorNeighbours[0]);
     let ax = 1;
     let az = 0;
     let length = 12;
-    if (next) {
-      const n = nodes[next];
-      const dx = n.x - c.x;
-      const dz = n.z - c.z;
+    const toward = next ?? end;
+    if (toward) {
+      const n = nodes[toward];
+      const dx = next ? n.x - c.x : c.x - n.x;
+      const dz = next ? n.z - c.z : c.z - n.z;
       length = Math.hypot(dx, dz) || 12;
       ax = dx / length;
       az = dz / length;
     }
+    const shift = end ? -length / 2 : 0;
     let px = -az;
     let pz = ax;
     if (loop) {
@@ -298,7 +303,7 @@ function placeNodes(nodes: Record<string, HotelNode>, edges: HotelEdge[], placed
     }
     const taken = Object.values(nodes).filter((node) => node.floor === c.floor && known(node.id) && !rooms.includes(node.id));
     rooms.forEach((room, index) => {
-      let t = (length * (index + 1)) / (rooms.length + 1);
+      let t = (length * (index + 1)) / (rooms.length + 1) + shift;
       const side = loop ? 1 : index % 2 === 0 ? 1 : -1;
       let x = c.x + ax * t + px * ROOM_OFFSET * side;
       let z = c.z + az * t + pz * ROOM_OFFSET * side;

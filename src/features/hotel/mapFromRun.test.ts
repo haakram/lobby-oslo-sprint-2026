@@ -5,13 +5,16 @@ import { parseRunLog } from "@/features/nightshift/runlog";
 import { BASE_HOTEL, floorFromId, floorsOf, hotelForRun, nodeFloorIn, roomsOf } from "./mapFromRun";
 
 const read = (path: string) => parseRunLog(readFileSync(resolve(process.cwd(), path), "utf8")).lines;
-const SEED5 = read("public/runs/demo.jsonl");
+// The Saturday demo night (seed 5), trimmed to the lines that shape the map.
+const SEED5 = read("src/features/hotel/fixtures/seed5-map.jsonl");
+// Today's demo night: the final agent's seed-16 shift (2,680 points).
+const SEED16 = read("public/runs/demo.jsonl");
 const SEED1 = read("src/features/nightshift/fixtures/sample.jsonl");
 
 const neighbours = (map: ReturnType<typeof hotelForRun>, id: string) =>
   map.edges.flatMap((edge) => (edge.a === id ? [edge.b] : edge.b === id ? [edge.a] : []));
 
-describe("hotelForRun on the seed-5 demo night", () => {
+describe("hotelForRun on the seed-5 night", () => {
   const map = hotelForRun(SEED5);
 
   it("is the night's hotel, not seed 1", () => {
@@ -70,6 +73,39 @@ describe("hotelForRun on the seed-5 demo night", () => {
 
   it("is deterministic", () => {
     expect(hotelForRun(SEED5)).toEqual(map);
+  });
+});
+
+describe("hotelForRun on the seed-16 demo night", () => {
+  const map = hotelForRun(SEED16);
+  const floor = (n: number) =>
+    roomsOf(map)
+      .filter((room) => room.floor === n)
+      .map((room) => room.id);
+
+  it("is the night's hotel: 131–138, 201–214 and 301–314", () => {
+    expect(map.seed).toBe(16);
+    expect(floor(1)).toEqual(Array.from({ length: 8 }, (_, i) => `room-${131 + i}`));
+    expect(floor(2)).toEqual(Array.from({ length: 14 }, (_, i) => `room-${201 + i}`));
+    expect(floor(3)).toEqual(Array.from({ length: 14 }, (_, i) => `room-${301 + i}`));
+  });
+
+  it("puts the rooms of the hall's last corridor around it, never on the rooms before it", () => {
+    expect(neighbours(map, "room-137")).toEqual(["corridor-1c"]);
+    const corridor = map.nodes["corridor-1c"];
+    for (const id of ["room-137", "room-138"]) {
+      expect(Math.hypot(map.nodes[id].x - corridor.x, map.nodes[id].z - corridor.z), id).toBeLessThan(8);
+    }
+    const rooms = roomsOf(map);
+    for (const a of rooms) {
+      for (const b of rooms) {
+        if (a.id < b.id && a.floor === b.floor) expect(Math.hypot(a.x - b.x, a.z - b.z), `${a.id} vs ${b.id}`).toBeGreaterThan(1.5);
+      }
+    }
+  });
+
+  it("keeps the floor-3 loop's rooms on their own side (d→a)", () => {
+    for (const id of ["room-311", "room-314"]) expect(map.nodes[id].x).toBeLessThan(0);
   });
 });
 

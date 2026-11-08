@@ -153,9 +153,9 @@ describe("RoutesScreen, Renhold", () => {
   });
 });
 
-describe("RoutesScreen, Renhold on the seed-5 demo night", () => {
-  it("routes all three rooms to clean, room 327 included, on tonight's map", async () => {
-    const demo = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
+describe("RoutesScreen, Renhold on the seed-5 night", () => {
+  it("routes all three rooms to clean, room 327 included, on that night's map", async () => {
+    const demo = readFileSync(resolve(process.cwd(), "src/features/hotel/fixtures/seed5-map.jsonl"), "utf8");
     expect(hotelForRun(parseRunLog(demo).lines).seed).toBe(5);
     fetchMock.mockImplementation(async () => new Response(demo, { status: 200 }));
     renderRoutes({});

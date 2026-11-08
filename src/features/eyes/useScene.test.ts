@@ -8,14 +8,14 @@ vi.mock("./cropFrame", () => ({ cropFrame }));
 
 const video = { current: { readyState: 2 } as HTMLVideoElement };
 const onQuota = vi.fn();
-type Options = { on: boolean; paused: boolean; stopped: boolean };
+type Options = { on: boolean; paused: boolean; stopped: boolean; people: boolean };
 
 function setup(options: Partial<Options> = {}) {
-  const props: Options = { on: true, paused: false, stopped: false, ...options };
+  const props: Options = { on: true, paused: false, stopped: false, people: true, ...options };
   return renderHook((p: Options) => useScene(video, { ...p, onQuota }), { initialProps: props });
 }
 
-const ok = () => Response.json({ landmarks: [{ label: "Dør", x: 0.1, y: 0.1, w: 0.2, h: 0.5 }] });
+const ok = () => Response.json({ landmarks: [{ label: "Dør", x: 0.1, y: 0.1, w: 0.2, h: 0.5 }], things: [] });
 const advance = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 
 describe("useScene", () => {
@@ -43,6 +43,28 @@ describe("useScene", () => {
     expect(result.current.landmarks.map((l) => l.label)).toEqual(["Dør"]);
   });
 
+  it("returns the scanned things too, and sends the people switch with the image", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({ landmarks: [], things: [{ name: "Caps", category: "other", kind: "guest", x: 0.4, y: 0.1, w: 0.2, h: 0.1 }] }),
+    );
+    const { result } = setup({ people: false });
+    await advance(1_500);
+    expect(result.current.things.map((thing) => thing.name)).toEqual(["Caps"]);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toMatchObject({ people: false });
+  });
+
+  it("hides things from a scan that looked at people as soon as people are switched off", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({ landmarks: [], things: [{ name: "Briller", category: "other", kind: "guest", x: 0.4, y: 0.1, w: 0.1, h: 0.05 }] }),
+    );
+    const { result, rerender } = setup();
+    await advance(1_500);
+    expect(result.current.things.map((thing) => thing.name)).toEqual(["Briller"]);
+    rerender({ on: true, paused: false, stopped: false, people: false });
+    expect(result.current.things).toEqual([]);
+  });
+
   it("never has two scans in flight", async () => {
     fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
     setup();
@@ -53,10 +75,10 @@ describe("useScene", () => {
   it("sends nothing while switched off, paused by a sheet, or hidden", async () => {
     const { rerender } = setup({ on: false });
     await advance(25_000);
-    rerender({ on: true, paused: true, stopped: false });
+    rerender({ on: true, paused: true, stopped: false, people: true });
     await advance(25_000);
     Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
-    rerender({ on: true, paused: false, stopped: false });
+    rerender({ on: true, paused: false, stopped: false, people: true });
     await advance(25_000);
     expect(fetchMock).not.toHaveBeenCalled();
   });

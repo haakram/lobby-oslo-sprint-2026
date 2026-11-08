@@ -62,10 +62,11 @@ describe("POST /api/scene", () => {
 
   it("returns the landmarks on success", async () => {
     const landmarks = [{ label: "Dør", x: 0.1, y: 0.1, w: 0.2, h: 0.6 }];
-    describeScene.mockResolvedValue(landmarks);
+    const things = [{ name: "Caps", category: "other", kind: "guest", x: 0.4, y: 0.1, w: 0.2, h: 0.1 }];
+    describeScene.mockResolvedValue({ landmarks, things });
     const res = await call({ image: jpeg() });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ landmarks });
+    expect(await res.json()).toEqual({ landmarks, things });
     expect(describeScene.mock.calls[0][1]).toBe("image/jpeg");
   });
 });

@@ -16,21 +16,29 @@ async function createDetector(delegate: "GPU" | "CPU"): Promise<ObjectDetector> 
   return ObjectDetector.createFromOptions(fileset, {
     baseOptions: { modelAssetPath: MODEL, delegate },
     runningMode: "VIDEO",
-    scoreThreshold: 0.4,
-    maxResults: 5,
+    // Low and many: Claude names the boxes, so a weak box (a remote in a hand) is still worth having;
+    // a person no longer takes the place of the things they hold.
+    scoreThreshold: 0.3,
+    maxResults: 10,
   });
 }
 
 /**
  * Runs MediaPipe's object detector on every new video frame while `active`, and returns the
- * detections eased into stable, smoothed boxes (video pixels).
+ * detections eased into stable, smoothed boxes (video pixels). `people: false` drops person boxes.
  */
-export function useDetector(video: RefObject<HTMLVideoElement | null>, active: boolean) {
+export function useDetector(video: RefObject<HTMLVideoElement | null>, active: boolean, people = true) {
   const [detector, setDetector] = useState<ObjectDetector | null>(null);
   const [status, setStatus] = useState<DetectorStatus>("loading");
   const [boxes, setBoxes] = useState<Box[]>([]);
   // Survives a pause (sheet open), so box ids and their labels carry on afterwards.
   const tracked = useRef<Box[]>([]);
+  const showPeople = useRef(people);
+  useEffect(() => {
+    showPeople.current = people;
+    // Off: the detector skips people itself, so they don't take places from the things they hold.
+    detector?.setOptions({ categoryDenylist: people ? [] : ["person"] }).catch(() => {});
+  }, [detector, people]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +85,7 @@ export function useDetector(video: RefObject<HTMLVideoElement | null>, active: b
           const box = detection.boundingBox;
           if (!box) return [];
           const top = detection.categories[0];
+          if (!showPeople.current && top?.categoryName === "person") return [];
           return [
             {
               id: "",
@@ -89,7 +98,8 @@ export function useDetector(video: RefObject<HTMLVideoElement | null>, active: b
             },
           ];
         });
-        tracked.current = smoothBoxes(tracked.current, found);
+        const keep = showPeople.current ? tracked.current : tracked.current.filter((box) => box.label !== "person");
+        tracked.current = smoothBoxes(keep, found);
         setBoxes(tracked.current);
       }
       frame = requestAnimationFrame(tick);

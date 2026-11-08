@@ -1,4 +1,4 @@
-import type { Landmark } from "./sceneSchema";
+import type { Landmark, Thing } from "./sceneSchema";
 
 /** One scene scan (one Claude call) at most this often. */
 export const SCAN_INTERVAL_MS = 10_000;
@@ -16,12 +16,14 @@ export type SceneInput = {
 };
 
 export type SeenLandmark = Landmark & { id: string; at: number };
+export type SeenThing = Thing & { id: string; at: number };
 
 export function shouldScan(input: SceneInput): boolean {
   if (input.paused || input.stopped || input.inFlight) return false;
   return input.lastScanAt === null || input.now - input.lastScanAt >= SCAN_INTERVAL_MS;
 }
 
-export function freshLandmarks(list: readonly SeenLandmark[], now: number): SeenLandmark[] {
+/** Landmarks and things alike: what a scan found fades and is dropped after LANDMARK_TTL_MS. */
+export function freshLandmarks<T extends { at: number }>(list: readonly T[], now: number): T[] {
   return list.filter((landmark) => now - landmark.at <= LANDMARK_TTL_MS);
 }

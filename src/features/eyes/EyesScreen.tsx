@@ -3,17 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, EmptyState, ErrorState, RegenIcon, Sheet, Skeleton, cx } from "@/ui";
 import { BoxOverlay, type BoxLabel } from "./BoxOverlay";
-import { cocoLabel, isProductClass } from "./cocoLabels";
+import { boxCategory } from "./boxCategory";
+import { cocoLabel, isSentToClaude, liveLabel } from "./cocoLabels";
 import { cropFrame } from "./cropFrame";
 import { PermissionState } from "./PermissionState";
 import { ProductCard } from "./ProductCard";
+import { KIND_TAG } from "./itemKind";
 import { IdentifyError, QUOTA_COPY } from "./requestIdentify";
 import type { IdentifyResult } from "./schema";
 import type { Box } from "./smoothBoxes";
 import { useCamera } from "./useCamera";
 import { useDetector } from "./useDetector";
 import { useLiveIdentify } from "./useLiveIdentify";
+import type { SeenThing } from "./sceneSchedule";
 import { useScene } from "./useScene";
+import { thingBoxes, thingOver } from "./things";
 
 /**
  * What the sheet shows. For a box, the result lives in `useLiveIdentify` (shared with live
@@ -28,6 +32,9 @@ type SheetContent = {
   error?: { title: string; quota: boolean };
 };
 
+// One empty list for every render, so the memos below don't rerun when auto recognition is off.
+const NO_THINGS: SeenThing[] = [];
+
 const RETRY_BODY = "Hold varen stille med teksten mot kameraet, og prøv igjen.";
 const QUOTA_BODY = "Les SKU-en på etiketten, eller spør skiftlederen.";
 
@@ -38,39 +45,61 @@ export function EyesScreen() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [autoOn, setAutoOn] = useState(true);
   const [sceneOn, setSceneOn] = useState(true);
+  // People are boxed and named unless this is off; off, they are left out everywhere, Claude included.
+  const [peopleOn, setPeopleOn] = useState(true);
   // Identify and scene share one budget: a 429 from either stops both.
   const [quotaReached, setQuotaReached] = useState(false);
   const onQuota = useCallback(() => setQuotaReached(true), []);
   const request = useRef<AbortController | null>(null);
 
-  const detector = useDetector(video, cameraStatus === "ready" && !sheetOpen);
+  const detector = useDetector(video, cameraStatus === "ready" && !sheetOpen, peopleOn);
   const { results, busy, send } = useLiveIdentify(video, detector.boxes, {
     auto: autoOn,
     paused: sheetOpen,
     stopped: quotaReached,
+    people: peopleOn,
     onQuota,
   });
+  // One scan every 10 s finds both the landmarks (Omgivelser) and the loose things the detector
+  // can't see, such as a cap or a pillow (Automatisk gjenkjenning): it runs while either is on.
   const scene = useScene(video, {
-    on: sceneOn && cameraStatus === "ready",
+    on: (sceneOn || autoOn) && cameraStatus === "ready",
     paused: sheetOpen,
     stopped: quotaReached,
+    people: peopleOn,
     onQuota,
   });
+  const landmarks = sceneOn ? scene.landmarks : [];
+  const things = autoOn ? scene.things : NO_THINGS;
+  const scanned = useMemo(
+    () => (videoSize ? thingBoxes(things, videoSize, detector.boxes) : []),
+    [things, videoSize, detector.boxes],
+  );
+  const allBoxes = useMemo(() => [...detector.boxes, ...scanned], [detector.boxes, scanned]);
 
   useEffect(() => () => request.current?.abort(), []);
 
   const labels = useMemo(() => {
     const next: Record<string, BoxLabel> = {};
-    for (const box of detector.boxes) {
+    const thingById = new Map(things.map((thing) => [thing.id, thing]));
+    for (const box of allBoxes) {
       const result = results[box.id];
-      if (busy[box.id]) next[box.id] = { text: "Gjenkjenner …", state: "busy" };
-      else if (result?.product) next[box.id] = { text: result.product.name, state: "known" };
-      // Not in the catalogue: Claude's own name for it ("Kaffekopp"); the tag and the card say "ikke i katalogen".
-      else if (result) next[box.id] = { text: result.name || cocoLabel(box.label), state: "missing" };
-      else next[box.id] = { text: cocoLabel(box.label), state: isProductClass(box.label) ? "product" : "object" };
+      // The detector only finds the box; the name comes from Claude (its own answer for this box, or
+      // the scan's for the same spot), or the detector's when it is sure.
+      const scan = thingById.get(box.id) ?? (box.label === "person" || !videoSize ? undefined : thingOver(box, things, videoSize));
+      const category = scan && !result ? scan.category : boxCategory(box.label, box.score, result);
+      const free = liveLabel(box.label, box.score);
+      if (busy[box.id]) next[box.id] = { text: "Gjenkjenner …", state: "busy", category };
+      else if (result?.product) next[box.id] = { text: result.product.name, state: "known", category };
+      // Not in the catalogue: Claude's own name ("Pute"), and what kind of thing it is ("hotellutstyr").
+      // Only a supply is "ikke i katalogen": the catalogue lists consumables, not pillows or caps.
+      else if (result) next[box.id] = { text: result.name || free, state: "missing", category, note: KIND_TAG[result.kind] };
+      // The scan named it but nobody checked the catalogue yet, so a supply says nothing extra.
+      else if (scan) next[box.id] = { text: scan.name, state: "scanned", category, note: scan.kind === "supply" ? null : KIND_TAG[scan.kind] };
+      else next[box.id] = { text: free, state: isSentToClaude(box.label) ? "product" : "object", category };
     }
     return next;
-  }, [detector.boxes, results, busy]);
+  }, [allBoxes, things, videoSize, results, busy]);
 
   /** Identifies a box (or the whole frame) on request and opens the sheet. */
   const run = useCallback(
@@ -97,8 +126,8 @@ export function EyesScreen() {
 
   const select = useCallback(
     (box: Box) => {
-      if (!isProductClass(box.label) && !results[box.id]) {
-        // People, furniture and the like are never sent: a small card with the class name, for free.
+      if (!isSentToClaude(box.label)) {
+        // A live person box is never sent: a small card with the class name, for free.
         setSheet({ boxId: null, image: null, objectLabel: cocoLabel(box.label) });
         setSheetOpen(true);
       } else if (results[box.id] || busy[box.id]) {
@@ -119,8 +148,8 @@ export function EyesScreen() {
 
   const retry = useCallback(() => {
     // The same box if it is still tracked, otherwise the whole frame.
-    void run(detector.boxes.find((box) => box.id === sheet?.boxId) ?? null);
-  }, [detector.boxes, sheet, run]);
+    void run(allBoxes.find((box) => box.id === sheet?.boxId) ?? null);
+  }, [allBoxes, sheet, run]);
 
   const problem = cameraStatus !== "idle" && cameraStatus !== "starting" && cameraStatus !== "ready" ? cameraStatus : null;
   const ready = cameraStatus === "ready";
@@ -130,8 +159,8 @@ export function EyesScreen() {
   if (!ready) hint = "Starter kameraet";
   else if (detector.status === "loading") hint = "Laster gjenkjenning";
   else if (detector.status === "failed") hint = "Live-bokser er av. Ta bilde av varen med utløseren.";
-  else if (detector.boxes.length > 0 && autoActive) hint = "Hold varen stille, så kjenner Fettero den igjen.";
-  else if (detector.boxes.length > 0) hint = "Trykk på en boks for å kjenne igjen varen.";
+  else if (allBoxes.length > 0 && autoActive) hint = "Hold varen stille, så kjenner Fettero den igjen.";
+  else if (allBoxes.length > 0) hint = "Trykk på en boks for å kjenne igjen varen.";
 
   // What the sheet shows, derived so a live result fills an open sheet as soon as it lands.
   const sheetResult = sheet?.boxId ? (results[sheet.boxId] ?? sheet.result) : sheet?.result;
@@ -140,9 +169,10 @@ export function EyesScreen() {
     sheet?.error ?? (!sheetResult && !sheetBusy ? { title: "Fikk ikke kjent igjen varen", quota: false } : undefined);
   let sheetTitle = "Ser på varen";
   if (sheet?.objectLabel) sheetTitle = "Gjenstand";
-  else if (sheetResult) sheetTitle = sheetResult.product ? "Vare funnet" : "Ukjent vare";
+  else if (sheetResult?.product) sheetTitle = "Vare funnet";
+  else if (sheetResult) sheetTitle = sheetResult.kind === "supply" ? "Ukjent vare" : "Dette ser roboten";
   else if (sheetError) sheetTitle = "Ingen svar";
-  const seenLabels = [...new Set(scene.landmarks.map((mark) => mark.label))];
+  const seenLabels = [...new Set(landmarks.map((mark) => mark.label))];
 
   return (
     <main data-surface="dark" className="relative flex flex-1 flex-col overflow-hidden bg-bg">
@@ -166,7 +196,7 @@ export function EyesScreen() {
         </>
       ) : (
         <>
-          {ready && videoSize && detector.boxes.length === 0 && (
+          {ready && videoSize && allBoxes.length === 0 && (
             <div aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center">
               <div className="relative size-56 opacity-60">
                 {["top-0 left-0 border-t-2 border-l-2", "top-0 right-0 border-t-2 border-r-2", "bottom-0 left-0 border-b-2 border-l-2", "bottom-0 right-0 border-b-2 border-r-2"].map((corner) => (
@@ -178,8 +208,8 @@ export function EyesScreen() {
 
           {ready && videoSize && (
             <BoxOverlay
-              boxes={detector.boxes}
-              landmarks={scene.landmarks}
+              boxes={allBoxes}
+              landmarks={landmarks}
               now={scene.now}
               videoSize={videoSize}
               labels={labels}
@@ -209,6 +239,7 @@ export function EyesScreen() {
                   disabled={quotaReached}
                   onToggle={() => setSceneOn((on) => !on)}
                 />
+                <Switch label="Personer" on={peopleOn} disabled={false} onToggle={() => setPeopleOn((on) => !on)} />
               </div>
             </div>
             <p aria-live="polite" className="rounded-md bg-bg/75 px-3 py-1 text-sm text-text backdrop-blur-sm">
@@ -283,14 +314,16 @@ function CameraStart({ onStart }: { onStart: () => void }) {
   );
 }
 
-/** A thing the detector names for free, which never goes to Claude. */
+/** A person's live box: the detector names them for free, and the box is never sent to Claude. */
 function ObjectCard({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-start gap-3">
       <Badge>Ikke en vare</Badge>
       <p className="text-2xl font-bold tracking-[-0.02em]">{label}</p>
       <p className="text-base text-muted">
-        Fettero kjenner igjen dette selv. Bare varer sendes til gjenkjenning, så dette kostet ingenting.
+        Fettero kjenner igjen personer selv, uten å sende bildet, så dette kostet ingenting. Trykk på boksene
+        rundt det personen har på seg eller holder, eller ta bilde av hele bildet. Slå av «Personer» for å
+        utelate dem.
       </p>
     </div>
   );

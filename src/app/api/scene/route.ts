@@ -11,8 +11,8 @@ export async function POST(request: Request) {
   if (!body.ok) return json({ error: body.error }, 400);
 
   try {
-    const landmarks = await describeScene(body.base64, body.mediaType);
-    return json({ landmarks }, 200);
+    const view = await describeScene(body.base64, body.mediaType, {}, body.people);
+    return json(view, 200);
   } catch (error) {
     if (error instanceof BudgetExceeded) {
       return json({ error: "Dagens kvote for gjenkjenning er brukt opp." }, 429);

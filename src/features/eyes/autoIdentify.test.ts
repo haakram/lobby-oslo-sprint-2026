@@ -28,6 +28,9 @@ const shampoo: IdentifyResult = {
   name: "Sjampo 250 ml",
   category: "hygiene",
   textSeen: ["Sjampo"],
+  kind: "supply",
+  summary: "",
+  seen: [],
   confidence: "high",
   product: productBySku("FT-1001")!,
 };
@@ -97,17 +100,20 @@ describe("nextAutoIdentify", () => {
     expect(result).toEqual({ kind: "identify", box: large });
   });
 
-  it("never sends people, furniture or other non-product classes", () => {
+  it("never sends a person", () => {
     const person = box("a", { label: "person" });
     expect(nextAutoIdentify(input({ boxes: [person] }))).toBeNull();
-    const chair = box("a", { label: "chair" });
-    expect(nextAutoIdentify(input({ boxes: [chair], recent: [{ box: box("old"), result: shampoo, at: NOW }] }))).toBeNull();
   });
 
-  it("skips a large non-product box and takes the product-like one", () => {
-    const table = box("a", { label: "dining table", w: 600, h: 400 });
+  it("sends a box whatever class the detector guessed (a pillow it calls a vase)", () => {
+    const pillow = box("a", { label: "vase" });
+    expect(nextAutoIdentify(input({ boxes: [pillow] }))).toEqual({ kind: "identify", box: pillow });
+  });
+
+  it("skips a person and takes the other box", () => {
+    const person = box("a", { label: "person", w: 600, h: 400 });
     const cup = box("b", { label: "cup", x: 700 });
-    const result = nextAutoIdentify(input({ boxes: [table, cup], firstSeen: new Map([["a", 0], ["b", 0]]) }));
+    const result = nextAutoIdentify(input({ boxes: [person, cup], firstSeen: new Map([["a", 0], ["b", 0]]) }));
     expect(result).toEqual({ kind: "identify", box: cup });
   });
 
@@ -121,11 +127,17 @@ describe("nextAutoIdentify", () => {
         kind: "reuse",
         box: box("a"),
         result: shampoo,
+        at: NOW - 1000,
       });
     });
 
     it("reuses even while a request is in flight or the quota is gone, since it costs nothing", () => {
       expect(nextAutoIdentify(input({ recent: recent(), inFlight: true, stopped: true }))?.kind).toBe("reuse");
+    });
+
+    it("hands back the original answer time, so a chain of reuses can't outlive the 10 s window", () => {
+      const decision = nextAutoIdentify(input({ recent: recent({ at: NOW - 9000 }) }));
+      expect(decision).toMatchObject({ kind: "reuse", at: NOW - 9000 });
     });
 
     it("does not reuse a result older than 10 s", () => {
@@ -138,9 +150,14 @@ describe("nextAutoIdentify", () => {
       expect(nextAutoIdentify(input({ recent: elsewhere }))?.kind).toBe("identify");
     });
 
-    it("does not reuse a result without a catalogue match", () => {
-      const unknown = recent({ result: { ...shampoo, sku: null, product: null } });
-      expect(nextAutoIdentify(input({ recent: unknown }))?.kind).toBe("identify");
+    it("reuses a confident answer outside the catalogue too (a pillow), so it is asked once", () => {
+      const pillow = recent({ result: { ...shampoo, sku: null, product: null, name: "Pute", category: "linen" } });
+      expect(nextAutoIdentify(input({ recent: pillow }))?.kind).toBe("reuse");
+    });
+
+    it("does not reuse a low-confidence answer: a sharper look may do better", () => {
+      const unsure = recent({ result: { ...shampoo, confidence: "low" } });
+      expect(nextAutoIdentify(input({ recent: unsure }))?.kind).toBe("identify");
     });
   });
 });

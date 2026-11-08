@@ -22,6 +22,9 @@ const result = {
   name: "Sjampo 250 ml",
   category: "hygiene",
   textSeen: [],
+  kind: "supply",
+  summary: "",
+  seen: [],
   confidence: "high",
   product: null,
 };
@@ -74,5 +77,19 @@ describe("POST /api/identify", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(result);
     expect(identifyProduct.mock.calls[0][1]).toBe("image/jpeg");
+    // People are in unless the request leaves them out.
+    expect(identifyProduct.mock.calls[0][3]).toBe(true);
+  });
+
+  it("passes people: false on to Claude", async () => {
+    identifyProduct.mockResolvedValue(result);
+    await call({ image: jpeg(), people: false });
+    expect(identifyProduct.mock.calls[0][3]).toBe(false);
+  });
+
+  it("rejects a people flag that is not a boolean", async () => {
+    const res = await call({ image: jpeg(), people: "no" });
+    expect(res.status).toBe(400);
+    expect(identifyProduct).not.toHaveBeenCalled();
   });
 });

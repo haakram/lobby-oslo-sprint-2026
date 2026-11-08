@@ -1,17 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { cropFrame } from "./cropFrame";
 import { IdentifyError, requestScene } from "./requestIdentify";
-import { freshLandmarks, shouldScan, type SeenLandmark } from "./sceneSchedule";
+import { freshLandmarks, shouldScan, type SeenLandmark, type SeenThing } from "./sceneSchedule";
 
 const TICK_MS = 1000;
-/** Landmarks need the room, not detail: a smaller frame is cheaper. */
-const SCAN_MAX_SIDE = 640;
+/** Landmarks need the room, things a little detail (a remote in a hand): big enough, still cheap. */
+const SCAN_MAX_SIDE = 800;
+
+/** A thing, and whether its scan asked about people (what they wear or hold). */
+type ScannedThing = SeenThing & { withPeople: boolean };
+
+/** Drops what has faded; the same array when nothing did, so React skips a render. */
+function keepFresh<T extends { at: number }>(current: T[], at: number): T[] {
+  const fresh = freshLandmarks(current, at);
+  return fresh.length === current.length ? current : fresh;
+}
 
 /**
- * Scans the whole frame for doors, lifts and signs every 10 s while `on` and not `paused`.
- * Returns the landmarks still fresh (they fade over 12 s), and `now` to fade them by.
+ * Scans the whole frame for doors, lifts and signs, and loose things (a cap, a pillow), every 10 s
+ * while `on` and not `paused`. Returns those still fresh (they fade over 12 s), and `now` to fade
+ * them by. `people: false` asks Claude to leave out what people wear or hold.
  */
 export function useScene(
   video: RefObject<HTMLVideoElement | null>,
@@ -19,17 +29,19 @@ export function useScene(
     on,
     paused,
     stopped,
+    people,
     onQuota,
-  }: { on: boolean; paused: boolean; stopped: boolean; onQuota: () => void },
+  }: { on: boolean; paused: boolean; stopped: boolean; people: boolean; onQuota: () => void },
 ) {
   const [landmarks, setLandmarks] = useState<SeenLandmark[]>([]);
+  const [things, setThings] = useState<ScannedThing[]>([]);
   const [now, setNow] = useState(0);
 
   // Latest options for the timer. `stopped`: the shared quota ran out (here or in identify).
-  const outside = useRef({ paused: paused || !on, stopped, onQuota });
+  const outside = useRef({ paused: paused || !on, stopped, people, onQuota });
   useEffect(() => {
-    outside.current = { paused: paused || !on, stopped, onQuota };
-  }, [on, paused, stopped, onQuota]);
+    outside.current = { paused: paused || !on, stopped, people, onQuota };
+  }, [on, paused, stopped, people, onQuota]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -38,10 +50,8 @@ export function useScene(
     const timer = setInterval(() => {
       const at = performance.now();
       setNow(at);
-      setLandmarks((current) => {
-        const fresh = freshLandmarks(current, at);
-        return fresh.length === current.length ? current : fresh;
-      });
+      setLandmarks((current) => keepFresh(current, at));
+      setThings((current) => keepFresh(current, at));
 
       const element = video.current;
       const scan = shouldScan({
@@ -63,12 +73,17 @@ export function useScene(
       book.lastScanAt = at;
       book.inFlight = true;
       const scanId = ++book.scans;
-      requestScene(image, controller.signal)
+      const withPeople = outside.current.people;
+      requestScene(image, controller.signal, withPeople)
         .then((found) => {
           const seenAt = performance.now();
-          const next = found.map((mark, index) => ({ ...mark, id: `${scanId}-${index}`, at: seenAt }));
           // A scan that finds something replaces the old view; an empty one lets the old view fade out.
-          if (next.length > 0) setLandmarks(next);
+          if (found.landmarks.length > 0) {
+            setLandmarks(found.landmarks.map((mark, index) => ({ ...mark, id: `${scanId}-${index}`, at: seenAt })));
+          }
+          if (found.things.length > 0) {
+            setThings(found.things.map((thing, index) => ({ ...thing, id: `scan-${scanId}-${index}`, at: seenAt, withPeople })));
+          }
         })
         .catch((error: unknown) => {
           if (error instanceof IdentifyError && error.quota) {
@@ -87,5 +102,7 @@ export function useScene(
     };
   }, [video]);
 
-  return { landmarks: on ? landmarks : [], now };
+  // People switched off: what an earlier scan saw on them (glasses, a cap) goes at once, not in 12 s.
+  const shown = useMemo<SeenThing[]>(() => (people ? things : things.filter((thing) => !thing.withPeople)), [people, things]);
+  return { landmarks: on ? landmarks : [], things: on ? shown : [], now };
 }

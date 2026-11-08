@@ -28,6 +28,9 @@ const found = (sku: string | null) => ({
   name: "Sjampo",
   category: "hygiene",
   textSeen: ["Sjampo"],
+  kind: "supply",
+  summary: "En flaske sjampo.",
+  seen: [],
   confidence: "high",
 });
 
@@ -38,6 +41,43 @@ describe("identifyProduct", () => {
     expect(result.sku).toBe("FT-1001");
     expect(result.product?.sku).toBe("FT-1001");
     expect(result.textSeen).toEqual(["Sjampo"]);
+    expect(result.kind).toBe("supply");
+    expect(result.summary).toBe("En flaske sjampo.");
+  });
+
+  it("keeps the summary and at most eight other things seen, for a person with a cap and a remote", async () => {
+    const seen = [
+      { name: "Caps", kind: "guest" },
+      { name: "Fjernkontroll", kind: "room" },
+      ...Array.from({ length: 10 }, () => ({ name: "Pute", kind: "room" })),
+    ];
+    const { client } = fakeClient({
+      parsed_output: {
+        ...found(null),
+        name: "Person",
+        category: "other",
+        kind: "person",
+        summary: "En person med caps holder en fjernkontroll.",
+        seen,
+      },
+    });
+    const result = await identifyProduct("AAAA", "image/jpeg", { client, meter: createSpendMeter(5) });
+    expect(result.kind).toBe("person");
+    expect(result.summary).toBe("En person med caps holder en fjernkontroll.");
+    expect(result.seen).toHaveLength(8);
+    expect(result.seen.slice(0, 2)).toEqual(seen.slice(0, 2));
+  });
+
+  it("asks to leave people out when people are off, in the user turn so the cached system prompt holds", async () => {
+    const { client, parse } = fakeClient({ parsed_output: found(null) });
+    await identifyProduct("AAAA", "image/jpeg", { client, meter: createSpendMeter(5) }, false);
+    await identifyProduct("AAAA", "image/jpeg", { client, meter: createSpendMeter(5) });
+    type Params = { system: { text: string }[]; messages: { content: { type: string; text?: string }[] }[] };
+    const [off, on] = parse.mock.calls.map(([params]) => params as Params);
+    expect(off.messages[0].content[1].text).toMatch(/Leave people out/);
+    expect(on.messages[0].content[1].text).toBe("What is this?");
+    expect(off.system[0].text).toBe(on.system[0].text);
+    expect(on.system[0].text).toMatch(/never describe their face, body, age or gender/);
   });
 
   it("drops an SKU that is not in the catalogue", async () => {

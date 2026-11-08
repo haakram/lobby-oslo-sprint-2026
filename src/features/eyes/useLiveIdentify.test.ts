@@ -11,7 +11,7 @@ const onQuota = vi.fn();
 
 function setup() {
   onQuota.mockClear();
-  return renderHook(() => useLiveIdentify(video, [], { auto: true, paused: false, stopped: false, onQuota }));
+  return renderHook(() => useLiveIdentify(video, [], { auto: true, paused: false, stopped: false, people: true, onQuota }));
 }
 
 describe("useLiveIdentify", () => {
@@ -20,12 +20,30 @@ describe("useLiveIdentify", () => {
   });
 
   it("remembers a result for the box, so its label can update live", async () => {
-    const result = { sku: "FT-1001", name: "Sjampo 250 ml", category: "hygiene", textSeen: [], confidence: "high" };
+    const result = { sku: "FT-1001", name: "Sjampo 250 ml", category: "hygiene", kind: "supply", summary: "", seen: [], textSeen: [], confidence: "high" };
     vi.stubGlobal("fetch", vi.fn(async () => Response.json(result)));
     const { result: hook } = setup();
     await act(() => hook.current.send("data:image/jpeg;base64,AAAA", box));
     expect(hook.current.results["box-1"]?.product?.name).toBe("Sjampo 250 ml");
     expect(hook.current.busy["box-1"]).toBeUndefined();
+  });
+
+  it("hides an answer that looked at people once people are switched off, and asks without them after", async () => {
+    const result = { sku: null, name: "Person", category: "other", kind: "person", summary: "En person med caps.", seen: [], textSeen: [], confidence: "high" };
+    const fetchMock = vi.fn(async () => Response.json(result));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result: hook, rerender } = renderHook(
+      ({ people }: { people: boolean }) => useLiveIdentify(video, [], { auto: true, paused: false, stopped: false, people, onQuota }),
+      { initialProps: { people: true } },
+    );
+    await act(() => hook.current.send("data:image/jpeg;base64,AAAA", box));
+    expect(hook.current.results["box-1"]?.summary).toBe("En person med caps.");
+    rerender({ people: false });
+    expect(hook.current.results["box-1"]).toBeUndefined();
+    await act(() => hook.current.send("data:image/jpeg;base64,AAAA", box));
+    expect(JSON.parse((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body as string)).toMatchObject({ people: false });
+    // Asked without people: shown while people stay off.
+    expect(hook.current.results["box-1"]).toBeDefined();
   });
 
   it("reports the shared quota after a 429 and keeps the server's copy", async () => {

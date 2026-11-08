@@ -87,45 +87,59 @@ type CocoClass = keyof typeof LABELS;
 export const COCO_CLASSES = Object.keys(LABELS) as CocoClass[];
 
 /**
- * Classes worth a Claude call: things a store room or a hotel trolley might hold. People, furniture,
- * vehicles and animals keep their free label and are never sent.
+ * Classes the small in-browser model names reliably. Anything else (a pillow it calls "vase",
+ * "potted plant" or "teddy bear") shows as "Ukjent" until Claude has looked at it.
  */
-export const PRODUCT_CLASSES: readonly CocoClass[] = [
+export const TRUSTED_CLASSES: readonly CocoClass[] = [
+  "person",
   "bottle",
   "cup",
   "wine glass",
   "bowl",
-  "book",
   "banana",
   "apple",
   "orange",
-  "sandwich",
-  "carrot",
-  "broccoli",
-  "hot dog",
-  "pizza",
-  "donut",
-  "cake",
-  "toothbrush",
-  "scissors",
-  "vase",
+  "book",
   "cell phone",
-  "handbag",
-  "backpack",
-  "suitcase",
-  "teddy bear",
-  "remote",
-  "mouse",
+  "laptop",
   "keyboard",
+  "mouse",
+  "remote",
+  "scissors",
+  "toothbrush",
+  "backpack",
+  "handbag",
+  "suitcase",
+  "chair",
 ];
 
-const PRODUCT_SET = new Set<string>(PRODUCT_CLASSES);
+const TRUSTED_SET = new Set<string>(TRUSTED_CLASSES);
+
+/** Below this score even a trusted class is shown as "Ukjent". */
+export const MIN_LABEL_SCORE = 0.6;
+
+export const UNKNOWN_LABEL = "Ukjent";
 
 /** The bokmål name of a detector class; "Gjenstand" for anything unknown. */
 export function cocoLabel(name: string): string {
   return Object.hasOwn(LABELS, name) ? LABELS[name as CocoClass] : "Gjenstand";
 }
 
-export function isProductClass(name: string): boolean {
-  return PRODUCT_SET.has(name);
+/**
+ * Whether the detector's own class name is worth showing for this box before Claude has answered.
+ * A person always is: people are never sent, and the model rarely calls a thing a person.
+ */
+export function isTrustedLabel(name: string, score: number): boolean {
+  if (name === "person") return true;
+  return TRUSTED_SET.has(name) && score >= MIN_LABEL_SCORE;
+}
+
+/** The free label for a box: its class name when the detector is sure, else "Ukjent". */
+export function liveLabel(name: string, score: number): string {
+  return isTrustedLabel(name, score) ? cocoLabel(name) : UNKNOWN_LABEL;
+}
+
+/** People are never sent to Claude: their box keeps the free "Person" label. Everything else may be. */
+export function isSentToClaude(name: string): boolean {
+  return name !== "person";
 }

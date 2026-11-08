@@ -50,7 +50,7 @@ describe("NightShiftScreen, replay", () => {
     expect(within(stats).getByText(END.clock)).toBeInTheDocument();
     // Done out of the robot's tasks, and the server's verdict on every "done" it reported.
     expect(within(stats).getByText("Oppdrag fullført").previousElementSibling).toHaveTextContent(`${TALLY.done}av ${TALLY.total}`);
-    expect(within(stats).getByText("Godkjent av Wybe-serveren").previousElementSibling).toHaveTextContent(`${TALLY.done}av ${TALLY.reported}`);
+    expect(within(stats).getByText("Godkjent av dommeren").previousElementSibling).toHaveTextContent(`${TALLY.done}av ${TALLY.reported}`);
     expect(within(stats).getByText("Wybe-poeng (simulering)")).toBeInTheDocument();
     expect(screen.getByRole("figure", { name: "Hotellet som plantegning" })).toBeInTheDocument();
     expect(screen.getAllByText(LAST_DECISION.text).length).toBeGreaterThan(0);

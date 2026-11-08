@@ -1,16 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { type ReactNode, useMemo } from "react";
 import { placeName } from "@/features/replay";
 import { cx, RegenIcon, type RegenName } from "@/ui";
+import { type DeclineSplit, declineSplit, declineSplitText } from "./declines";
 import { type RobotJudgement, robotJudgement } from "./judgement";
+import { type CrossNight, crossNightPrecision, grouped, percentText, shiftOf } from "./ledger";
 import type { RunLine } from "./runlog";
 
 /**
  * "Robotens vurderinger i natt": the calls the robot made on its own, from its run log, in the
  * hotel's words. The refusals of the stranger come first, as one security incident with its times;
- * then every "done" against the server's confirmation, the claims it checked and declined, the
- * wet floors and the Do-Not-Disturb doors. Calm and factual: green only where the figure is good,
+ * then every "done" against the referee's confirmation (the Wybe Night Shift simulator), with the
+ * same figure over every live night in the evidence ledger (docs/runs/ledger.csv); the refusals,
+ * held to the same standard (credited by the referee or not) and handed to reception where a
+ * guest may still want the thing; the wet floors and the Do-Not-Disturb doors. Calm and factual: green only where the figure is good,
  * no red or amber (DESIGN.md, where colour goes; what needs a person is in the bell).
  *
  * Natteskift passes `until` (the replay's sim second) so the card follows the scrubber; Overlevering
@@ -32,16 +37,24 @@ export function RobotJudgementCard({
   className?: string;
 }) {
   const judgement = useMemo(() => robotJudgement(lines, until), [lines, until]);
-  return <RobotJudgementView judgement={judgement} asOf={asOf} id={id} className={className} />;
+  const declines = useMemo(() => declineSplit(lines, until), [lines, until]);
+  const crossNight = useMemo(() => crossNightPrecision(shiftOf(lines)), [lines]);
+  return <RobotJudgementView judgement={judgement} declines={declines} crossNight={crossNight} asOf={asOf} id={id} className={className} />;
 }
 
 export function RobotJudgementView({
   judgement,
+  declines,
+  crossNight,
   asOf,
   id = "vurderinger",
   className,
 }: {
   judgement: RobotJudgement;
+  /** The refusals with the referee's verdict on each; without it the card counts them unsplit. */
+  declines?: DeclineSplit;
+  /** The same "done" figure over every live night in the ledger; left out when not given. */
+  crossNight?: CrossNight;
   asOf?: string | null;
   id?: string;
   className?: string;
@@ -72,17 +85,22 @@ export function RobotJudgementView({
             )
           }
           good={done.reported > 0 && done.confirmed === done.reported}
-          label="«Ferdig» bekreftet av Wybe-serveren"
+          label="«Ferdig» godkjent av dommeren"
         >
           {done.reported === 0
             ? "Roboten har ikke meldt noe ferdig ennå."
             : done.confirmed === done.reported
-              ? "Roboten melder bare ferdig når serveren har godtatt leveransen."
-              : `${done.reported - done.confirmed} meldt ferdig uten bekreftelse; de telles ikke som fullført.`}
+              ? "Dommeren, Wybe Night Shift-simulatoren, godkjente hver ferdigmelding i natt."
+              : `Dommeren, Wybe Night Shift-simulatoren, godkjente ikke ${done.reported - done.confirmed}; de telles ikke som fullført.`}
+          {crossNight?.all && <CrossNightLine crossNight={crossNight} />}
         </Row>
-        <Row icon="search" figure={String(declined.total)} label={declined.total === 1 ? "Melding avvist etter sjekk" : "Meldinger avvist etter sjekk"}>
-          {declined.total === 0 ? "Ingen meldinger måtte avvises." : `${declineText(declined)}. Roboten sjekket først og gjorde ikke noe unødvendig.`}
-        </Row>
+        {declines ? (
+          <DeclineRow declines={declines} />
+        ) : (
+          <Row icon="search" figure={String(declined.total)} label={declined.total === 1 ? "Melding avvist etter sjekk" : "Meldinger avvist etter sjekk"}>
+            {declined.total === 0 ? "Ingen meldinger måtte avvises." : `${declineText(declined)}.`}
+          </Row>
+        )}
         <Row icon="flag" figure={String(wetFloors.signed.length)} label="Skilt for vått gulv satt ut">
           {wetFloors.signed.length > 0 ? `${places(wetFloors.signed)}.` : wetFloors.found.length > 0 ? "Ingen skilt satt ut." : "Ingen våte gulv funnet."}
           {wetFloors.unsignedAtEnd.length > 0 && (
@@ -103,6 +121,71 @@ export function RobotJudgementView({
         </Row>
       </ul>
     </section>
+  );
+}
+
+/** "Alle 79 live-netter med logg: 4 340 av 4 374 godkjent (99,2 %). Samme versjon som i natt (cb72845): 290 av 291 over 4 netter." */
+function CrossNightLine({ crossNight }: { crossNight: CrossNight }) {
+  const { all, build } = crossNight;
+  if (!all) return null;
+  return (
+    <span className="mt-1 block">
+      Alle {all.nights} live-netter med logg: {grouped(all.credited)} av {grouped(all.reported)} godkjent ({percentText(all.percent)}).
+      {build && build.nights > 1 && (
+        <>
+          {" "}
+          Samme versjon som i natt (<span className="font-mono text-sm sm:text-xs">{build.commit}</span>): {grouped(build.credited)} av {grouped(build.reported)} over {build.nights} netter.
+        </>
+      )}{" "}
+      <span className="max-sm:block">Kilde: docs/runs/ledger.csv.</span>
+    </span>
+  );
+}
+
+/**
+ * The refusals as the referee judged them, and as a decision for a person: a guest who said
+ * something never came may still want it, so reception decides (Forespørsler), not the robot.
+ */
+function DeclineRow({ declines }: { declines: DeclineSplit }) {
+  const notCredited = declines.checks.filter((check) => check.judged === "not_credited");
+  const guests = declines.checks.filter((check) => check.kind === "noOrder").length;
+  return (
+    <Row
+      icon="search"
+      figure={
+        declines.total > 0 ? (
+          <>
+            {declines.credited} <span className="font-sans text-base font-normal">av</span> {declines.total}
+          </>
+        ) : (
+          "0"
+        )
+      }
+      label={declines.total > 0 ? "Avvisninger godkjent av dommeren" : "Avvisninger"}
+    >
+      {declines.total === 0 ? (
+        "Roboten har ikke avvist noe."
+      ) : (
+        <>
+          {declineSplitText(declines)}.
+          {notCredited.length > 0 && (
+            <span className="mt-1 block">
+              Ikke godkjent: {joinNo(notCredited.map((check) => `${check.request} (${check.reason.replace(/\.$/, "").toLowerCase()})`))}.
+            </span>
+          )}
+          {guests > 0 && (
+            <span className="mt-1 block">
+              {guests === 1 ? "Én gjest sa" : `${capitalise(countWord(guests))} gjester sa`} at noe aldri kom. Roboten fant ingen bestilling og leverte ikke. Gi det likevel? Det
+              avgjør resepsjonen i{" "}
+              <Link href="/foresporsler?filter=robot" className="font-semibold text-accent-text underline-offset-2 hover:underline">
+                Forespørsler
+              </Link>
+              .
+            </span>
+          )}
+        </>
+      )}
+    </Row>
   );
 }
 

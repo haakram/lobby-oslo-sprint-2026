@@ -109,7 +109,7 @@ export function classify(facts: RequestFacts, over: boolean): Outcome {
   const base = { request: facts.request, note: facts.note };
   if (facts.ended === "done") {
     return facts.unverified
-      ? { ...base, verdict: "unverified", reason: "Meldt ferdig, men Wybe-serveren godkjente det ikke. Sjekk med gjesten." }
+      ? { ...base, verdict: "unverified", reason: "Meldt ferdig, men dommeren (Wybe Night Shift-simulatoren) godkjente det ikke. Sjekk med gjesten." }
       : { ...base, verdict: "done", reason: null };
   }
   if (facts.skipped !== null) return { ...base, verdict: "cancelled", reason: cancelledReason(facts.skipped) };

@@ -297,8 +297,8 @@ function StatRow({ replay, verdicts }: { replay: HotelReplay; verdicts: NightOut
     <section role="group" aria-label="Skiftet i tall" className="border-y border-line py-5">
       <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 2xl:grid-cols-8">
         <Stat label="Oppdrag fullført" value={tally.done} unit={`av ${tally.total}`} tone="success" />
-        {/* Every "done" checked against the server: a done it did not credit is not counted as done. */}
-        <Stat label="Godkjent av Wybe-serveren" value={tally.done} unit={`av ${tally.reported}`} />
+        {/* Every "done" checked against the referee (the Wybe Night Shift simulator): a done it did not credit is not counted as done. */}
+        <Stat label="Godkjent av dommeren" value={tally.done} unit={`av ${tally.reported}`} />
         {/* Plain counts beside the green one: the night's misses are part of its total, not an alarm. */}
         <Stat label="Ga videre til en person" value={tally.handedBack} />
         <Stat label="Avvist eller avlyst" value={tally.declined + tally.cancelled} />

@@ -24,7 +24,7 @@ describe("how one request ended", () => {
     expect(classify({ ...base, ended: "done" }, true)).toMatchObject({ verdict: "done", reason: null });
     expect(classify({ ...base, ended: "done", unverified: true }, true)).toMatchObject({
       verdict: "unverified",
-      reason: "Meldt ferdig, men Wybe-serveren godkjente det ikke. Sjekk med gjesten.",
+      reason: "Meldt ferdig, men dommeren (Wybe Night Shift-simulatoren) godkjente det ikke. Sjekk med gjesten.",
     });
   });
 

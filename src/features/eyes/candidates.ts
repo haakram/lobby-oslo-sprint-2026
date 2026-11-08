@@ -2,7 +2,7 @@ import { PRODUCTS, type Product, productBySku } from "@/features/catalog/product
 import type { IdentifyResult } from "./schema";
 
 /**
- * When the camera is not sure, a person picks between the two or three products it could be (product
+ * When the camera is not sure, a person picks between the two or three products it could be (domain
  * review, round 5: typing the guessed shelf's label only confirms the shelf, never the item in hand,
  * and an item with no barcode often has no label at all). Pure: the same result gives the same list.
  */

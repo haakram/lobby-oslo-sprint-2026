@@ -1,9 +1,11 @@
-import { hhmm } from "@/features/dashboard/format";
+import { atNight } from "@/features/dashboard/highlights";
+import { formatKroner, hhmm } from "@/features/dashboard/format";
 import { humanizeText, placeLabel } from "@/features/dashboard/labels";
 import type { Night, RoomView } from "@/features/dashboard/selectors";
+import type { Tally } from "@/features/nightshift/outcomes";
 import type { PhoneTask } from "@/features/requests/phoneTasks";
 import type { RequestView } from "@/features/requests/select";
-import { type RoomRevenue } from "@/features/rooms/pms";
+import { type RoomRevenue, sellableValue } from "@/features/rooms/pms";
 import type { Reconciliation, RoomCheckMark } from "@/features/rooms/reconcile";
 import { byRole, cleanersToday } from "@/features/staff/testData";
 
@@ -18,8 +20,13 @@ export type Figures = {
   roomsTotal: number;
   /** Ready rooms the booking system had as occupied (the robot's room check found them empty). */
   sellable: number;
-  /** Requests done: by the robot, by staff; and the calls the AI receptionist took. */
-  done: { robot: number; staff: number; calls: number };
+  /** What those rooms are worth today, NOK: sellable × last night's average rate, to the hundred. */
+  sellableValue: number;
+  /** The robot's night: the one tally every screen counts with (src/features/nightshift/outcomes.ts). */
+  robot: Tally;
+  /** Requests the night staff finished themselves (staff and in-room voice, 22:00–06:00), and the calls the AI receptionist took. */
+  staffDone: number;
+  calls: number;
   /** Guest matters the robot settled: noise, lost things found, spills made safe. */
   guestIssues: { noise: number; lost: number; spill: number };
   revenue: RoomRevenue;
@@ -52,7 +59,7 @@ export type Handover = {
 export const NIGHT_NOTE: NightNote = {
   author: "Kjersti Lund",
   role: "Nattevakt",
-  text: "Rolig natt. Roboten tok det meste av runden selv. Det var støy fra rom 328 rundt kl. 03:15, og rommet står ikke i systemet. Radiatoren på 104 bør sees på tidlig; familien fikk et ekstra pledd.",
+  text: "Rolig natt. Roboten tok det meste av runden selv. Det var støy fra rom 210 to ganger, rundt 23:20 og 04:10, og rommet står ikke i systemet. Radiatoren på 134 bør sees på tidlig; familien fikk et ekstra pledd.",
 };
 
 const NIGHT_ORDER = (clock: string) => {
@@ -88,15 +95,20 @@ export function composeHandover({
   revenue: RoomRevenue;
 }): Handover {
   const tasks = [...night.tasks.values()];
-  const doneOf = (kind: string) => tasks.filter((task) => task.kind === kind && task.outcome === "done").length;
-  const staffDone = requests.filter((request) => request.status === "fullfort" && request.source !== "robot").length;
-  const robotPhoneDone = requests.filter((request) => request.phone && request.status === "fullfort" && request.handler.startsWith("Roboten")).length;
+  const doneOf = (kind: string) => tasks.filter((task) => task.kind === kind && task.verdict === "done").length;
+  const staffDone = requests.filter(
+    (request) => (request.source === "personale" || request.source === "stemme") && request.status === "fullfort" && atNight(request.at),
+  ).length;
+  const value = sellableValue(reconciliation.sellable.length, revenue);
 
   const figures: Figures = {
-    roomsReady: rooms.filter((room) => room.status === "klar").length,
+    roomsReady: rooms.filter((room) => room.status === "klar" && !room.closed).length,
     roomsTotal: rooms.length,
     sellable: reconciliation.sellable.length,
-    done: { robot: night.tasksDone + robotPhoneDone, staff: staffDone - robotPhoneDone, calls: phone.length },
+    sellableValue: value,
+    robot: night.tally,
+    staffDone,
+    calls: phone.length,
     guestIssues: { noise: doneOf("noise"), lost: doneOf("lost_item"), spill: doneOf("spill") },
     revenue,
   };
@@ -104,14 +116,13 @@ export function composeHandover({
   // What happened: a few lines, most telling first, then shown in the night's order.
   const ranked: Highlight[] = [];
   const end = night.clock && night.ended ? night.clock : null;
-  const total = tasks.length;
-  if (end) ranked.push({ at: hhmm(end), text: `Roboten avsluttet natten med ${night.tasksDone} av ${total} oppdrag fullført.`, by: "robot" });
+  if (end) ranked.push({ at: hhmm(end), text: `Roboten avsluttet natten med ${night.tally.done} av ${night.tally.total} oppdrag fullført. Wybe-serveren godkjente ${night.tally.done} av ${night.tally.reported} ferdigmeldinger.`, by: "robot" });
   const sellable = [...reconciliation.sellable].sort((a, b) => NIGHT_ORDER(a.at ?? "00:00") - NIGHT_ORDER(b.at ?? "00:00"));
   if (sellable[0]?.at) {
     const many = sellable.length > 1;
     ranked.push({
       at: hhmm(sellable[0].at),
-      text: `Roboten fant ${joinNb(sellable.map((row) => `rom ${number(row.room)}`))} ${many ? "tomme og ryddige" : "tomt og ryddig"}, men systemet sa opptatt. ${many ? "De" : "Det"} kan selges i dag.`,
+      text: `Roboten fant ${joinNb(sellable.map((row) => `rom ${number(row.room)}`))} ${many ? "tomme og ryddige" : "tomt og ryddig"}, men systemet sa opptatt. ${many ? "De" : "Det"} kan selges i dag, ca. ${formatKroner(value)} kr.`,
       by: "robot",
     });
   }
@@ -164,7 +175,7 @@ export function composeHandover({
   if (unreleased.length > 0) {
     open.push({
       id: "sellable",
-      text: `Merk ${joinNb(unreleased.map((row) => `rom ${number(row.room)}`))} som ledig for salg. Roboten fant ${unreleased.length === 1 ? "det" : "dem"} tomt og ryddig.`,
+      text: `Merk ${joinNb(unreleased.map((row) => `rom ${number(row.room)}`))} som ledig for salg (ca. ${formatKroner(sellableValue(unreleased.length, revenue))} kr). Roboten fant ${unreleased.length === 1 ? "det tomt og ryddig" : "dem tomme og ryddige"}.`,
       owner: desk,
       due: "09:00",
       href: "/rom",
@@ -172,11 +183,12 @@ export function composeHandover({
       urgent: false,
     });
   }
+  // Only what the robot handed back: a refusal on good grounds or a request the night manager called off needs nobody.
   const needPerson = requests.filter((request) => !request.phone && request.source === "robot" && !request.badge && (request.status === "venter" || request.status === "feilet"));
   if (needPerson.length > 0) {
     open.push({
       id: "robot",
-      text: `${needPerson.length} forespørsler roboten ikke fikk til, trenger en person (mest gjenglemte ting og purringer).`,
+      text: `${needPerson.length === 1 ? "1 forespørsel" : `${needPerson.length} forespørsler`} roboten ikke fikk til eller ikke rakk, trenger en person.`,
       owner: desk,
       due: "10:00",
       href: "/foresporsler",

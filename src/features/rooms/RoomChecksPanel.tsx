@@ -10,7 +10,8 @@ import type { RunLine } from "@/features/nightshift/runlog";
 import { osloToday } from "@/features/reception/dates";
 import { formatClock } from "@/features/reception/format";
 import { Badge, Button, Card, RegenIcon, Skeleton } from "@/ui";
-import { pmsLastNight } from "./pms";
+import { formatKroner } from "@/features/dashboard/format";
+import { pmsLastNight, revenueLastNight, sellableValue } from "./pms";
 import { type GuestFound, markRoom, reconcileRooms, robotRoomChecks, ROOM_CHECK_MARKS, type RoomCheckMark, type Sellable } from "./reconcile";
 
 const number = (room: string) => room.replace(/^room-/, "");
@@ -22,11 +23,13 @@ const number = (room: string) => room.replace(/^room-/, "");
  * TODO(phase-3): *Merk som ledig for salg* writes the room status to the PMS; the task goes to the
  * shared request desk.
  */
-export function RoomChecksPanel({ lines, today = osloToday() }: { lines: readonly RunLine[] | null; today?: string }) {
+export function RoomChecksPanel({ lines, today = osloToday(), roomsInHotel = 36 }: { lines: readonly RunLine[] | null; today?: string; roomsInHotel?: number }) {
   const { user, effectiveRole } = useSession();
   const requestsLink = effectiveRole === null || canAccess(effectiveRole, "/foresporsler");
   const marks = ROOM_CHECK_MARKS.use()[today] ?? {};
-  const result = useMemo(() => (lines ? reconcileRooms(robotRoomChecks(lines), pmsLastNight()) : null), [lines]);
+  const result = useMemo(() => (lines ? reconcileRooms(robotRoomChecks(lines), pmsLastNight(today)) : null), [lines, today]);
+  // Last night's average rate from the same booking system: what a room found sellable is worth today.
+  const revenue = useMemo(() => revenueLastNight(roomsInHotel, pmsLastNight(today)), [roomsInHotel, today]);
   const list = useRef<HTMLDivElement>(null);
   const refocus = useRef<string | null>(null);
 
@@ -44,12 +47,13 @@ export function RoomChecksPanel({ lines, today = osloToday() }: { lines: readonl
 
   const sellable = result?.sellable.length ?? 0;
   const released = result?.sellable.filter((row) => marks[row.room]?.action === "released").length ?? 0;
+  const value = sellableValue(sellable, revenue);
   const headline =
     sellable === 0
       ? null
       : released === sellable
-        ? `${sellable === 1 ? "Rommet" : `Alle ${sellable} rom`} er merket ledig for salg i dag.`
-        : `${sellable} rom kan selges i dag som systemet trodde var opptatt.`;
+        ? `${sellable === 1 ? "Rommet" : `Alle ${sellable} rom`} er merket ledig for salg i dag · ca. ${formatKroner(value)} kr.`
+        : `${sellable} rom kan selges i dag · ca. ${formatKroner(value)} kr`;
 
   return (
     <section aria-labelledby="room-checks-heading" data-enter>
@@ -70,7 +74,7 @@ export function RoomChecksPanel({ lines, today = osloToday() }: { lines: readonl
         ) : result.checked === 0 ? (
           <div className="mt-3 flex max-w-xl flex-col gap-1">
             <h3 className="text-base font-semibold">Roboten har ikke sjekket noen rom ennå</h3>
-            <p className="text-base text-muted">Når roboten sjekker rom i natt, sammenligner Lobby det den finner med bookingsystemet her.</p>
+            <p className="text-base text-muted">Når roboten sjekker rom i natt, sammenligner Fettero det den finner med bookingsystemet her.</p>
           </div>
         ) : sellable === 0 && result.guestFound.length === 0 ? (
           <p className="mt-3 flex items-start gap-2 text-base">
@@ -82,10 +86,15 @@ export function RoomChecksPanel({ lines, today = osloToday() }: { lines: readonl
         ) : (
           <div ref={list} className="mt-4 flex flex-col gap-5">
             {headline && (
-              <p className="flex items-start gap-2 text-lg font-semibold tracking-[-0.01em]">
+              <div className="flex items-start gap-2">
                 <RegenIcon name="circle-check" size={22} className="mt-0.5 shrink-0 text-success" />
-                <span>{headline}</span>
-              </p>
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-lg font-semibold tracking-[-0.01em]">{headline}</p>
+                  <p className="text-sm text-muted">
+                    Systemet trodde {sellable === 1 ? "det var" : "de var"} opptatt. Anslag: {sellable} × snittprisen i natt, {formatKroner(revenue.adr)} kr (testdata).
+                  </p>
+                </div>
+              </div>
             )}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
               {sellable > 0 && (
@@ -119,7 +128,7 @@ export function RoomChecksPanel({ lines, today = osloToday() }: { lines: readonl
         {result && result.tooEarly.length > 0 && (
           <p className="mt-4 text-sm text-muted">
             Teller ikke: {result.tooEarly.map((row) => `rom ${number(row.room)} (sjekket ${hhmm(row.at)})`).join(", ")}. Et rom må være tomt etter kl.
-            01:00 før Lobby foreslår å selge det, så en gjest som er ute på kvelden ikke mister rommet.
+            01:00 før Fettero foreslår å selge det, så en gjest som er ute på kvelden ikke mister rommet.
           </p>
         )}
         <SourceNote className="mt-3" sources={["run-log", "test", "local"]} />

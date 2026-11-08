@@ -19,28 +19,32 @@ function handover(marks: Record<string, RoomCheckMark> = {}) {
 describe("Overlevering 06:00, composed from the night", () => {
   it("counts the night's good news: rooms ready, requests done, guest matters settled, revenue", () => {
     const { figures } = handover();
-    // 321 is ready on the base hotel's map (the short test night has no map of its own; 331 is not on it).
+    // 301 is ready on the base hotel's map (the short test night has no map of its own; 311 is not on it).
     expect(figures.roomsReady).toBe(1);
     expect(figures.sellable).toBe(1);
-    // The robot did the noise run; the night receptionist settled the seeded wake-up call.
-    expect(figures.done).toEqual({ robot: 1, staff: 1, calls: 3 });
+    // The robot did the noise run and failed the towels: one tally, the one every screen counts with.
+    expect(figures.robot).toMatchObject({ done: 1, total: 2, reported: 1, failed: 1, handedBack: 1 });
+    expect(figures.staffDone).toBe(0);
+    expect(figures.calls).toBe(3);
     expect(figures.guestIssues).toEqual({ noise: 1, lost: 0, spill: 0 });
-    expect(figures.revenue.roomsSold).toBe(28);
+    expect(figures.revenue.roomsSold).toBe(31);
+    // 1 room the system thought occupied × last night's average rate, to the hundred.
+    expect(figures.sellableValue).toBe(Math.round(figures.revenue.adr / 100) * 100);
   });
 
   it("tells the night in a few lines, in the night's order (22:00 before 03:00)", () => {
     const { timeline } = handover();
     expect(timeline.map((line) => line.at)).toEqual(["22:50", "01:47", "02:14", "03:14", "03:15", "04:35", "05:58"]);
-    expect(timeline[0].text).toBe("Støyklage nær rom 322: roboten ba rom 322 dempe seg.");
-    expect(timeline.find((line) => line.at === "03:14")?.text).toBe("Roboten fant rom 331 tomt og ryddig, men systemet sa opptatt. Det kan selges i dag.");
-    expect(timeline.at(-1)?.text).toBe("Roboten avsluttet natten med 1 av 2 oppdrag fullført.");
+    expect(timeline[0].text).toBe("Støyklage nær rom 302: roboten ba rom 302 dempe seg.");
+    expect(timeline.find((line) => line.at === "03:14")?.text).toMatch(/^Roboten fant rom 311 tomt og ryddig, men systemet sa opptatt\. Det kan selges i dag, ca\. [\d\s\u00a0]+ kr\.$/);
+    expect(timeline.at(-1)?.text).toBe("Roboten avsluttet natten med 1 av 2 oppdrag fullført. Wybe-serveren godkjente 1 av 1 ferdigmeldinger.");
   });
 
   it("lists what is open, each with an owner and a time, soonest first", () => {
     const { open } = handover();
     expect(open.map((item) => [item.id, item.owner, item.due])).toEqual([
       ["phone", "Siri Haugen", "07:00"],
-      ["guest-room-328", "Siri Haugen", "08:00"],
+      ["guest-room-210", "Siri Haugen", "08:00"],
       ["sellable", "Siri Haugen", "09:00"],
       ["robot", "Siri Haugen", "10:00"],
     ]);
@@ -49,10 +53,10 @@ describe("Overlevering 06:00, composed from the night", () => {
 
   it("drops a room once it is marked free to sell, and says when reception already has the guest task", () => {
     const { open } = handover({
-      "room-331": { action: "released", at: "06:02", by: "Ana Pereira" },
-      "room-328": { action: "task", at: "06:03", by: "Ana Pereira" },
+      "room-311": { action: "released", at: "06:02", by: "Ana Pereira" },
+      "room-210": { action: "task", at: "06:03", by: "Ana Pereira" },
     });
     expect(open.map((item) => item.id)).not.toContain("sellable");
-    expect(open.find((item) => item.id === "guest-room-328")).toMatchObject({ text: "Rom 328: en gjest uten booking. Sjekk registreringen (oppgave laget).", href: "/foresporsler" });
+    expect(open.find((item) => item.id === "guest-room-210")).toMatchObject({ text: "Rom 210: en gjest uten booking. Sjekk registreringen (oppgave laget).", href: "/foresporsler" });
   });
 });

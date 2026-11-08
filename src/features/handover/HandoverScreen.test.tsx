@@ -1,9 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
-import { demoCalls } from "@/features/reception/demoCalls";
-import { phoneTasks } from "@/features/requests/phoneTasks";
-import { selectRequests } from "@/features/requests/select";
+import { atNight } from "@/features/dashboard/highlights";
+import { MANUAL_REQUESTS } from "@/features/requests/testData";
 import { TEST_NIGHT_JSONL } from "@/features/rooms/testNight";
 import { HandoverScreen } from "./HandoverScreen";
 
@@ -16,15 +15,8 @@ const session = {
 };
 const fetchMock = vi.fn<typeof fetch>();
 
-// The staff's share of the night follows the shared demo data (finished manual requests), not a magic number.
-const STAFF_DONE = selectRequests({
-  night: null,
-  calls: null,
-  statusOf: () => "ny",
-  phone: phoneTasks([], demoCalls(TODAY)),
-}).filter(
-  (request) => request.status === "fullfort" && request.source !== "robot",
-).length;
+// The night staff's share follows the shared demo data (their finished requests 22:00–06:00), not a magic number.
+const STAFF_DONE = MANUAL_REQUESTS.filter((request) => request.status === "fullfort" && atNight(request.at)).length;
 
 function serve(run: () => Response) {
   fetchMock.mockImplementation(async (input) => {
@@ -57,17 +49,21 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     // The labels stand under skeletons while the night loads; the details come with it.
     expect(await screen.findByText("1 støyklage")).toBeInTheDocument();
     expect(screen.getByText("Gjestesaker løst")).toBeInTheDocument();
+    // The robot's figure is its night's one tally, with the server's verdict on every "done".
+    expect(screen.getByText("Robotens oppdrag")).toBeInTheDocument();
     expect(
       screen.getByText(
-        new RegExp(`Roboten 1 · personalet ${STAFF_DONE} · AI tok 3 samtaler`),
+        `Godkjent av Wybe-serveren: 1 av 1 · nattevakten ${STAFF_DONE} · AI tok 3 samtaler`,
       ),
     ).toBeInTheDocument();
+    // The room the system thought occupied, with what it is worth today.
+    expect(screen.getByText(/^1 rom kan selges i dag · ca\. [\d\s\u00a0]+ kr \(systemet trodde de var opptatt\)$/)).toBeInTheDocument();
     expect(screen.getByText("Losjiinntekt i natt")).toBeInTheDocument();
 
     const open = screen.getByRole("region", { name: /^Åpent nå/ });
     expect(
       within(open).getByText(
-        "Rom 328: en gjest uten booking. Sjekk registreringen.",
+        "Rom 210: en gjest uten booking. Sjekk registreringen.",
       ),
     ).toBeInTheDocument();
     expect(within(open).getByText("Gjest venter")).toBeInTheDocument();
@@ -76,7 +72,7 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     const night = screen.getByRole("region", { name: "Dette skjedde i natt" });
     expect(
       within(night).getByText(
-        "Roboten fant rom 331 tomt og ryddig, men systemet sa opptatt. Det kan selges i dag.",
+        /^Roboten fant rom 311 tomt og ryddig, men systemet sa opptatt\. Det kan selges i dag, ca\. [\d\s\u00a0]+ kr\.$/,
       ),
     ).toBeInTheDocument();
     expect(within(night).getByText("Kjersti Lund")).toBeInTheDocument();

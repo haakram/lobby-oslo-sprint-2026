@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useSession } from "@/features/auth";
-import { formatNumber, nightLabel } from "@/features/dashboard/format";
+import { formatKroner, nightLabel } from "@/features/dashboard/format";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
@@ -46,10 +46,11 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
 
   const handover = useMemo(() => {
     if (!night || !rooms || !ready) return null;
-    const reconciliation = reconcileRooms(robotRoomChecks(run.lines), pmsLastNight());
+    const pms = pmsLastNight(today);
+    const reconciliation = reconcileRooms(robotRoomChecks(run.lines), pms);
     const requests = selectRequests({ night, calls: null, statusOf, phone, assignments });
-    return composeHandover({ night, rooms, reconciliation, marks: marks ?? {}, requests, phone, revenue: revenueLastNight(rooms.length) });
-  }, [night, rooms, ready, run.lines, statusOf, phone, assignments, marks]);
+    return composeHandover({ night, rooms, reconciliation, marks: marks ?? {}, requests, phone, revenue: revenueLastNight(rooms.length, pms) });
+  }, [night, rooms, ready, run.lines, statusOf, phone, assignments, marks, today]);
 
   const signButton = useRef<HTMLDivElement>(null);
   const refocus = useRef(false);
@@ -87,7 +88,6 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
 
   const label = night ? nightLabel(night.startedAt) : null;
   const figures = handover?.figures;
-  const done = figures ? figures.done.robot + figures.done.staff : undefined;
   const issues = figures ? figures.guestIssues.noise + figures.guestIssues.lost + figures.guestIssues.spill : undefined;
 
   return (
@@ -108,12 +108,19 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       </div>
 
       <FigureRow label="Natten i tall">
-        <Figure label="Klare til salg" value={figures?.roomsReady} unit={figures ? `av ${figures.roomsTotal}` : undefined} tone="success" detail={figures && figures.sellable > 0 ? `${figures.sellable} av dem trodde systemet var opptatt` : undefined} />
         <Figure
-          label="Forespørsler ordnet"
-          value={done}
+          label="Klare til salg"
+          value={figures?.roomsReady}
+          unit={figures ? `av ${figures.roomsTotal}` : undefined}
           tone="success"
-          detail={figures ? `Roboten ${figures.done.robot} · personalet ${figures.done.staff} · AI tok ${figures.done.calls} ${figures.done.calls === 1 ? "samtale" : "samtaler"}` : undefined}
+          detail={figures && figures.sellable > 0 ? `${figures.sellable} rom kan selges i dag · ca. ${formatKroner(figures.sellableValue)} kr (systemet trodde de var opptatt)` : undefined}
+        />
+        <Figure
+          label="Robotens oppdrag"
+          value={figures?.robot.done}
+          unit={figures ? `av ${figures.robot.total}` : undefined}
+          tone="success"
+          detail={figures ? robotLine(figures) : undefined}
         />
         <Figure
           label="Gjestesaker løst"
@@ -123,9 +130,9 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
         />
         <Figure
           label="Losjiinntekt i natt"
-          value={figures ? formatNumber(figures.revenue.revenue) : undefined}
+          value={figures ? formatKroner(figures.revenue.revenue) : undefined}
           unit="kr"
-          detail={figures ? `Snittpris ${formatNumber(figures.revenue.adr)} kr · ${figures.revenue.roomsSold} av ${figures.roomsTotal} rom solgt` : undefined}
+          detail={figures ? `Snittpris ${formatKroner(figures.revenue.adr)} kr · ${figures.revenue.roomsSold} av ${figures.roomsTotal} rom solgt` : undefined}
         />
       </FigureRow>
 
@@ -216,6 +223,19 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       </div>
     </ModulePage>
   );
+}
+
+/** "Godkjent av Wybe-serveren: 73 av 73 · 8 avvist uten bestilling · nattevakten 3 · AI tok 2 samtaler". */
+function robotLine({ robot, staffDone, calls }: { robot: { done: number; reported: number; declined: number; cancelled: number }; staffDone: number; calls: number }): string {
+  return [
+    `Godkjent av Wybe-serveren: ${robot.done} av ${robot.reported}`,
+    robot.declined > 0 ? `${robot.declined} avvist uten bestilling` : null,
+    robot.cancelled > 0 ? `${robot.cancelled} avlyst` : null,
+    staffDone > 0 ? `nattevakten ${staffDone}` : null,
+    `AI tok ${calls} ${calls === 1 ? "samtale" : "samtaler"}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function issuesDetail({ noise, lost, spill }: { noise: number; lost: number; spill: number }): string {

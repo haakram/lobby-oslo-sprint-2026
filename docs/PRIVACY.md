@@ -278,7 +278,7 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   (`src/features/staffinput/entries.ts`). **The robot's hazards reach her as they happen:** *Fra
   roboten* on `/natt` lists them at the robot's clock, each with a *Kvitter* tap that records who saw it
   and when (`src/features/staffinput/robotHazards.ts`), so the time from the robot's report to a
-  person's acknowledgement is computed, not guessed. {AFTER_A_WAIT} The pilot rule beyond that: a push
+  person's acknowledgement is computed, not guessed. The pilot rule beyond that: a push
   to the night staffer's phone the moment the robot sees a wet floor it can't sign, escalated if nobody
   acknowledges within 10 minutes (pilot design, not built: today she sees it when she opens the
   screen).

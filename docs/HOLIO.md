@@ -1,6 +1,6 @@
 # HOLIO.md — Holio pains 3, 6 and 9 in Fettero, with the honest status
 
-> For Holio (the Holio juror and the people at the stand) and for us. Written Sun 8 Nov, updated
+> For Holio (the people at the stand) and for us. Written Sun 8 Nov, updated
 > at about 03:10 and again at 05:50 (owner E's round-5 fixes: no way round the label, guides that name
 > only real controls) from the code on `hamad/jury-loop`. Fettero is a hotel product; this page says plainly which parts
 > of it work for a web-shop warehouse today, which parts are hotel stand-ins, and what we would build
@@ -28,11 +28,18 @@ and 9 what it plugs into.
 Holio's brief says "pick one", so the stand path leads with pain 3 and shows 6 and 9 as what it plugs
 into. Five physical items on the table, Øyne open on a phone (logged in, camera allowed, network on).
 
+**How the phone reaches this build (decide before 14:00, team lead):** a phone's camera needs a secure
+context (HTTPS, or `localhost`). The only HTTPS deployment (`lobby-sandy.vercel.app`) serves `main`,
+which has neither the label gate nor the guides, and a phone on the laptop's `http://<ip>:3300` gets no
+camera at all. So either this branch gets an HTTPS preview or tunnel the team lead agrees to, or Øyne
+runs on the laptop's own webcam at `localhost`, which counts as a secure context. Write the chosen
+way here and in `docs/DEMO.md` § 4.1: **[fill]**.
+
 1. **Tap an item with readable text.** The card shows *Tekst på pakken* (what the model read) and
    *Sikker*; *Legg i plukkliste* is offered.
 2. **Tap an item with no readable text.** It shows *Usikker, sjekk varen*, hides the SKU and offers no
    *Vis vei*: it asks for the label. Type `1004` (the soap bar), or another product's SKU to show that
-   the label wins (*… Etiketten gjelder.*). Only then does *Vis vei* appear. This is the Holio juror's own
+   the label wins (*… Etiketten gjelder.*). Only then does *Vis vei* appear. This is the domain review's
    stand question ("walk me from an unsure result to the pick list"): there is no way round the label.
 3. ***Vis vei*:** the pick round, with the saving against a list sorted by shelf (the baseline a WMS
    prints), read off the screen.
@@ -54,7 +61,7 @@ sends nothing at all (people can't be covered), so start the phone a minute earl
 - **20,000 SKUs, not 12:** Claude reads the pack (brand, size, colour, any text), a text or embedding
   search over the WMS catalogue returns the top five with photo and bin, and the picker taps one. The
   catalogue never goes in the prompt.
-- **The open order narrows the catalogue (the Holio juror's point):** unknown items turn up at receiving,
+- **The open order narrows the catalogue (the domain review's point):** unknown items turn up at receiving,
   where the candidates are the open purchase order's 10–40 lines, and at returns, where they are the
   1–5 lines of the customer's original order. Matching against those lines, not 20,000 SKUs, is where
   accuracy jumps, and today's design (candidates in the prompt) already has that shape. Items with no

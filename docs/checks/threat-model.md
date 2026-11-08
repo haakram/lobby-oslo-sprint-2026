@@ -22,7 +22,7 @@ path or HTML is built from input.
 | User enumeration by timing | Unknown usernames are checked against a dummy scrypt hash with the same cost. | `handlers.test.ts` |
 | Leaked hashes | scrypt N = 2^17, r = 8, p = 1 (OWASP minimum), 16-byte salt per account; cost bounded when read so a bad env value can't exhaust memory. | `password.test.ts` |
 | Login CSRF, forced logout or view switch from another site | `SameSite=Lax`, and every `POST /api/auth/*` refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site`. | `handlers.test.ts` |
-| Another site drives a logged-in browser at a data or paid API | `SameSite=Lax`, the proxy's session check, and since jury round 5 each of `/api/identify`, `/api/scene`, `/api/reception/calls`, `/api/voice/token` and `/api/reception/token` refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site` with a 403 before the rate limit counts or any backend is reached (`refuseCrossSite`, `src/app/api/_lib/sameOrigin.ts`). | `sameOrigin.test.ts`, each route's `route.test.ts` |
+| Another site drives a logged-in browser at a data or paid API | `SameSite=Lax`, the proxy's session check, and since the security review (Sun 8 Nov) each of `/api/identify`, `/api/scene`, `/api/reception/calls`, `/api/voice/token` and `/api/reception/token` refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site` with a 403 before the rate limit counts or any backend is reached (`refuseCrossSite`, `src/app/api/_lib/sameOrigin.ts`). | `sameOrigin.test.ts`, each route's `route.test.ts` |
 | Open redirect after login | `next` must be a same-origin relative path (no `//`, `\`, scheme, control characters, `/login`, `/api`), and one the role may open; otherwise `/`. | `access.test.ts` |
 | Misconfigured deploy opens the app | Missing or short `LOBBY_AUTH_SECRET`, or missing/malformed `LOBBY_USERS` → nobody logs in (503 on login, every cookie invalid); the server log names the variable, never a value. | `config.test.ts`, `proxy.test.ts` |
 
@@ -31,14 +31,18 @@ server to server, and each call carries `x-reception-secret`, checked in constan
 
 **Residual risks (accepted for the demo).**
 
-- All four accounts share one password (team lead's choice). If it leaks, regenerate `LOBBY_USERS` with a
-  new one; rotating `LOBBY_AUTH_SECRET` logs every session out.
+- The team's accounts share one password (team lead's choice; the jury account has its own). If it
+  leaks, regenerate `LOBBY_USERS` with a new one; rotating `LOBBY_AUTH_SECRET` logs every session out.
 - Sessions are stateless: one can't be revoked before it expires except by removing the user from
   `LOBBY_USERS` or rotating the secret.
+- **The named security step before a pilot** (`TODO(phase-3)`): one account per person with its own
+  password, and sessions that can be revoked one by one (a server-side session list, or a session
+  version per user checked on every request), with a shorter session than 12 h on a shared desk PC.
+  Then a leaked token or a person who leaves is one revocation, not a new secret for everyone.
 - The login limiter lives in memory per server instance. On Vercel the client IP header is set by the
   platform; locally it can be spoofed (irrelevant there).
 - The data and paid APIs (`/api/identify`, `/api/scene`, `/api/reception/calls`, `/api/voice/token`,
-  `/api/reception/token`) no longer rely on the proxy and `SameSite=Lax` alone: since jury round 5 each
+  `/api/reception/token`) no longer rely on the proxy and `SameSite=Lax` alone: since the security review (Sun 8 Nov) each
   route refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site` itself with a 403, before the rate
   limit counts or any backend is reached (`refuseCrossSite` in `src/app/api/_lib/sameOrigin.ts`, the
   same `isSameOrigin` as the auth POSTs; tested in `sameOrigin.test.ts` and in each route's `route.test.ts`). Server Functions

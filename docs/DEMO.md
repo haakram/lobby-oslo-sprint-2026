@@ -21,7 +21,7 @@ per room from the door lock, never who, and the night clerk's own entries. The r
 its own judgement on the demo night, the simulator credited 9, and its own log contradicts one (209),
 so the card says 8 of 9.**
 
-Two figures in the pitch, no more (the creative juror): the room **found free hours earlier, about 1,500 kroner
+Two figures in the pitch, no more (design review): the room **found free hours earlier, about 1,500 kroner
 if the night sells out**, and **8 of 9**. Everything else is for questions (§ 1.1).
 
 The one line, as on the login screen and the first slide: ***Natten, ærlig overlevert.*** (the night,
@@ -52,7 +52,7 @@ Why it matters (sourced; use one or two on the hook slide, never all):
   rounded on screen to *ca. 1 500 kr*; *Slik regner vi* shows the method, with SSB's Oslo rate beside
   it), and only after the desk confirms. 213's guest was **due out yesterday (7.11)** and the check-out
   was never recorded, so the booking system still has him in house. **Never "otherwise unsold"
-  (the founder juror, the Wybe engineer):** housekeeping's round would find the room by late morning. What Fettero buys is
+  (founders and domain review):** housekeeping's round would find the room by late morning. What Fettero buys is
   the hours: found free before the round, worth the kroner only **if the night sells out** (the demo
   hotel has 31 of 36 booked tonight, and the money figure says so) or for an early check-in. Say "on the demo
   night", never "per night" or "per hotel".
@@ -92,13 +92,13 @@ with the same result.
 | Build `8eac151`, 01:50–01:58 | seed 10 **2,760** · 16 **2,679** · 23 **2,240** · 5 **2,559**: mean **2,560** | `builds.csv` row `8eac151` |
 | Build `c3801e0`, 03:26: the head of `hamad/final` at 03:30 (`8eac151`'s agent plus the end-of-night battery guard and a spill look) | seed 10 **2,760** · 16 **2,748** · 23 **2,298** · 5 **2,559**: mean **2,591**. Not played on seeds 9 or 11 | `builds.csv` row `c3801e0` |
 | **The build that plays at 12:00: `8de9ffc`**, the head of `hamad/final` at 05:50 (`c3801e0` plus a cleaning-closed corridor avoided 90 min; `013f90d` has the same agent) | tuned seeds (04:50): 10 **2,759** · 16 **2,748** · 23 **2,298** · 5 **2,559**, mean **2,591**. **Dress rehearsal on ten seeds no build had played** (22, 34, 53, 55, 67, 70, 78, 83, 86, 93; started 05:02, all 10 complete at 05:50): 22 **2,085** · 34 **2,166** · 53 **2,481** · 55 **2,138** · 67 **2,312** · 70 **2,186** · 78 **2,008** · 83 **2,236** · 86 **1,786** · 93 **1,969**; mean night **2,137**, **mean of the best 9 of 10 (the final's statistic) 2,176**; 573 of 573 "done" credited, 101 of 101 on its own judgement | `builds.csv` rows `013f90d`, `8de9ffc` |
-| **Forecast for the final** (mean of the best 9 of 10 unseen seeds, `8de9ffc`) | **median 2,050, 80 % between 1,759 and 2,393.** Model: log score = build + seed, least squares over 67 build×seed cells of complete live build nights (19 builds, 20 seeds), then 20,000 simulated finals. The band carries the tuning penalty's uncertainty (drawn per simulated final from N(−0.054, 0.106)) and the leave-one-cell-out error (0.088 on the log scale, against an in-sample 0.063): the data juror's correction; round 4's method gives 1,903–2,196. **Why lower than the tuned nights (2,591): mostly seed difficulty.** The four seeds this build played are easy (+19 % against the average seed; the unseen ones −4 %), which alone is −19 %; the tuning penalty we can measure is −5 %, from two nights (leave-seed-out on `d4e445c`: seed 9 predicted 1,865, played 1,965; seed 11 predicted 2,245, played 1,914). Sensitivity: no penalty 2,163, penalty doubled 1,942. Regenerated 05:50 Sun, before the final (the rehearsal kept out of the fit). **The larger risk no band covers:** the final may use another map and other tasks | `docs/runs/forecast.txt` (`python3 scripts/forecast.py`, reads the head of `hamad/final` from git) |
+| **Forecast for the final** (mean of the best 9 of 10 unseen seeds, `8de9ffc`) | **median 2,050, 80 % between 1,759 and 2,393.** Model: log score = build + seed, least squares over 67 build×seed cells of complete live build nights (19 builds, 20 seeds), then 20,000 simulated finals. The band carries the tuning penalty's uncertainty (drawn per simulated final from N(−0.054, 0.106)) and the leave-one-cell-out error (0.088 on the log scale, against an in-sample 0.063): the data review's correction; the earlier, narrower method gives 1,903–2,196. **Why lower than the tuned nights (2,591): mostly seed difficulty.** The four seeds this build played are easy (+19 % against the average seed; the unseen ones −4 %), which alone is −19 %; the tuning penalty we can measure is −5 %, from two nights (leave-seed-out on `d4e445c`: seed 9 predicted 1,865, played 1,965; seed 11 predicted 2,245, played 1,914). Sensitivity: no penalty 2,163, penalty doubled 1,942. Regenerated 05:50 Sun, before the final (the rehearsal kept out of the fit). **The larger risk no band covers:** the final may use another map and other tasks | `docs/runs/forecast.txt` (`python3 scripts/forecast.py`, reads the head of `hamad/final` from git) |
 | **Forecast against the dress rehearsal** (out of sample) | The forecast committed at **04:08**, before the rehearsal (`b57e4c1`, for `c3801e0`: final median 2,035, 80 % 1,898–2,186), expected a **mean night of 1,989** on unseen seeds. **Result: the rehearsal's best 9 of 10 is 2,176, inside the committed 80 % interval**; its mean night, 2,137, is **+7 %** on the forecast (+2 % against the forecast without the penalty). The rehearsal's own bootstrap for the final: 2,168 (80 % 2,091–2,243), on its ten seeds only. Practice seeds go to 999 (`docs/research/wybe-api.md`), so a holdout was always available; "the final is the only true holdout", which we wrote at 04:08, was wrong | `docs/runs/forecast.txt`, section *Out-of-sample check* |
 | "Done" credited, 18 nights of these four builds | **1,263 of 1,267 (99.7 %)**; the 4 not credited were all on seed 23, one per build | `builds.csv`: `done_reports`, `done_credited` |
 | What each "done" rested on, same 18 nights | **1,078** sent after the agent had seen the score rise during the task (credited by construction: the simulator's verifier, not trust). **189 on the robot's own judgement, 185 credited (97.9 %)**: room checks **117 of 117**, spill reports **68 of 72**. The 4 misses are one probe (R-037 on seed 23, a sign on another request's patch) repeated in all four builds, because what the agent learns resets every shift. **Counted once per (seed, request), the 189 are 65 distinct claims: 64 credited, 95 % (Wilson) interval 92–99.7 %**; the only miss is 23/R-037 | `builds.csv`/`ledger.csv`: `done_after_rise`, `done_own`, `done_own_credited`, `done_room_check*`, `done_spill*`; the distinct count in `ledger.json` (`distinct_own`); the rule in `scripts/ledger.py`, which the app's `doneBasis` runs too |
-| "Done" with the score hidden (the Wybe juror, the data juror) | Side branch `hamad/blind` (`NS_SCORE_BLIND=1`), four live nights started 04:26 Sun, seeds 10/16/23/5: the agent decides "done" only from what it saw, never from the score or the reply's wording. **The same 291 "done" reports as the sighted build, 290 credited**; the miss is R-037 on seed 23, the same spill the sighted build misses. Scores 2,760 · 2,748 · 2,304 · 2,559: the sighted `c3801e0`'s on 10, 16 and 5, +6 on 23. **Its own check said "not done" 0 times in 265** (D recounted the four logs): no action failed, so the run shows the score wasn't needed on those nights, **not how well the robot catches a failure**. We no longer quote a false-done rate from it | the four logs (`flags.score_blind`), `kind=experiment` and `blind_checks`/`blind_said_no` in `ledger.csv`; § 6.1 |
-| **The verifier with failures injected** (the data juror, the Wybe juror) | Offline, side branch `hamad/faults` (`4571de3`): 20 rebuilt real nights × 5 draws, 13 kinds of fault (a place that lands outside the room, a reply that doesn't answer, a sign beside the spill …), 640 nights. The score-blind "done" check: **precision 98.5 %, recall 99.8 % with 5 % of actions failing**; 95.5 / 99.7 % at 15 %; 91.0 / 99.7 % at 30 % (the sighted build: 98.8 / 99.5, 96.4 / 99.0, 92.0 / 98.3). It said "not done" **256, 734 and 1,578 times**, against once with no faults. Misses: a guest asleep in a room it checked, a polite off-topic reply, music that starts again, a look-alike lost item. **Caveat:** the fault wordings are ours, so it measures the kinds of failure, not how often a real robot meets them | `hamad/faults` `4571de3` (from the controller's message, Sun 8 Nov; not on this branch) |
-| **What hotel rules cost** (the Wybe juror, the Wybe engineer) | Replay bed, 164 real nights, side branch `hamad/hotelrules` (`70d5be4`): all four rules **−125.8 points a night** (−100.4 weighted per seed), 0 strands. Per rule: knock before every keycard entry **−12.4**; never move a sign off a wet floor **−105.2** (the store holds three signs, so 415 spill reports declined for "no sign left" across the 164 nights); avoid a known wet corridor **0** (with the cart there is no dry way round); sign a patch nobody reported **−30.1**. A stock of signs per floor would make the safe rule nearly free. **Live on Wybe's server** (`NS_HOTEL_RULES=1`, four nights complete at about 05:55 Sun): seed 10 **2,605** · 16 **2,584** · 23 **2,393** · 5 **2,453** against the final build's **2,760 · 2,748 · 2,298 · 2,559** on the same seeds (`c3801e0`'s nights; `013f90d`, the same agent as `8de9ffc`, 1 point lower on seed 10): **mean 2,509 against 2,591, −82 points a night**, less than the replay's −125.8; seed 23 went the other way (+95), and four nights can't pin the cost closer than that. It knocked before **59 of 59** keycard entries (the final build on the same four seeds: **26 of 61**) | replay: `hamad/hotelrules` `70d5be4` (controller's message; not on this branch); live: `builds.csv` row `70d5be4`; the knocks counted from the eight logs with `masterKeyEntries` (`src/features/nightshift/conduct.ts`); `src/features/nightshift/data/hotel-rules.json` |
+| "Done" with the score hidden (domain and data review) | Side branch `hamad/blind` (`NS_SCORE_BLIND=1`), four live nights started 04:26 Sun, seeds 10/16/23/5: the agent decides "done" only from what it saw, never from the score or the reply's wording. **The same 291 "done" reports as the sighted build, 290 credited**; the miss is R-037 on seed 23, the same spill the sighted build misses. Scores 2,760 · 2,748 · 2,304 · 2,559: the sighted `c3801e0`'s on 10, 16 and 5, +6 on 23. **Its own check said "not done" 0 times in 265** (D recounted the four logs): no action failed, so the run shows the score wasn't needed on those nights, **not how well the robot catches a failure**. We no longer quote a false-done rate from it | the four logs (`flags.score_blind`), `kind=experiment` and `blind_checks`/`blind_said_no` in `ledger.csv`; § 6.1 |
+| **The verifier with failures injected** (data and domain review) | Offline, side branch `hamad/faults` (`4571de3`): 20 rebuilt real nights × 5 draws, 13 kinds of fault (a place that lands outside the room, a reply that doesn't answer, a sign beside the spill …), 640 nights. The score-blind "done" check: **precision 98.5 %, recall 99.8 % with 5 % of actions failing**; 95.5 / 99.7 % at 15 %; 91.0 / 99.7 % at 30 % (the sighted build: 98.8 / 99.5, 96.4 / 99.0, 92.0 / 98.3). It said "not done" **256, 734 and 1,578 times**, against once with no faults. Misses: a guest asleep in a room it checked, a polite off-topic reply, music that starts again, a look-alike lost item. **Caveat:** the fault wordings are ours, so it measures the kinds of failure, not how often a real robot meets them | `hamad/faults` `4571de3` (from the controller's message, Sun 8 Nov; not on this branch) |
+| **What hotel rules cost** (domain review) | Replay bed, 164 real nights, side branch `hamad/hotelrules` (`70d5be4`): all four rules **−125.8 points a night** (−100.4 weighted per seed), 0 strands. Per rule: knock before every keycard entry **−12.4**; never move a sign off a wet floor **−105.2** (the store holds three signs, so 415 spill reports declined for "no sign left" across the 164 nights); avoid a known wet corridor **0** (with the cart there is no dry way round); sign a patch nobody reported **−30.1**. A stock of signs per floor would make the safe rule nearly free. **Live on Wybe's server** (`NS_HOTEL_RULES=1`, four nights complete at about 05:55 Sun): seed 10 **2,605** · 16 **2,584** · 23 **2,393** · 5 **2,453** against the final build's **2,760 · 2,748 · 2,298 · 2,559** on the same seeds (`c3801e0`'s nights; `013f90d`, the same agent as `8de9ffc`, 1 point lower on seed 10): **mean 2,509 against 2,591, −82 points a night**, less than the replay's −125.8; seed 23 went the other way (+95), and four nights can't pin the cost closer than that. It knocked before **59 of 59** keycard entries (the final build on the same four seeds: **26 of 61**) | replay: `hamad/hotelrules` `70d5be4` (controller's message; not on this branch); live: `builds.csv` row `70d5be4`; the knocks counted from the eight logs with `masterKeyEntries` (`src/features/nightshift/conduct.ts`); `src/features/nightshift/data/hotel-rules.json` |
 | Declines, same 18 nights | 112 declined; the referee credited **93** (+5 each) and gave **19** nothing | `builds.csv`: `declines_credited`, `declines_not_credited` |
 | Best practice score on the board | **2,807**, **#8 of 20** at 04:10 Sun, level with the team below us (top 3,448; we played 242 practice shifts, the leader 1,556). It came from a board test (the `lottery` checkout, `d7040b7`, seed 10, 03:38), so it is **not** the final build; the final branch's best (2,760, `8eac151` and `c3801e0`) would rank #11 | `nightshift-board.wybe.me/data`; `ledger.csv`, `kind` `board-test` |
 | All full live nights, every version | **120** nights that ran to 06:00 by 04:08 (4 more stranded). Builds: **67**, Sat 13:15 – Sun 03:26, median **1,960**, mean **2,030**, most from earlier, weaker builds. Board tests: **53**, Sun 02:37–04:02, mean **2,753**, best **2,807**, on the seeds they were tuned for (42 on seed 10). Moves as nights are logged | `ledger.csv`, `end_reason` "server ended: time", `kind` |
@@ -107,7 +107,7 @@ with the same result.
 | How we test a change before a live shift | a **replay bed** rebuilds every full live night offline (72 when we ran it at 02:55). Replayed with the code that played them, 50 nights land within **61 points (3.2 %)** of live on average, 48 of 50 within 10 % (the first 40: 72 points, 3.8 %, the figure we quoted before). **In-sample**: the reward model was fitted on 50 nights that include these | `docs/runs/replay-fidelity.txt` (from `python -m agent replaybench --fidelity`; `agent/replaybed.py` on `hamad/final`) |
 | Wybe's final (10 shifts, Sun 12:00–13:00) | **[fill after 13:05: mean, rank]** | Wybe's board |
 
-**The replay bed, honestly (the data juror will ask).** The 3.2 % shows the bed can reproduce a night with the
+**The replay bed, honestly (the data review asks).** The 3.2 % shows the bed can reproduce a night with the
 code that played it. It does not show that the bed ranks a *changed* policy correctly. What we can
 check: the two pairs of builds that played the same seeds live (replayed Sun 02:58 with the bed on
 `8eac151`, `replaybench --code A --vs B --seeds 10,16,23,5`):
@@ -216,7 +216,7 @@ screen (the product juror, the marketing juror).
 Each juror scores from their own field (CONTEXT § 11). Every part names the field it answers.
 
 1. **Problem, story first, then money and safety (1 min; Real problem, Founders, Marketing).** Open
-   on the image (the creative juror): the 3D replay for 8 seconds, the robot at 209 at 01:27 with the stranger,
+   on the image (design review): the 3D replay for 8 seconds, the robot at 209 at 01:27 with the stranger,
    then the page, where the night clerk's note says *«Rolig natt.»* beside three wet floors and a man at
    seven doors. "From the desk it *was* a calm night. The robot saw the rest. And we check the robot
    too: at 01:29 it carried bags into 209, at 03:47 it reported 209 empty. Fettero held the room back.
@@ -272,7 +272,7 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
    screens and show one; the cut list is in the PRD." The commitment and the stop rule: **"We both work
    on this full-time for four weeks from Monday. If fewer than 2 of 10 hotels take a free pilot by
    8 December, we stop the hotel wedge and test selling through robot makers."** Hold up the printed
-   A4 last (the design juror, the product juror): "This page is what hotel number one gets on Monday, without a robot."
+   A4 last (design and product review): "This page is what hotel number one gets on Monday, without a robot."
 
 ## 4. Backup plan
 
@@ -300,7 +300,7 @@ The login limiter counts failed tries per address: 5 per address and user and 20
 minutes (`src/features/auth/rateLimit.ts`). On venue wifi every juror shares one public address, and
 three jurors were locked out for minutes during the night's reviews. So nobody types a password on stage.
 
-- [ ] **Run the production build on the demo laptop, not `next dev`** (the security juror, the data juror):
+- [ ] **Run the production build on the demo laptop, not `next dev`** (security and data review):
       `npm ci && npm run build && npm start`, then http://localhost:3000, with `.env.local` as in § 4.
       Then the CSP a juror can inspect has no `'unsafe-eval'` and no `ws://localhost`, and the session
       cookie is `Secure`. Build in its own checkout, not in a worktree where a dev server is running
@@ -345,11 +345,11 @@ three jurors were locked out for minutes during the night's reviews. So nobody t
       so the live agent carries it; the live ElevenLabs agents also keep the old work-guide wording
       until their setup is re-run (owner E's note; team).
 - [ ] The forecast (`docs/runs/forecast.txt`) committed **before 12:00** with its timestamp, and after
-      13:05 "forecast X (80 %: a–b) · actual Y" added to § 1.1 (the data juror).
-- [ ] A team e-mail address for the print footer and the README (the founder juror, the marketing juror: a leave-behind nobody
+      13:05 "forecast X (80 %: a–b) · actual Y" added to § 1.1 (data review).
+- [ ] A team e-mail address for the print footer and the README (founders and marketing review: a leave-behind nobody
       can reply to doesn't do its job). None exists yet; don't invent one.
 - [ ] Repo access for the jury: **add the jury as collaborators; don't make the repo public**
-      (the law juror): `docs/` holds the organisers' decks, Wybe's guide and Holio's challenge PDF, and making
+      (legal review): `docs/` holds the organisers' decks, Wybe's guide and Holio's challenge PDF, and making
       the repo public would redistribute third-party material (team lead's decision, CONTEXT § 11).
 - [ ] `README.md` first screen: what it is, the URL, the jury login, three things to click, how to run.
 - [ ] Jury account: its password in the `/lever` message, not in the repo; `LOBBY_USERS` with the jury
@@ -668,8 +668,8 @@ so no single vendor has a reason to build the cross-vendor layer.
 | 85 requests a night in a 36-room hotel? | That's game density. A real hotel sees a handful of night requests, which is why we price on rooms found and released, not on tasks or hours saved. | Hamad |
 | What if the robot calls a room empty and the guest's bag is behind the door? | That happened on the demo night, and it's the first thing on the page: at 01:29 the robot carried bags into 209 itself, and at 03:47 it reported 209 "empty and tidy", which the simulator credited. Fettero checks the robot's report against the robot's own actions and holds 209 back, with no booking needed; the card counts it as a miss (8 of 9). A room goes to reception only after a named receptionist confirms the folio, the bags and the key card. | ShirazIQ |
 | Is the money real? | It's gross room revenue at last night's average rate in the test PMS (NOK 1,467), for a real sleeper: 213's guest was due out yesterday and the check-out was never recorded. Housekeeping would find it by late morning, so what Fettero buys is hours: the kroner are real only if the night sells out (the demo hotel has 31 of 36 booked tonight) or for an early check-in; Oslo sold 72 % of its rooms in 2025 at NOK 1,631 a room (SSB table 14169). Say "on the demo night", never "per night". | Hamad |
-| Doesn't the night audit catch 213? (the product juror) | The PMS knows the booking, not the room: its due-out report can't tell "left without checking out" from "still asleep, extended at the desk". The missing piece is physical evidence: the lock, the energy slot, a look inside. We ask hotels when they find such rooms today (§ 8.1 Q3). | Hamad |
-| Why doesn't Mews or the lock vendor just build this? (the founder juror) | They could build the page; each sees only its own silo. Our piece is cross-vendor evidence in one signed record: the staff, the lock, the phone and any robot. "Nobody positions on trust" is positioning, not a moat, and we say so. | ShirazIQ |
+| Doesn't the night audit catch 213? (product review) | The PMS knows the booking, not the room: its due-out report can't tell "left without checking out" from "still asleep, extended at the desk". The missing piece is physical evidence: the lock, the energy slot, a look inside. We ask hotels when they find such rooms today (§ 8.1 Q3). | Hamad |
+| Why doesn't Mews or the lock vendor just build this? (founders review) | They could build the page; each sees only its own silo. Our piece is cross-vendor evidence in one signed record: the staff, the lock, the phone and any robot. "Nobody positions on trust" is positioning, not a moat, and we say so. | ShirazIQ |
 | What does the robot add that the lock doesn't? | Its own night as evidence: what it delivered where (bags for three arrivals in 212 is now an open item for the desk), hazards with place and time, refusals of a stranger, and its own faults (10 of 15 master-key entries without a knock). Finding sleepers is the lock log's job, which is why hotel number one needs no robot. | Hamad |
 | What would you cut first? | Already cut: linen counting by camera, voice-to-work-order, translation between guest and staff, a database, the red alert band. Kept: one handover story that runs end to end. | ShirazIQ |
 | Where did "Timer spart" go? | Off the screens in round 4, on Oversikt and in the host view: it was an estimate (tasks × assumed minutes) on a first screen that should carry only what the data proves. The pilot measures minutes from 06:00 to the first room released instead. | Hamad |
@@ -710,7 +710,7 @@ operations add-ons charge per room per month: HelloShift USD 1.25–4
 ([SoftwareFinder](https://softwarefinder.com/hotel-management/sweeply)); a mid-market cloud PMS is USD
 5–12 ([Roommaster](https://www.roommaster.com/blog/hotel-software-pricing-guide)).
 
-**What Fettero buys is hours, not a room-night (the founder juror, the Wybe engineer).** Every hotel already has two nets
+**What Fettero buys is hours, not a room-night (founders and domain review).** Every hotel already has two nets
 for a sleeper: the end-of-day routine and housekeeping's morning round, which finds an empty room with
 no bags by late morning. So the money line on screen says what is true: the room was *found free hours
 earlier*, worth about NOK 1,500 **if the night sells out**, with tonight's bookings beside it (the demo
@@ -730,13 +730,19 @@ Norway NOK 1,471, Oslo NOK 1,631.
 | 100 rooms | NOK 3,000 (NOK 36,000 a year) | 2.0 room-nights at NOK 1,471 (1.8 in Oslo); about two rooms like 213 on the demo night (2 × NOK 1,467) | two such rooms a month |
 | 200 rooms | NOK 6,000 | 4.1 room-nights at NOK 1,471 (3.7 in Oslo) | four such rooms a month |
 
-**The pilot's conversion rule (proposal, team to confirm; the founder juror):** the free four-week pilot converts
-at NOK 30 a room a month if Fettero finds **at least two rooms ready before the housekeeping round**
-in those four weeks, or moves the first room release earlier by a number of minutes agreed with the
-hotel on day one. Offered beside it: *paid from day one, money back if we miss it*. A free pilot with
-no exit rule is how founders lose a quarter.
+**The pilot's conversion rule: on usage (proposal, team to confirm; founders review).** The free
+four-week pilot converts at NOK 30 a room a month when the hotel **uses** it: the 06:00 handover signed
+in Fettero on **at least 5 of 7 mornings in 3 of the 4 weeks, plus the general manager's yes** at the
+end. That is the same rule as an *active* hotel below, so the pilot and the first-100 slide count one
+thing. Rooms found before the housekeeping round, and the minutes from 06:00 to the first room sent to
+reception, are the numbers we report beside it, not the gate: a hotel with one sleeper a month would
+otherwise "fail" a pilot its staff sign every morning. **What it needs, and isn't built:** today
+*Kvitter mottatt* is kept on one device, so we can't yet measure our own rule. In a pilot every
+sign-off is one append-only event on our server (hotel, role, date; no guest data), `TODO(phase-3)`,
+the first week's build task. Offered beside it: *paid from day one, money back if the rule isn't met*.
+A free pilot with no exit rule is how founders lose a quarter.
 
-**How big, honestly (the founder juror, the marketing juror).** Norway has 92,678 hotel rooms (SSB 14164, Sep 2026). At NOK 30
+**How big, honestly (founders and marketing review).** Norway has 92,678 hotel rooms (SSB 14164, Sep 2026). At NOK 30
 a room a month, NOK 360 a year, that is **about NOK 33 M a year if every hotel room in Norway paid**: a
 small business on its own, so Norway is the proving ground. The four large Nordic countries have about
 **359,000 hotel bedrooms** (Eurostat [`tour_cap_nat`](https://ec.europa.eu/eurostat/databrowser/view/tour_cap_nat/default/table),
@@ -760,6 +766,20 @@ Flexkeeping, Optii. Room discrepancies in the PMS, fed by housekeeping: OPERA Cl
 ([Oracle](https://docs.oracle.com/en/industries/hospitality/opera-cloud/25.1/ocsuh/t_housekeeping_viewing_room_discrepancies.htm)),
 protel. And one fleet dashboard per robot vendor.
 
+What they do and what they don't: **hotelkit, Quore and ALICE own the shift log and the task list**,
+the handover as text that people write and tick off, and they do it well in thousands of hotels. They
+don't check what was written: none of them reconciles the booking system with the door lock, or a
+robot's log with what the robot did. **Compartment delivery robots already verify a delivery** inside
+their own cloud (the guest's PIN and a lid sensor). Nobody verifies the tasks that aren't deliveries (a
+room check, a hazard, a refusal), or joins them with the lock, the PMS and the staff. That gap is
+Fettero's.
+
+**The pitch line for this slide (marketing review):** ***Fettero finner rommene der bookingsystemet
+og dørlåsen er uenige — før renholdet gjør det.*** (Fettero finds the rooms your booking system and
+your door locks disagree about, before housekeeping does.) It is the hotel-one differentiator and needs
+no robot; on screen it is *Sjekk disse først* on `/natt` and the 213 and 210 rows on Overlevering. It is
+true where the locks report at night, so the phone round's Q7 says for how many hotels (§ 8.1).
+
 **Why we win.** The only handover that merges the night staff, the AI phone and the robot into one
 signed page; "confirmed" needs a signal from outside the robot (the door lock, the guest, the staff,
 the PMS), and refusals and misses are shown; and the run log is vendor-neutral, so any robot that
@@ -768,7 +788,7 @@ hours saved without the arithmetic; nobody positions on trust in autonomous work
 is cross-vendor evidence in one signed record: a PMS or a lock vendor sees only its own silo (and Mews
 bought Flexkeeping, so the page alone is a feature they could ship).
 
-**Two lines for the slide and the staff (the creative juror).**
+**Two lines for the slide and the staff (design review).**
 - ***Fettero signerer for nattevakten, ikke på henne.*** (Fettero signs for the night clerk, not on
   her.) The page counts the robot's faults, never a person's; staff cards never reach us
   (`docs/PRIVACY.md` § 10.3). It is the sentence a hotel's *tillitsvalgt* needs before the first pilot.
@@ -781,6 +801,15 @@ bought Flexkeeping, so the page alone is a feature they could ship).
 9 November. If fewer than 2 of 10 hotels take a free four-week pilot by 8 December 2026, we stop the
 hotel wedge and test selling through robot makers instead.
 
+**The julebord season against the stop rule (marketing review).** Mid-November to mid-December is the
+busiest stretch of a Norwegian hotel's year: the most sold-out nights, which is when an earlier room is
+real money (*i julebordsesongen er hvert rom penger*), and the weeks a manager has least time for a
+pilot. 8 December falls inside it, so a low yes-rate in those weeks may be the season, not the product.
+Two consequences (proposal, team to confirm): hotel 1 goes live on **16 November, before the peak**; and
+the stop rule counts **conversations held, not the calendar**: the "2 of 10" is 2 pilots out of the
+first 10 hotels we actually spoke to (a manager or the night desk, not a call that rang out). If we
+haven't spoken to 10 by 8 December, the check waits until we have, and we say so.
+
 **Channel, in order** (the wedge decides it: hotels first, the robot later).
 1. **Direct** for hotel 1: from Sunday's phone round (§ 8), a visit with a printed Overlevering of
    their own night. The printed page carries the name (*Fettero · Natten, ærlig overlevert. · Team Fettero, Oslo
@@ -788,9 +817,10 @@ hotel wedge and test selling through robot makers instead.
    print the demo night (*Skriv ut*) and hold it up in the final: "This page is what hotel number one
    gets on Monday."
 2. **Robot makers** (Wybe, on this jury, and others), for the hotels that have a robot: Fettero is the
-   manager's page their robot's log feeds. Ask Wybe one concrete thing at the stand before 14:00:
-   "Would you put this handover, fed by your robot's task log, in front of one pilot hotel's morning
-   manager for two weeks, and what would your log need to contain?" Write the answer down as given.
+   manager's page their robot's log feeds. Ask Wybe one concrete thing at the stand before 14:00
+   (domain review): "Give us one night of your robot's task log, in any format, and we render it on
+   Overlevering within 48 hours." And: "Would you put this handover in front of one pilot hotel's
+   morning manager for two weeks?" Write the answers down as given.
 3. **PMS marketplaces**: Apaleo's Store and Agent Hub
    ([Hospitality Net](https://www.hospitalitynet.org/news/4126037.html)) and Mews' marketplace
    ("1,000+ hospitality apps", [mews.com](https://www.mews.com/en)). Flexkeeping went from marketplace
@@ -807,12 +837,18 @@ Offer a free four-week pilot, software only: Fettero reads the hotel's PMS (read
 first), one signal per room from the door lock and the energy slot where the locks are online, and the
 night clerk's own room check and notes (the *Uten robot* input, built Sunday: stored on her device in
 the pilot build, a server store is pilot work), and puts the rooms, the open items with owners and the
-sign-off on the 06:00 handover. The robot is phase 2. The number that decides it: rooms ready before the
-housekeeping round, and the minutes from 06:00 to the first room sent to reception, against a week of
-their own logbook before the pilot. The prize money (NOK 50,000) buys four weeks of one person's runway
+sign-off on the 06:00 handover. The robot is phase 2. The number that decides it: mornings signed (5 of
+7, the conversion rule above), with the GM's yes; beside it, rooms ready before the housekeeping round
+and the minutes from 06:00 to the first room sent to reception, against a week of their own logbook
+before the pilot. The prize money (NOK 50,000) buys four weeks of one person's runway
 and the first PMS listing work, not "two more pilots".
 
-**The first 100 users: the slide (the marketing juror).** Every number is either measured on Sunday morning
+**The named security step before hotel 1 goes live (security review):** one account per person with
+its own password, and sessions that can be revoked one by one instead of today's shared team password
+and 12-hour tokens that only a new secret ends (`TODO(phase-3)`; `docs/checks/threat-model.md`,
+*Residual risks*). Said on the slide, so the 48-hour shortcut reads as a decision, not an oversight.
+
+**The first 100 users: the slide (marketing review).** Every number is either measured on Sunday morning
 (§ 8.1, **PENDING** until the phone round runs) or labelled as an assumption. Counts, never
 percentages from a handful of calls.
 
@@ -830,8 +866,8 @@ percentages from a handful of calls.
   in 10, 125. Two people at about 25 calls a week each (assumption) make 250 in five weeks.
 - **Dates** (the stop rule is decided; the rest is a proposal, team to confirm): Mon 9 Nov, call back
   every yes and maybe with the printed page and `docs/DPA.md` · **Mon 16 Nov, hotel 1 live** (read-only,
-  software only) · **Tue 8 Dec, the stop-rule check:** fewer than 2 of 10 hotels in a pilot, and we stop
-  the hotel wedge and test robot makers · Mon 14 Dec, hotel 1's four weeks end, the conversion rule
+  software only) · **Tue 8 Dec, the stop-rule check:** fewer than 2 pilots from the first 10 hotels we
+  spoke to, and we stop the hotel wedge and test robot makers (counted on conversations held, above) · Mon 14 Dec, hotel 1's four weeks end, the conversion rule
   above decides · **10 hotels by the end of February 2027** (proposal).
 
 | Order | Hotels | Users (at S = 4, assumption) | Channel | Gate |
@@ -862,7 +898,7 @@ and filled the tables with real answers.** It can't be faked, and a juror will a
 
 Who calls: **[fill]** (not the person running the Wybe final at 12:00). Pick 10 Oslo hotels of about
 60–200 rooms from public listings, a mix of independent and chain, never two from one chain. **Two
-windows (the marketing juror, the founder juror):** the night desk **before 06:45**, when the person who writes the 06:00
+windows (marketing and founders review):** the night desk **before 06:45**, when the person who writes the 06:00
 handover is on shift and the hour is quiet (the user: Q1, Q3, Q3b, Q6, Q7); then the duty or front
 office manager **08:00–09:30**, before the Sunday check-out peak (the buyer: Q2, Q4, Q5, and ask for a
 written "yes, send me the pilot" by e-mail). A walk-in at a hotel near the venue at 06:30 with the
@@ -878,7 +914,7 @@ Script (four questions, about three minutes; Q5 only if they have time):
 2. **Q1:** "Hvordan gjør dere overleveringen fra nattevakt til morgenvakt i dag: papirbok, notater i
    PMS-en, e-post, Teams, eller noe annet?"
 3. **Q2:** "Kunne dere tenkt dere å teste en skjerm for den overleveringen i fire uker, gratis?"
-4. **Q3 (the counterfactual, the founder juror):** "Når finner dere i dag et rom som står opptatt, men der
+4. **Q3 (the counterfactual, founders review):** "Når finner dere i dag et rom som står opptatt, men der
    gjesten har reist: i nattrevisjonen, på husøkonomens runde (hvilket klokkeslett?), eller når neste
    gjest står i resepsjonen? Hvor mange i uka?" (what Fettero buys is hours: write the time and the
    number they say; a guest due out *today* doesn't count, the PMS already sells that room)
@@ -887,11 +923,11 @@ Script (four questions, about three minutes; Q5 only if they have time):
    (the first price signal: yes / maybe / no, and why)
 6. **Q5 (if time):** "Hvor mange ulike personer tar over vakten kl. 06 i løpet av en uke?" (S, the
    signers per hotel, in the first-100 arithmetic, § 7)
-   **Q6 (if time, the message test, the marketing juror):** "Hvis du bare fikk se én ting kl. 06:00, hva ville det
+   **Q6 (if time, the message test, marketing review):** "Hvis du bare fikk se én ting kl. 06:00, hva ville det
    vært: (a) rom som kan selges, (b) hva som er åpent og hvem som eier det, eller (c) hva
    roboten eller nattevakten faktisk gjorde?" Write their exact words: the phrase used most becomes the
    hook line. And: "Hva tenker du når du hører navnet Fettero?"
-   **Q7 (the lock, the Wybe engineer):** "Hvilket låssystem har dere, og er låsene online, eller leses loggen av
+   **Q7 (the lock, domain review):** "Hvilket låssystem har dere, og er låsene online, eller leses loggen av
    ved døra? Er energibryteren koblet til et system?" (whether the lock signal exists at night for this
    hotel, `docs/PRIVACY.md` § 10.1)
 7. *Close:* "Får vi sitere svaret ditt uten navn i pitchen i dag, med hotelltype og omtrent antall
@@ -915,9 +951,9 @@ on paper, __ in the PMS, __ by e-mail or chat; __ yes, __ maybe to a free pilot;
 __ (night audit / housekeeping round at __:__ / next guest), __ a week; sold out __ nights a month;
 NOK 30 a room a month: __ yes, __ maybe, __ no; locks online at __ of __; __ people sign a week."
 
-**Also before 14:00, at the Wybe stand:** ask the Wybe juror or the Wybe engineer whether Wybe would
-introduce one of its hotel customers to a Fettero pilot. Write down the answer as given, yes or "not
-yet": **[fill]**. A partner conversation that happened beats a channel slide; one that didn't is not
+**Also before 14:00, at the Wybe stand:** ask Wybe's team for one night of their robot's task log ("we
+render it on Overlevering within 48 hours"), and whether Wybe would introduce one of its hotel
+customers to a Fettero pilot. Write down the answers as given, yes or "not yet": **[fill]**. A partner conversation that happened beats a channel slide; one that didn't is not
 mentioned.
 
 ### 8.2 Hallway test: 3 people, 5 minutes each
@@ -938,7 +974,7 @@ seconds.
 Measure per task: seconds to the first correct tap, success within 60 s (yes/no), wrong taps before
 success, where they looked first, one thing they said. Afterwards ask: "Hva var mest forvirrende?"
 
-Order matters (the design juror): **test first, then fix, then retest.** Run P1–P3 on the build as it is, change
+Order matters (design review): **test first, then fix, then retest.** Run P1–P3 on the build as it is, change
 one thing (the smallest fix for the biggest stumble), commit it with the test in the message, then run
 only the task that tripped people on two new people, P4 and P5. That gives a before and an after.
 

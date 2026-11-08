@@ -76,8 +76,8 @@ altogether (§ 7, "An EU hosting path").
 
 No analytics, no ad trackers, no third-party fonts at runtime (`next/font` self-hosts them), no CDN
 for the camera model (served from our own origin, `src/features/eyes/useDetector.ts`). MediaPipe's
-library has telemetry to Google built in (`odml.pa.googleapis.com`, found by the jury's lawyer in
-round 1). The app answers that one host on the phone before any request exists, so it never leaves the
+library has telemetry to Google built in (`odml.pa.googleapis.com`, found in the first legal
+review). The app answers that one host on the phone before any request exists, so it never leaves the
 device (`src/features/eyes/noTelemetry.ts`), and the Content-Security-Policy's `connect-src` (only our
 own origin, the local 3D viewer and ElevenLabs) is the backstop (`next.config.ts`). **On this build
 only:** the public URL (lobby-sandy.vercel.app) serves `main`, whose older header has no `connect-src`
@@ -185,7 +185,7 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   A layered notice is the accepted way to do that on a call: a short first layer, the rest on request
   (Article 29 Working Party, *Guidelines on transparency*, WP260 rev.01, 11 Apr 2018, endorsed by the
   EDPB; the section on the layered approach outside a screen: paragraph **to verify**). Proposed first
-  layer, appended to `firstMessage` (the law juror): *«Samtalen behandles av ElevenLabs og Anthropic i USA,
+  layer, appended to `firstMessage` (legal review): *«Samtalen behandles av ElevenLabs og Anthropic i USA,
   og teksten slettes etter 30 dager. Si «personvern» for mer.»* The live agent carries it only after
   `setup-agent.ts` is run again. Same file, same owner: goal 3 has the agent say in every call that
   booking direct is 10 % cheaper than the booking sites, which is true only against the prompt's
@@ -266,7 +266,7 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   first pilot. The design answer is the same either way (safety gates in code, "done" only when
   verified). One behaviour of the simulation agent must not reach a hotel: moving a warning sign off a
   floor that is still wet (`sign_move`, on for Wybe's game only); a pilot build switches it off.
-- **The handover as evidence of care (the law juror):** what the robot knows about a hazard, the hotel knows.
+- **The handover as evidence of care (legal review):** what the robot knows about a hazard, the hotel knows.
   A page that read *siden 23:51 … innen 06:30* beside a wet floor would be the first exhibit in a slip
   claim (negligence, and the employer's liability under
   [skadeserstatningsloven § 2-1](https://lovdata.no/dokument/NL/lov/1969-06-13-26/KAPITTEL_2): the
@@ -365,7 +365,7 @@ automated TMview query was refused by the site's bot protection on Sun 8 Nov, so
 
 The pilot is software only (`docs/DEMO.md` § 7): it reads the booking system (read-only), the door
 lock, the energy slot and the night clerk's own entries. Not the camera, not the voice. This section
-answers the question a hotel's lawyer asks first (the law juror, round 4): on what basis does the hotel hand
+answers the question a hotel's lawyer asks first (the legal review's question): on what basis does the hotel hand
 over its door-lock data, and what stops it becoming staff monitoring. Read against primary sources on
 Sun 8 Nov, about 05:30: the GDPR in Norwegian on Lovdata (Art. 6(4), 13, 28), arbeidsmiljøloven
 chapter 9 on Lovdata, and the regulators' joint guide on control and monitoring at work
@@ -393,7 +393,7 @@ yet.
   reduced on the hotel's own machine before it is sent, or we don't take it. Which vendors can give a
   per-room report: **to verify**, vendor by vendor.
 - **Offline locks:** many hotels run locks whose audit trail is read at the door with a handheld, and
-  have no networked room control (the founder juror, the Wybe engineer). Then there is no signal at night, and the pilot
+  have no networked room control (founders and domain review). Then there is no signal at night, and the pilot
   runs on the night clerk's check (§ 10.3): slower, but nothing legal stops it. How many target hotels
   have online locks is a phone-round question (`docs/DEMO.md` § 8.1).
 - **Retention:** the signal is deleted 24 hours after the handover it fed (our proposal; the hotel sets

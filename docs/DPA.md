@@ -1,6 +1,6 @@
 # DPA.md — Databehandleravtale for en Fettero-pilot (utkast)
 
-> **For the hotel that says yes on Monday** (the marketing juror, the law juror, round 4): a pilot sees the hotel's guest
+> **For the hotel that says yes on Monday** (asked for in the marketing and legal reviews): a pilot sees the hotel's guest
 > data, so the hotel will want an Art. 28 agreement before anything is sent. This is a one-page draft
 > in Norwegian, ready to fill in. **Not reviewed by a lawyer; draft of Sun 8 Nov 2026.** It is built on
 > the European Commission's standard contractual clauses between controllers and processors

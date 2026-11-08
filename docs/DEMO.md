@@ -20,7 +20,8 @@ The robot is how we prove "confirmed" can be measured: our AI agent ran Wybe's l
 its own. On the night in the demo it said "done" 73 times; 64 of those came after it had seen the
 simulator's score rise, and **9 rested on its own judgement (5 room checks, 4 spills): 9 of 9
 credited**. Over the final branch's 18 live nights, 185 of its 189 own-judgement claims were credited
-(97.9 %), room checks 117 of 117.
+(97.9 %), room checks 117 of 117. With the score hidden from its decisions, four live nights: 290 of
+291 credited, a false-done rate of 0.3 %.
 
 The one line, as on the login screen and the first slide: ***Natten, ærlig overlevert.*** (the night,
 handed over honestly). One sentence after it, the one in `src/ui/brand.ts` (`DESCRIPTION`), which since
@@ -89,6 +90,7 @@ with the same result.
 | **Forecast for the final** (mean of the best 9 of 10 unseen seeds, `c3801e0`) | **median 2,035, 80 % between 1,898 and 2,186.** Model: log score = build + seed, least squares over 63 build×seed cells of complete live build nights (18 builds, 20 seeds, residual SD 0.065), then 20,000 simulated finals. **Why lower than the tuned nights (2,591): mostly seed difficulty.** The four seeds this build played are easy (+19 % against the average seed; the unseen ones −4 %), which alone is −19 %; the tuning penalty we can measure is −6 %, from two nights (leave-seed-out on `d4e445c`: seed 9 predicted 1,869, played 1,965; seed 11 predicted 2,254, played 1,914). Sensitivity: no penalty 2,154, penalty doubled 1,923. Committed 04:08 Sun, before the final; the replay bed screened changes on all 20 seeds, so the final is the only true holdout | `docs/runs/forecast.txt` (`python3 scripts/forecast.py`) |
 | "Done" credited, 18 nights of these four builds | **1,263 of 1,267 (99.7 %)**; the 4 not credited were all on seed 23, one per build | `builds.csv`: `done_reports`, `done_credited` |
 | What each "done" rested on, same 18 nights | **1,078** sent after the agent had seen the score rise during the task (credited by construction: the simulator's verifier, not trust). **189 on the robot's own judgement, 185 credited (97.9 %)**: room checks **117 of 117**, spill reports **68 of 72**. The 4 misses are one probe (R-037 on seed 23, a sign on another request's patch) repeated in all four builds, because what the agent learns resets every shift | `builds.csv`/`ledger.csv`: `done_after_rise`, `done_own`, `done_own_credited`, `done_room_check*`, `done_spill*` (the rule in `scripts/ledger.py`; the app's `doneBasis` runs the same rule) |
+| "Done" with the score hidden (the Wybe juror) | Side branch `hamad/blind` (`NS_SCORE_BLIND=1`), four live nights started 04:26 Sun, seeds 10/16/23/5: the agent decides "done" only from what it saw, never from the score or the reply's wording. **290 of 291 credited (99.7 %), false-done 0.3 %**; the miss is R-037 on seed 23, the same spill the sighted build misses. Scores 2,760 · 2,748 · 2,304 · 2,559: the sighted `c3801e0`'s on 10, 16 and 5, +6 on 23 | the four logs (`flags.score_blind`), `kind=experiment` in `ledger.csv`; § 6.1 |
 | Declines, same 18 nights | 112 declined; the referee credited **93** (+5 each) and gave **19** nothing | `builds.csv`: `declines_credited`, `declines_not_credited` |
 | Best practice score on the board | **2,807**, **#8 of 20** at 04:10 Sun, level with the team below us (top 3,448; we played 242 practice shifts, the leader 1,556). It came from a board test (the `lottery` checkout, `d7040b7`, seed 10, 03:38), so it is **not** the final build; the final branch's best (2,760, `8eac151` and `c3801e0`) would rank #11 | `nightshift-board.wybe.me/data`; `ledger.csv`, `kind` `board-test` |
 | All full live nights, every version | **120** nights that ran to 06:00 by 04:08 (4 more stranded). Builds: **67**, Sat 13:15 – Sun 03:26, median **1,960**, mean **2,030**, most from earlier, weaker builds. Board tests: **53**, Sun 02:37–04:02, mean **2,753**, best **2,807**, on the seeds they were tuned for (42 on seed 10). Moves as nights are logged | `ledger.csv`, `end_reason` "server ended: time", `kind` |
@@ -367,7 +369,8 @@ hotel where there is no referee?"* (Hamad)
 > 117. The 4 misses are one deliberate probe, the same request on seed 23 (R-037) in all four builds,
 > because what the agent learns in a shift resets every shift. In a hotel there's no score, so the
 > room-check path is the one that carries over: 'done' needs an observation, and that's the path with
-> the clean record. Both lines are on the judgement card, and the columns are in `ledger.csv`. On the
+> the clean record. And with the score hidden from its decisions altogether, four live nights this
+> morning: 290 of 291 credited. Both lines are on the judgement card, and the columns are in `ledger.csv`. On the
 > score: we committed a forecast before the final, from a build-plus-seed model fitted on every complete live build night (`scripts/forecast.py`, output in `docs/runs/forecast.txt`): a median of **2,035, with 80 % between 1,898 and 2,186**. It's lower than the 2,591 this build scored on its tuned seeds mostly because those seeds are easy: seed difficulty alone accounts for about −19 %. The tuning penalty we can measure is about −6 %, from two nights, so treat it as rough. [After 13:05: 'The final came in at [Y].']"
 
 Follow-ups he may ask:
@@ -413,26 +416,35 @@ against our score first. That's where your 99.7 % comes from. A hotel has no sco
 your agent: what's your false-done rate then, and what replaces our referee on a real robot?"* (Hamad,
 about 40 seconds)
 
-**Score-blind experiment. Resultat: PENDING** (the controller fills this in: build and branch, seeds,
-shifts, start times, "X of Y «ferdig» godkjent med poengsummen skjult", the misses and their kind,
-and the log paths). Until it is filled, don't say the first two sentences below.
+**Score-blind experiment (Sun 8 Nov, side branch `hamad/blind`, `NS_SCORE_BLIND=1`).** Four live
+practice nights on Wybe's server, started at 04:26 on seeds 10, 16, 23 and 5. The agent never used the
+score or the wording of the referee's reply to decide "done"; it decided from what it saw: the place
+reply ("inside room-N"), the guest's answer at the door, the sign "over the spill". **Resultat: 291
+"done", 290 credited by the referee (99.7 %): a false-done rate of 0.3 %.** The one miss is the same spill
+report the sighted build also misses (R-037 on seed 23, "wet-floor sign placed over the spill at
+corridor-3b", reply "Noted."). Scores: identical to the sighted final build (`c3801e0`) on three seeds
+(10: 2,760 · 16: 2,748 · 5: 2,559) and 6 points higher on seed 23 (2,304 against 2,298). The logs carry
+`flags.score_blind` on their start line, the ledger keeps them as `kind=experiment` (out of every build
+figure), and D recounted the four logs (`oslo-wt/blind/temp/runs/`, on Hamad's laptop): 74 + 74 + 73 +
+70 "done", 290 replies "Noted. Thanks.".
 
-> "We ran it this morning: [N] practice shifts, seeds [..], with the score hidden. The agent said 'done'
-> only from what the world told it: 'placed inside the room', the guest's 'thanks', a door opening. It
-> never read the score or your reply. Your referee credited [X of Y]. [The misses were [kind], so on the
-> handover that kind shows as *ikke bekreftet* until a person checks.] On a real robot the referee is
-> replaced per task by a second, independent signal: a delivery needs the guest's acknowledgement or a
-> compartment sensor plus a photo; a room check never means opening a booked room, so occupancy comes
-> from the lock trail and the energy slot, and the robot only checks rooms the booking system shows as
-> vacant; a spill needs the sign placed plus a photo. One signal alone reads *ikke bekreftet*. And we're
+> "We ran it this morning: four live practice shifts on your server, seeds 10, 16, 23 and 5, with the
+> score hidden from the agent's decisions. It said 'done' only from what the world told it: the place
+> reply 'inside room-N', the guest's answer at the door, the sign 'over the spill'. It never used the
+> score or your reply's wording. Your referee credited 290 of its 291: a false-done rate of 0.3 %. The
+> one miss is the same spill on seed 23 the sighted build misses too, so on the handover a spill with
+> only the robot's word shows as *ikke bekreftet* until a person looks. And it cost nothing: the same
+> score on three seeds, six points more on the fourth. On a real robot your referee is replaced per
+> kind by evidence: a room check by the lock trail and the robot's photo, never by opening a booked
+> room; a message by the guest's reply; a spill by the sign's placement and a photo; a delivery by the
+> guest's acknowledgement or a compartment sensor. One signal alone reads *ikke bekreftet*. And we're
 > straight about what your score taught our robot: 10 of its 15 master-key entries came without a knock,
 > it kept crossing corridor 2B after slipping there and never signed it, and it moved a sign off a floor
 > that was still wet. Those lines are on its card now, and a pilot runs with them off."
 
-Honest version without the result: "We haven't measured it with the score hidden. What we can show is
-the split: 9 of the night's 73 'done' rested on the robot's own judgement, 9 of 9 credited, and 185 of
-189 over 18 nights." What hotel rules (knock first, no sign moves, a 20 % battery reserve) cost in
-Wybe's sim is **not measured**: don't give a number.
+What hotel rules (knock first, no sign moves, a 20 % battery reserve) cost in Wybe's sim is **not
+measured**: don't give a number. The blind run is a side branch, not necessarily the build that plays
+at 12:00: say which one plays.
 
 Don't say "we switched off the sign move": `sign_move` is still in `DEFAULT_EXPERIMENTS` on
 `hamad/final`. Sources for "since about 2014", Relay and Henn na: [Relay Robotics, 2022](https://www.businesswire.com/news/home/20220627005165/en/Relay-Robotics-to-Showcase-Newest-Service-Robot-at-Worlds-Largest-Hospitality-Tech-Conference-HITEC-Orlando);

@@ -73,7 +73,9 @@ its own judgement. Numbers per build, pinned to commits on `hamad/final`, not a 
 head at 03:30 (`c3801e0`) averaged 2,591 on its four tuned seeds (best 2,760, seed 10; `8eac151` before
 it, 2,560). Our forecast for the final's unseen seeds, from a build-plus-seed model fitted on every complete live build night (`scripts/forecast.py`, `docs/runs/forecast.txt`), is **a median of 2,035, 80 % between 1,898 and 2,186**: lower than the tuned nights mostly because those seeds are easier (about −19 %), plus a measured tuning penalty of about −6 % (from two nights). Over the 18 live nights of the last four builds the referee credited 1,263 of
 1,267 "done" reports (99.7 %); taking out the ones sent after the score rose, **185 of 189 claims on its
-own judgement were credited (97.9 %), room checks 117 of 117**. Best practice score anywhere: 2,807, **#8 of 20** on Wybe's board at 04:10 Sun, from a board test (a seed-specific test branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build; the final branch's best is 2,760. On the night in the app (seed
+own judgement were credited (97.9 %), room checks 117 of 117**; and with the score hidden from its
+decisions (four live nights on a side branch, Sun 04:26), 290 of 291 were credited, a false-done rate of
+0.3 %. Best practice score anywhere: 2,807, **#8 of 20** on Wybe's board at 04:10 Sun, from a board test (a seed-specific test branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build; the final branch's best is 2,760. On the night in the app (seed
 16, 2,680, `cb72845`) it reported "done" 73 times: 64 after the score rose, 9 on its own judgement, 9 of
 9 credited. Full table and the replay bed's limits: `docs/DEMO.md` § 1.1.
 
@@ -193,8 +195,11 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
     of 9 credited); over the final branch's 18 nights, 185 of 189 own-judgement claims. A pilot needs a
     second, independent signal instead (lock audit log, the guest's acknowledgement, a photo of the
     item, a cart slot going empty, the clerk's confirmation); one signal alone shows as *ikke
-    bekreftet*, for a person. A score-blind run of the agent is being measured (`docs/DEMO.md` § 6.1,
-    the Wybe juror: PENDING).
+    bekreftet*, for a person. **With the score hidden** (side branch `hamad/blind`, four live nights at
+    04:26 Sun on seeds 10, 16, 23 and 5), the agent decided "done" only from what it saw (the place
+    reply, the guest's answer, the sign over the spill): 290 of 291 credited, a false-done rate of
+    0.3 %, the one miss the same spill on seed 23 the sighted build misses; scores the same on three
+    seeds and +6 on the fourth (`docs/DEMO.md` § 6.1, the Wybe juror).
   - In the simulation the robot fetches a master keycard and checks rooms the PMS shows as occupied. In
     a pilot it does not open occupied rooms: occupancy comes from the door-lock audit trail and the
     keycard energy slot, the robot only knocks or checks rooms the PMS already shows as vacant, and keys

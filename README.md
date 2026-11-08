@@ -86,7 +86,11 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   the agent had already seen the score rise, so they are credited by construction. **On its own
   judgement it made 189 claims and 185 were credited (97.9 %): room checks 117 of 117, spill reports 68
   of 72**; the 4 misses are one probe on seed 23 repeated in every build. That is the figure that
-  carries over to a hotel, which has no score. Over every live night with a log, every version, the
+  carries over to a hotel, which has no score. **And with the score hidden:** four live practice nights
+  on a side branch (`hamad/blind`, Sun 04:26, seeds 10, 16, 23 and 5) where the agent never used the
+  score or the referee's wording to decide "done", only what it saw (the place reply, the guest's
+  answer, the sign over the spill): **290 of 291 credited, a false-done rate of 0.3 %**; the one miss is
+  the same spill on seed 23, and the scores matched the sighted build on three seeds (+6 on the fourth). Over every live night with a log, every version, the
   app's judgement card recomputes the plain credited share from the ledger, so it moves as nights are
   logged. It declined 112 requests as false or impossible; the referee credited 93 of those declines
   and gave 19 nothing.

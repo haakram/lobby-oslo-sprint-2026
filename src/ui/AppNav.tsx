@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { homeFor, type Role } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
+import { MODULES } from "@/features/modules/registry";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
 import { barItemsFor, groupsFor, isActive, type NavGroup, type NavItem } from "./nav";
@@ -16,6 +17,11 @@ export const HOTEL_NAME = "Hotell Nattskift";
 /** The line under "Lobby": the hotel, or for the host (an Airbnb host) their own apartments. */
 function placeFor(role: Role): string {
   return role === "host" ? "Korttidsutleie i Oslo" : HOTEL_NAME;
+}
+
+/** The host's screens (Utleie, under /vert) carry their own bell in their top bar. */
+function onHostScreen(pathname: string): boolean {
+  return MODULES.some((module) => module.group === "utleie" && (pathname === module.route || pathname.startsWith(`${module.route}/`)));
 }
 
 /** How many of the role's screens fit on the phone bar before the rest go into Meny. */
@@ -36,12 +42,16 @@ function readDesktop() {
 }
 
 /**
- * The navigation, grouped by job (Hotellet · Drift · Roboten · Resepsjon, from the module registry)
- * and filtered by what the effective role may open. Desktop: a rail on the Natt surface with the user plate bottom-left.
- * Phone: a bottom bar with the first screens and Meny, which opens the whole list as a sheet.
+ * The navigation, grouped by job (Hotellet · Drift · Roboten · Resepsjon · Utleie, from the module
+ * registry) and filtered by what the effective role may open. Desktop: a rail on the Natt surface with the user plate bottom-left.
+ * Phone: a slim top bar (the name and the bell) and a bottom bar with the first screens and Meny,
+ * which opens the whole list as a sheet. `bell` (the hotel's notifications, from the layout) sits at the top
+ * of the rail on desktop and in the top bar on a phone: on every hotel page, for every hotel role (the
+ * host's pages carry their own bell, so the host and an admin on /vert see only that one). The name links
+ * to the role's home (the host: /vert).
  * Hidden on the login page.
  */
-export function AppNav() {
+export function AppNav({ bell }: { bell?: ReactNode }) {
   const pathname = usePathname();
   const { effectiveRole } = useSession();
   const desktop = useSyncExternalStore(subscribe, readDesktop, () => true);
@@ -49,20 +59,32 @@ export function AppNav() {
   // Nobody logged in (the login page, the no-access page): no navigation.
   if (!effectiveRole || pathname.startsWith("/login")) return null;
   const groups = groupsFor(effectiveRole);
-  return desktop ? <Rail groups={groups} pathname={pathname} home={homeFor(effectiveRole)} place={placeFor(effectiveRole)} /> : <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} />;
+  // The host's pages carry their own bell (the apartments' items), so the hotel's bell is not shown to a host,
+  // nor beside the host's bell when an admin opens /vert: one bell per screen.
+  const hotelBell = effectiveRole === "host" || onHostScreen(pathname) ? undefined : bell;
+  const home = homeFor(effectiveRole);
+  const place = placeFor(effectiveRole);
+  return desktop ? (
+    <Rail groups={groups} pathname={pathname} bell={hotelBell} home={home} place={place} />
+  ) : (
+    <Bar groups={groups} shown={barItemsFor(effectiveRole, BAR_ITEMS)} pathname={pathname} bell={hotelBell} home={home} place={place} />
+  );
 }
 
-function Rail({ groups, pathname, home, place }: { groups: NavGroup[]; pathname: string; home: string; place: string }) {
+function Rail({ groups, pathname, bell, home, place }: { groups: NavGroup[]; pathname: string; bell?: ReactNode; home: string; place: string }) {
   return (
     <nav
       aria-label="Hovedmeny"
       data-surface="dark"
       className="sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-surface text-text lg:flex"
     >
-      <Link href={home} className="flex flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
-        <span className="text-xl font-bold leading-none tracking-[-0.02em]">Lobby</span>
-        <span className="mt-1.5 text-xs text-muted">{place}</span>
-      </Link>
+      <div className="flex items-start justify-between gap-1 pr-3">
+        <Link href={home} className="flex min-w-0 flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
+          <span className="text-xl font-bold leading-none tracking-[-0.02em]">Lobby</span>
+          <span className="mt-1.5 text-xs text-muted">{place}</span>
+        </Link>
+        {bell && <div className="pt-5">{bell}</div>}
+      </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-4">
         {groups.map((group) => (
@@ -105,13 +127,37 @@ function RailLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-function Bar({ groups, shown, pathname }: { groups: NavGroup[]; shown: NavItem[]; pathname: string }) {
+function Bar({
+  groups,
+  shown,
+  pathname,
+  bell,
+  home,
+  place,
+}: {
+  groups: NavGroup[];
+  shown: NavItem[];
+  pathname: string;
+  bell?: ReactNode;
+  home: string;
+  place: string;
+}) {
   const [menu, setMenu] = useState(false);
   const rest = groups.flatMap((group) => group.items).filter((item) => !shown.includes(item));
   const restActive = rest.some((item) => isActive(item.href, pathname));
 
   return (
     <>
+      {/* The phone's top edge: the name, and the bell where people look for it. */}
+      <header data-surface="dark" className="bg-bg pt-[env(safe-area-inset-top)] text-text lg:hidden">
+        <div className="flex min-h-14 items-center justify-between gap-3 pr-2 pl-4">
+          <Link href={home} className="flex min-h-11 min-w-0 items-baseline gap-2 focus-visible:outline-offset-[-2px]">
+            <span className="text-lg font-bold tracking-[-0.02em]">Lobby</span>
+            <span className="truncate text-xs text-muted">{place}</span>
+          </Link>
+          {bell}
+        </div>
+      </header>
       <nav
         aria-label="Hovedmeny"
         data-surface="dark"

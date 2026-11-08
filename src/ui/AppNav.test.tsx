@@ -173,6 +173,29 @@ describe("AppNav on a desktop (the rail)", () => {
     expect(robot).toHaveFocus();
   });
 
+  it("holds the bell at the top of the rail, beside the name, on every page", () => {
+    path.current = "/foresporsler";
+    render(as("receptionist", <AppNav bell={<button type="button">Varsler, 2 nye</button>} />));
+    const rail = within(screen.getByRole("navigation", { name: "Hovedmeny" }));
+    expect(rail.getByRole("button", { name: "Varsler, 2 nye" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Varsler/ })).toHaveLength(1);
+  });
+
+  it("shows the host no hotel bell, and an admin none on the host's screens (they carry their own)", () => {
+    path.current = "/vert";
+    const bell = <button type="button">Varsler, 2 nye</button>;
+    const host = render(as("host", <AppNav bell={bell} />));
+    expect(screen.queryByRole("button", { name: /^Varsler/ })).not.toBeInTheDocument();
+    host.unmount();
+    path.current = "/vert/meldinger";
+    const onVert = render(as("admin", <AppNav bell={bell} />));
+    expect(screen.queryByRole("button", { name: /^Varsler/ })).not.toBeInTheDocument();
+    onVert.unmount();
+    path.current = "/rom";
+    render(as("admin", <AppNav bell={bell} />));
+    expect(screen.getByRole("button", { name: "Varsler, 2 nye" })).toBeInTheDocument();
+  });
+
   it("hides itself on the login pages and when nobody is logged in", () => {
     path.current = "/login";
     expect(render(as("admin", <AppNav />)).container).toBeEmptyDOMElement();
@@ -194,6 +217,29 @@ describe("AppNav on a phone (the bar and Meny)", () => {
     expect(bar.getByRole("link", { name: "Vedlikehold" })).toHaveAttribute("aria-current", "page");
     expect(bar.getByRole("button", { name: "Meny" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("puts the name and the bell in a slim bar along the top, above the page", () => {
+    onAPhone();
+    path.current = "/rom";
+    render(as("robot", <AppNav bell={<button type="button">Varsler, 4 nye</button>} />));
+    const top = within(screen.getByRole("banner"));
+    expect(top.getByRole("link", { name: /^Lobby/ })).toHaveAttribute("href", "/");
+    expect(top.getByRole("button", { name: "Varsler, 4 nye" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Varsler/ })).toHaveLength(1);
+  });
+
+  it("gives the host a top bar with their place, linking home to /vert, and no hotel bell", () => {
+    onAPhone();
+    path.current = "/vert/bookinger";
+    render(as("host", <AppNav bell={<button type="button">Varsler, 4 nye</button>} />));
+    const top = within(screen.getByRole("banner"));
+    expect(top.getByRole("link", { name: /^Lobby/ })).toHaveAttribute("href", "/vert");
+    expect(top.getByText("Korttidsutleie i Oslo")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Varsler/ })).not.toBeInTheDocument();
+    const bar = within(screen.getByRole("navigation", { name: "Hovedmeny" }));
+    expect(bar.getAllByRole("link").map((link) => link.textContent)).toEqual(["Boliger", "Meldinger", "Bookinger", "Drift"]);
+    expect(bar.getByRole("link", { name: "Bookinger" })).toHaveAttribute("aria-current", "page");
   });
 
   it("opens every group in a sheet from Meny, with a line on each screen and the user plate", () => {

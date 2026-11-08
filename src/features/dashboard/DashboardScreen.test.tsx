@@ -6,21 +6,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { canAccess, type Role } from "@/features/auth/roles";
 import { SessionProvider } from "@/features/auth/SessionProvider";
 import { selectGuestDay } from "@/features/guests/testData";
-import { lowStock } from "@/features/inventory/testData";
 import { type ModuleId, MODULES } from "@/features/modules/registry";
 import { parseRunLog } from "@/features/nightshift/runlog";
+import { MANUAL_REQUESTS } from "@/features/requests/testData";
 import { DashboardScreen } from "./DashboardScreen";
+import { atNight } from "./highlights";
 import { placeLabel } from "./labels";
 import { foldNight, selectRobot, selectRooms } from "./selectors";
 
-// Oversikt is the whole hotel at a glance: the Nå band across every module, the hotel's figures and
-// one widget per module the role may open. The demo night may be swapped for a better run: the
-// screen must show whatever it holds, so the expectations below are read off the same fixture.
+// Oversikt is the whole hotel at a glance, good news first: a greeting with how the night went, the
+// hotel's figures and one widget per module the role may open. What needs a person is in the bell
+// (src/features/notifications), not on this page. The demo night may be swapped for a better run:
+// the expectations below are read off the same fixture.
 const DEMO = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
 const NIGHT = foldNight(parseRunLog(DEMO).lines);
 const ROOMS = selectRooms(NIGHT);
 const ROBOT = selectRobot(NIGHT);
 const GUESTS = selectGuestDay();
+// The night staff's own requests count with the robot's in "Oppgaver fullført i natt".
+const STAFF_NIGHT = MANUAL_REQUESTS.filter((request) => atNight(request.at));
+const DONE = NIGHT.tasksDone + STAFF_NIGHT.filter((request) => request.status === "fullfort").length;
+const TOTAL = Math.max(NIGHT.tasks.size, NIGHT.tasksDone + NIGHT.tasksFailed) + STAFF_NIGHT.length;
 
 /** The widget's heading as the registry names the module; the robot's widget is "Roboten". */
 function widgetName(id: ModuleId): RegExp {
@@ -46,12 +52,17 @@ function as(role: Role, children: ReactNode) {
   return <SessionProvider session={session}>{children}</SessionProvider>;
 }
 
-function nowBand() {
-  return within(screen.getByRole("region", { name: "Oversikt" }));
-}
-
 function rooms() {
   return within(screen.getByRole("region", { name: "Rom og renhold" }));
+}
+
+function figures() {
+  return within(screen.getByRole("region", { name: "Hotellet i tall" }));
+}
+
+/** A figure's value and unit, read from the line above its label. */
+function figure(label: string): string {
+  return figures().getByText(label).previousElementSibling?.textContent ?? "";
 }
 
 beforeEach(() => {
@@ -68,12 +79,11 @@ afterEach(() => {
 });
 
 describe("DashboardScreen (Oversikt, the home page)", () => {
-  it("shows the admin the whole hotel: the top bar, the Nå band, the figures and one widget per module", async () => {
+  it("shows the admin the whole hotel: the top bar, the greeting, the figures and one widget per module", async () => {
     route();
     render(as("admin", <DashboardScreen />));
 
     expect(screen.getByText("Hotell Nattskift")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1, name: "Oversikt" })).toBeInTheDocument();
     await rooms().findByRole("link", { name: /^Rom 319/ });
 
     // The top bar: the night, the shift clock at the handover, the robot's chip.
@@ -81,14 +91,19 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(screen.getByText("Skiftklokke").parentElement).toHaveTextContent("Skiftklokke 06:00");
     expect(screen.getAllByText("Skiftet er over").length).toBeGreaterThan(0);
 
-    // The hotel's figures, eight along one rule.
-    const figures = within(screen.getByRole("region", { name: "Hotellet i tall" }));
-    for (const label of ["Belegg i natt", "Ankomster i dag", "Avreiser i dag", "Klare til salg", "Må vaskes", "Åpne arbeidsordre", "Forespørsler venter", "På vakt nå"]) {
-      expect(figures.getByText(label)).toBeInTheDocument();
+    // Good news first: the greeting is the page's heading, honest about the time of day.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^(God morgen|God dag|God kveld|Hei), Test$/);
+    expect(screen.getByText(`Roboten og nattevakten fullførte ${DONE} av ${TOTAL} oppgaver, og ingen rom venter på renhold.`, { exact: false })).toBeInTheDocument();
+
+    // Six figures along one rule, from today's business to the guests' rating.
+    for (const label of ["Nye bookinger i dag", "Belegg i natt", "Oppgaver fullført i natt", "Timer spart av roboten", "Rom klare til salg", "Gjester fornøyd"]) {
+      expect(figures().getByText(label)).toBeInTheDocument();
     }
-    expect(figures.getAllByText(String(GUESTS.arrivals.length)).length).toBeGreaterThan(0);
-    // Occupancy and rooms ready to sell are both "of 36".
-    expect(figures.getAllByText(`av ${ROOMS.length}`)).toHaveLength(2);
+    expect(figure("Nye bookinger i dag")).toBe(String(GUESTS.bookedToday.length));
+    expect(figure("Belegg i natt")).toBe(`${Math.round((GUESTS.roomsTonight / 36) * 100)}%`);
+    // The night's misses are part of its total, not a red count of their own.
+    expect(figure("Oppgaver fullført i natt")).toBe(`${DONE}av ${TOTAL}`);
+    expect(screen.queryByText(/feilet/)).not.toBeInTheDocument();
 
     // One widget per module that has one, in registry order; the robot is one small widget.
     const widgets = WIDGET_MODULES.map((module) => screen.getByRole("region", { name: widgetName(module.id) }));
@@ -105,35 +120,37 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(rooms().getByRole("link", { name: /^Rom 319:/ }).querySelectorAll("svg").length).toBeGreaterThan(0);
   });
 
-  it("lists what needs a person now across the modules, loudest first: six rows with an action, the rest named", async () => {
+  it("has no Nå band and no red or amber on the page: what needs a person is in the bell", async () => {
+    route();
+    const { container } = render(as("admin", <DashboardScreen />));
+    await rooms().findByRole("link", { name: /^Rom 319/ });
+
+    expect(screen.queryByRole("region", { name: "Oversikt" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/venter på noen|høy prioritet|under minimum:/)).not.toBeInTheDocument();
+    // The demo night has no room to clean, so nothing on Oversikt is painted as a warning or danger.
+    expect(container.querySelectorAll('[class*="danger"], [class*="warning"]')).toHaveLength(0);
+    // Green carries the good news: the figures and the widgets' first lines.
+    expect(container.querySelectorAll(".text-success").length).toBeGreaterThan(4);
+  });
+
+  it("leads the widgets with what got done: requests and work orders done first, stock above minimum", async () => {
     route();
     render(as("admin", <DashboardScreen />));
     await rooms().findByRole("link", { name: /^Rom 319/ });
 
-    const now = nowBand();
-    const all = now.getAllByRole("listitem");
-    const rows = all.filter((row) => !row.textContent?.startsWith("og "));
-    expect(rows.length).toBeGreaterThan(0);
-    expect(rows.length).toBeLessThanOrEqual(6);
-    // Nothing is cut without a word: the seventh row (the robot) is named under the six, with a link.
-    expect(now.getByText(/^og \d+ til:$/)).toBeInTheDocument();
-    expect(now.getByRole("link", { name: /^Roboten / })).toHaveAttribute("href", "/hotell");
+    const requests = within(screen.getByRole("region", { name: /^Forespørsler/ }));
+    expect(requests.getByText(/av \d+ fullført/)).toBeInTheDocument();
+    expect(requests.getAllByText(/fullført$/).length).toBeGreaterThan(0);
+    within(requests.getByRole("list", { name: "Sist fullført" }))
+      .getAllByRole("listitem")
+      .forEach((row) => expect(row).toHaveTextContent(/fullført/));
 
-    // Vedlikehold: the staff-reported leak and thermostat close two rooms (test data).
-    expect(now.getByText("2 rom ute av drift: 107, 213")).toBeInTheDocument();
-    expect(now.getByText(/arbeidsordre med høy prioritet$/)).toBeInTheDocument();
-    // Gjester: today's arrivals without a room yet.
-    expect(now.getByText("2 ankomster i dag uten rom: Priya Nair, Lukas Brandt")).toBeInTheDocument();
-    // Lager: the linen under a third of what the rooms need.
-    expect(now.getByText(new RegExp(`^${lowStock().length} varer under minimum`))).toBeInTheDocument();
-    // Rom: the demo night found no room to clean; the unchecked rooms get a check round instead.
-    const unchecked = ROOMS.filter((room) => room.status === "ukjent").length;
-    expect(now.getByText(`Ingen rom må vaskes · ${unchecked} rom er ikke sjekket`)).toBeInTheDocument();
-    expect(now.getByRole("link", { name: "Lag sjekkrunde" })).toBeInTheDocument();
-    expect(now.queryByRole("link", { name: "Lag renholdsrute" })).not.toBeInTheDocument();
-    // The louder rows come first.
-    expect(rows[0]).toHaveTextContent(/høy prioritet|venter på noen/);
-    expect(rows.at(-1)).toHaveTextContent("Ingen rom må vaskes");
+    const maintenance = within(screen.getByRole("region", { name: /^Vedlikehold/ }));
+    expect(maintenance.getByText(/løst i dag/)).toBeInTheDocument();
+    expect(maintenance.getByRole("list", { name: "Sist løst" })).toBeInTheDocument();
+
+    const stock = within(screen.getByRole("region", { name: /^Lager og lin/ }));
+    expect(stock.getByText(/av 16 varer over minimum/)).toBeInTheDocument();
   });
 
   it("makes the cleaning route the primary action when the night found rooms to clean", async () => {
@@ -146,56 +163,75 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     route({ run: night.map((line) => JSON.stringify(line)).join("\n") });
     render(as("admin", <DashboardScreen />));
 
-    const send = await nowBand().findByRole("link", { name: "Lag renholdsrute" });
+    const send = await screen.findByRole("link", { name: "Lag renholdsrute" });
     expect(send).toHaveAttribute("href", "/ruter?rom=room-201,room-214");
-    expect(nowBand().getByText("2 rom må vaskes: 201, 214")).toBeInTheDocument();
+    expect(screen.getByText(/2 rom skal vaskes før innsjekk\.$/)).toBeInTheDocument();
+    // One primary action on the page, and it is this one.
+    expect(screen.getAllByRole("link", { name: /^Lag / })).toHaveLength(1);
     expect(rooms().getByRole("link", { name: /^Rom 201: Må vaskes/ })).toBeInTheDocument();
-    const figures = within(screen.getByRole("region", { name: "Hotellet i tall" }));
-    expect(figures.getByText("Må vaskes")).toBeInTheDocument();
   });
 
-  it.each<[Role, ModuleId[], ModuleId[], RegExp]>([
-    ["receptionist", ["rom", "gjester", "foresporsler", "ansatte", "resepsjon"], ["vedlikehold", "lager", "hotell3d"], /rom ute av drift|varer under minimum/],
-    ["robot", ["rom", "foresporsler", "vedlikehold", "lager", "hotell3d"], ["gjester", "ansatte", "resepsjon"], /ankomster i dag uten rom|ringe tilbake/],
-  ])("shows the %s only the modules they may open", async (role, shown, hidden, notTheirs) => {
+  it("offers a check round instead when no room must be cleaned and some are unchecked", async () => {
+    route();
+    render(as("admin", <DashboardScreen />));
+    const unchecked = ROOMS.filter((room) => room.status === "ukjent").length;
+    expect(await screen.findByRole("link", { name: `Lag sjekkrunde for ${unchecked} rom` })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Lag renholdsrute" })).not.toBeInTheDocument();
+  });
+
+  it.each<[Role, ModuleId[], ModuleId[]]>([
+    ["receptionist", ["rom", "gjester", "foresporsler", "ansatte", "resepsjon"], ["vedlikehold", "lager", "hotell3d"]],
+    ["robot", ["rom", "foresporsler", "vedlikehold", "lager", "hotell3d"], ["gjester", "ansatte", "resepsjon"]],
+  ])("shows the %s only the modules they may open", async (role, shown, hidden) => {
     route();
     render(as(role, <DashboardScreen />));
     await rooms().findByRole("link", { name: /^Rom 319/ });
 
     for (const id of shown) expect(screen.getByRole("region", { name: widgetName(id) })).toBeInTheDocument();
     for (const id of hidden) expect(screen.queryByRole("region", { name: widgetName(id) })).not.toBeInTheDocument();
-    expect(nowBand().queryByText(notTheirs)).not.toBeInTheDocument();
     for (const entry of WIDGET_MODULES) expect(shown.includes(entry.id) || hidden.includes(entry.id), entry.id).toBe(true);
     expect(shown.every((id) => canAccess(role, MODULES.find((entry) => entry.id === id)!.route))).toBe(true);
+  });
+
+  it.each<[Role, string[], string[]]>([
+    ["receptionist", ["Nye bookinger i dag", "Belegg i natt", "Oppgaver fullført i natt", "Timer spart av roboten", "Rom klare til salg", "Gjester fornøyd"], ["Rom sjekket av roboten", "Varer over minimum"]],
+    ["robot", ["Oppgaver fullført i natt", "Timer spart av roboten", "Rom klare til salg", "Rom sjekket av roboten", "Varer over minimum"], ["Belegg i natt", "Nye bookinger i dag", "Gjester fornøyd"]],
+  ])("shows the %s only the figures of screens they may open", async (role, shown, hidden) => {
+    route();
+    render(as(role, <DashboardScreen />));
+    await rooms().findByRole("link", { name: /^Rom 319/ });
+    for (const label of shown) expect(figures().getByText(label)).toBeInTheDocument();
+    for (const label of hidden) expect(figures().queryByText(label)).not.toBeInTheDocument();
+  });
+
+  it("greets a shared login by its desk, not by the role's name", async () => {
+    route();
+    const session = { user: { u: "resepsjon", name: "Resepsjonist", role: "receptionist" as const }, view: "receptionist" as const, effectiveRole: "receptionist" as const, exp: 0 };
+    render(
+      <SessionProvider session={session}>
+        <DashboardScreen />
+      </SessionProvider>,
+    );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^(God morgen|God dag|God kveld|Hei), resepsjonen$/);
   });
 
   it("says an empty night is empty, not still loading", async () => {
     route({ run: "" });
     render(as("admin", <DashboardScreen />));
     expect(await rooms().findByText("Ingen natt å vise ennå.")).toBeInTheDocument();
+    expect(screen.getByText("Ingen natt å vise ennå.", { selector: "h1 + p span" })).toBeInTheDocument();
   });
 
-  it.each<[Role, string[], string[]]>([
-    ["receptionist", ["Belegg i natt", "Klare til salg", "Forespørsler venter", "På vakt nå"], ["Åpne arbeidsordre"]],
-    ["robot", ["Klare til salg", "Må vaskes", "Åpne arbeidsordre", "Forespørsler venter"], ["Belegg i natt", "Ankomster i dag", "På vakt nå"]],
-  ])("shows the %s only the figures of modules they may open", async (role, shown, hidden) => {
-    route();
-    render(as(role, <DashboardScreen />));
-    await rooms().findByRole("link", { name: /^Rom 319/ });
-    const figures = within(screen.getByRole("region", { name: "Hotellet i tall" }));
-    for (const label of shown) expect(figures.getByText(label)).toBeInTheDocument();
-    for (const label of hidden) expect(figures.queryByText(label)).not.toBeInTheDocument();
-  });
-
-  it("shows the robot as one small widget with the way into the 3D map, not the 3D hotel itself", async () => {
+  it("shows the robot as one small widget with its night as a total, and the way into the 3D map", async () => {
     route();
     render(as("robot", <DashboardScreen />));
     const robot = within(await screen.findByRole("region", { name: "Roboten" }));
     await robot.findByText("Skift slutt");
 
     expect(robot.getByText(placeLabel(ROBOT.location))).toBeInTheDocument();
-    expect(robot.getByText(new RegExp(`^${NIGHT.tasksDone} oppgaver fullført`))).toBeInTheDocument();
-    if (NIGHT.tasksFailed > 0) expect(robot.getByText(new RegExp(`${NIGHT.tasksFailed} feilet$`))).toBeInTheDocument();
+    const total = Math.max(NIGHT.tasks.size, NIGHT.tasksDone + NIGHT.tasksFailed);
+    expect(robot.getByText(String(NIGHT.tasksDone)).parentElement).toHaveTextContent(`${NIGHT.tasksDone} av ${total} oppgaver fullført`);
+    expect(robot.queryByText(/feilet/)).not.toBeInTheDocument();
     expect(robot.getByRole("link", { name: "Vis i 3D-kartet" })).toHaveAttribute("href", "/hotell");
     expect(robot.getByRole("link", { name: "Natteskift" })).toHaveAttribute("href", "/natteskift");
     expect(screen.queryByLabelText("Hotellet som plantegning")).not.toBeInTheDocument();
@@ -207,7 +243,6 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     const reception = within(await screen.findByRole("region", { name: "Resepsjon" }));
     expect(await reception.findByText("Resepsjonisten er ikke koblet til ennå")).toBeInTheDocument();
     expect(reception.getByRole("link", { name: "Åpne Resepsjon" })).toHaveAttribute("href", "/resepsjon");
-    expect(nowBand().queryByText(/ringe tilbake/)).not.toBeInTheDocument();
     first.unmount();
     sessionStorage.clear();
 
@@ -234,10 +269,8 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(await screen.findByText("Booking med hund")).toBeInTheDocument();
     expect(screen.getByText("Kari Nordmann")).toBeInTheDocument();
     expect(screen.getByText("Booking 20.11.2026–22.11.2026")).toBeInTheDocument();
-    expect(screen.getByText("Ring tilbake")).toBeInTheDocument();
-    // The call also reaches the Nå band and the requests widget.
-    expect(await nowBand().findByText("1 innringer å ringe tilbake")).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: /^Forespørsler/ })).getByText("Booking")).toBeInTheDocument();
+    // A plain tag: the call-back itself is an alert in the bell.
+    expect(screen.getByText("Ring tilbake")).not.toHaveClass("text-warning");
   });
 
   it("shows an error with a retry when the night can't be loaded, and keeps the rest of the hotel", async () => {
@@ -245,14 +278,16 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     render(as("admin", <DashboardScreen />));
 
     expect(await screen.findByText("Fikk ikke lastet natten")).toBeInTheDocument();
+    expect(screen.getByText("Natten er ikke lastet ennå.")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Gjester og bookinger" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /^Lager og lin/ })).toBeInTheDocument();
     expect(screen.getByText("Ingen data fra natten")).toBeInTheDocument();
     // The night's widgets and figures say it isn't there, instead of loading forever.
     expect(rooms().getByText(/^Ikke lastet/)).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Roboten" })).getByText(/^Ikke lastet/)).toBeInTheDocument();
-    const figures = within(screen.getByRole("region", { name: "Hotellet i tall" }));
-    expect(figures.getByText("Klare til salg").previousElementSibling).toHaveTextContent("–");
+    expect(figure("Oppgaver fullført i natt")).toBe("–");
+    // Today's figures don't hang on the night.
+    expect(figure("Nye bookinger i dag")).toBe(String(GUESTS.bookedToday.length));
 
     route();
     fireEvent.click(screen.getByRole("button", { name: "Prøv igjen" }));

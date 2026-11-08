@@ -92,7 +92,7 @@ export function ReceptionPanelView({ state, retry, className }: { state: CallsSt
                         {call.departure ? `–${formatDate(call.departure)}` : ""}
                       </Badge>
                     )}
-                    {call.needsCallback && <Badge tone="warning">Ring tilbake</Badge>}
+                    {call.needsCallback && <Badge>Ring tilbake</Badge>}
                   </div>
                   {call.summary && <p className="line-clamp-2 text-sm text-muted">{call.summary}</p>}
                 </li>

@@ -94,10 +94,11 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
       }
     >
       <FigureRow label="Rommene i tall">
-        <Figure label="Klare til salg" value={counts?.klar} unit={rooms ? `av ${rooms.length}` : undefined} tone={counts && counts.klar / Math.max(1, rooms?.length ?? 1) < 0.25 ? "warning" : "success"} />
-        <Figure label="Må vaskes" value={counts?.ma_vaskes} tone={counts && counts.ma_vaskes > 0 ? "warning" : "default"} />
+        {/* Ready rooms in green; the rest are plain counts. The rooms to clean are the header's action. */}
+        <Figure label="Klare til salg" value={counts?.klar} unit={rooms ? `av ${rooms.length}` : undefined} tone={counts?.klar ? "success" : "default"} />
+        <Figure label="Må vaskes" value={counts?.ma_vaskes} />
         <Figure label="Ikke sjekket" value={counts?.ukjent} />
-        <Figure label="Ute av drift" value={rooms ? outOfOrder.length : undefined} tone={outOfOrder.length > 0 ? "danger" : "default"} />
+        <Figure label="Ute av drift" value={rooms ? outOfOrder.length : undefined} />
       </FigureRow>
 
       {/* Good news first: rooms the booking system thought were taken that can be sold today. */}

@@ -37,7 +37,7 @@ const PEOPLE: Array<Omit<StaffMember, "id">> = [
   { name: "Trond Eikeland", role: "Vedlikehold", shift: "dag", area: "Teknisk rom, alle etasjer", phone: "intern 301" },
   { name: "Linnea Berg", role: "Frokost", shift: "dag", area: "Frokostsalen", phone: "intern 401" },
   { name: "Samuel Adeyemi", role: "Frokost", shift: null, area: null, phone: "intern 402" },
-  { name: "Hanne Vold", role: "Resepsjon", shift: null, area: null, phone: "intern 103" },
+  { name: "Hanne Vold", role: "Resepsjon", shift: "natt", area: "Resepsjonen", phone: "intern 103" },
 ];
 
 export const STAFF: readonly StaffMember[] = PEOPLE.map((person, index) => ({ id: `staff-${index + 1}`, ...person }));

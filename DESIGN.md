@@ -26,6 +26,8 @@ code has. Everything below is read from `globals.css`, `layout.tsx` and `src/ui/
   Oversikt, the login page, the 3D hotel, the camera and the night shift. The accent is orange and
   appears in two roles: the one primary action on a screen, and the robot (in 3D, on the plans, in
   its chip). Status green, amber and red mean state only, and a word always says the state too.
+  **Good news is green or neutral; red and amber are for what needs a person** (team lead
+  2026-11-08), which lives in the bell (see "Color · Where colour goes").
 - **Space: dense inside, clear between.** 4 px grid; 4–8 px inside a group, 24 px between groups,
   24–32 px between sections. Page gutters 16 (phone) · 24 (tablet) · 40 (desktop); content up to
   1600 px wide. At 1280 px and up a screen is composed across the canvas (figures on one rule,
@@ -36,8 +38,9 @@ code has. Everything below is read from `globals.css`, `layout.tsx` and `src/ui/
 - **One screen, one job.** Every module screen has the same frame (`ModulePage`): its name, one line
   on what it is, the screen's actions, four figures on one rule, then the panels. Oversikt is the
   exception: it is the whole hotel, one widget per module.
-- **No hero.** Oversikt starts with a 64 px dark bar (hotel, night, robot chip, shift clock); every
-  other screen with a `PageHeader`. The ambient fog (Vanta) lives behind the login page only.
+- **No hero.** Oversikt starts with a 64 px dark bar (hotel, night, robot chip, shift clock) and a
+  greeting; every other screen with a `PageHeader`. The ambient fog (Vanta) lives behind the login
+  page only.
 
 ## World
 
@@ -62,8 +65,8 @@ One registry, `src/features/modules/registry.ts`, lists the hotel's modules. The
 
 | Module | Route | Group | Who (besides admin) | Data | On the screen |
 |---|---|---|---|---|---|
-| Oversikt | `/` | Hotellet | both | mixed | The whole hotel: Nå band, eight figures, one widget per module |
-| Rom og renhold | `/rom` | Hotellet | both | run log + test | The robot's room checks against the booking system (rooms to sell today, guests without a booking; *Merk som ledig for salg*, *Lag oppgave for resepsjonen*), the key rack (every room's status), today's round per cleaner, rooms out of order; *Lag renholdsrute* |
+| Oversikt | `/` | Hotellet | both | mixed | The whole hotel, good news first: greeting, six figures, one widget per module; what needs a person is in the bell |
+| Rom og renhold | `/rom` | Hotellet | both | run log + test | The key rack (every room's status), today's round per cleaner, rooms out of order; *Lag renholdsrute* Above the rack: the robot's room checks against the booking system (rooms to sell today, guests without a booking; *Merk som ledig for salg*, *Lag oppgave for resepsjonen*), the key rack (every room's status), today's round per cleaner, rooms out of order; *Lag renholdsrute* |
 | Gjester og bookinger | `/gjester` | Hotellet | resepsjonist | test + reception | Arrivals, departures, in house tonight, the receptionist's bookings and callbacks, special cases |
 | Ruter | `/ruter` | Hotellet | both | run log | Shortest route between floors: cleaning round, pick list, the robot's own walk |
 | Overlevering 06:00 | `/overlevering` | Drift | resepsjonist | run log + reception + test | The night on one page for the morning manager: four good-news figures, what is open (owner, due time), what happened, the night shift's note, *Kvitter mottatt* (who and when, per day); prints |
@@ -88,7 +91,7 @@ AI-resepsjonisten."
 
 ### Navigation groups
 
-The rail and the Meny sheet show the modules in four labelled groups, in registry order; a role
+The rail and the Meny sheet show the modules in five labelled groups, in registry order; a role
 sees only the modules it may open, and a group with nothing left in it is dropped.
 
 - **Hotellet:** Oversikt · Rom og renhold · Gjester og bookinger · Ruter
@@ -99,25 +102,70 @@ sees only the modules it may open, and a group with nothing left in it is droppe
   Every host screen opens with a 64 px dark bar (the host, the date, the clock, the *Varsler* bell). What
   needs the host sits in the bell; amber and red appear only there, on the items that need action.
 
+The bell (`NotificationBell`) is part of the navigation, so it is on every hotel page for every hotel
+role: at the top of the rail beside the name on desktop, and on a phone in a slim dark top bar (*Lobby*,
+the hotel, the bell) above the page. The host's screens carry their own bell in their top bar, so the
+hotel's bell is never shown to the host, nor on /vert to an admin: one bell per screen. For the host the
+slim bar reads *Lobby* and *Korttidsutleie i Oslo*, and the name links to /vert. On Oversikt that bar runs straight into the dark top bar, so the
+phone reads one dark header.
+
 The phone bar holds the role's first four *pinned* modules (Oversikt, Rom, then Gjester / Forespørsler
 / Vedlikehold by role) and *Meny*; everything else is in the sheet, each with its one-line hint. Short
 names (`short` in the registry: Rom, Gjester, Lager, Vakter, Øyne, Stemme) go under the icons.
 
-### Oversikt, the whole hotel
+### Oversikt, the whole hotel, good news first
 
-1. **TopBar** (dark, 64 px): hotel name, the night ("Natt til søndag 8. november · overlevering
-   06:00"), the robot's chip (place · doing · battery), the *Opptak* / *Direkte* badge, the shift clock
-   in Martian Mono.
-2. **Nå band** (`NowBand`, the h1 "Oversikt"): what needs a person now across every module the role
-   may open, loudest first (danger, warning, quiet), at most six rows, each with its one action. The
-   screen's primary action is the cleaning route when rooms must be cleaned.
-3. **Hotellet i tall** (`KpiStrip`): eight figures on one rule: belegg i natt, ankomster, avreiser,
-   klare til salg, må vaskes, åpne arbeidsordre, forespørsler venter, på vakt nå. Each toned by
-   whether it is good or bad.
+Team lead 2026-11-08: the first thing on Oversikt is how well the hotel runs, not a list of errors.
+What needs a person moved into the bell.
+
+1. **TopBar** (dark, 64 px): hotel name (from `lg`; the phone's top bar names it), the night ("Natt
+   til søndag 8. november · overlevering 06:00"), the robot's chip (place · doing · battery, in the
+   bar's grey even when low), the *Opptak* / *Direkte* badge, the shift clock in Martian Mono.
+2. **Greeting** (`Greeting`, the h1): "God morgen / God dag / God kveld / Hei, Hamad" by the Oslo
+   hour (a shared login greets its desk: "God dag, resepsjonen"), then one sentence: the verdict
+   ("Natten gikk fint." in `success` with a check when at least 80 % of the night's tasks were done,
+   plain otherwise) and the night's work and what the day starts with ("Roboten og nattevakten
+   fullførte 71 av 81 oppgaver, og 3 rom skal vaskes før innsjekk."). On the right the screen's one
+   primary action: *Lag renholdsrute* when rooms must be cleaned (a normal primary button, not an
+   alarm), else *Lag sjekkrunde for N rom* (secondary).
+3. **Hotellet i tall** (`KpiStrip`, figures from `highlights.ts`): six figures at most on one rule,
+   `Stat size="lg"`, `success` where the figure is good, neutral otherwise, never amber or red. In
+   order, filtered by what the role may open: nye bookinger i dag, belegg i natt (%), oppgaver
+   fullført i natt ("71 av 81": the misses are part of the total, not a red count), timer spart av
+   roboten (an estimate per finished task, `MINUTES_PER_TASK`), rom klare til salg ("6 av 9 ledige"),
+   gjester fornøyd ("4,7 av 5"); the robot manager gets rom sjekket av roboten and varer over
+   minimum instead of the guest figures.
 4. **Widgets**, one per module the role may open, in registry order, in a 1 / 2 / 3 column grid (Rom
-   spans two). A widget is a `Card` with the module's name and a count, the *Åpne* link, a dense list
-   of at most four rows ("og N til"), and its `SourceNote`. The robot is one small widget (place,
-   doing, battery, tonight's tasks, *Vis i 3D-kartet*), not the 3D hotel.
+   spans two). A widget is a `Card` with the module's name, the *Åpne* link, its good news first (a
+   green check and the figure: "73 av 87 fullført", "5 løst i dag", "15 av 16 varer over minimum"),
+   then a dense list of at most four rows, completed first (*Sist fullført*, *Sist løst*), and its
+   `SourceNote`. Ready rooms are green tiles; an avvik is a quiet mark. The robot is one small
+   widget (place, doing, battery, "68 av 78 oppgaver fullført", *Vis i 3D-kartet*), not the 3D hotel.
+
+### The bell (`NotificationBell`)
+
+Everything that needs a person, from every module the role may open (`selectAlerts`), in one place
+on every page. Only what is actionable: a request the robot handed over (*Haster*), a staff-reported
+urgent order, callers waiting for a call back, an arrival without a room, a room out of order, stock
+under minimum, the robot's low battery. Routine work stays out (the cleaning route is Oversikt's
+primary action).
+
+- **Button:** 44 px icon button with the `bell` icon; a count badge (Martian Mono 12, `text` pill
+  with `bg` digits: a calm, high-contrast pill, not red) shows how many are new to this person. Its
+  name says it: "Varsler, 3 nye" · "Varsler, 1 ny" · "Varsler, ingen nye" · "Varsler, henter".
+- **Sheet** (`Sheet`, light, portalled to `<body>`): "N nye, trenger en person" and *Merk alle som
+  sett*; the new alerts, *Haster* first, at most five ("og N til" names the rest as links). A row is
+  an icon (`danger` circle for Haster, the module's icon in `warning` otherwise), the title, one line
+  of detail, its one action (*Åpne …*, secondary small; taking it counts as seen) and *Marker som
+  sett* (ghost). Seen alerts stay listed under **Sett** in `muted`, without colour, so nothing
+  disappears without a trace; focus moves to the next new alert, and a polite status says what was
+  marked.
+- **Seen** is kept per user in this browser (`localStorage` `lobby:varsler-sett:<user>`, try/catch;
+  blocked storage holds for the tab). Each alert has a stable id and a level (its count): it is new
+  again only when there is more of it than was seen.
+- **States:** loading (skeleton rows, "Varsler, henter"); empty ("Ingenting trenger deg nå" with a
+  green check: "Roboten og personalet har resten."); a failed night says the robot's alerts are
+  missing while the rest still show.
 
 ## Typography
 
@@ -160,14 +208,24 @@ UI parts ≥ 3:1. The accent fills a button with ink text, never white text (whi
 
 Hue check: the accent sits at ~22°, danger at ~5°, warning at ~39°, success at ~144°. The accent is
 never used for a state, and danger and warning always come with their word, so the robot's orange is
-not read as a warning.
+not read as a warning. `success` on the concrete page (`bg`) is 4.95:1, enough for the greeting's
+verdict and the figures that sit there.
+
+**Where colour goes (team lead 2026-11-08).** Good news is green (`success`) or neutral; red and
+amber are for what needs a person, and that lives in the bell, on alerts that are new. On Oversikt
+and the screens the jury sees first (Rom, Forespørsler, Natteskift) a figure is `success` when it is
+good and plain otherwise: no amber "Venter", no red "Feilet", no red avvik; the counts stay, only the
+alarm colour goes. The few exceptions are states, not news: a *Må vaskes* tile (the primary action's
+rooms), an error (`ErrorState`), and a status badge in a module's own list.
 
 **Room states** live in one map, `src/ui/roomStatus.ts` (word, token, icon), that Rom og renhold,
-Oversikt's widget, Ruter and the 3D hotel all read: Klar `success` · Må vaskes `warning` (loud: a
-`warning-soft` tile) · Opptatt `line-strong` tag on a quiet `sunken` tile · Ikke forstyrr `text`
-outline (a door hanger) · Ikke sjekket dashed `line-strong`. *Avvik is not a status:* it is a `danger`
-marker (a 2 px left edge and the word, with a count) drawn over whatever status the room has. The
-robot is `accent`.
+Oversikt's widget, Ruter and the 3D hotel all read: Klar `success` (a `success-soft` tile on the
+racks, so ready rooms read green at a glance) · Må vaskes `warning` (loud: a `warning-soft` tile) ·
+Opptatt `line-strong` tag on a quiet `sunken` tile · Ikke forstyrr `text` outline (a door hanger) ·
+Ikke sjekket dashed `line-strong`. *Avvik is not a status:* it is a quiet ink marker (a 3 px `text`
+left edge and the word, with a count; a `muted` icon on Oversikt's small tiles) drawn over whatever
+status the room has; what it needs is on Vedlikehold and in the bell. A legend icon for a status no
+room is in stays `muted`. The robot is `accent`.
 
 ## Spacing and radii
 
@@ -234,13 +292,14 @@ All in `src/ui/`, exported from `src/ui/index.ts`. The module frame lives in
 | `Badge` | `tone` neutral · accent · success · warning · danger | Soft background, strong text, radius `sm`, 12 px 600. |
 | `Stat` | `label`, `value`, `unit`, `tone` (default · accent · success · warning · danger), `size` | Value in Martian Mono 500 (`xl`, or `2xl` when `size="lg"`), tabular; the unit small in the text face beside it; the label below in `muted`. The tone says whether the figure is good or bad. |
 | `TopBar` (dashboard) | `night`, `robot`, `source`, `loading` | The 64 px dark bar on Oversikt. |
-| `NowBand` (dashboard) | `items`, `loading` | What needs a person now, loudest first, each row with its one action; holds the screen's primary action. |
-| `KpiStrip` (dashboard) | `data` | Eight figures on one rule. |
+| `Greeting` (dashboard) | `data` | The h1 greeting by the hour, the night's verdict and summary in one sentence, and the screen's one primary action. |
+| `KpiStrip` (dashboard) | `data` | Up to six good-news figures on one rule (`selectHighlights`), `success` or neutral. |
+| `NotificationBell` (notifications) | `viewerUrl`; the view takes `alerts`, `loading`, `nightFailed`, `user` | The bell in the navigation: count badge, sheet of alerts with one action each, *Marker som sett* / *Merk alle som sett* per user. See "The bell". |
 | `SourceNote` (modules) | `sources` | One `xs` `muted` line under a list saying where its figures come from. |
 | `Sheet` | `open`, `onClose`, `title` | Bottom sheet, `role="dialog"`, Escape and scrim close it, focus returns to the opener. |
 | `Skeleton` | `className` | `sunken`, pulse, `aria-hidden`. |
 | `EmptyState` / `ErrorState` | `title`, `body`, `action` | As above. |
-| `AppNav` | — | Desktop (≥ 1024 px): a 232 px dark rail with the four labelled groups and the user plate bottom-left. Phone: a 64 px dark bottom bar with the role's first four pinned screens and *Meny*, which opens a sheet with every group, each screen's hint and the user plate. Filtered by `canAccess(effectiveRole, path)`. The active item carries a 2 px `accent` mark on its left (rail) or top (bar) that fades in, and its icon in `accent-text`. |
+| `AppNav` | `bell` | Desktop (≥ 1024 px): a 232 px dark rail with the bell beside the name at the top (not for the host, nor on the host's screens), the labelled groups and the user plate bottom-left. Phone: a 56 px dark top bar (name, bell) and a 64 px dark bottom bar with the role's first four pinned screens and *Meny*, which opens a sheet with every group, each screen's hint and the user plate. Filtered by `canAccess(effectiveRole, path)`. The active item carries a 2 px `accent` mark on its left (rail) or top (bar) that fades in, and its icon in `accent-text`. |
 | `UserPlate` | — | Generated monogram (no photos), name, role; opens a menu with the view switcher for admins (Admin · Resepsjonist · Robotansvarlig, calls `switchView`) and *Logg ut*. |
 | `Monogram` | `name`, `size` | Initials on `accent-soft`, `accent-text`; the robot's is `accent` with `on-accent`. |
 | `ViewAsBanner` (auth) | — | The band under the top edge while an admin views as another role: "Viser som Resepsjonist · Tilbake til admin". |

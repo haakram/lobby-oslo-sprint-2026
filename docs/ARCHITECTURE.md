@@ -158,6 +158,7 @@ same PR that first reads it.
 | `NIGHTSHIFT_MAX_RPS` | Track A agent client | no (default 5) | `.env.example` |
 | `SECRETS_CLEAR_AFTER` | `scripts/secrets.sh` | no (default 60) | `.env.example` |
 | `VIEWER_ALLOWED_ORIGINS` | Track A viewer server (CORS on `/api/*`) | no (default `http://localhost:3000,http://127.0.0.1:3000`) | `.env.example` |
+| `NEXT_PUBLIC_VIEWER_URL` | Lobby app (Oversikt, Rom, Gjester, Forespørsler, Vedlikehold, 3D-kart, Natteskift and the bell ask this viewer server for a live night) | no: not a secret, optional; blank = the recorded night (`public/runs`) without a live connection | `.env.example`; `.env.local` when the viewer runs |
 | `FINAL_ARMED` | Track A final-mode lock | no | real environment only, never a file (export in the shell) |
 | `ELEVENLABS_API_KEY` | Track B server | **yes** | Hamad's `.env.local` (written by the ElevenLabs CLI), sent privately |
 | `ELEVENLABS_AGENT_ID` | Track B server (`/api/voice/token`), `src/features/voice/setup-agent.ts` | no (blank in `.env.example`; printed by `setup-agent.ts`) | `.env` and Vercel project settings |

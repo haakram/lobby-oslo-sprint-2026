@@ -149,10 +149,11 @@ export function RequestsScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   return (
     <ModulePage module="foresporsler" ready={!loading} lede="Alt gjestene ber om, fra telefon, robot, personale og stemme. Det som venter på noen står først.">
       <FigureRow label="Forespørslene i tall">
-        <Stat label="Venter" value={figure(counts.venter)} tone={!runLoading && counts.venter > 0 ? "warning" : "default"} />
-        <Stat label="Pågår" value={figure(counts.pagar)} />
+        {/* What got done first, in green; the rest are plain counts (what needs a person is in the bell). */}
         <Stat label="Fullført" value={figure(counts.fullfort)} tone={runLoading ? "default" : "success"} />
-        <Stat label="Feilet" value={figure(counts.feilet)} tone={!runLoading && counts.feilet > 0 ? "danger" : "default"} />
+        <Stat label="Pågår" value={figure(counts.pagar)} />
+        <Stat label="Venter" value={figure(counts.venter)} />
+        <Stat label="Feilet" value={figure(counts.feilet)} />
       </FigureRow>
 
       {run.status === "error" && (

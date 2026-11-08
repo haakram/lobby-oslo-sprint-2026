@@ -59,8 +59,8 @@ function fromRobot(order: OrderView, status: OrderStatus, assignee: string | nul
 }
 
 function fromManual(order: ManualOrder, status: OrderStatus): WorkOrderView {
-  // A manual order that already has a name is at least Tildelt.
-  const effective: OrderStatus = status === "ny" && order.assignee ? "tildelt" : status;
+  // A manual order that already has a name is at least Tildelt; one fixed already comes in as Løst.
+  const effective: OrderStatus = status !== "ny" ? status : order.resolvedAt ? "lost" : order.assignee ? "tildelt" : "ny";
   return {
     id: order.id,
     origin: "personale",

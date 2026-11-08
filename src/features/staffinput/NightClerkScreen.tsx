@@ -291,17 +291,15 @@ function FromRobot({
                 );
               }
               return (
-                <li key={hazard.key} className="flex flex-col gap-2 py-3">
-                  <div className="flex items-baseline gap-3">
-                    <span className="font-mono text-sm font-medium tabular-nums">{clock}</span>
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <p className="text-base font-semibold">{hazard.title}</p>
-                      <p className="text-sm text-muted">{hazard.detail}</p>
-                    </div>
+                <li key={hazard.key} className="flex items-baseline gap-3 py-3">
+                  <span className="font-mono text-sm font-medium tabular-nums">{clock}</span>
+                  <div className="flex min-w-0 flex-col items-start gap-0.5">
+                    <p className="text-base font-semibold">{hazard.title}</p>
+                    <p className="text-sm text-muted">{hazard.detail}</p>
+                    <Button variant="secondary" size="sm" className="mt-1.5" onClick={() => onAck(hazard)} aria-label={`Kvitter: ${hazard.title}`}>
+                      Kvitter
+                    </Button>
                   </div>
-                  <Button variant="secondary" size="sm" className="self-start" onClick={() => onAck(hazard)} aria-label={`Kvitter: ${hazard.title}`}>
-                    Kvitter
-                  </Button>
                 </li>
               );
             })}

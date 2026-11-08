@@ -14,7 +14,8 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
 1. Open **https://lobby-sandy.vercel.app** on a laptop (1280 px or wider). It serves `main`; the screens
    below are on `hamad/jury-loop` until the team merges it (or run it locally, below).
 2. Log in as **`jury`**: the jury's own account (admin view). Its password is in our `/lever`
-   submission, not in this repo, and the account is deleted after the event.
+   submission, not in this repo, and the account is deleted after the event. (On the deployed URL it
+   works once the team has set the new `LOBBY_USERS` there.)
 3. Click three things:
    1. **Overlevering 06:00** (from Oversikt: *Se overleveringen* in the top bar): the night on one
       page, every open item with an owner and a deadline, the robot's judgement card (*Robotens

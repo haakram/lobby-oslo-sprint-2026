@@ -161,7 +161,8 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
 - [ ] Name: the team lead decides whether `main` trades as Fettero (this branch does).
 - [ ] Repo access for the jury: public, or the jury added (team lead's decision, CONTEXT § 11).
 - [ ] `README.md` first screen: what it is, the URL, the jury login, three things to click, how to run.
-- [ ] Jury account: its password in the `/lever` message, not in the repo; removed after the event.
+- [ ] Jury account: its password in the `/lever` message, not in the repo; `LOBBY_USERS` with the jury
+      account set on Vercel too (today only `.env.local` has it); removed after the event.
 - [ ] Provider-side spend limits set in the Anthropic and ElevenLabs consoles (the app's meter is per
       server instance). Say "provider-side cap" in Q&A only once this box is ticked.
 - [ ] The team's own ElevenLabs test calls deleted before 14:00 (real names and numbers), so the call

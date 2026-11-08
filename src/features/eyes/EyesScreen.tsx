@@ -301,8 +301,7 @@ function CameraStart({ onStart }: { onStart: () => void }) {
         />
         <p className="border-t border-line pt-4 text-sm text-muted">
           Utsnitt av varer sendes til Claude (Anthropic, USA) for å kjennes igjen. Personer sendes aldri som utsnitt:
-          personer kameraet finner, dekkes til på telefonen før et bilde sendes, og en vare nær en person sendes bare
-          når du trykker på den. Gjesters ting, som mobil, veske, koffert og bok, sendes aldri. Hele bildet sendes bare
+          de dekkes til på telefonen før et bilde sendes, og en vare nær en person sendes bare når du trykker på den. Gjesters ting, som mobil, veske, koffert og bok, sendes aldri. Hele bildet sendes bare
           når du slår på Omgivelser eller trykker Identifiser hele bildet. Ingenting lagres hos oss.
         </p>
       </div>

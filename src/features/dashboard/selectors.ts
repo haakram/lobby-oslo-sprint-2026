@@ -1,4 +1,5 @@
 import { BASE_HOTEL, type HotelMap, nodeFloorIn, roomsOf } from "@/features/hotel";
+import { nightOutcomes, type Outcome as RequestOutcome, type Tally, type Verdict } from "@/features/nightshift/outcomes";
 import type { RunLine } from "@/features/nightshift/runlog";
 import { KNOWN_STATUSES, type KnownStatus, type RoomStatus, STATUS_ORDER } from "./labels";
 
@@ -42,6 +43,10 @@ export type Task = {
   startedAt: string | null;
   endedAt: string | null;
   outcome: Outcome;
+  /** How it really ended (src/features/nightshift/outcomes.ts): a "done" the server did not credit is not done. */
+  verdict: Verdict;
+  /** Why, in Norwegian; null for a plain done. */
+  reason: string | null;
 };
 
 export type QueuedRequest = { request: string; kind: string; text: string | null; at: string | null };
@@ -80,8 +85,13 @@ export type Night = {
   /** Request ids in the order their tasks (re)started. */
   started: string[];
   requests: Map<string, QueuedRequest>;
+  /** Done and credited by the server (the tally's `done`). */
   tasksDone: number;
+  /** Handed to a person: failed, not credited, or not reached (the tally's `handedBack`). */
   tasksFailed: number;
+  /** Every request's verdict, and the night's one set of robot figures. */
+  outcomes: Map<string, RequestOutcome>;
+  tally: Tally;
 };
 
 const STATUS_SET = new Set<string>(KNOWN_STATUSES);
@@ -135,6 +145,8 @@ export function foldNight(lines: readonly RunLine[], upto: number = lines.length
     requests: new Map(),
     tasksDone: 0,
     tasksFailed: 0,
+    outcomes: new Map(),
+    tally: nightOutcomes([]).tally,
   };
   const end = Math.max(0, Math.min(upto, lines.length));
 
@@ -165,6 +177,19 @@ export function foldNight(lines: readonly RunLine[], upto: number = lines.length
         break;
     }
   }
+  // One reading of how each request ended, the same one every screen counts with.
+  const { outcomes, tally } = nightOutcomes(end === lines.length ? lines : lines.slice(0, end));
+  night.outcomes = outcomes;
+  night.tally = tally;
+  night.tasksDone = tally.done;
+  night.tasksFailed = tally.handedBack;
+  for (const task of night.tasks.values()) {
+    const outcome = outcomes.get(task.request);
+    if (outcome) {
+      task.verdict = outcome.verdict;
+      task.reason = outcome.reason;
+    }
+  }
   return night;
 }
 
@@ -187,6 +212,8 @@ function foldDecision(night: Night, kind: string, data: Record<string, unknown> 
         startedAt: at,
         endedAt: null,
         outcome: "running",
+        verdict: "running",
+        reason: null,
       };
       night.tasks.set(request, task);
       night.started = [...night.started.filter((id) => id !== request), request];
@@ -195,8 +222,6 @@ function foldDecision(night: Night, kind: string, data: Record<string, unknown> 
     }
     case "task_done":
     case "task_failed": {
-      if (kind === "task_done") night.tasksDone += 1;
-      else night.tasksFailed += 1;
       const task = request ? night.tasks.get(request) : undefined;
       if (task) {
         task.outcome = kind === "task_done" ? "done" : "failed";
@@ -253,7 +278,15 @@ export type RoomView = HotelRoom & {
   statusAt: string | null;
   /** Work orders on this room that staff have not marked Løst. */
   openOrders: number;
+  /** Out of order today (an open work order closes it): not sold, whatever the robot saw. */
+  closed?: boolean;
 };
+
+/** The rooms with today's closed ones marked, so the rack says "Ute av drift" where the bell says "stengt". */
+export function withClosed(rooms: readonly RoomView[], closed: readonly string[]): RoomView[] {
+  const set = new Set(closed);
+  return rooms.map((room) => (set.has(room.id) ? { ...room, closed: true } : room));
+}
 
 export function selectRooms(night: Night, resolved: ReadonlySet<string> = NONE, map: HotelMap = BASE_HOTEL): RoomView[] {
   const open = new Map<string, number>();
@@ -284,13 +317,18 @@ export function countRooms(rooms: readonly RoomView[]): StatusCounts {
   return counts;
 }
 
-export type OrderView = WorkOrder & { robot: Outcome | null };
+export type OrderView = WorkOrder & {
+  robot: Outcome | null;
+  /** The robot's verdict on its own task for it ("declined": it found no order on record). */
+  verdict: Verdict | null;
+};
 
 /** Newest first, each with how the robot's own task for it went (when it had one). */
 export function selectWorkOrders(night: Night): OrderView[] {
   return [...night.workOrders].reverse().map((order) => ({
     ...order,
     robot: (order.request && night.tasks.get(order.request)?.outcome) || null,
+    verdict: (order.request && night.outcomes.get(order.request)?.verdict) || null,
   }));
 }
 
@@ -316,7 +354,7 @@ export function selectKpis(night: Night, resolved: ReadonlySet<string> = NONE, m
     roomsDirty: rooms.filter((room) => room.status === "ma_vaskes").length,
     roomsTotal: rooms.length,
     ordersOpen: open.length,
-    guestsWaiting: open.filter((order) => order.type === "gjesteklage" || order.robot === "failed").length,
+    guestsWaiting: open.filter((order) => order.verdict !== "declined" && order.verdict !== "cancelled" && (order.type === "gjesteklage" || order.robot === "failed")).length,
     tasksDone: night.tasksDone,
     tasksFailed: night.tasksFailed,
     tasksOpen: night.ended ? [...night.tasks.values()].filter((task) => task.outcome === "running").length : 0,

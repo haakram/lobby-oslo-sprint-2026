@@ -8,7 +8,8 @@ import { EventFeed, RoomCard, TaskCard, WorkOrderList } from "@/features/hotel3d
 import { RoomPicker } from "@/features/hotel3d/RoomPicker";
 import { type HotelReplay, itemName, placeName, type ReplaySource, roomNumber, simToClock, type Task, taskKindName, useHotelReplay } from "@/features/replay";
 import { Badge, Button, buttonClasses, Card, cx, EmptyState, ErrorState, PageHeader, RegenIcon, Skeleton, Stat } from "@/ui";
-import { failures, forManagers } from "./eventFilter";
+import { forManagers } from "./eventFilter";
+import { HANDED_BACK, type NightOutcomes, type OutcomeRow, outcomeRows, outcomesAt, reasonGroups, RIGHTLY_NOT_DONE } from "./outcomes";
 import { RobotJudgementCard } from "./RobotJudgementCard";
 import { viewerBase } from "./useRun";
 
@@ -47,13 +48,18 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
     return upTo.slice(-MAX_EVENTS).reverse();
   }, [replay.timeline, snapshot, technical]);
 
-  const failed = useMemo(
-    () => (replay.timeline && snapshot ? failures(replay.timeline.tasks, replay.timeline.events, snapshot.eventCount, snapshot.t) : []),
+  // How each request ended at this point of the night: the same reading Oversikt, Forespørsler and Overlevering count with.
+  const verdicts = useMemo(
+    () => (replay.timeline && snapshot ? outcomesAt(replay.timeline, snapshot.eventCount, snapshot.t) : null),
     [replay.timeline, snapshot],
   );
-  const open = useMemo(
-    () => (replay.timeline && snapshot ? replay.timeline.tasks.filter((task) => task.start <= snapshot.t && task.outcome === null && snapshot.finished).length : 0),
-    [replay.timeline, snapshot],
+  const handedBack = useMemo(
+    () => (replay.timeline && snapshot && verdicts ? outcomeRows(replay.timeline, snapshot.eventCount, verdicts.outcomes, HANDED_BACK) : []),
+    [replay.timeline, snapshot, verdicts],
+  );
+  const rightlyNot = useMemo(
+    () => (replay.timeline && snapshot && verdicts ? outcomeRows(replay.timeline, snapshot.eventCount, verdicts.outcomes, RIGHTLY_NOT_DONE) : []),
+    [replay.timeline, snapshot, verdicts],
   );
 
   return (
@@ -109,7 +115,7 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
 
         {ready && snapshot && (
           <>
-            <StatRow replay={replay} open={open} />
+            {verdicts && <StatRow replay={replay} verdicts={verdicts} />}
 
             {replay.timeline && (
               <RobotJudgementCard lines={replay.timeline.lines} until={snapshot.t} asOf={snapshot.finished ? null : snapshot.clock} />
@@ -120,36 +126,38 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
                 <section aria-labelledby="failed-heading">
                   <div className="flex items-baseline gap-2">
                     <h2 id="failed-heading" className="text-lg font-semibold tracking-[-0.01em]">
-                      Feilet
+                      Trenger en person
                     </h2>
-                    <span className="text-sm text-muted tabular-nums">{failed.length}</span>
+                    <span className="text-sm text-muted tabular-nums">{handedBack.length}</span>
                   </div>
-                  {failed.length === 0 ? (
-                    <p className="mt-2 text-base text-muted">Ingen oppgaver har feilet så langt i natt.</p>
+                  {/* "Feilet", split by reason: what the robot could not do, apart from what it was right not to do. */}
+                  {handedBack.length > 0 && (
+                    <p className="mt-1 text-sm text-muted">{reasonGroups([...(verdicts?.outcomes.values() ?? [])].filter((outcome) => HANDED_BACK.has(outcome.verdict)))
+                        .map((group) => `${group.label} ${group.count}`)
+                        .join(" · ")}</p>
+                  )}
+                  {handedBack.length === 0 ? (
+                    <p className="mt-2 text-base text-muted">Roboten har ikke gitt noe videre så langt i natt.</p>
                   ) : (
                     <ol className="mt-2 divide-y divide-line rounded-md bg-surface">
-                      {failed.map(({ task, reason, clock }) => (
-                        <li key={task.id} className="flex flex-col gap-1 px-4 py-3">
-                          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                            <span className="font-semibold">{taskName(task)}</span>
-                            <span className="font-mono text-sm whitespace-nowrap text-muted tabular-nums">{clock.slice(0, 5)}</span>
-                          </div>
-                          {reason && <p className="text-sm text-muted">{reason}</p>}
-                          {task.text && (
-                            <p lang="en" className="text-sm text-muted">
-                              «{task.text}»
-                            </p>
-                          )}
-                          <span className="font-mono text-sm text-muted sm:text-xs">{task.id}</span>
-                          <Link
-                            href={`/hotell?t=${Math.round(task.start)}${task.room ? `&rom=${task.room}` : ""}`}
-                            className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent-text hover:underline"
-                          >
-                            Vis i 3D-kartet kl. {simToClock(task.start, false)}
-                          </Link>
-                        </li>
+                      {handedBack.map((row) => (
+                        <OutcomeItem key={row.request} row={row} />
                       ))}
                     </ol>
+                  )}
+                  {rightlyNot.length > 0 && (
+                    <details className="mt-4 group">
+                      <summary className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
+                        Avvist eller avlyst, ikke feil
+                        <span className="font-normal text-muted tabular-nums">{rightlyNot.length}</span>
+                      </summary>
+                      <p className="text-sm text-muted">Roboten sjekket og fant ingen bestilling, eller nattsjefen avlyste. Ingen trenger å ta over disse.</p>
+                      <ol className="mt-2 divide-y divide-line rounded-md bg-surface">
+                        {rightlyNot.map((row) => (
+                          <OutcomeItem key={row.request} row={row} />
+                        ))}
+                      </ol>
+                    </details>
                   )}
                 </section>
 
@@ -214,6 +222,31 @@ export function NightShiftScreen({ viewerUrl }: { viewerUrl?: string }) {
   );
 }
 
+/** One request the robot did not finish: what, when, why in Norwegian, the guest's words, the way into the 3D map. */
+function OutcomeItem({ row }: { row: OutcomeRow }) {
+  return (
+    <li className="flex flex-col gap-1 px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="font-semibold">{row.task ? taskName(row.task) : "Ikke startet"}</span>
+        <span className="font-mono text-sm whitespace-nowrap text-muted tabular-nums">{simToClock(row.t, false)}</span>
+      </div>
+      {row.reason && <p className="text-sm">{row.reason}</p>}
+      {row.text && (
+        <p lang="en" className="text-sm text-muted">
+          «{row.text}»
+        </p>
+      )}
+      <span className="font-mono text-sm text-muted sm:text-xs">{row.request}</span>
+      <Link
+        href={`/hotell?t=${Math.round(row.t)}${row.task?.room ? `&rom=${row.task.room}` : ""}`}
+        className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-accent-text hover:underline"
+      >
+        Vis i 3D-kartet kl. {simToClock(row.t, false)}
+      </Link>
+    </li>
+  );
+}
+
 /** "Romservice til 319", "Mobillader til 104": the task without its id. */
 function taskName(task: Task): string {
   const what = task.kind === "amenity" && task.item ? capitalise(itemName(task.item)) : taskKindName(task.kind);
@@ -256,19 +289,23 @@ function Tabs({ source, onChange }: { source: ReplaySource; onChange: (source: R
   );
 }
 
-function StatRow({ replay, open }: { replay: HotelReplay; open: number }) {
+function StatRow({ replay, verdicts }: { replay: HotelReplay; verdicts: NightOutcomes }) {
   const snapshot = replay.snapshot!;
   const low = snapshot.battery !== null && snapshot.battery < 20;
+  const { tally } = verdicts;
   return (
     <section role="group" aria-label="Skiftet i tall" className="border-y border-line py-5">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Oppgaver fullført" value={snapshot.tasksDone} tone="success" />
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 xl:grid-cols-8">
+        <Stat label="Oppdrag fullført" value={tally.done} unit={`av ${tally.total}`} tone="success" />
+        {/* Every "done" checked against the server: a done it did not credit is not counted as done. */}
+        <Stat label="Godkjent av Wybe-serveren" value={tally.done} unit={`av ${tally.reported}`} />
         {/* Plain counts beside the green one: the night's misses are part of its total, not an alarm. */}
-        <Stat label={open > 0 ? `Feilet · ${open} ikke ferdig` : "Oppgaver feilet"} value={snapshot.tasksFailed} />
+        <Stat label="Ga videre til en person" value={tally.handedBack} />
+        <Stat label="Avvist eller avlyst" value={tally.declined + tally.cancelled} />
         <Stat label="Avvik meldt" value={snapshot.workOrders.length} />
         <Stat label="Klokke" value={snapshot.clock} />
         <Stat label={low ? "Batteri · lavt" : "Batteri"} value={snapshot.battery === null ? "–" : Math.round(snapshot.battery)} unit={snapshot.battery === null ? undefined : "%"} />
-        <Stat label="Poeng" value={snapshot.score} />
+        <Stat label="Wybe-poeng (simulering)" value={snapshot.score} />
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-muted">
         <dl className="flex gap-2">

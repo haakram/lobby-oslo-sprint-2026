@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTimeline, snapshotAt } from "@/features/replay";
 import { NightShiftScreen } from "./NightShiftScreen";
+import { outcomesAt } from "./outcomes";
 import { parseRunLog } from "./runlog";
 import { viewerBase } from "./useRun";
 
@@ -11,6 +12,8 @@ const SAMPLE = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixt
 // The demo night changes when a better live run is published; the screen must show whatever it holds.
 const TIMELINE = buildTimeline(parseRunLog(SAMPLE).lines);
 const END = snapshotAt(TIMELINE, TIMELINE.duration);
+// How each request ended, read the same way Oversikt, Forespørsler and Overlevering read it.
+const TALLY = outcomesAt(TIMELINE, END.eventCount, END.t).tally;
 const LAST_DECISION = [...TIMELINE.events].reverse().find((event) => event.decision)!;
 const SHIFT = "w2-3fa94c1d07be4e2a9c55d1e8b6a0f217";
 
@@ -45,7 +48,10 @@ describe("NightShiftScreen, replay", () => {
     const stats = screen.getByRole("group", { name: "Skiftet i tall" });
     expect(within(stats).getByText(String(END.score))).toBeInTheDocument();
     expect(within(stats).getByText(END.clock)).toBeInTheDocument();
-    expect(within(stats).getByText(String(END.tasksDone))).toBeInTheDocument();
+    // Done out of the robot's tasks, and the server's verdict on every "done" it reported.
+    expect(within(stats).getByText("Oppdrag fullført").previousElementSibling).toHaveTextContent(`${TALLY.done}av ${TALLY.total}`);
+    expect(within(stats).getByText("Godkjent av Wybe-serveren").previousElementSibling).toHaveTextContent(`${TALLY.done}av ${TALLY.reported}`);
+    expect(within(stats).getByText("Wybe-poeng (simulering)")).toBeInTheDocument();
     expect(screen.getByRole("figure", { name: "Hotellet som plantegning" })).toBeInTheDocument();
     expect(screen.getAllByText(LAST_DECISION.text).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Spill av/ })).toBeEnabled();
@@ -101,18 +107,25 @@ describe("NightShiftScreen, replay", () => {
     expect(screen.queryByRole("heading", { name: "Rom 319" })).not.toBeInTheDocument();
   });
 
-  it("lists exactly as many failed tasks as the figure counts, each with a 3D link", async () => {
+  it("splits what failed by reason: what needs a person, apart from what the robot was right not to do", async () => {
     serveDemo();
     render(<NightShiftScreen />);
     await screen.findByText("Ferdig");
 
     const stats = screen.getByRole("group", { name: "Skiftet i tall" });
-    expect(within(stats).getAllByText(String(END.tasksFailed)).length).toBeGreaterThan(0);
-    const section = screen.getByRole("region", { name: /^Feilet/ });
-    expect(within(section).getByText(String(END.tasksFailed))).toBeInTheDocument();
-    const rows = END.tasksFailed === 0 ? [] : within(section).getAllByRole("listitem");
-    expect(rows).toHaveLength(END.tasksFailed);
+    expect(within(stats).getByText("Ga videre til en person").previousElementSibling).toHaveTextContent(String(TALLY.handedBack));
+    expect(within(stats).getByText("Avvist eller avlyst").previousElementSibling).toHaveTextContent(String(TALLY.declined + TALLY.cancelled));
+    const section = screen.getByRole("region", { name: /^Trenger en person/ });
+    const lists = within(section).getAllByRole("list");
+    // The handed-back list, each row with a reason in Norwegian and a 3D link.
+    const rows = within(lists[0]).getAllByRole("listitem");
+    expect(rows).toHaveLength(TALLY.handedBack);
     for (const row of rows) expect(within(row).getByRole("link", { name: /^Vis i 3D-kartet kl\. / })).toBeInTheDocument();
+    expect(within(section).getByText(/^Fant ikke briller etter 6 søk\.$/)).toBeInTheDocument();
+    // Refusals on good grounds are listed apart, quietly, and never say "score".
+    expect(within(lists[1]).getAllByRole("listitem")).toHaveLength(TALLY.declined + TALLY.cancelled);
+    expect(within(section).getAllByText(/^Roboten sjekket: ingen bestilling av /).length).toBeGreaterThan(0);
+    expect(within(section).queryByText(/score/)).not.toBeInTheDocument();
   });
 
   it("opens the room's card right under the map, from the room list too, and scrolls it into view", async () => {

@@ -6,7 +6,23 @@ import { lowStock, STOCK } from "@/features/inventory/testData";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import type { RequestView } from "@/features/requests/select";
 import type { DashboardData } from "./data";
-import { atNight, greeting, greetingWord, hoursLabel, MAX_HIGHLIGHTS, minutesSaved, nightSummary, nightTotals, nightVerdict, selectHighlights } from "./highlights";
+import { occupancy, revenueLastNight } from "@/features/rooms/pms";
+import {
+  atNight,
+  figureSources,
+  greeting,
+  greetingWord,
+  hoursLabel,
+  MAX_HIGHLIGHTS,
+  MINUTES_PER_HANDBACK,
+  minutesSaved,
+  nightSummary,
+  nightTotals,
+  nightVerdict,
+  selectHighlights,
+  timeSaved,
+  timeSavedMethod,
+} from "./highlights";
 import { foldNight, selectRobot, selectRooms } from "./selectors";
 
 // Oversikt's good news: the greeting, the night in one sentence and the figures, from the demo data.
@@ -51,13 +67,13 @@ describe("the greeting", () => {
     expect(greeting(20, null)).toBe("God kveld");
   });
 
-  it("says how the night went in one sentence: the robot's and the night staff's tasks together", () => {
+  it("says how the night went: the robot's tally, then what the night staff did besides", () => {
     const totals = nightTotals(data());
-    // The day staff's 07:12 request is not the night's.
-    expect(totals).toEqual({ done: NIGHT.tasksDone + 2, total: NIGHT.tasks.size + 2 });
-    expect(nightSummary(data(), totals)).toBe(`Roboten og nattevakten fullførte ${NIGHT.tasksDone + 2} av ${NIGHT.tasks.size + 2} oppgaver, og ingen rom venter på renhold.`);
+    // The robot's figures are its night's one tally; the day staff's 07:12 request is not the night's.
+    expect(totals).toEqual({ done: NIGHT.tally.done, total: NIGHT.tally.total, staffDone: 2 });
+    expect(nightSummary(data(), totals)).toBe(`Roboten fullførte ${NIGHT.tally.done} av ${NIGHT.tally.total} oppdrag. Nattevakten ordnet 2 til. Ingen rom venter på renhold.`);
     const dirty = data().rooms!.map((room, index) => (index < 3 ? { ...room, status: "ma_vaskes" as const } : room));
-    expect(nightSummary(data({ rooms: dirty }), totals)).toMatch(/, og 3 rom skal vaskes før innsjekk\.$/);
+    expect(nightSummary(data({ rooms: dirty }), totals)).toMatch(/ 3 rom skal vaskes før innsjekk\.$/);
   });
 
   it("calls a night that went well fine, and is plain about the rest", () => {
@@ -70,14 +86,20 @@ describe("the greeting", () => {
 });
 
 describe("selectHighlights (the figures)", () => {
-  it("gives the admin six good-news figures, green where the figure is good", () => {
+  it("gives the admin six good-news figures, green where the figure is good, each with its source", () => {
     const figures = selectHighlights(data());
-    expect(figures.map((figure) => figure.label)).toEqual(["Nye bookinger i dag", "Belegg i natt", "Oppgaver fullført i natt", "Timer spart av roboten", "Rom klare til salg", "Gjester fornøyd"]);
+    expect(figures.map((figure) => figure.label)).toEqual(["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Timer spart, anslag", "Rom klare til salg", "Gjester fornøyd"]);
     expect(figures).toHaveLength(MAX_HIGHLIGHTS);
     const by = Object.fromEntries(figures.map((figure) => [figure.id, figure]));
-    expect(by.bookinger).toMatchObject({ value: 10 });
-    expect(by.belegg).toMatchObject({ value: 86, unit: "%", tone: "success" });
-    expect(by.oppgaver).toMatchObject({ value: NIGHT.tasksDone + 2, unit: `av ${NIGHT.tasks.size + 2}`, tone: "success" });
+    const rooms = data().rooms!.length;
+    const revenue = revenueLastNight(rooms);
+    expect(by.belegg).toMatchObject({ value: occupancy(revenue, rooms), unit: "%", detail: `${revenue.roomsSold} av ${rooms} rom solgt`, source: "test" });
+    expect(by.inntekt).toMatchObject({ unit: "kr", source: "test" });
+    expect(by.inntekt.detail).toMatch(/^Snittpris .+ kr · RevPAR .+ kr$/);
+    expect(by.oppgaver).toMatchObject({ value: NIGHT.tally.done, unit: `av ${NIGHT.tally.total}`, tone: "success", source: "run-log" });
+    expect(by.oppgaver.detail).toMatch(new RegExp(`^Godkjent av Wybe-serveren: ${NIGHT.tally.done} av ${NIGHT.tally.reported}`));
+    expect(by.spart).toMatchObject({ prefix: "ca.", source: "estimate" });
+    expect(by.spart.method?.join(" ")).toMatch(/Et anslag, ikke en måling/);
     expect(by.fornoyd).toMatchObject({ value: "4,7", unit: "av 5", tone: "success" });
     const ready = data().rooms!.filter((room) => room.status === "klar").length;
     expect(by.klare).toMatchObject({ value: ready, unit: `av ${ready} ledige`, tone: "success" });
@@ -94,11 +116,23 @@ describe("selectHighlights (the figures)", () => {
   it("leaves the night's figures empty until the night is in, and keeps today's", () => {
     const figures = selectHighlights(data({ night: null, rooms: null, robot: null, loading: true, nightStatus: "loading" }));
     expect(figures.filter((figure) => figure.fromNight).every((figure) => figure.value === null)).toBe(true);
-    expect(figures.find((figure) => figure.id === "bookinger")?.value).toBe(10);
+    expect(figures.find((figure) => figure.id === "belegg")?.value).toEqual(expect.any(Number));
   });
 
-  it("estimates the hours the robot saved from the tasks it finished", () => {
-    expect(minutesSaved(NIGHT)).toBeGreaterThan(NIGHT.tasksDone * 5);
+  it("names under the row which figures are the robot's log, which test data, which estimates", () => {
+    const line = figureSources(selectHighlights(data()));
+    expect(line).toBe(
+      "Fra robotens natt (kjøringsloggen): Robotens oppdrag i natt, Rom klare til salg. Testdata til bookingsystemet er koblet til: Belegg i natt, Losjiinntekt i natt, Gjester fornøyd. Anslag: Timer spart.",
+    );
+  });
+
+  it("estimates the hours the robot saved from the credited tasks, less what it handed back", () => {
+    const saved = timeSaved(NIGHT);
+    expect(saved.tasks).toBe(NIGHT.tally.done);
+    expect(saved.handback).toBe(NIGHT.tally.handedBack * MINUTES_PER_HANDBACK);
+    expect(saved.net).toBe(Math.max(0, saved.gross - saved.handback));
+    expect(minutesSaved(NIGHT)).toBe(saved.net);
+    expect(timeSavedMethod(saved).at(-1)).toBe(`Til sammen ${saved.net} min, ca. ${hoursLabel(saved.net)} t.`);
     expect(hoursLabel(717)).toBe("12");
     expect(hoursLabel(270)).toBe("4,5");
     expect([atNight("23:40"), atNight("05:59"), atNight("06:00"), atNight("21:59"), atNight(null)]).toEqual([true, true, false, false, false]);

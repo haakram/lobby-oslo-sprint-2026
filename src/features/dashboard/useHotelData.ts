@@ -7,9 +7,12 @@ import { reviewScore, selectGuestDay } from "@/features/guests/testData";
 import { lowStock, STOCK } from "@/features/inventory/testData";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
 import { useOsloHour } from "@/features/modules/useNow";
+import { osloToday } from "@/features/reception/dates";
 import { selectRequests } from "@/features/requests/select";
+import { useRequestInputs } from "@/features/requests/useRequestInputs";
 import { byRole, onShift, shiftAt } from "@/features/staff/testData";
 import type { DashboardData } from "./data";
+import { withClosed } from "./selectors";
 import { useNight } from "./useNight";
 import { useOrderStatuses } from "./useOrderStatuses";
 import { useReceptionCalls } from "./useReceptionCalls";
@@ -29,7 +32,16 @@ export function useHotelData(viewerUrl?: string) {
 
   const technician = byRole("Vedlikehold").find((member) => member.shift === "dag") ?? null;
   const maintenance = useMemo(() => selectMaintenance({ orders, statusOf, assignee: technician?.name ?? null }), [orders, statusOf, technician]);
-  const requests = useMemo(() => selectRequests({ night, calls: calls.kind === "ready" ? calls.calls : null, statusOf }), [night, calls, statusOf]);
+  // The same requests as Forespørsler (its phone tasks and Rom's tasks too), so the widget and the page agree.
+  const liveCalls = calls.kind === "ready" ? calls.calls : null;
+  const { phone, assignments, extra } = useRequestInputs({ today: osloToday(), calls: liveCalls });
+  const requests = useMemo(
+    () => selectRequests({ night, calls: liveCalls, statusOf, phone, assignments, extra }),
+    [night, liveCalls, statusOf, phone, assignments, extra],
+  );
+  const outOfOrder = useMemo(() => outOfOrderRooms(maintenance), [maintenance]);
+  // The rack reads the same closed rooms as the bell: a room out of order says so on its tile.
+  const rackRooms = useMemo(() => (rooms ? withClosed(rooms, outOfOrder) : null), [rooms, outOfOrder]);
   const guests = useMemo(() => selectGuestDay(), []);
   const shift = shiftAt(hour);
 
@@ -41,11 +53,11 @@ export function useHotelData(viewerUrl?: string) {
       loading: run.status === "loading",
       nightStatus: run.status,
       night,
-      rooms,
+      rooms: rackRooms,
       robot,
       requests,
       maintenance,
-      outOfOrder: outOfOrderRooms(maintenance),
+      outOfOrder,
       guests,
       calls,
       retryCalls,
@@ -55,7 +67,7 @@ export function useHotelData(viewerUrl?: string) {
       shift,
       onShift: onShift(shift),
     }),
-    [role, user, hour, run.status, night, rooms, robot, requests, maintenance, guests, calls, retryCalls, shift],
+    [role, user, hour, run.status, night, rackRooms, robot, requests, maintenance, outOfOrder, guests, calls, retryCalls, shift],
   );
 
   return { data, run, night, robot };

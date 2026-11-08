@@ -5,10 +5,10 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { canAccess, type Role } from "@/features/auth/roles";
 import { SessionProvider } from "@/features/auth/SessionProvider";
-import { selectGuestDay } from "@/features/guests/testData";
 import { type ModuleId, MODULES } from "@/features/modules/registry";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import { MANUAL_REQUESTS } from "@/features/requests/testData";
+import { occupancy, revenueLastNight } from "@/features/rooms/pms";
 import { DashboardScreen } from "./DashboardScreen";
 import { atNight } from "./highlights";
 import { placeLabel } from "./labels";
@@ -22,11 +22,11 @@ const DEMO = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtur
 const NIGHT = foldNight(parseRunLog(DEMO).lines);
 const ROOMS = selectRooms(NIGHT);
 const ROBOT = selectRobot(NIGHT);
-const GUESTS = selectGuestDay();
-// The night staff's own requests count with the robot's in "Oppgaver fullført i natt".
-const STAFF_NIGHT = MANUAL_REQUESTS.filter((request) => atNight(request.at));
-const DONE = NIGHT.tasksDone + STAFF_NIGHT.filter((request) => request.status === "fullfort").length;
-const TOTAL = Math.max(NIGHT.tasks.size, NIGHT.tasksDone + NIGHT.tasksFailed) + STAFF_NIGHT.length;
+// The robot's figures are the one tally of its night (nightshift/outcomes.ts); the night staff's are said apart.
+const STAFF_DONE = MANUAL_REQUESTS.filter((request) => atNight(request.at) && request.status === "fullfort").length;
+const DONE = NIGHT.tally.done;
+const TOTAL = NIGHT.tally.total;
+const ADMIN_FIGURES = ["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Timer spart, anslag", "Rom klare til salg", "Gjester fornøyd"];
 
 /** The widget's heading as the registry names the module; the robot's widget is "Roboten". */
 function widgetName(id: ModuleId): RegExp {
@@ -93,17 +93,24 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
 
     // Good news first: the greeting is the page's heading, honest about the time of day.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^(God morgen|God dag|God kveld|Hei), Test$/);
-    expect(screen.getByText(`Roboten og nattevakten fullførte ${DONE} av ${TOTAL} oppgaver, og ingen rom venter på renhold.`, { exact: false })).toBeInTheDocument();
+    expect(screen.getByText(`Roboten fullførte ${DONE} av ${TOTAL} oppdrag. Nattevakten ordnet ${STAFF_DONE} til. Ingen rom venter på renhold.`, { exact: false })).toBeInTheDocument();
 
-    // Six figures along one rule, from today's business to the guests' rating.
-    for (const label of ["Nye bookinger i dag", "Belegg i natt", "Oppgaver fullført i natt", "Timer spart av roboten", "Rom klare til salg", "Gjester fornøyd"]) {
-      expect(figures().getByText(label)).toBeInTheDocument();
-    }
-    expect(figure("Nye bookinger i dag")).toBe(String(GUESTS.bookedToday.length));
-    expect(figure("Belegg i natt")).toBe(`${Math.round((GUESTS.roomsTonight / 36) * 100)}%`);
-    // The night's misses are part of its total, not a red count of their own.
-    expect(figure("Oppgaver fullført i natt")).toBe(`${DONE}av ${TOTAL}`);
+    // Six figures along one rule: last night's rooms and money, the robot's night, the rooms, the guests.
+    for (const label of ADMIN_FIGURES) expect(figures().getByText(label)).toBeInTheDocument();
+    // One occupancy: the booking system's last night, as on Gjester and Overlevering.
+    const revenue = revenueLastNight(ROOMS.length);
+    expect(figure("Belegg i natt")).toBe(`${occupancy(revenue, ROOMS.length)}%`);
+    expect(figures().getByText(`${revenue.roomsSold} av ${ROOMS.length} rom solgt`)).toBeInTheDocument();
+    expect(figures().getByText(/^Snittpris [\d\s\u00a0]+ kr · RevPAR [\d\s\u00a0]+ kr$/)).toBeInTheDocument();
+    // The night's misses are part of its total, not a red count of their own; the server's verdict is said.
+    expect(figure("Robotens oppdrag i natt")).toBe(`${DONE}av ${TOTAL}`);
+    expect(figures().getByText(new RegExp(`^Godkjent av Wybe-serveren: ${NIGHT.tally.done} av ${NIGHT.tally.reported}`))).toBeInTheDocument();
     expect(screen.queryByText(/feilet/)).not.toBeInTheDocument();
+    // The estimate says it is one, and how it is made.
+    expect(figure("Timer spart, anslag")).toMatch(/^ca\./);
+    expect(figures().getByText("Slik regner vi")).toBeInTheDocument();
+    // Under the row: which figures are the robot's log, which test data, which estimates.
+    expect(figures().getByText(/^Fra robotens natt \(kjøringsloggen\): Robotens oppdrag i natt, Rom klare til salg\. Testdata/)).toHaveTextContent(/Anslag: Timer spart\.$/);
 
     // One widget per module that has one, in registry order; the robot is one small widget.
     const widgets = WIDGET_MODULES.map((module) => screen.getByRole("region", { name: widgetName(module.id) }));
@@ -194,8 +201,8 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
   });
 
   it.each<[Role, string[], string[]]>([
-    ["receptionist", ["Nye bookinger i dag", "Belegg i natt", "Oppgaver fullført i natt", "Timer spart av roboten", "Rom klare til salg", "Gjester fornøyd"], ["Rom sjekket av roboten", "Varer over minimum"]],
-    ["robot", ["Oppgaver fullført i natt", "Timer spart av roboten", "Rom klare til salg", "Rom sjekket av roboten", "Varer over minimum"], ["Belegg i natt", "Nye bookinger i dag", "Gjester fornøyd"]],
+    ["receptionist", ADMIN_FIGURES, ["Rom sjekket av roboten", "Varer over minimum"]],
+    ["robot", ["Robotens oppdrag i natt", "Timer spart, anslag", "Rom klare til salg", "Rom sjekket av roboten", "Varer over minimum"], ["Belegg i natt", "Losjiinntekt i natt", "Gjester fornøyd"]],
   ])("shows the %s only the figures of screens they may open", async (role, shown, hidden) => {
     route();
     render(as(role, <DashboardScreen />));
@@ -229,8 +236,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     await robot.findByText("Skift slutt");
 
     expect(robot.getByText(placeLabel(ROBOT.location))).toBeInTheDocument();
-    const total = Math.max(NIGHT.tasks.size, NIGHT.tasksDone + NIGHT.tasksFailed);
-    expect(robot.getByText(String(NIGHT.tasksDone)).parentElement).toHaveTextContent(`${NIGHT.tasksDone} av ${total} oppgaver fullført`);
+    expect(robot.getByText(String(DONE)).parentElement).toHaveTextContent(`${DONE} av ${TOTAL} oppdrag fullført`);
     expect(robot.queryByText(/feilet/)).not.toBeInTheDocument();
     expect(robot.getByRole("link", { name: "Vis i 3D-kartet" })).toHaveAttribute("href", "/hotell");
     expect(robot.getByRole("link", { name: "Natteskift" })).toHaveAttribute("href", "/natteskift");
@@ -285,9 +291,9 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     // The night's widgets and figures say it isn't there, instead of loading forever.
     expect(rooms().getByText(/^Ikke lastet/)).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Roboten" })).getByText(/^Ikke lastet/)).toBeInTheDocument();
-    expect(figure("Oppgaver fullført i natt")).toBe("–");
+    expect(figure("Robotens oppdrag i natt")).toBe("–");
     // Today's figures don't hang on the night.
-    expect(figure("Nye bookinger i dag")).toBe(String(GUESTS.bookedToday.length));
+    expect(figure("Belegg i natt")).toMatch(/^\d+%$/);
 
     route();
     fireEvent.click(screen.getByRole("button", { name: "Prøv igjen" }));

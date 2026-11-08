@@ -101,10 +101,10 @@ describe("RequestsScreen (Forespørsler)", () => {
     render(<RequestsScreen />);
     await screen.findByRole("button", { name: /^Ta over/ });
     // req-m2 comes from staff already in progress (Pågår), not Ny: the first click must close it.
-    fireEvent.click(screen.getByRole("button", { name: "Marker fullført: Romservice, Rom 104" }));
+    fireEvent.click(screen.getByRole("button", { name: "Marker fullført: Romservice, Rom 134" }));
     const done = rowWith("Frokost på rommet 08:30, fire personer.");
     expect(within(done).getByText("Fullført")).toBeInTheDocument();
-    expect(screen.getByText("Romservice, Rom 104 står nå under Fullført.")).toBeInTheDocument();
+    expect(screen.getByText("Romservice, Rom 134 står nå under Fullført.")).toBeInTheDocument();
     const fullfort = screen.getByRole("heading", { name: /^Fullført/ }).nextElementSibling as HTMLElement;
     expect(within(fullfort).getAllByRole("listitem")[0]).toBe(done);
   });
@@ -178,9 +178,11 @@ describe("RequestsScreen (Forespørsler)", () => {
 
     fireEvent.click(towels);
     const moved = rowWith("Rom 214 ønsker to ekstra håndklær.");
-    expect(within(moved).getByText("Pågår")).toBeInTheDocument();
-    expect(within(moved).getByText("Roboten tar den")).toBeInTheDocument();
-    const status = screen.getByText("Utstyr, Rom 214 er sendt til roboten.").closest("[role=status]") as HTMLElement;
+    // Nothing reaches the robot yet (TODO(phase-3)): the screen never says "sendt til roboten".
+    expect(within(moved).getByText("I robotens kø")).toBeInTheDocument();
+    expect(within(moved).getByText("Lagt i robotens kø · sendes når roboten er koblet til")).toBeInTheDocument();
+    expect(screen.queryByText(/sendt til roboten/)).not.toBeInTheDocument();
+    const status = screen.getByText("Utstyr, Rom 214 er lagt i robotens kø. Den sendes når roboten er koblet til.").closest("[role=status]") as HTMLElement;
     fireEvent.click(within(status).getByRole("button", { name: "Angre: Utstyr, Rom 214" }));
     expect(within(rowWith("Rom 214 ønsker to ekstra håndklær.")).getByText("Forslag: roboten")).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("lobby:phone-task-assignments") ?? "{}")).toEqual({});

@@ -1,7 +1,8 @@
 import type { CallSummary } from "@/features/dashboard/useReceptionCalls";
 import { hhmm } from "@/features/dashboard/format";
 import { requestKindLabel } from "@/features/dashboard/labels";
-import type { Night, OrderStatus, Task } from "@/features/dashboard/selectors";
+import type { Night, OrderStatus, QueuedRequest, Task } from "@/features/dashboard/selectors";
+import type { Outcome } from "@/features/nightshift/outcomes";
 import { formatClock } from "@/features/reception/format";
 import type { RoomCheckMark } from "@/features/rooms/reconcile";
 import type { PhoneAssignment, PhoneTask } from "./phoneTasks";
@@ -21,7 +22,11 @@ export const SOURCE_WORD: Record<RequestSource, string> = {
   stemme: "Stemme",
 };
 
-export type RequestStatus = "venter" | "pagar" | "fullfort" | "feilet";
+/**
+ * `avvist`: the robot checked and refused on good grounds (no order on record, already delivered).
+ * `avlyst`: the night manager called it off. Neither is a failure, and neither needs a person.
+ */
+export type RequestStatus = "venter" | "pagar" | "fullfort" | "feilet" | "avvist" | "avlyst";
 
 export const REQUEST_STATUS: Record<RequestStatus, { word: string; tone: "neutral" | "accent" | "success" | "danger" | "warning" }> = {
   venter: { word: "Venter", tone: "warning" },
@@ -29,9 +34,11 @@ export const REQUEST_STATUS: Record<RequestStatus, { word: string; tone: "neutra
   pagar: { word: "Pågår", tone: "neutral" },
   fullfort: { word: "Fullført", tone: "success" },
   feilet: { word: "Feilet", tone: "danger" },
+  avvist: { word: "Avvist", tone: "neutral" },
+  avlyst: { word: "Avlyst", tone: "neutral" },
 };
 
-export const REQUEST_ORDER: readonly RequestStatus[] = ["venter", "feilet", "pagar", "fullfort"];
+export const REQUEST_ORDER: readonly RequestStatus[] = ["venter", "feilet", "pagar", "fullfort", "avvist", "avlyst"];
 
 export type RequestView = {
   id: string;
@@ -53,25 +60,69 @@ export type RequestView = {
   badge?: string;
   /** A call the AI receptionist turned into a task: the call, and who can take it in one tap. */
   phone?: PhoneTask;
+  /** Why the robot did not finish it, in Norwegian (src/features/nightshift/outcomes.ts). */
+  reason?: string | null;
+  /** Put in the robot's queue but not sent: there is no connection to the robot yet (TODO(phase-3)). */
+  pending?: boolean;
+  /** The status badge's word when it says more than the status's own ("Avvist (ingen bestilling)"). */
+  statusWord?: string;
 };
 
-function fromTask(task: Task, ended: boolean): RequestView {
-  const status: RequestStatus = task.outcome === "done" ? "fullfort" : task.outcome === "failed" ? "feilet" : ended ? "venter" : "pagar";
-  // A person can take over what the robot failed or left open; done and running tasks stay the robot's.
+/** The robot's verdict as a request's status: refused and called-off requests are their own, quiet states. */
+function robotStatus(outcome: Outcome | undefined, fallback: RequestStatus): RequestStatus {
+  switch (outcome?.verdict) {
+    case "done":
+      return "fullfort";
+    case "declined":
+      return "avvist";
+    case "cancelled":
+      return "avlyst";
+    case "failed":
+    case "unverified":
+      return "feilet";
+    case "open":
+      return "venter";
+    default:
+      return fallback;
+  }
+}
+
+const ROBOT_HANDLER: Partial<Record<RequestStatus, string>> = {
+  venter: "Roboten · trenger en person",
+  feilet: "Roboten · trenger en person",
+  avvist: "Roboten sjekket først",
+  avlyst: "Avlyst av nattsjefen",
+};
+
+function robotRequest(id: string, kind: string, room: string | null, text: string | null, at: string | null, status: RequestStatus, outcome: Outcome | undefined): RequestView {
+  // A person can take over what the robot failed or left open; done, running, refused and called-off stay the robot's.
   const needsPerson = status === "venter" || status === "feilet";
   return {
-    id: `robot:${task.request}`,
+    id: `robot:${id}`,
     source: "robot",
-    kind: requestKindLabel(task.kind),
-    room: task.room,
-    text: task.text,
-    lang: task.text ? "en" : null,
-    at: hhmm(task.startedAt),
-    handler: needsPerson ? "Roboten · trenger en person" : "Roboten",
+    kind: requestKindLabel(kind),
+    room,
+    text,
+    lang: text ? "en" : null,
+    at: hhmm(at),
+    handler: ROBOT_HANDLER[status] ?? "Roboten",
     status,
     actionable: needsPerson,
     tonight: true,
+    reason: outcome?.reason ?? null,
+    statusWord: status === "avvist" && outcome?.reason?.includes("ingen bestilling") ? "Avvist (ingen bestilling)" : undefined,
   };
+}
+
+function fromTask(task: Task, outcome: Outcome | undefined, ended: boolean): RequestView {
+  const fallback: RequestStatus = task.outcome === "done" ? "fullfort" : task.outcome === "failed" ? "feilet" : ended ? "venter" : "pagar";
+  return robotRequest(task.request, task.kind, task.room, task.text, task.startedAt, robotStatus(outcome, fallback), outcome);
+}
+
+/** A request the robot never started: in its queue while the night runs, waiting for a person after it. */
+function fromQueued(request: QueuedRequest, outcome: Outcome | undefined, ended: boolean): RequestView {
+  const view = robotRequest(request.request, request.kind, null, request.text, request.at, robotStatus(outcome, ended ? "venter" : "pagar"), outcome);
+  return view.status === "pagar" ? { ...view, handler: "I robotens kø" } : view;
 }
 
 function fromCall(call: CallSummary): RequestView {
@@ -111,7 +162,9 @@ function fromManual(request: ManualRequest): RequestView {
 /** A phone call the AI receptionist took down, as a task: waiting until someone takes it in one tap. */
 export function fromPhoneTask(task: PhoneTask, assignment: PhoneAssignment | undefined, staffStatus: OrderStatus = "ny"): RequestView {
   const handled = task.demo?.handled;
-  const doneBy = assignment ? (assignment.to === "robot" ? "Roboten" : assignment.who) : null;
+  // Nothing reaches the robot yet, so a robot task closed here was closed by staff, never "Roboten ordnet det".
+  const doneBy = assignment ? (assignment.to === "robot" ? "Personalet" : assignment.who) : null;
+  const queued = assignment?.to === "robot" && staffStatus !== "lost";
   return {
     id: task.id,
     source: "telefon",
@@ -125,7 +178,7 @@ export function fromPhoneTask(task: PhoneTask, assignment: PhoneAssignment | und
       ? `${doneBy} ordnet det`
       : assignment
       ? assignment.to === "robot"
-        ? "Roboten tar den"
+        ? "Lagt i robotens kø · sendes når roboten er koblet til"
         : `${assignment.who} har saken`
       : handled
         ? `${handled.who} ordnet det ${handled.at}`
@@ -134,6 +187,7 @@ export function fromPhoneTask(task: PhoneTask, assignment: PhoneAssignment | und
     actionable: true,
     tonight: false,
     phone: task,
+    pending: queued,
   };
 }
 
@@ -186,7 +240,12 @@ export function selectRequests({
   /** Requests made on other screens (the robot's room checks on Rom). */
   extra?: readonly RequestView[];
 }): RequestView[] {
-  const robot = night ? [...night.tasks.values()].map((task) => fromTask(task, night.ended)) : [];
+  const robot = night
+    ? [
+        ...[...night.tasks.values()].map((task) => fromTask(task, night.outcomes.get(task.request), night.ended)),
+        ...[...night.requests.values()].filter((request) => !night.tasks.has(request.request)).map((request) => fromQueued(request, night.outcomes.get(request.request), night.ended)),
+      ]
+    : [];
   // A callback that became a phone task (it names a room) is listed once, as the task.
   const asTask = new Set(phone.map((task) => task.id));
   const callbacks = (calls ?? []).filter((call) => call.needsCallback && !asTask.has(`call:${call.id}`)).map(fromCall);
@@ -204,9 +263,31 @@ export function selectRequests({
 }
 
 export function countRequests(requests: readonly RequestView[]): Record<RequestStatus, number> {
-  const counts: Record<RequestStatus, number> = { venter: 0, pagar: 0, fullfort: 0, feilet: 0 };
+  const counts: Record<RequestStatus, number> = { venter: 0, pagar: 0, fullfort: 0, feilet: 0, avvist: 0, avlyst: 0 };
   for (const request of requests) counts[request.status] += 1;
   return counts;
+}
+
+export type RequestTotals = {
+  done: number;
+  /** Every request but the refused and the called-off ones: read "done av total". */
+  total: number;
+  /** Waiting for a person: waiting, or the robot handed it back. */
+  waiting: number;
+  declined: number;
+  cancelled: number;
+};
+
+/** One definition of "fullført av alle", for Forespørsler and its widget on Oversikt. */
+export function requestTotals(requests: readonly RequestView[]): RequestTotals {
+  const counts = countRequests(requests);
+  return {
+    done: counts.fullfort,
+    total: requests.length - counts.avvist - counts.avlyst,
+    waiting: counts.venter + counts.feilet,
+    declined: counts.avvist,
+    cancelled: counts.avlyst,
+  };
 }
 
 /** What needs a person now: waiting, or the robot failed and nobody has taken over. */

@@ -9,25 +9,24 @@ import { useReceptionCalls } from "@/features/dashboard/useReceptionCalls";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
 import { type DataSource, SourceNote } from "@/features/modules/SourceNote";
 import { osloToday } from "@/features/reception/dates";
-import { type DemoCall, demoCalls } from "@/features/reception/demoCalls";
+import type { DemoCall } from "@/features/reception/demoCalls";
 import { formatClock } from "@/features/reception/format";
-import { useStoredRecords } from "@/features/reception/useStoredRecords";
-import { ROOM_CHECK_MARKS } from "@/features/rooms/reconcile";
 import { Badge, Button, Card, cx, EmptyState, ErrorState, Skeleton, Stat } from "@/ui";
 import { CallSheet } from "./CallSheet";
-import { assignPhoneTask, PHONE_ASSIGNMENTS, type PhoneTask, phoneTasks } from "./phoneTasks";
+import { assignPhoneTask, type PhoneTask } from "./phoneTasks";
 import {
   countRequests,
-  fromRoomCheck,
   orderStatusOf,
   REQUEST_ORDER,
   REQUEST_STATUS,
   type RequestSource,
   type RequestStatus,
   type RequestView,
+  requestTotals,
   selectRequests,
   SOURCE_WORD,
 } from "./select";
+import { useRequestInputs } from "./useRequestInputs";
 import { focusAction, UndoStatus } from "./UndoStatus";
 
 const DONE_SHOWN = 8;
@@ -38,10 +37,12 @@ const GROUP_TITLE: Record<RequestStatus, string> = {
   feilet: "Roboten fikk det ikke til",
   pagar: "Pågår",
   fullfort: "Fullført",
+  avvist: "Avvist: roboten sjekket, det var ingenting å gjøre",
+  avlyst: "Avlyst av nattsjefen",
 };
 
 /** The one step a row offers: take a waiting request, take over what the robot failed, close it. */
-const VERB: Record<Exclude<RequestStatus, "fullfort">, string> = {
+const VERB: Record<Exclude<RequestStatus, "fullfort" | "avvist" | "avlyst">, string> = {
   venter: "Ta saken",
   feilet: "Ta over",
   pagar: "Marker fullført",
@@ -74,17 +75,9 @@ export function RequestsScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   const { run, night } = useNight(viewerUrl);
   const { state: calls, retry: retryCalls } = useReceptionCalls();
   const today = day ?? osloToday();
-  // What the AI receptionist took down in this browser, and last night's seeded calls (TODO(phase-3)).
-  const { records } = useStoredRecords();
-  const seeded = useMemo(() => demo ?? demoCalls(today), [demo, today]);
+  // What the AI receptionist took down (this browser, last night's seeded calls) and Rom's tasks: the same inputs Oversikt reads.
   const liveCalls = calls.kind === "ready" ? calls.calls : null;
-  const tasks = useMemo(() => phoneTasks(records, seeded, liveCalls ?? []), [records, seeded, liveCalls]);
-  const assignments = PHONE_ASSIGNMENTS.use();
-  const roomChecks = ROOM_CHECK_MARKS.use()[today];
-  const extra = useMemo(
-    () => Object.entries(roomChecks ?? {}).flatMap(([room, mark]) => (mark.action === "task" ? [fromRoomCheck(today, room, mark)] : [])),
-    [roomChecks, today],
-  );
+  const { phone: tasks, assignments, extra } = useRequestInputs({ today, demo, calls: liveCalls });
   const [call, setCall] = useState<{ task: PhoneTask; open: boolean } | null>(null);
   const [source, setSource] = useState<RequestSource | null>(null);
   const [allDone, setAllDone] = useState(false);
@@ -105,6 +98,7 @@ export function RequestsScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
     [night, calls, statusOf, tasks, assignments, extra],
   );
   const counts = countRequests(requests);
+  const totals = requestTotals(requests);
   const shown = source ? requests.filter((request) => request.source === source) : requests;
   const runLoading = run.status === "loading";
   const loading = runLoading || calls.kind === "loading";
@@ -125,7 +119,8 @@ export function RequestsScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
     if (!task) return;
     const who = to === "robot" ? "Roboten" : task.staff.name;
     const what = describe(request);
-    remember(request, "pagar", { message: to === "robot" ? `${what} er sendt til roboten.` : `${what} er gitt til ${who}.`, assigned: task.id });
+    // TODO(phase-3): no connection to the robot yet; the task waits in its queue in this browser, and the line says so.
+    remember(request, "pagar", { message: to === "robot" ? `${what} er lagt i robotens kø. Den sendes når roboten er koblet til.` : `${what} er gitt til ${who}.`, assigned: task.id });
     assignPhoneTask(task.id, { to, who, at: formatClock(new Date().toISOString()) });
     advance(request.id, "ny");
   };
@@ -150,10 +145,12 @@ export function RequestsScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
     <ModulePage module="foresporsler" ready={!loading} lede="Alt gjestene ber om, fra telefon, robot, personale og stemme. Det som venter på noen står først.">
       <FigureRow label="Forespørslene i tall">
         {/* What got done first, in green; the rest are plain counts (what needs a person is in the bell). */}
-        <Stat label="Fullført" value={figure(counts.fullfort)} tone={runLoading ? "default" : "success"} />
+        <Stat label="Fullført" value={figure(totals.done)} unit={runLoading ? undefined : `av ${totals.total}`} tone={runLoading ? "default" : "success"} />
         <Stat label="Pågår" value={figure(counts.pagar)} />
         <Stat label="Venter" value={figure(counts.venter)} />
         <Stat label="Feilet" value={figure(counts.feilet)} />
+        {/* Not failures: the robot refused a claim with no order on record, or the night manager called it off. */}
+        <Stat label="Avvist eller avlyst" value={figure(totals.declined + totals.cancelled)} />
       </FigureRow>
 
       {run.status === "error" && (
@@ -339,6 +336,7 @@ function Row({
             {request.lang === "en" ? `«${request.text}»` : request.text}
           </p>
         )}
+        {request.reason && <p className="text-sm text-text">{request.reason}</p>}
         <p className="flex flex-wrap items-center gap-x-3 text-sm text-muted">
           <span>{request.handler}</span>
           {phone && (
@@ -354,7 +352,7 @@ function Row({
         </p>
       </div>
       <div className={cx("flex shrink-0 flex-wrap items-center gap-3 sm:justify-end", phone && request.status === "venter" ? "sm:w-auto" : "sm:w-56")}>
-        <Badge tone={look.tone}>{look.word}</Badge>
+        <Badge tone={look.tone}>{request.pending ? "I robotens kø" : (request.statusWord ?? look.word)}</Badge>
         {phone && request.status === "venter" ? (
           <AssignButtons request={request} task={phone} named={named} onAssign={onAssign} />
         ) : request.actionable &&
@@ -362,11 +360,11 @@ function Row({
             <Button variant="ghost" size="sm" data-action-for={request.id} onClick={() => onReopen(request)} aria-label={`Angre fullført: ${named}`}>
               Angre
             </Button>
-          ) : (
-            <Button variant="secondary" size="sm" data-action-for={request.id} onClick={() => onAdvance(request)} aria-label={`${VERB[request.status]}: ${named}`}>
-              {VERB[request.status]}
+          ) : request.status in VERB ? (
+            <Button variant="secondary" size="sm" data-action-for={request.id} onClick={() => onAdvance(request)} aria-label={`${VERB[request.status as keyof typeof VERB]}: ${named}`}>
+              {VERB[request.status as keyof typeof VERB]}
             </Button>
-          ))}
+          ) : null)}
       </div>
     </li>
   );

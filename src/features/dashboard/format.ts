@@ -29,3 +29,8 @@ export function percent(value: number | null): string {
 export function formatNumber(value: number): string {
   return new Intl.NumberFormat("nb-NO", { useGrouping: "min2" }).format(value);
 }
+
+/** Kroner as a hotel writes them, grouped from four digits: 2900 → "2 900", 45490 → "45 490". */
+export function formatKroner(value: number): string {
+  return new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 0 }).format(value);
+}

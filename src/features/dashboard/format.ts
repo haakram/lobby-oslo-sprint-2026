@@ -5,13 +5,18 @@ const NIGHT_DAY = new Intl.DateTimeFormat("nb-NO", {
   month: "long",
 });
 
+const OSLO_HOUR = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Oslo", hour: "2-digit", hourCycle: "h23" });
+
 /**
  * "Natt til søndag 8. november": the shift runs 22:00 to 06:00, so it is named after the morning it
- * hands over to. The run log has no sim date; the start line's wall-clock time stands in for it.
+ * hands over to. The run log has no sim date; the start line's wall-clock time stands in for it. A
+ * start before noon (Oslo) already is that morning (the demo night was recorded Sun 8 Nov 01:07, so
+ * it is the night to Sunday); a start at noon or later hands over to the next morning.
  */
 export function nightLabel(startedAt: number | null): string | null {
   if (startedAt === null || !Number.isFinite(startedAt)) return null;
-  const morning = new Date((startedAt + 24 * 60 * 60) * 1000);
+  const hour = Number(OSLO_HOUR.format(new Date(startedAt * 1000)));
+  const morning = new Date((startedAt + (hour < 12 ? 0 : 24 * 60 * 60)) * 1000);
   return `Natt til ${NIGHT_DAY.format(morning)}`;
 }
 

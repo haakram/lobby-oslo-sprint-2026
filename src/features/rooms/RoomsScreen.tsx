@@ -41,9 +41,18 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
   const assignments = useMemo(() => (rooms ? assignRooms(rooms, cleanersToday()) : null), [rooms]);
   // "Klare til salg" is the one figure Oversikt shows too: ready, free in the booking system or released today.
   const { money } = useRoomCheck(ready ? run.lines : null, rackRooms);
-  // The rack says what the room check says: a room held back is taken, and one still to confirm is not a green Klar.
+  // The rack says what the room check says: a room held back is taken, one still to confirm is not a green Klar,
+  // and one sent to reception reads "Venter på PMS-en" until the booking system confirms it (as Oversikt and the 3D map).
   const boardRooms = useMemo(
-    () => (rackRooms && money ? withHeld(rackRooms, money.held.map((row) => row.room), money.toSell.map((row) => row.room)) : rackRooms),
+    () =>
+      rackRooms && money
+        ? withHeld(
+            rackRooms,
+            money.held.map((row) => row.room),
+            money.toSell.map((row) => row.room),
+            money.released.map((row) => row.room),
+          )
+        : rackRooms,
     [rackRooms, money],
   );
 

@@ -7,7 +7,7 @@ function minutes(seconds: number): string {
 /** "216 m (32 % kortere)" or "216 m (like kort)", for one baseline. */
 function Baseline({ label, metres, saved }: { label: string; metres: number; saved: { metres: number; percent: number } }) {
   return (
-    <div className="flex flex-wrap gap-x-2">
+    <div className="contents">
       <dt>{label}:</dt>
       <dd className="text-text">
         <span className="font-mono whitespace-nowrap tabular-nums">{Math.round(metres)} m</span>{" "}
@@ -60,11 +60,11 @@ export function RouteStats({
             <Stat label="Gangtid" value={Math.max(1, Math.round(seconds / 60))} unit="min" />
           )}
         </div>
-        <dl aria-label="Sammenlignet med" className="mt-4 flex flex-col gap-1 border-t border-line pt-3 text-sm text-muted">
+        <dl aria-label="Sammenlignet med" className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-t border-line pt-3 text-sm text-muted">
           <Baseline label="Mot hyllerekkefølge" metres={shelfMetres} saved={savedOnShelves} />
           <Baseline label="Mot listerekkefølgen" metres={naiveMetres} saved={saved} />
           {shorter && (
-            <div className="flex flex-wrap gap-x-2">
+            <div className="contents">
               <dt>Gangtid:</dt>
               <dd className="font-mono whitespace-nowrap text-text tabular-nums">{minutes(seconds)}</dd>
             </div>

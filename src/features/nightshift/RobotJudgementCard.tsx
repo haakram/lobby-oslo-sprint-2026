@@ -134,7 +134,7 @@ function CrossNightLine({ crossNight }: { crossNight: CrossNight }) {
       {build && build.nights > 1 && (
         <>
           {" "}
-          Samme versjon som i natt (<span className="font-mono text-sm sm:text-xs">{build.commit}</span>): {grouped(build.credited)} av {grouped(build.reported)} over {build.nights} netter.
+          Samme versjon som i natt (<span className="font-mono text-xs">{build.commit}</span>): {grouped(build.credited)} av {grouped(build.reported)} over {build.nights} netter.
         </>
       )}{" "}
       <span className="max-sm:block">Kilde: docs/runs/ledger.csv.</span>

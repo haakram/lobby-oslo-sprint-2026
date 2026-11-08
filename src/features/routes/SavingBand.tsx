@@ -75,27 +75,30 @@ export function SavingBand({
             </p>
           )}
           {win.comparable ? (
-            <dl aria-label="Sammenlignet med" className="mt-3 flex max-w-[64ch] flex-col gap-1 text-sm text-muted">
-              <div className="flex flex-wrap gap-x-2">
-                <dt>Mot romnummer-rekkefølge:</dt>
-                <dd className="text-text">
-                  <span className="font-mono tabular-nums">{metres.format(Math.round(plan.numberMetres))}</span> m, beste rute er {saving(win.onNumbers)}
-                </dd>
-              </div>
-              <div className="flex flex-wrap gap-x-2">
-                <dt>{given}:</dt>
-                <dd className="text-text">
-                  <span className="font-mono tabular-nums">{metres.format(Math.round(plan.givenMetres))}</span> m, beste rute er {saving(win.onGiven)}
-                  {win.rides > 0 && (
-                    <>
-                      {" "}
-                      og har <span className="font-mono tabular-nums">{win.rides}</span> {win.rides === 1 ? "heistur" : "heisturer"} færre
-                    </>
-                  )}
-                </dd>
-              </div>
-              {givenNote && <p>{givenNote}</p>}
-            </dl>
+            <>
+              {/* One row per baseline; on a tablet and up the names line up in one column. */}
+              <dl aria-label="Sammenlignet med" className="mt-3 grid max-w-[80ch] grid-cols-1 gap-y-1 text-sm text-muted sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-3">
+                <div className="contents">
+                  <dt>Mot romnummer-rekkefølge:</dt>
+                  <dd className="text-text">
+                    <span className="font-mono tabular-nums">{metres.format(Math.round(plan.numberMetres))}</span> m, beste rute er {saving(win.onNumbers)}
+                  </dd>
+                </div>
+                <div className="contents">
+                  <dt className="max-sm:mt-1">{given}:</dt>
+                  <dd className="text-text">
+                    <span className="font-mono tabular-nums">{metres.format(Math.round(plan.givenMetres))}</span> m, beste rute er {saving(win.onGiven)}
+                    {win.rides > 0 && (
+                      <>
+                        {" "}
+                        og har <span className="font-mono tabular-nums">{win.rides}</span> {win.rides === 1 ? "heistur" : "heisturer"} færre
+                      </>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+              {givenNote && <p className="mt-1 max-w-[80ch] text-sm text-muted">{givenNote}</p>}
+            </>
           ) : (
             <p className="mt-2 max-w-[60ch] text-sm text-muted">Korteste runde på tvers av etasjene.</p>
           )}

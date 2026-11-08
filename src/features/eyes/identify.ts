@@ -4,6 +4,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { PRODUCTS, productBySku } from "@/features/catalog/products";
 import { serverEnv } from "@/lib/env";
 import { appSpend, costUsd, type SpendMeter } from "@/lib/spend";
+import { catalogueAlternatives } from "./candidates";
 import { ModelOutput, type IdentifyResult } from "./schema";
 
 export class BudgetExceeded extends Error {
@@ -21,7 +22,7 @@ export class IdentifyRefused extends Error {
 const catalogue = PRODUCTS.map((p) => `${p.sku} | ${p.name} | ${p.category} | ${p.description}`).join("\n");
 
 // Stable and first, so it can be cached.
-const SYSTEM = `You identify retail and hotel supply products from a photo. Read any visible text on the packaging. Then pick the matching SKU from the catalogue below, or null when nothing matches. Never invent an SKU. Always give a short name and category for what you see, even when sku is null.
+const SYSTEM = `You identify retail and hotel supply products from a photo. Read any visible text on the packaging. Then pick the matching SKU from the catalogue below, or null when nothing matches. Never invent an SKU. Always give a short name and category for what you see, even when sku is null. When you are not sure (confidence medium or low), list up to two other catalogue SKUs it could be in alternatives, most likely first; a person compares them with the item in hand.
 
 Catalogue (sku | name | category | description):
 ${catalogue}`;
@@ -68,5 +69,6 @@ export async function identifyProduct(
     textSeen: out.textSeen,
     confidence: out.confidence,
     product,
+    alternatives: catalogueAlternatives(out.alternatives, product),
   };
 }

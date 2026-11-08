@@ -1,5 +1,6 @@
 import { productBySku } from "@/features/catalog/products";
-import { ModelOutput, type IdentifyResult } from "./schema";
+import { catalogueAlternatives } from "./candidates";
+import { IdentifyResponse, type IdentifyResult } from "./schema";
 import { SceneResponse, type Landmark } from "./sceneSchema";
 
 export const QUOTA_COPY = "Dagens kvote for gjenkjenning er brukt opp.";
@@ -42,11 +43,11 @@ async function postImage(path: string, image: string, failure: string, signal?: 
 /** POST /api/identify: what the product is, matched against our own catalogue. */
 export async function requestIdentify(image: string, signal?: AbortSignal): Promise<IdentifyResult> {
   const failure = "Fikk ikke kjent igjen varen";
-  const parsed = ModelOutput.safeParse(await postImage("/api/identify", image, failure, signal));
+  const parsed = IdentifyResponse.safeParse(await postImage("/api/identify", image, failure, signal));
   if (!parsed.success) throw new IdentifyError(failure);
-  // The product comes from our own catalogue, never from the response.
+  // The product and the alternatives come from our own catalogue, never from the response.
   const product = parsed.data.sku ? (productBySku(parsed.data.sku) ?? null) : null;
-  return { ...parsed.data, sku: product ? product.sku : null, product };
+  return { ...parsed.data, sku: product ? product.sku : null, product, alternatives: catalogueAlternatives(parsed.data.alternatives, product) };
 }
 
 /** POST /api/scene: the doors, lifts and signs in view. */

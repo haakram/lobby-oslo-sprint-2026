@@ -5,11 +5,12 @@ import { type Product, productBySku } from "@/features/catalog/products";
 import { Button } from "@/ui";
 
 /**
- * When the camera is not sure, the label decides (jury round 3, the Holio juror: a wrong SKU in a warehouse
- * becomes a wrong shipment). Instead of one tap on *Legg i plukkliste*, the worker types the SKU
- * printed on the item's or the shelf's label. The camera's guess goes on the list only when the
- * label agrees; a label that names another product offers that product instead; anything else says
- * so and keeps what was typed.
+ * When the camera is not sure and the item carries its own label, the label decides (product review:
+ * a wrong SKU in a warehouse becomes a wrong shipment). The worker types the SKU printed on the item
+ * itself, never the shelf's: the guessed shelf's label would only confirm the guess (product review,
+ * round 5). Items with no label are settled by picking among the candidates on Øyne's card. The
+ * camera's guess goes on the list only when the label agrees; a label that names another product
+ * offers that product instead; anything else says so and keeps what was typed.
  *
  * TODO(phase-3): read the label's barcode with the camera or the handheld's scanner instead of typing.
  */
@@ -58,7 +59,7 @@ export function ShelfLabelCheck({ guess, onConfirm }: { guess: Product; onConfir
         Bekreft med etiketten
       </label>
       <p id={`${id}-hint`} className="text-sm text-muted">
-        Kameraet er ikke sikkert. Skriv SKU-en som står på etiketten på varen eller hyllen, for eksempel 1004.
+        Skriv SKU-en fra etiketten på selve varen, ikke fra hylla, for eksempel 1004.
       </p>
       <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-[minmax(0,1fr)_auto]">
         <input

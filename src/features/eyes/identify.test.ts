@@ -48,6 +48,12 @@ describe("identifyProduct", () => {
     expect(result.name).toBe("Sjampo");
   });
 
+  it("keeps the model's alternatives to catalogue SKUs other than the guess, at most two", async () => {
+    const { client } = fakeClient({ parsed_output: { ...found("FT-1001"), confidence: "low", alternatives: ["FT-9999", "FT-1001", "FT-1003", "FT-1002", "FT-1006"] } });
+    const result = await identifyProduct("AAAA", "image/jpeg", { client, meter: createSpendMeter(5) });
+    expect(result.alternatives).toEqual(["FT-1003", "FT-1002"]);
+  });
+
   it("throws IdentifyRefused on a refusal", async () => {
     const { client } = fakeClient({ stop_reason: "refusal" });
     await expect(

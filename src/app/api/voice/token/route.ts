@@ -1,5 +1,6 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { voiceEnv, type VoiceEnv } from "@/lib/env";
+import { limitPaidRoute } from "@/app/api/_lib/paidRouteLimit";
 
 // A fresh token per request; never cached, never prerendered.
 export const dynamic = "force-dynamic";
@@ -14,7 +15,9 @@ function fail(status: number, error: string) {
  * A short-lived ElevenLabs conversation token (WebRTC) for the Fettero agent.
  * The API key stays here; the browser only ever sees the token.
  */
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
+  const limited = limitPaidRoute("voice-token", request);
+  if (limited) return limited;
   let env: VoiceEnv;
   try {
     env = voiceEnv();

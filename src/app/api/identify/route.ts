@@ -1,11 +1,14 @@
 import { BudgetExceeded, identifyProduct } from "@/features/eyes/identify";
 import { readImageBody } from "@/features/eyes/imageBody";
+import { limitPaidRoute } from "@/app/api/_lib/paidRouteLimit";
 
 export const runtime = "nodejs";
 
 const json = (body: unknown, status: number) => Response.json(body, { status });
 
 export async function POST(request: Request) {
+  const limited = limitPaidRoute("identify", request);
+  if (limited) return limited;
   const body = await readImageBody(request);
   if (!body.ok) return json({ error: body.error }, 400);
 

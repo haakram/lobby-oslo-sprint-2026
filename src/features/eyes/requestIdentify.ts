@@ -30,7 +30,9 @@ async function postImage(path: string, image: string, failure: string, signal?: 
   }
   const data: unknown = await response.json().catch(() => null);
   if (response.status === 429) {
-    const message = (data as { error?: unknown } | null)?.error;
+    const { error: message, code } = (data ?? {}) as { error?: unknown; code?: unknown };
+    // The per-user rate limit is brief: not the day's quota, so live recognition keeps going after it.
+    if (code === "rate_limited") throw new IdentifyError(typeof message === "string" ? message : failure);
     throw new IdentifyError(typeof message === "string" ? message : QUOTA_COPY, true);
   }
   if (!response.ok) throw new IdentifyError(failure);

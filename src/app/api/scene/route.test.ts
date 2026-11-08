@@ -11,6 +11,7 @@ vi.mock("@/features/eyes/identify", () => {
 });
 
 import { BudgetExceeded } from "@/features/eyes/identify";
+import { PAID_ROUTE_LIMITS, resetPaidRouteLimits } from "@/app/api/_lib/paidRouteLimit";
 import { POST } from "./route";
 
 const jpeg = (bytes = 10) => `data:image/jpeg;base64,${Buffer.alloc(bytes, 1).toString("base64")}`;
@@ -19,6 +20,7 @@ const call = (body: unknown) =>
 
 beforeEach(() => {
   describeScene.mockReset();
+  resetPaidRouteLimits();
 });
 
 describe("POST /api/scene", () => {
@@ -67,5 +69,15 @@ describe("POST /api/scene", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ landmarks });
     expect(describeScene.mock.calls[0][1]).toBe("image/jpeg");
+  });
+  it("answers 429 with Retry-After once a caller's per-minute limit is spent, before any model call", async () => {
+    describeScene.mockResolvedValue([]);
+    const max = PAID_ROUTE_LIMITS["scene"][0]!.max;
+    for (let i = 0; i < max; i++) expect((await call({ image: jpeg() })).status).toBe(200);
+    const res = await call({ image: jpeg() });
+    expect(res.status).toBe(429);
+    expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await res.json()).code).toBe("rate_limited");
+    expect(describeScene).toHaveBeenCalledTimes(max);
   });
 });

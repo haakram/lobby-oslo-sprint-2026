@@ -193,3 +193,30 @@ def test_done_is_split_by_what_it_rested_on_a_rise_during_the_task_or_the_robots
     split = ledger.basis_split(nights)
     assert (split["done_own"], split["done_own_credited"], split["done_after_rise"]) == (2, 1, 1)
     assert "own judgement 1 of 2 (50.0 %): room checks 1 of 1, spills 0 of 1" in ledger.basis_text("t", nights)
+
+
+def test_a_score_blind_night_is_an_experiment_its_done_all_own_judgement_and_a_stamped_commit_wins(tmp_path: Path) -> None:
+    blind, dirty = "w2-" + "1" * 32, "w2-" + "2" * 32
+    root = tmp_path / "blind"
+    write_jsonl(root / "temp" / "live_runs.jsonl", [{"t": 1794096422.7, "shift": blind, "seed": 16},
+                                                     {"t": 1794096500.0, "shift": dirty, "seed": 10}])
+    night = [
+        {"v": 1, "type": "start", "shift": blind, "mode": "practice", "seed": 16,
+         "build": {"commit": "ec84142abcde", "dirty": True}, "flags": {"score_blind": True}},
+        state(100),
+        decision("task_start", "R-001", "amenity"),
+        state(130),  # the score rose, but a blind agent never read it
+        call("report", {"request": "R-001", "outcome": "done", "note": "placed"}, "Noted. Thanks."),
+        decision("task_done", "R-001"),
+        {"v": 1, "type": "end", "score": 130, "reason": "server ended: time"},
+    ]
+    write_jsonl(root / "temp" / "runs" / f"{blind}.jsonl", night)
+    stamped = [{**night[0], "shift": dirty, "flags": {"score_blind": False}}, *night[1:]]
+    write_jsonl(root / "temp" / "runs" / f"{dirty}.jsonl", stamped)
+    (root / "agent" / "data").mkdir(parents=True)
+
+    by = {n.shift: n for n in ledger.collect([root])}
+    assert by[blind].kind == "experiment" and (by[blind].done_own, by[blind].done_after_rise) == (1, 0)
+    assert by[blind].commit == "ec84142" and by[blind].commit_source == "start_line"
+    assert by[dirty].kind == "board-test" and by[dirty].done_after_rise == 1  # dirty stamp: not a build
+    assert list(csv.DictReader(io.StringIO(ledger.builds_csv(list(by.values()))))) == []

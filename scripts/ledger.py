@@ -28,6 +28,13 @@ is a seed-specific board experiment, not a build of the agent:
   checkout is caught without a new name here; or
 - any checkout whose working tree differs from its commit (tracked files changed against HEAD, by
   ``git status --untracked-files=no``, read when the ledger runs), so the commit is not what played.
+A night is an ``experiment`` when its log's ``start`` line says so: the flags in force carry
+``score_blind: true`` (the score-blind runs on ``hamad/blind``: the agent never reads the score, so every
+"done" it says is its own judgement). Experiments are kept like board tests (in ledger.csv, out of builds.csv
+and every build figure, in the all-nights figure only when complete) and get their own printed line.
+When the ``start`` line carries the code version (``build: {commit, dirty}``, newer agents), that commit wins
+over the two inferences below (``commit_source=start_line``), and ``dirty: true`` makes a build night a
+board test: the commit is not what played, decided when the night ran, not when the ledger runs.
 Every other night is a ``build`` night. Board tests:
 - stay in ledger.csv, marked ``kind=board-test`` (the best live score anywhere is one of them);
 - are left out of builds.csv's per-commit rows, out of the judgement card's same-build figure and out
@@ -92,7 +99,7 @@ FIDELITY_TXT = REPO / "docs" / "runs" / "replay-fidelity.txt"
 # Seed-specific board experiments, not builds (see the docstring): their nights are kind=board-test.
 BOARD_CHECKOUTS = frozenset({"lottery", "lawet", "wetoff", "lafinal", "boardtune"})
 BOARD_BRANCH = re.compile(r"(^|/)board-")
-BUILD, BOARD_TEST = "build", "board-test"
+BUILD, BOARD_TEST, EXPERIMENT = "build", "board-test", "experiment"
 # The final branch's last four builds (hamad/final, the README's "18 nights"): the done split is also
 # printed over their complete build nights. A list, not a rule: a later build is added here by hand.
 FINAL_BUILDS = ("d4e445c", "cb72845", "8eac151", "c3801e0")
@@ -174,8 +181,19 @@ def score_of(line: dict) -> int | None:
     return None
 
 
+def start_line(lines: list[dict]) -> dict:
+    return next((line for line in lines if line.get("type") == "start"), {})
+
+
+def score_blind(lines: list[dict]) -> bool:
+    flags = start_line(lines).get("flags")
+    return isinstance(flags, dict) and flags.get("score_blind") is True
+
+
 def read_night(lines: list[dict]) -> dict:
-    """The per-night columns from one run log (lines already parsed)."""
+    """The per-night columns from one run log (lines already parsed). A score-blind night's "done" are all
+    the robot's own judgement: the agent never read the score, whatever the log recorded of it."""
+    blind = score_blind(lines)
     requests: set[str] = set()
     done_reports = done_credited = failed = calls = refused = drops = lost = 0
     declines: list[int] = []  # index of each declined report
@@ -196,7 +214,7 @@ def read_night(lines: list[dict]) -> dict:
             if last_score is not None and score < last_score:
                 drops += 1
                 lost += last_score - score
-            if last_score is not None and score > last_score:
+            if last_score is not None and score > last_score and not blind:
                 for task in open_tasks.values():
                     task[1] = True
             last_score = score
@@ -394,9 +412,16 @@ def collect(roots: list[Path]) -> list[Night]:
                 night.log = str(log.relative_to(home))
             except ValueError:
                 night.log = str(log)
-            start = next((line for line in lines if line.get("type") == "start"), None)
-            if night.seed is None and start and isinstance(start.get("seed"), int):
+            start = start_line(lines)
+            if night.seed is None and isinstance(start.get("seed"), int):
                 night.seed = start["seed"]
+            stamp = start.get("build")
+            if isinstance(stamp, dict) and isinstance(stamp.get("commit"), str) and stamp["commit"]:
+                night.commit, night.commit_source = stamp["commit"][:7], "start_line"
+                if stamp.get("dirty") is True and night.kind == BUILD:
+                    night.kind = BOARD_TEST
+            if score_blind(lines):
+                night.kind = EXPERIMENT
         nights.append(night)
     nights.sort(key=lambda night: night.t)
     return nights
@@ -542,8 +567,10 @@ def main(argv: list[str] | None = None) -> int:
     logged = [n for n in nights if n.log]
     complete = [n for n in logged if n.complete]
     board = [n for n in nights if n.kind == BOARD_TEST]
+    experiments = [n for n in nights if n.kind == EXPERIMENT]
     print(f"{len(nights)} live starts, {len(logged)} with a log, {len(complete)} complete nights; "
-          f"{len(board)} board tests ({sum(1 for n in board if n.complete)} complete)")
+          f"{len(board)} board tests ({sum(1 for n in board if n.complete)} complete); "
+          f"{len(experiments)} score-blind experiments ({sum(1 for n in experiments if n.complete)} complete)")
     count, credited, reports = precision(counted(nights))
     if reports:
         print(f"all nights (the card's figure): {credited} of {reports} 'done' credited over {count} nights "
@@ -552,6 +579,14 @@ def main(argv: list[str] | None = None) -> int:
     if final:
         print("done split, " + basis_text("final branch's last four builds", final))
     print("done split, " + basis_text("all nights the card counts", [n for n in counted(nights) if (n.done_reports or 0) > 0]))
+    blind = [n for n in experiments if n.log]
+    if blind:
+        s = basis_split(blind)
+        rate = f" ({100 * s['done_credited'] / s['done_reports']:.1f} %)" if s["done_reports"] else ""
+        print(f"score-blind experiment ({len(blind)} nights, {sum(1 for n in blind if n.complete)} complete; seeds "
+              f"{' '.join(str(n.seed) for n in blind)}; scores {' '.join(str(n.score) for n in blind)}): "
+              f"{s['done_credited']} of {s['done_reports']} 'done' credited{rate}, "
+              f"false done {s['done_reports'] - s['done_credited']}")
     builds = [n for n in complete if n.kind == BUILD and n.score is not None]
     if builds:
         best = max(builds, key=lambda n: n.score or 0)

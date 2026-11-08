@@ -66,6 +66,7 @@ def handle(ex: Executor, task: Task) -> Result:
     if task.kind not in (Kind.FOLLOWUP, Kind.NOISE):  # those keep their own logic
         _refuse_known_dnd(ex, task.room, task.request)
     ex.ensure_battery()  # a trip starts: below 25 % it charges first (never runs flat)
+    ex.charge_for(task)  # ... and only with the battery for its drain and the way back to the dock
     if task.room is None and task.guest and task.kind in NAMED_KINDS:
         return flows_extra.named(ex, task)
     handler = HANDLERS.get(task.kind) or flows_extra.HANDLERS.get(task.kind)
@@ -859,6 +860,7 @@ def _find(ex: Executor, item: str, hint: str | None, request: str | None = None)
                 ex.log("look_failed", at=place, reason=str(exc))
             if name := _pick_found(ex, item, primary, request):
                 return name
+            ex.battery_guard()  # a scan drains 1 %: enough battery for it?
             ex.scan()
             scans += 1
             if name := _pick_found(ex, item, primary, request):

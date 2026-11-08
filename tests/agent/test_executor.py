@@ -1472,8 +1472,9 @@ def test_forced_charge_docks_again_after_each_wake(tmp_path):
     assert 15 <= block["minutes"] <= 17, block
 
 
-def test_forced_charge_docks_through_wakes_up_to_a_target_it_can_reach(tmp_path):
+def test_forced_charge_docks_through_wakes_up_to_a_target_it_can_reach(tmp_path, monkeypatch):
     # 05:30: the target has shrunk to 22 % (10 + 0.4 x 30), reached in ~12 min, before the 15 min bound.
+    monkeypatch.setattr("agent.executor.END_STOP", False)  # the chain to the target; the stop: test_end_of_night.py
     fake, session, ex = _at_clock(tmp_path, _every(2, start="05:32:00", n=12), battery=10, clock="05:30:00")
     _inbox_hook(ex)
     unread = _unread_at_docks(fake)
@@ -1664,11 +1665,11 @@ def test_a_forced_block_under_25_after_15_min_keeps_docking(tmp_path):
 def test_no_forced_charge_when_the_battery_lasts_to_six(tmp_path):
     fake, session, ex = _at_clock(tmp_path, [], battery=14.5, clock="05:50:00")
     ex.queue.append(parse_request("R-009", "104 wants a towel.", "05:49:00"))
-    assert ex.ensure_battery() is False  # 10 min x 0.9 + 5 = 14 <= 14.5: work, not a charge
+    assert ex.ensure_battery() is False  # 10 min x 0.8 + 2 = 10 <= 14.5: work, not a charge
     assert not calls(fake, "dock") and decisions(session, "charge_deferred")
     fake, _session, ex = _at_clock(tmp_path, _every(2, start="05:42:00", n=8), battery=14.5, clock="05:40:00")
     ex.queue.append(parse_request("R-009", "104 wants a towel.", "05:39:00"))
-    assert ex.ensure_battery() is True  # 20 min x 0.9 + 5 = 23 > 14.5: forced
+    assert ex.ensure_battery() is True  # 20 min x 0.8 + 2 = 18 > 14.5: forced
     assert calls(fake, "dock")
 
 
@@ -1687,13 +1688,12 @@ def _far_from_the_dock(tmp_path, battery, clock):
 
 
 def test_the_guard_never_skips_a_forced_charge_below_the_dock_reserve(tmp_path):
-    # 50 % with 60 min left: 60 x 0.9 + 5 = 59 > 50, the guard does not skip (at 0.75 it gave 50 and
-    # skipped: at a real 0.9 %/min that robot strands ~5 min before 06:00, -200).
-    fake, session, ex = _far_from_the_dock(tmp_path, 50, "05:00:00")
-    assert not ex._lasts_the_night(50)
+    # 45 % with 60 min left: 60 x 0.8 + 2 = 50 > 45, the guard does not skip.
+    fake, session, ex = _far_from_the_dock(tmp_path, 45, "05:00:00")
+    assert not ex._lasts_the_night(45)
     assert ex.ensure_battery() is True and calls(fake, "dock")
     assert decisions(session, "battery_low")[-1]["forced"] is True
-    # 50 % with 20 min left lasts the night by the drain (23 % needed), but it is under the dock
+    # 50 % with 20 min left lasts the night by the drain (18 % needed), but it is under the dock
     # reserve: still charged.
     fake, session, ex = _far_from_the_dock(tmp_path, 50, "05:40:00")
     assert ex._lasts_the_night(50)
@@ -1712,17 +1712,17 @@ def test_the_battery_needed_to_six_is_conservative_and_wraps_midnight(tmp_path):
         ex.state.clock = clock
         return ex._needed_to_six()
 
-    assert needed("05:50:00") == 0.9 * 10 + 5
-    assert needed("00:00:00") == 0.9 * 360 + 5  # after midnight: 6 h left, not 30 h or -18 h
-    assert needed("23:30:00") == 0.9 * 390 + 5
-    assert needed("06:00:00") == 5.0
+    assert needed("05:50:00") == 0.8 * 10 + 2  # END_DRAIN_PER_MIN and END_MARGIN (tests/agent/test_end_of_night.py)
+    assert needed("00:00:00") == 0.8 * 360 + 2  # after midnight: 6 h left, not 30 h or -18 h
+    assert needed("23:30:00") == 0.8 * 390 + 2
+    assert needed("06:00:00") == 2.0
 
     def lasts(battery, clock):
         ex.state.clock = clock
         return ex._lasts_the_night(battery)
 
-    assert not lasts(50, "05:00:00")  # 60 min left: 59 % needed
-    assert lasts(30, "05:40:00")  # 20 min left: 23 % needed
+    assert not lasts(45, "05:00:00")  # 60 min left: 50 % needed
+    assert lasts(30, "05:40:00")  # 20 min left: 18 % needed
 
 
 def test_charged_line_counts_the_wakes_of_a_chain(tmp_path):

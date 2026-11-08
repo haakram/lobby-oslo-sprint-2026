@@ -85,7 +85,7 @@ describe("the guide language on this device (Holio pain 9)", () => {
   it("has every pick list word in every language", () => {
     for (const { code } of GUIDE_LANGUAGES) {
       for (const [key, value] of Object.entries(PICKLIST_WORDS[code])) {
-        const text = typeof value === "function" ? value(2) : value;
+        const text = typeof value === "function" ? (value as (input: unknown) => string)(2) : value;
         expect(String(text).length, `${code} ${key}`).toBeGreaterThan(0);
       }
     }

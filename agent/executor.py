@@ -89,6 +89,22 @@ BATTERY_OK = 60.0  # ... up to this (or until a request arrives)
 BATTERY_CRITICAL = 15.0  # below this the charge goes ahead even while work waits (a forced block)
 DRAIN_PER_MIN = 0.9  # [obs] active battery drain, % per sim minute (413 live intervals)
 DOCK_MARGIN = 5.0  # % kept on top of what the way to the dock drains
+# End of the night: the battery a robot working without a break to 06:00 still needs is END_DRAIN_PER_MIN x
+# the minutes left + END_MARGIN [obs, live work windows with no dock, 67 real nights: 0.70 %/min on average,
+# also after 04:00; p90 over 30-60 min 0.76-0.80; the worst 10-15 min window 1.01]. It decides when a forced
+# charge under BATTERY_CRITICAL is skipped (the last ~16 min) and when a forced block stops (below). A night
+# that drains faster than the rate falls under the need again and charges again; the dock reserve
+# (DRAIN_PER_MIN + DOCK_MARGIN on the way to the dock) still forces a charge under it, whatever the clock.
+# One rate for both, or the robot would leave a block with a battery the skip rule sends straight back.
+# Replay (67 real nights vs 8eac151): 0.75-0.80 +15.0 plain / +8.6 seed-weighted, 0.85-0.90 +13.1 / +6.6,
+# 1.0 +7.2 / +4.3; margin 3 or 5 less; drain x1.08: 0.80 +21.0 / +11.2; never a strand.
+END_DRAIN_PER_MIN = 0.8
+END_MARGIN = 2.0  # was DOCK_MARGIN (5): at 05:47 with 14.4 % that sent the robot to a dock no message woke
+# ... and a forced block ends at the first dock where the battery lasts the night (that need at the dock's
+# clock) and covers the way to the dock: live docks end only on a message, so a block charged to a fixed
+# target ran 15-25 min after 05:00 with 6-14 requests waiting and ended the night with 13-22 % unused
+# (replay seeds 9, 16, 23).
+END_STOP = True
 CHARGE_ROUNDS = 20  # docks per charge: a forced block chains short docks, each woken by a message
 # A forced charge is a block: dock, read the inbox when a message wakes it (0 s), dock again, up to
 # this target. Live seed 16 ran ~20 forced cycles after 03:21, each a walk to the dock that the next
@@ -1484,16 +1500,16 @@ class Executor:
             self.inbox_waiting = False
 
     def _needed_to_six(self) -> float:
-        """% a robot working without a break until 06:00 still drains, plus DOCK_MARGIN; infinite
-        when the clock is unknown. Conservative like the dock reserve: DRAIN_PER_MIN (0.9), not the
-        measured 0.70-0.76 (at 0.75 a robot at 50 % with 60 min left passed, and at a real 0.9 it
-        strands ~5 min before 06:00, -200). clock_to_seconds puts times before noon on the next
-        day, so the minutes left are right on both sides of midnight."""
+        """% a robot working without a break until 06:00 still drains, plus END_MARGIN; infinite
+        when the clock is unknown. END_DRAIN_PER_MIN (0.8) is above the measured mean (0.70); a
+        robot that drains faster falls under this need again and charges again, and the dock reserve
+        stays in force (_charge). clock_to_seconds puts times before noon on the next day, so the
+        minutes left are right on both sides of midnight."""
         now = self._now_s()
         if now is None:
             return float("inf")
         left = max(0.0, (clock_to_seconds(NIGHT_END) - now) / 60)
-        return DRAIN_PER_MIN * left + DOCK_MARGIN
+        return END_DRAIN_PER_MIN * left + END_MARGIN
 
     def _lasts_the_night(self, battery: float) -> bool:
         """The battery carries the robot to 06:00: no charge forced by BATTERY_CRITICAL (a charge
@@ -1584,6 +1600,8 @@ class Executor:
                     and now - start_s >= FORCED_BLOCK_MAX_S and not price.on("charge")):
                 break  # (price switch "charge": the price decides when the block ends, _charge_not_worth)
             dock = self.hotel.special.get("dock", "charging-dock")
+            if forced and self._charged_enough(battery, dock):
+                break
             if not self._reach_dock(dock):
                 self.log("charge_failed", reason=f"could not reach {dock}")
                 break
@@ -1614,6 +1632,15 @@ class Executor:
         self.log("charge_block", **{"from": start_battery}, to=self._battery(),
                  minutes=None if minutes is None else round(minutes, 1), queued=len(self.queue),
                  woken=woken, forced=forced, target=round(target, 1))
+
+    def _charged_enough(self, battery: float, dock: str) -> bool:
+        """END_STOP: a forced block stops once the battery lasts the night (_needed_to_six at this clock)
+        and covers the way to the dock (the reserve, 0 at the dock): a dock ends only on a message, so
+        more charge late in the night is work lost. One `charge_lasts` line when it stops the block."""
+        if not END_STOP or not self._lasts_the_night(battery) or battery < self._dock_reserve(dock):
+            return False
+        self.log("charge_lasts", battery=battery, needed=round(self._needed_to_six(), 1), queued=len(self.queue))
+        return True
 
     def _charge_not_worth(self) -> bool:
         """Price switch "charge": a forced block stops after a wake-up once the battery covers the queued

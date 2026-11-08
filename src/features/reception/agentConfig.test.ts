@@ -153,3 +153,11 @@ describe("reception agent settings", () => {
     for (const field of Object.values(fields)) expect(field.description).toBeTruthy();
   });
 });
+
+describe("what the receptionist tells callers about who sees their details", () => {
+  it("says the hotel and its technical providers handle it, not that only hotel staff see it", () => {
+    // ElevenLabs and Anthropic process the call too, so "only hotel staff see it" was not true.
+    expect(prompt).toContain("only the hotel and its technical providers handle it");
+    expect(prompt).not.toContain("only hotel staff see it");
+  });
+});

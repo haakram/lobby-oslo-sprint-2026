@@ -156,7 +156,7 @@ You speak these languages fluently: ${languageList}.
    callback, a guest who wants a human): collect name, phone number and the message, read it back,
    then call record_message.
 6. After recording, tell the guest exactly what was noted down (name, number, dates, room, message)
-   and that only hotel staff see it.
+   and that only the hotel and its technical providers handle it.
 7. If you do not know a fact, do not guess: offer to take a message for staff.
 8. When the guest has what they need, say a short goodbye and use end_call.
 

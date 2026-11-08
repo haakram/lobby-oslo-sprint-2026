@@ -3,31 +3,58 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { canAccess } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { useHotelData } from "@/features/dashboard/useHotelData";
+import { handoverLine, type HandoverSummary } from "@/features/handover/select";
+import { openSummary, useHandover } from "@/features/handover/useHandover";
 import { moduleById } from "@/features/modules/registry";
+import { osloToday } from "@/features/reception/dates";
 import { Badge, Button, buttonClasses, cx, EmptyState, RegenIcon, Sheet, Skeleton } from "@/ui";
 import { type Alert, MAX_ALERTS, selectAlerts } from "./alerts";
 import { isNew, useSeen } from "./useSeen";
 
-/** "Varsler, 3 nye": the bell's name says the count, the badge only shows it. */
-export function bellLabel(fresh: number, loading: boolean): string {
+/**
+ * "Varsler, 3 nye": the bell's name says the count, the badge only shows it. For a role that may open
+ * Overlevering the badge is the page's straks (round 7, design review: 10 on the bell, 13 in *Åpent nå*
+ * and 5 on the safety figure read as three counts), and the name says the page's line.
+ */
+export function bellLabel(fresh: number, loading: boolean, handover: HandoverSummary | null = null): string {
   if (loading) return "Varsler, henter";
+  if (handover) return `Varsler, ${handoverLine(handover).replace(/^Overlevering 06:00: /, "")}`;
   if (fresh === 0) return "Varsler, ingen nye";
   return `Varsler, ${fresh} ${fresh === 1 ? "ny" : "nye"}`;
 }
 
 const noop = () => () => {};
 
+// The one "needs you" line lives with the page that owns the numbers (handover/select.ts).
+export { handoverLine, type HandoverSummary };
+
 /**
  * The bell in the navigation, on every page and for every role: what needs a person, from every
- * module the role may open. Reads the same hotel as Oversikt (useHotelData).
+ * module the role may open. Reads the same hotel as Oversikt (useHotelData), and the same Overlevering
+ * as the page (useHandover): its safety alerts are *Åpent nå*'s straks saker, the night clerk's
+ * entries included, and its line says how many saker the page holds.
  */
 export function NotificationBell({ viewerUrl }: { viewerUrl?: string }) {
   const { user } = useSession();
-  const { data } = useHotelData(viewerUrl);
-  const alerts = useMemo(() => selectAlerts(data), [data]);
-  return <NotificationBellView alerts={alerts} loading={data.loading} nightFailed={data.nightStatus === "error"} user={user?.u ?? null} />;
+  const { data, nightState, statusOf } = useHotelData(viewerUrl);
+  const { safety, handover } = useHandover({ nightState, statusOf, today: osloToday() });
+  const alerts = useMemo(() => selectAlerts({ ...data, safety: safety ?? data.safety }), [data, safety]);
+  const mayOpen = canAccess(data.role, "/overlevering");
+  const summary = useMemo(() => (handover && mayOpen ? openSummary(handover.open) : null), [handover, mayOpen]);
+  // Until the page's numbers are in, a role that may open it gets no badge (never a count that then changes meaning).
+  return (
+    <NotificationBellView
+      alerts={alerts}
+      loading={data.loading}
+      nightFailed={data.nightStatus === "error"}
+      user={user?.u ?? null}
+      handover={summary}
+      handoverPending={mayOpen && !summary && data.nightStatus !== "error"}
+    />
+  );
 }
 
 /**
@@ -41,11 +68,17 @@ export function NotificationBellView({
   loading,
   nightFailed = false,
   user,
+  handover = null,
+  handoverPending = false,
 }: {
   alerts: readonly Alert[];
   loading: boolean;
   nightFailed?: boolean;
   user: string | null;
+  /** Overlevering's *Åpent nå* (useHandover), for a role that may open it; null otherwise. */
+  handover?: HandoverSummary | null;
+  /** The role may open Overlevering and its numbers are not in yet: no badge until they are. */
+  handoverPending?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [said, setSaid] = useState("");
@@ -59,7 +92,12 @@ export function NotificationBellView({
   const rest = alerts.slice(MAX_ALERTS);
   const fresh = shown.filter((alert) => isNew(alert, seen));
   const old = shown.filter((alert) => !isNew(alert, seen));
+  // The badge counts every new alert, also the ones named in "og N til" (review round 1: it said 5 with 6 in the sheet).
+  const freshAll = alerts.filter((alert) => isNew(alert, seen));
+  const freshCount = freshAll.length;
   const waiting = loading && alerts.length === 0;
+  // One count (round 7): the badge is Overlevering's straks when the role may open it, else what is new here.
+  const badge = handover ? handover.straks : handoverPending ? 0 : freshCount;
 
   // After Marker som sett the button is gone: put the focus on the next new alert, or on the one
   // just marked (now under Sett), never on <body>.
@@ -79,8 +117,8 @@ export function NotificationBellView({
   }
 
   function markAll() {
-    mark(fresh);
-    setSaid(fresh.length === 1 ? "Varselet er markert som sett." : `Alle ${fresh.length} varsler er markert som sett.`);
+    mark(freshAll);
+    setSaid(freshAll.length === 1 ? "Varselet er markert som sett." : `Alle ${freshAll.length} varsler er markert som sett.`);
     if (fresh[0]) setFocusNext(fresh[0].id);
   }
 
@@ -96,6 +134,15 @@ export function NotificationBellView({
         <p role="status" className="sr-only">
           {said}
         </p>
+        {/* The page's two numbers, from the same composition: the bell's Haster safety rows are its straks. */}
+        {handover && handover.total > 0 && !waiting && (
+          <p className="mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-line pb-2 text-sm">
+            <span>{handoverLine(handover)}</span>
+            <Link href="/overlevering" onClick={() => setOpen(false)} className="inline-flex min-h-11 items-center font-semibold text-accent-text hover:underline">
+              Åpne Overlevering
+            </Link>
+          </p>
+        )}
         {waiting ? (
           <div className="flex flex-col gap-4 py-2" aria-busy="true">
             <Skeleton className="h-16 w-full" />
@@ -113,8 +160,8 @@ export function NotificationBellView({
         ) : (
           <>
             <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-1">
-              <p className="text-sm text-muted">{fresh.length > 0 ? `${fresh.length} ${fresh.length === 1 ? "ny" : "nye"}, trenger en person` : "Alt her er sett."}</p>
-              {fresh.length > 0 && (
+              <p className="text-sm text-muted">{freshCount > 0 ? `${freshCount} ${freshCount === 1 ? "ny" : "nye"}, trenger en person` : "Alt her er sett."}</p>
+              {freshCount > 0 && (
                 <Button variant="ghost" size="sm" onClick={markAll}>
                   Merk alle som sett
                 </Button>
@@ -172,7 +219,7 @@ export function NotificationBellView({
     <>
       <button
         type="button"
-        aria-label={bellLabel(fresh.length, waiting)}
+        aria-label={bellLabel(freshCount, waiting, handover)}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => {
@@ -183,16 +230,16 @@ export function NotificationBellView({
           "relative flex size-11 shrink-0 items-center justify-center rounded-md text-muted",
           "transition-[background-color,color,transform] duration-[120ms] ease-standard hover:bg-sunken hover:text-text active:scale-[0.97]",
           "focus-visible:outline-offset-[-2px]",
-          fresh.length > 0 && "text-text",
+          badge > 0 && "text-text",
         )}
       >
         <RegenIcon name="bell" size={22} />
-        {fresh.length > 0 && (
+        {badge > 0 && (
           <span
             aria-hidden="true"
             className="absolute top-1 right-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-text px-1 font-mono text-xs leading-none font-medium text-bg tabular-nums animate-fade"
           >
-            {fresh.length}
+            {badge}
           </span>
         )}
       </button>

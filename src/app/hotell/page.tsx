@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { HotelScreen } from "@/features/hotel3d/HotelScreen";
 
 export const metadata: Metadata = {
-  title: { absolute: "Hotell | Lobby" },
+  title: "Hotell",
   description: "Hele hotellet i 3D: romstatus og roboten der den går, natten gjennom.",
 };
 

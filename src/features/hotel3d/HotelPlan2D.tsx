@@ -1,7 +1,8 @@
 import { type KeyboardEvent, useMemo } from "react";
 import { BASE_HOTEL, floorsOf, type HotelMap, type HotelNode } from "@/features/hotel/mapFromRun";
-import { placeName, ROOM_STATUS_LABEL, roomNumber, type Snapshot } from "@/features/replay";
+import { placeName, roomNumber, type Snapshot } from "@/features/replay";
 import { cx } from "@/ui";
+import { roomWord } from "./held";
 import { STATUS_CSS_VAR } from "./tokens";
 
 /**
@@ -149,7 +150,8 @@ export function HotelPlan2D({
                   const status = snapshot?.rooms[node.id]?.status ?? "ukjent";
                   const highlighted = robot?.attention === node.id;
                   const isSelected = selectedRoom === node.id;
-                  const name = `Rom ${roomNumber(node.id)}: ${ROOM_STATUS_LABEL[status]}`;
+                  const avvik = snapshot?.rooms[node.id]?.avvik ?? false;
+                  const name = `Rom ${roomNumber(node.id)}: ${roomWord(snapshot?.rooms[node.id])}${avvik ? ", åpent avvik" : ""}`;
                   return (
                     <g
                       key={node.id}
@@ -169,8 +171,9 @@ export function HotelPlan2D({
                         height={ROOM}
                         rx={0.25}
                         fill={STATUS_CSS_VAR[status]}
-                        stroke={isSelected ? "var(--text)" : highlighted ? "var(--accent)" : "var(--line-strong)"}
-                        strokeWidth={isSelected || highlighted ? 0.4 : 0.1}
+                        // An open avvik is an ink frame over the room's own colour, never red (DESIGN.md).
+                        stroke={isSelected || avvik ? "var(--text)" : highlighted ? "var(--accent)" : "var(--line-strong)"}
+                        strokeWidth={isSelected || highlighted ? 0.4 : avvik ? 0.3 : 0.1}
                       />
                       <text
                         x={node.x}

@@ -20,7 +20,7 @@ export type RobotMove = {
 /** One stop on a task's walk: where the robot did something, or an elevator ride. */
 export type TaskStep = {
   node: string;
-  /** What the robot did there, in staff words, in order ("hent brett til 104", "melder utført"). */
+  /** What the robot did there, in staff words, in order ("hent brett til 104", "melder fullført"). */
   actions: string[];
   /** An elevator ride between two floors; `node` is the elevator it got out at. */
   ride: { from: number; to: number } | null;
@@ -130,7 +130,7 @@ export function actionText(cmd: string, args: unknown): string | null {
     case "ask":
       return str(a?.person) === "clerk" ? "spør resepsjonen" : "spør";
     case "report":
-      return str(a?.outcome) === "done" ? "meld utført" : str(a?.outcome) === "failed" ? "meld feilet" : "meld fra";
+      return str(a?.outcome) === "done" ? "meld fullført" : str(a?.outcome) === "failed" ? "meld feilet" : "meld fra";
     default:
       return null;
   }

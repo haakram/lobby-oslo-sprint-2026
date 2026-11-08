@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { RoutesScreen, type RouteParams } from "@/features/routes/RoutesScreen";
 
-// Absolute: the product is Lobby now; the layout's title template still says the old name.
-export const metadata: Metadata = { title: { absolute: "Ruter | Lobby" } };
+export const metadata: Metadata = { title: "Ruter" };
 
 const KEYS = ["modus", "rom", "start", "vogn", "sku"] as const;
 

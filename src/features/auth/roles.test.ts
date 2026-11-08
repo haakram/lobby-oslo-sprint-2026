@@ -7,6 +7,8 @@ const MATRIX: Record<string, Record<Role, boolean>> = {
   "/": { admin: true, receptionist: true, robot: true, host: false },
   "/rom": { admin: true, receptionist: true, robot: true, host: false },
   "/gjester": { admin: true, receptionist: true, robot: false, host: false },
+  "/overlevering": { admin: true, receptionist: true, robot: false, host: false },
+  "/natt": { admin: true, receptionist: true, robot: false, host: false },
   "/foresporsler": { admin: true, receptionist: true, robot: true, host: false },
   "/vedlikehold": { admin: true, receptionist: false, robot: true, host: false },
   "/lager": { admin: true, receptionist: false, robot: true, host: false },
@@ -105,8 +107,9 @@ describe("role helpers", () => {
     expect(roleLabel("host")).toBe("Vert");
   });
 
-  it("starts every hotel role on Oversikt and the host on its own app", () => {
-    expect(homeFor("admin")).toBe("/");
+  it("starts the pilot accounts (admin) on Overlevering, the other hotel roles on Oversikt and the host on its own app", () => {
+    expect(homeFor("admin")).toBe("/overlevering");
+    expect(canAccess("admin", "/")).toBe(true); // Oversikt stays one tap away
     expect(homeFor("receptionist")).toBe("/");
     expect(homeFor("robot")).toBe("/");
     expect(homeFor("host")).toBe("/vert");

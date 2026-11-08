@@ -18,6 +18,8 @@ describe("the module registry", () => {
       "rom",
       "gjester",
       "ruter",
+      "overlevering",
+      "natt",
       "foresporsler",
       "vedlikehold",
       "lager",
@@ -53,7 +55,7 @@ describe("the module registry", () => {
       expect(canAccess("robot", entry.route), entry.route).toBe(entry.roles.includes("robot"));
       expect(canAccess("host", entry.route), entry.route).toBe(entry.roles.includes("host"));
     }
-    expect(moduleRoutesFor("receptionist")).toEqual(["/", "/rom", "/gjester", "/ruter", "/foresporsler", "/ansatte", "/resepsjon"]);
+    expect(moduleRoutesFor("receptionist")).toEqual(["/", "/rom", "/gjester", "/ruter", "/overlevering", "/natt", "/foresporsler", "/ansatte", "/resepsjon"]);
     expect(moduleRoutesFor("robot")).toEqual(["/", "/rom", "/ruter", "/foresporsler", "/vedlikehold", "/lager", "/hotell", "/natteskift", "/oyne", "/stemme"]);
     // The host (an Airbnb host) has only the Utleie group, and no hotel role has any of it.
     expect(moduleRoutesFor("host")).toEqual(["/vert", "/vert/meldinger", "/vert/bookinger", "/vert/drift"]);

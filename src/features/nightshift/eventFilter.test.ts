@@ -37,3 +37,15 @@ describe("failures", () => {
     expect(failures(tasks, [], 0, 120)).toEqual([]);
   });
 });
+
+describe("forManagers", () => {
+  it("keeps the refused stranger (H-bathrobe) and hides other hypotheses unless technical", async () => {
+    const { forManagers } = await import("./eventFilter");
+    const events = [
+      { id: 1, t: 1, clock: "01:17:02", kind: "stranger_refused", label: "Sa nei", text: "Åpnet ikke rom 308 for en ukjent person", tone: "success", request: null, decision: true },
+      { id: 2, t: 2, clock: "01:20:00", kind: "hypothesis", label: "Hypotese", text: "H-bags · placed luggage (+36 p)", tone: "accent", request: "R-014", decision: true },
+    ] as ReplayEvent[];
+    expect(forManagers(events, false).map((event) => event.kind)).toEqual(["stranger_refused"]);
+    expect(forManagers(events, true).map((event) => event.text)).toEqual(["Åpnet ikke rom 308 for en ukjent person", "H-bags · placed luggage"]);
+  });
+});

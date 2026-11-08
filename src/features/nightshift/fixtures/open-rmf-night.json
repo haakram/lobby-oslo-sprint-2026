@@ -1,0 +1,117 @@
+{
+  "_doc": "A test sample, written by Team Fettero in the shape of Open-RMF's task_state and fleet_state messages (rmf_api_msgs), for a delivery robot on a hotel night. Not a real robot's log: it shows that a second producer's tasks render on the same handover through src/features/nightshift/openRmf.ts. The deliveries work the way deployed compartment robots do (round 5, domain review): the robot waits at the door and calls the room, the guest opens the lid with a PIN, the lid closes on an empty compartment. One task (204) shows a robot that opened the door with its own credential and took its own photo: two signals, both the robot's, so it reads robotens egen observasjon.",
+  "fleet": "hotel_delivery",
+  "fleet_states": [
+    { "name": "hotel_delivery", "robots": { "deliverybot_1": { "name": "deliverybot_1", "status": "idle", "battery": 0.96, "location": { "map": "L1", "x": 2.1, "y": 4.0, "yaw": 0.0 }, "unix_millis_time": 1794085800000 } } },
+    { "name": "hotel_delivery", "robots": { "deliverybot_1": { "name": "deliverybot_1", "status": "working", "battery": 0.71, "location": { "map": "L2", "x": 14.2, "y": 8.5, "yaw": 1.57 }, "unix_millis_time": 1794097800000 } } },
+    { "name": "hotel_delivery", "robots": { "deliverybot_1": { "name": "deliverybot_1", "status": "charging", "battery": 0.38, "location": { "map": "L1", "x": 2.1, "y": 4.0, "yaw": 0.0 }, "unix_millis_time": 1794110400000 } } }
+  ],
+  "tasks": [
+    {
+      "booking": { "id": "delivery.towels.0001", "unix_millis_earliest_start_time": 1794087000000, "labels": ["room:204", "item:towel"] },
+      "category": "delivery",
+      "assigned_to": { "group": "hotel_delivery", "name": "deliverybot_1" },
+      "status": "completed",
+      "unix_millis_start_time": 1794087000000,
+      "unix_millis_finish_time": 1794087660000,
+      "phases": {
+        "1": { "id": 1, "category": "Go to [place:linen_room]", "events": { "0": { "id": 0, "status": "completed", "name": "Pickup towel" } } },
+        "2": {
+          "id": 2,
+          "category": "Go to [place:room_204]",
+          "events": {
+            "0": { "id": 0, "status": "completed", "name": "Door [door:room_204] opened", "detail": "lock audit: robot credential" },
+            "1": { "id": 1, "status": "completed", "name": "Photo taken at dropoff", "detail": "towel on the rack" }
+          }
+        }
+      },
+      "completed": [1, 2]
+    },
+    {
+      "booking": { "id": "delivery.water.0002", "unix_millis_earliest_start_time": 1794089400000, "labels": ["room:311", "item:water-bottle"] },
+      "category": "delivery",
+      "assigned_to": { "group": "hotel_delivery", "name": "deliverybot_1" },
+      "status": "completed",
+      "unix_millis_start_time": 1794089400000,
+      "unix_millis_finish_time": 1794089940000,
+      "phases": {
+        "1": {
+          "id": 1,
+          "category": "Go to [place:room_311]",
+          "events": {
+            "0": { "id": 0, "status": "completed", "name": "Recipient confirmed with PIN", "detail": "guest opened the lid at the door" },
+            "1": { "id": 1, "status": "completed", "name": "Compartment empty", "detail": "lid closed" }
+          }
+        }
+      },
+      "completed": [1]
+    },
+    {
+      "booking": { "id": "delivery.bags.0003", "unix_millis_earliest_start_time": 1794093600000, "labels": ["room:212", "item:luggage"] },
+      "category": "delivery",
+      "assigned_to": { "group": "hotel_delivery", "name": "deliverybot_1" },
+      "status": "completed",
+      "unix_millis_start_time": 1794093600000,
+      "unix_millis_finish_time": 1794094500000,
+      "phases": {
+        "1": {
+          "id": 1,
+          "category": "Go to [place:room_212]",
+          "events": {
+            "0": { "id": 0, "status": "completed", "name": "Recipient confirmed with PIN", "detail": "guest came to the door" },
+            "1": { "id": 1, "status": "completed", "name": "Compartment empty", "detail": "lid closed" }
+          }
+        }
+      },
+      "completed": [1]
+    },
+    {
+      "booking": { "id": "delivery.pillow.0004", "unix_millis_earliest_start_time": 1794097200000, "labels": ["room:305", "item:pillow"] },
+      "category": "delivery",
+      "assigned_to": { "group": "hotel_delivery", "name": "deliverybot_1" },
+      "status": "failed",
+      "unix_millis_start_time": 1794097200000,
+      "unix_millis_finish_time": 1794097620000,
+      "phases": {
+        "1": {
+          "id": 1,
+          "category": "Go to [place:room_305]",
+          "events": { "0": { "id": 0, "status": "failed", "name": "Door [door:room_305] did not open", "detail": "door adapter timeout" } }
+        }
+      },
+      "completed": []
+    },
+    {
+      "booking": { "id": "patrol.floor2.0005", "unix_millis_earliest_start_time": 1794101400000, "labels": ["place:corridor_2a"] },
+      "category": "patrol",
+      "assigned_to": { "group": "hotel_delivery", "name": "deliverybot_1" },
+      "status": "completed",
+      "unix_millis_start_time": 1794101400000,
+      "unix_millis_finish_time": 1794102300000,
+      "phases": {
+        "1": { "id": 1, "category": "Go to [place:corridor_2a]", "events": { "0": { "id": 0, "status": "completed", "name": "Photo taken at waypoint" } } }
+      },
+      "completed": [1]
+    },
+    {
+      "booking": { "id": "delivery.charger.0006", "unix_millis_earliest_start_time": 1794105000000, "labels": ["room:136", "item:phone-charger"] },
+      "category": "delivery",
+      "assigned_to": { "group": "hotel_delivery", "name": "deliverybot_1" },
+      "status": "canceled",
+      "unix_millis_start_time": 1794105000000,
+      "unix_millis_finish_time": 1794105300000,
+      "cancellation": { "unix_millis_request_time": 1794105300000, "labels": ["front desk took it"] },
+      "phases": {},
+      "completed": []
+    },
+    {
+      "booking": { "id": "delivery.tray.0007", "unix_millis_earliest_start_time": 1794112500000, "labels": ["room:203", "item:tray"] },
+      "category": "delivery",
+      "assigned_to": { "group": "hotel_delivery", "name": "deliverybot_1" },
+      "status": "underway",
+      "unix_millis_start_time": 1794112500000,
+      "phases": { "1": { "id": 1, "category": "Go to [place:kitchen]", "events": {} } },
+      "completed": []
+    }
+  ]
+}

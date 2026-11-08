@@ -15,7 +15,7 @@ const nb = new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 0 });
 const NO_STATUSES: ReadonlyMap<string, RoomReport> = new Map();
 
 const OUTCOME: Record<RobotTask["outcome"], { label: string; tone: "success" | "danger" | "neutral" }> = {
-  done: { label: "Utført", tone: "success" },
+  done: { label: "Fullført", tone: "success" },
   failed: { label: "Feilet", tone: "danger" },
   open: { label: "Ikke ferdig", tone: "neutral" },
 };
@@ -128,7 +128,7 @@ export function RobotMode({ map, log }: { map: HotelGraph; log: NightLog }) {
         <Card className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-4 sm:p-5">
           <Stat label="Gått i natt" value={nb.format(night.metres)} unit="m" />
           <Stat label="Heisturer" value={night.rides} />
-          <Stat label="Oppgaver utført" value={done} unit={`av ${night.tasks.length}`} />
+          <Stat label="Oppgaver fullført" value={done} unit={`av ${night.tasks.length}`} />
           <Stat label="Mellom oppgaver" value={nb.format(night.between.metres)} unit="m" />
         </Card>
       </section>

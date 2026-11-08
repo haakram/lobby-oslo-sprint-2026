@@ -2,8 +2,9 @@
 
 import { useId } from "react";
 import { BASE_HOTEL, floorsOf, type HotelMap, roomsOf } from "@/features/hotel/mapFromRun";
-import { placeName, ROOM_STATUS_LABEL, type Snapshot } from "@/features/replay";
+import { placeName, type Snapshot } from "@/features/replay";
 import { cx } from "@/ui";
+import { roomWord } from "./held";
 
 /**
  * Choose a room from a list: the keyboard's (and a screen reader's) way into the room card, next to
@@ -45,7 +46,7 @@ export function RoomPicker({
             <optgroup key={floor} label={`${floor}. etasje`}>
               {onFloor.map((room) => (
                 <option key={room.id} value={room.id}>
-                  {placeName(room.id)} · {ROOM_STATUS_LABEL[snapshot?.rooms[room.id]?.status ?? "ukjent"]}
+                  {placeName(room.id)} · {roomWord(snapshot?.rooms[room.id])}
                 </option>
               ))}
             </optgroup>

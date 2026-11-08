@@ -17,6 +17,7 @@ export {
   type HotelNode,
   itemName,
   nodeFloor,
+  placeInSentence,
   placeName,
   roomNumber,
   taskKindName,

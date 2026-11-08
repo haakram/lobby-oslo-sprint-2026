@@ -9,6 +9,7 @@ import { planCleaning } from "./cleaningPlan";
 import { placeLabel, type HotelGraph } from "./hotelMap";
 import { HotelPlan } from "./HotelPlan";
 import { OffMapRooms } from "./OffMapRooms";
+import { dayRooms } from "./dayRooms";
 import { cleaningPresets, roomStatusAt, type RoomPreset, type RoomReport } from "./nightRooms";
 import type { CleaningStart } from "./query";
 import { SavingBand } from "./SavingBand";
@@ -59,9 +60,17 @@ function NoRouteError({
 /** Renhold: pick rooms (from the night or on the map), get the best round across floors. */
 export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: NightLog; initial: CleaningInitial }) {
   const statuses = useMemo(() => (log.status === "ready" ? roomStatusAt(log.lines) : NO_STATUSES), [log.status, log.lines]);
-  const { presets, doNotDisturb } = useMemo(() => cleaningPresets(statuses), [statuses]);
+  const { presets: nightPresets, doNotDisturb } = useMemo(() => cleaningPresets(statuses), [statuses]);
+  // Dagens renhold: the night's dirty rooms and today's departures, in the order they come free.
+  const day = useMemo(() => (log.status === "ready" ? dayRooms(statuses) : []), [log.status, statuses]);
+  const presets = useMemo<RoomPreset[]>(
+    () => [{ id: "dag", label: "Dagens renhold", hint: "Nattens Må vaskes og dagens utsjekk, i den rekkefølgen rommene blir ledige", rooms: day.map((entry) => entry.room) }, ...nightPresets],
+    [day, nightPresets],
+  );
 
   const [rooms, setRooms] = useState(initial.rooms);
+  // Where the list came from says what the best round is compared with.
+  const [source, setSource] = useState<"lenke" | "dag" | "valgt">(initial.rooms.length > 0 ? "lenke" : "dag");
   // "Fjern alle rom" keeps the round it cleared until the next change, for Angre.
   const [cleared, setCleared] = useState<string[] | null>(null);
   const [start, setStart] = useState<CleaningStart>(initial.start ?? "laundry");
@@ -91,12 +100,24 @@ export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: Nigh
     replaceQuery({ rom: rooms.length ? rooms.join(",") : null, start, vogn: cart ? "1" : "0" });
   }, [rooms, start, cart]);
 
+  // Opened without rooms (from the menu): the day's round loads itself once the night is read.
+  const dayLoaded = useRef(initial.rooms.length > 0);
+  useEffect(() => {
+    if (dayLoaded.current || day.length === 0) return;
+    dayLoaded.current = true;
+    setRooms(day.map((entry) => entry.room));
+    setSource("dag");
+    setDrawToken((t) => t + 1);
+  }, [day]);
+
   const toggle = (room: string) => {
     setCleared(null);
+    setSource("valgt");
     setRooms((current) => (current.includes(room) ? current.filter((r) => r !== room) : [...current, room]));
   };
   const load = (preset: RoomPreset) => {
     setCleared(null);
+    setSource(preset.id === "dag" ? "dag" : "valgt");
     setRooms(preset.rooms);
     redraw();
   };
@@ -109,9 +130,10 @@ export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: Nigh
     setCleared(null);
   };
 
+  const dayPreset = presets.find((p) => p.id === "dag");
   const mustClean = presets.find((p) => p.id === "ma_vaskes");
   const occupied = presets.find((p) => p.id === "opptatt");
-  const suggested = mustClean?.rooms.length ? mustClean : occupied?.rooms.length ? occupied : null;
+  const suggested = dayPreset?.rooms.length ? dayPreset : mustClean?.rooms.length ? mustClean : occupied?.rooms.length ? occupied : null;
 
   const ok = plan && !("error" in plan) ? plan : null;
   // The map is tonight's only once the log is in; route nothing on the stand-in map before that.
@@ -144,10 +166,10 @@ export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: Nigh
               ) : suggested ? (
                 <div className="flex flex-col items-start gap-2">
                   <Button onClick={() => load(suggested)}>
-                    {suggested.id === "ma_vaskes" ? "Hent rommene som må vaskes" : "Hent rommene med gjester i natt"}
+                    {suggested.id === "dag" ? "Hent dagens renhold" : suggested.id === "ma_vaskes" ? "Hent rommene som må vaskes" : "Hent rommene med gjester i natt"}
                     <span className="font-mono text-sm tabular-nums">{suggested.rooms.length}</span>
                   </Button>
-                  {suggested.id !== "ma_vaskes" && (
+                  {suggested.id === "opptatt" && (
                     <p className="text-sm text-muted">Ingen rom står som Må vaskes etter natten.</p>
                   )}
                 </div>
@@ -161,7 +183,17 @@ export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: Nigh
           <Skeleton className="h-5 w-1/3 max-w-xs" />
         </Card>
       ) : ok ? (
-        <SavingBand plan={ok} />
+        <SavingBand
+          plan={ok}
+          given={
+            source === "dag"
+              ? "Mot rekkefølgen rommene blir ledige i"
+              : source === "lenke"
+                ? "Mot rekkefølgen i lenken"
+                : "Mot rekkefølgen rommene ble valgt i"
+          }
+          givenNote={source === "dag" ? "Beste rute ser bort fra når rommene blir ledige; romnummer-rekkefølge gjør det samme." : undefined}
+        />
       ) : plan && "error" in plan ? (
         <Card className="p-4 sm:p-5">
           <NoRouteError

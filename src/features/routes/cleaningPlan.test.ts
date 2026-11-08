@@ -56,10 +56,10 @@ describe("planCleaning", () => {
   });
 });
 
-describe("planCleaning on the seed-5 demo night's map", () => {
+describe("planCleaning on the seed-5 night's map", () => {
   it("routes 201, 206 and 327 (a room only seed 5 has), with the cart, never by the stairs", () => {
-    const demo = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
-    const seed5 = hotelForRun(demo);
+    const night = parseRunLog(readFileSync(resolve(process.cwd(), "src/features/hotel/fixtures/seed5-map.jsonl"), "utf8")).lines;
+    const seed5 = hotelForRun(night);
     expect(seed5.seed).toBe(5);
     const plan = planCleaning(seed5, { start: "laundry", rooms: ["room-201", "room-206", "room-327"], cart: true });
     if (!plan || "error" in plan) throw new Error("expected a plan");

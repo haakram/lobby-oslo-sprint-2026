@@ -1,0 +1,71 @@
+{
+  "_doc": "What the hotel's rules cost in Wybe's sim (round 5, domain reviews). Hotel-rules mode on side branch hamad/hotelrules at 70d5be4 (NS_HOTEL_RULES=1; default off, byte-identical): knock before every keycard entry, never move a sign off a wet floor, avoid known-wet corridors, sign an unreported patch after a slip. Live: four practice nights started 05:49 Sun 8 Nov, measured complete at ~05:55 on seeds 10/16/23/5 (ledger.csv rows of commit 70d5be4); the final build's nights on the same seeds are c3801e0's (013f90d, the same agent as 8de9ffc, scored 1 point lower on seed 10). Keycard entries and knocks counted with masterKeyEntries (conduct.ts) over the eight logs. Replay: the replay bed on 164 real nights, as reported by the controller.",
+  "branch": "hamad/hotelrules",
+  "commit": "70d5be4",
+  "flag": "NS_HOTEL_RULES=1",
+  "measuredAt": "05:55",
+  "seeds": [
+    10,
+    16,
+    23,
+    5
+  ],
+  "scores": [
+    2605,
+    2584,
+    2393,
+    2453
+  ],
+  "finalScores": [
+    2760,
+    2748,
+    2298,
+    2559
+  ],
+  "keycard": {
+    "entries": 59,
+    "knockedFirst": 59
+  },
+  "finalKeycard": {
+    "entries": 61,
+    "knockedFirst": 26
+  },
+  "replay": {
+    "nights": 164,
+    "plain": -125.8,
+    "seedWeighted": -100.4,
+    "signsInStore": 3
+  },
+  "_doc_rules2": "rules2: hotel rules 5 and 6 on hamad/hotelrules at 41b10f4 (NS_HOTEL_RULES=1; default off, never in the final build), replayed on the replay bed's frozen 202 real nights / 30 seeds (docs/runs/hotel-rules-replay-2.md, copied from that checkout's temp/hotelrules-report-2.md). Points are the mean delta per night against the same nights without the rules, plain and seed-weighted (each seed's mean, then the mean of those). selfConflict: the room check names the bags the robot itself carried in instead of reporting the room empty, outcome kept 'done' (live: the simulator thanked 389 of 390 such checks, about 38 points each, so reporting them failed would cost about 70 a night, an estimate, not replayed). homeBy0545: the master keycard returned and the robot docked by 05:45.",
+  "rules2": {
+    "commit": "41b10f4",
+    "nights": 202,
+    "seeds": 30,
+    "selfConflict": {
+      "plain": 0.0,
+      "seedWeighted": 0.0,
+      "fired": 368,
+      "firedNights": 190,
+      "persons": 0,
+      "liveChecks": 390,
+      "liveThanked": 389,
+      "creditEach": 38.3,
+      "failedCostPerNight": 70
+    },
+    "homeBy0545": {
+      "plain": -90.4,
+      "seedWeighted": -84.3,
+      "keycardReturnedNights": 202,
+      "dockedMedianMinAfter": 3.5
+    },
+    "fourRules": {
+      "plain": -123.7,
+      "seedWeighted": -93.7
+    },
+    "allSix": {
+      "plain": -207.3,
+      "seedWeighted": -172.1
+    },
+    "strands": 0
+  }
+}

@@ -34,7 +34,7 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
     return { rooms, unknown, start: parseStart(params.start), cart: parseCart(params.vogn) };
   }, [params.rom, params.start, params.vogn]);
 
-  // An explicit ?modus= wins; ?sku= (Øyne's "Vis vei") or a pick list in progress opens the pick list.
+  // An explicit ?modus= wins; ?sku= (Øyne's "Vis vei": the way to one shelf) or a pick list in progress opens the pick list.
   const [mode, setMode] = useState<RouteMode>(
     () => parseMode(params.modus) ?? (sku || (skus.length > 0 && initial.rooms.length === 0) ? "plukk" : "renhold"),
   );
@@ -61,8 +61,8 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
   }
 
   const intro = MODES.find((m) => m.id === mode)?.intro;
-  // The pick list is the robot's restocking route; its tab shows only while a list is in use (UX audit, Ruter 4).
-  const shown = MODES.filter((m) => m.id !== "plukk" || opened.has("plukk") || skus.length > 0 || Boolean(sku));
+  // The pick list's tab is always there (Holio pain 6): it opens on an example order when nobody has scanned yet.
+  const shown = MODES;
 
   return (
     <main className="flex-1 px-4 pt-6 pb-12 sm:px-6 lg:px-10 lg:pt-10">
@@ -112,7 +112,7 @@ export function RoutesScreen({ params = {}, matrix }: { params?: RouteParams; ma
             >
               {m.id === "renhold" && <CleaningMode map={map} log={log} initial={initial} />}
               {m.id === "robot" && <RobotMode map={map} log={log} />}
-              {m.id === "plukk" && <PicklistMode addSku={sku} matrix={matrix} />}
+              {m.id === "plukk" && <PicklistMode showSku={sku} matrix={matrix} />}
             </div>
           ) : null,
         )}

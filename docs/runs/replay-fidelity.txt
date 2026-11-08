@@ -1,0 +1,74 @@
+seed  shift           live  replay   delta   delta%  flags  code
+   1  w2-95461e83a     581       -       -        -     28    (no commit known for this night (agent/data/replay_codes.json))
+   1  w2-2a0543d9a    1513       -       -        -     13    (no commit known for this night (agent/data/replay_codes.json))
+   1  w2-3eb205e43    1534    1512     -22    -1.4%      2  eb4a440
+   1  w2-9981d80d3    1619    1568     -51    -3.2%      1  ea5bc47
+   2  w2-0ccfceac9     841       -       -        -     15    (no commit known for this night (agent/data/replay_codes.json))
+   2  w2-e3cad4648    1467       -       -        -      6    (no commit known for this night (agent/data/replay_codes.json))
+   2  w2-60764c97c    1473    1509     +36    +2.4%      8  eb4a440
+   2  w2-824b7e24e    1646    1654      +8    +0.5%      4  fd65def
+   3  w2-d35d0d264    1340       -       -        -      5    (no commit known for this night (agent/data/replay_codes.json))
+   3  w2-c51b37510    1392    1318     -74    -5.3%      5  eb4a440
+   3  w2-4271df127    1666    1592     -74    -4.4%      5  fd65def
+   4  w2-80facb100    1461       -       -        -      7    (no commit known for this night (agent/data/replay_codes.json))
+   4  w2-e67e6c9cc    1690    1632     -58    -3.4%      6  eb4a440
+   4  w2-3475c5b76    1808    1828     +20    +1.1%      4  ea5bc47
+   5  w2-1916db083    1237       -       -        -     19    (no commit known for this night (agent/data/replay_codes.json))
+   5  w2-69a2f0cc8    1842       -       -        -      8    (no commit known for this night (agent/data/replay_codes.json))
+   5  w2-001ceef19    2212    2298     +86    +3.9%      8  404a7f6
+   5  w2-54521dc8b    2337    2326     -11    -0.5%      5  e0590d7
+   5  w2-d706b8050    2341    2327     -14    -0.6%      5  0192db6
+   5  w2-3cbccbc17    2492    2573     +81    +3.3%      6  d4e445c
+   5  w2-2db795c08    2584    2548     -36    -1.4%      5  cb72845
+   5  w2-5399091a4    2559       -       -        -      5    (no commit known for this night (agent/data/replay_codes.json))
+   5  w2-9c0e439df    2602       -       -        -      5    (no commit known for this night (agent/data/replay_codes.json))
+   6  w2-667af0a1e    1644    1686     +42    +2.6%      4  404a7f6
+   6  w2-a6e7281ff    1683    1670     -13    -0.8%      7  e0590d7
+   7  w2-c8cf323c9    1938    1919     -19    -1.0%      4  404a7f6
+   7  w2-f635d6f26    1665    1868    +203   +12.2%      2  e0590d7  (live run had 4 internal errors)
+   8  w2-5290b67b9    1682    1683      +1    +0.1%     12  404a7f6
+   8  w2-c796f8499    1664    1771    +107    +6.4%     10  e0590d7  (live run had 2 internal errors)
+   9  w2-de547241a    1554    1593     +39    +2.5%     10  7180964
+   9  w2-5045a1227    1625    1600     -25    -1.5%     12  512a8a1
+   9  w2-b4c6b464e    1965    2059     +94    +4.8%     11  d4e445c
+  10  w2-9bf732e41    2409    2309    -100    -4.2%     13  7180964
+  10  w2-6e4f4a271    2678    2628     -50    -1.9%      9  0192db6
+  10  w2-f46dc30ca    2570    2546     -24    -0.9%     10  512a8a1
+  10  w2-d705fc54b    2695    2618     -77    -2.9%      9  8564396
+  10  w2-35b0831e8    2695    2618     -77    -2.9%      9  8564396
+  10  w2-9e1ebd59b    2712       -       -        -      7    (no commit known for this night (agent/data/replay_codes.json))
+  10  w2-9c1d3d93e    2707    2715      +8    +0.3%      9  d4e445c
+  10  w2-01d8e0b74    2707    2715      +8    +0.3%      9  cb72845
+  10  w2-916442017    2760       -       -        -      9    (no commit known for this night (agent/data/replay_codes.json))
+  10  w2-b34641076    2798       -       -        -      7    (no commit known for this night (agent/data/replay_codes.json))
+  10  w2-95156b4cd    2724       -       -        -      7    (no commit known for this night (agent/data/replay_codes.json))
+  11  w2-b32a38f39    1900    1896      -4    -0.2%      6  7180964
+  11  w2-e4a9206ee    1914    1910      -4    -0.2%      8  d4e445c
+  12  w2-d92e0b3dc    1734    1699     -35    -2.0%      4  7180964
+  13  w2-a34dc2c69    1867    1787     -80    -4.3%      4  3fcd572
+  14  w2-22befef5e    1766    1693     -73    -4.1%      7  3fcd572
+  15  w2-b5fc964b9    1888    1934     +46    +2.4%      5  3fcd572
+  16  w2-7351b5e5a    1898    1714    -184    -9.7%     11  3fcd572  STRANDED
+  16  w2-5d6cbaccc    1930    1985     +55    +2.8%     11  512a8a1
+  16  w2-67964f740    1960    1787    -173    -8.8%      9  3381426+NS_NAV_MIN_HOPS=0  STRANDED
+  16  w2-7937623ec    2153    1979    -174    -8.1%     11  8564396
+  16  w2-2a236875c    2153    1979    -174    -8.1%     11  8564396
+  16  w2-56f8112e3    1983       -       -        -      9    (no commit known for this night (agent/data/replay_codes.json))
+  16  w2-56541b1a9    2359       -       -        -      9    (no commit known for this night (agent/data/replay_codes.json))
+  16  w2-f9d1ec6e6    2564    2554     -10    -0.4%      9  d4e445c
+  16  w2-5991166ac    2680    2674      -6    -0.2%      9  cb72845
+  16  w2-ad9291afb    2679       -       -        -      7    (no commit known for this night (agent/data/replay_codes.json))
+  16  w2-b76eaf8f6    2616       -       -        -      7    (no commit known for this night (agent/data/replay_codes.json))
+  16  w2-3fae5e072    2680       -       -        -      9    (no commit known for this night (agent/data/replay_codes.json))
+  23  w2-28db193c7    1960    1687    -273   -13.9%     13  512a8a1  STRANDED
+  23  w2-1655c5a81    1803    1877     +74    +4.1%     13  3381426+NS_NAV_MIN_HOPS=0
+  23  w2-772666089    1633    1676     +43    +2.6%     17  8564396
+  23  w2-daea60d2a    1980       -       -        -     10    (no commit known for this night (agent/data/replay_codes.json))
+  23  w2-64acc3feb    2254    2257      +3    +0.1%      6  d4e445c
+  23  w2-885ee3bca    2334    2331      -3    -0.1%      7  cb72845
+  23  w2-14535441b    2240       -       -        -      7    (no commit known for this night (agent/data/replay_codes.json))
+  31  w2-e3fc80e0c    2293    2253     -40    -1.7%      7  8564396
+  32  w2-1a4ae92a6    1838    1957    +119    +6.5%      7  8564396
+  41  w2-691eb5f16    1337    1356     +19    +1.4%     10  8564396
+  41  w2-c29dd0c93    1664       -       -        -      5    (no commit known for this night (agent/data/replay_codes.json))
+mean  live 2010.7  replay 1993.4  delta -17.3  mean abs error 61.0 (3.2 %)  within 10 %: 48/50  worst -13.9 %  nights 50

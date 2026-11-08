@@ -270,7 +270,7 @@ speaks up → close. Every beat solves a named hotel problem and maps to a prize
 - [x] **Owners** (team lead, 2026-11-07 12:25): Hamad builds Track A (the Night Shift agent: route
       finding, task planning); ShirazIQ builds Track B (UI, camera, ElevenLabs) and Track C (demo).
 - [ ] **Holio:** does solving 3, 6 and 9 together count for or against us? Their text says "pick
-      one". Ask the Holio juror (Head of Holio) at the panel or the stand.
+      one". Ask the Head of Holio (on the jury, CONTEXT § 7) at the panel or the stand.
 - [ ] **Holio:** demo time, test data, judging criteria, a Zebra TC27 on loan? (left blank in their
       document)
 - [ ] **Organisers:** how is "all files" delivered on Sunday (zip, repo link, Discord)?
@@ -280,6 +280,6 @@ speaks up → close. Every beat solves a named hotel problem and maps to a prize
       robot".)
 - [ ] **Repo visibility for the jury:** the jury reads the commit history; the repo is private. Make
       it public or give the jury access before Sun 14:00 (team lead's decision; CONTEXT § 11).
-- [ ] **Mock jury (12 jurors) — re-run next session**; 3 of 12 finished: `docs/checks/jury-2026-11-07.md`.
-- [ ] **Business slide** (Founders juror: 3/10): one buyer, one price, one next step, sourced numbers.
-- [ ] **Cut the demo to three beats?** (Product juror): night → work orders, send cleaners, Spanish complaint → work order; linen count and the Polish cleaner to Q&A.
+- [ ] **Mock review (12 fields) — re-run next session**; 3 of 12 finished: `docs/checks/jury-2026-11-07.md`.
+- [ ] **Business slide** (founders review: 3/10): one buyer, one price, one next step, sourced numbers.
+- [ ] **Cut the demo to three beats?** (product review): night → work orders, send cleaners, Spanish complaint → work order; linen count and the Polish cleaner to Q&A.

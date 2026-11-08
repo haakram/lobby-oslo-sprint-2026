@@ -1,9 +1,12 @@
 import { type ReplayEvent, simToClock, type Task } from "@/features/replay";
+import { agentNote } from "@/features/replay/norsk";
 
 /**
  * Which of the robot's events a hotel manager sees (UX audit X4): the ones with a known Norwegian
  * label and a hotel meaning. Everything else (hypotheses, the model's own notes, scans, requeues,
- * unknown kinds) is technical and stays behind "Vis tekniske hendelser" on Natteskift.
+ * unknown kinds) is technical and stays behind "Vis tekniske hendelser" on Natteskift. The one
+ * hypothesis a manager must see is the refused stranger (H-bathrobe): the timeline gives it the kind
+ * "stranger_refused".
  */
 export const MANAGER_KINDS: ReadonlySet<string> = new Set([
   "request",
@@ -13,6 +16,7 @@ export const MANAGER_KINDS: ReadonlySet<string> = new Set([
   "room_status",
   "work_order",
   "person",
+  "stranger_refused",
   "keycard_withheld",
   "wet_floor",
   "knock",
@@ -51,7 +55,7 @@ export function failures(tasks: readonly Task[], events: readonly ReplayEvent[],
     .map((task) => {
       const failed = seen.find((event) => event.kind === "task_failed" && event.request === task.id);
       const logged = failed ? managerText(failed.text) || null : null;
-      const reason = task.note ?? logged ?? (task.outcome === null ? "Ble ikke fullført." : null);
+      const reason = (task.note ? agentNote(task.note) : null) ?? logged ?? (task.outcome === null ? "Ble ikke fullført." : null);
       return { task, reason, clock: failed?.clock ?? simToClock(task.end) };
     })
     .sort((a, b) => b.task.start - a.task.start);

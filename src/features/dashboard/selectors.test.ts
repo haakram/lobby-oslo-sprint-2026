@@ -10,6 +10,7 @@ import {
   HOTEL_ROOMS,
   nextOrderStatus,
   selectCleaning,
+  withHeld,
   selectKpis,
   selectRobot,
   selectRoomNight,
@@ -81,9 +82,12 @@ describe("the 06:00 handover on the demo night", () => {
       roomsTotal: 36,
       ordersOpen: 26,
       tasksDone: 46,
-      tasksFailed: 21,
+      // 21 task_failed lines and one task the shift ended on; 16 of them were refusals on good grounds
+      // (no order on record, a Do-Not-Disturb sign, a duplicate), so 6 go to a person.
+      tasksFailed: 6,
       score: 1513,
     });
+    expect(night.tally).toMatchObject({ received: 68, done: 46, reported: 46, declined: 16, failed: 5, open: 1, handedBack: 6, total: 52 });
     const first = selectWorkOrders(night)[0].id;
     expect(selectKpis(night, new Set([first])).ordersOpen).toBe(25);
   });
@@ -117,7 +121,9 @@ describe("earlier in the night", () => {
     const rooms = new Map(selectRooms(night).map((room) => [room.id, room]));
     expect(rooms.get("room-208")?.status).toBe("ikke_forstyrr");
     expect(rooms.get("room-103")?.status).toBe("ukjent");
-    expect(selectKpis(night)).toMatchObject({ tasksDone: 2, tasksFailed: 1, ordersOpen: 0 });
+    // R-003 met a Do-Not-Disturb sign and left the guest alone: refused on good grounds, not a failure.
+    expect(selectKpis(night)).toMatchObject({ tasksDone: 2, tasksFailed: 0, ordersOpen: 0 });
+    expect(night.outcomes.get("R-003")).toMatchObject({ verdict: "declined", reason: "Ikke forstyrr-skilt på rom 208: roboten forstyrret ikke." });
   });
 
   it("shows the task in progress and the requests waiting behind it", () => {
@@ -180,5 +186,32 @@ describe("humanizeText", () => {
     expect(humanizeText("Vått gulv ved corridor-3a")).toBe("Vått gulv ved korridor 3A");
     expect(humanizeText("ikke forstyrr-skilt på room-208")).toBe("ikke forstyrr-skilt på rom 208");
     expect(humanizeText("Gjesteklage fra rom 319")).toBe("Gjesteklage fra rom 319");
+  });
+});
+
+describe("withHeld: the rack says what the room check says", () => {
+  it("shows a room held back (an arriving guest's bags inside) as taken, never Klar, and leaves the rest", () => {
+    const night = foldNight(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
+    const rooms = selectRooms(night);
+    expect(rooms.find((room) => room.id === "room-209")?.status).toBe("klar");
+    const rack = withHeld(rooms, ["room-209"]);
+    expect(rack.find((room) => room.id === "room-209")).toMatchObject({ status: "opptatt", held: true });
+    expect(rack.find((room) => room.id === "room-213")?.status).toBe("klar");
+    expect(countRooms(rack).klar).toBe(countRooms(rooms).klar - 1);
+    expect(withHeld(rooms, [])).toBe(rooms);
+  });
+
+  it("shows a room still to confirm (213, the system holds it) as not ready, so the legend counts the same Klare til salg as the figure", () => {
+    const night = foldNight(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
+    const rooms = selectRooms(night);
+    const rack = withHeld(rooms, ["room-209"], ["room-213"]);
+    expect(rack.find((room) => room.id === "room-213")).toMatchObject({ status: "opptatt", toConfirm: true });
+    expect(countRooms(rack).klar).toBe(countRooms(rooms).klar - 2);
+    // Sent to reception (round 5): pending, neutral, never a green Klar until the booking system confirms it.
+    const sent = withHeld(rooms, ["room-209"], [], ["room-213"]).find((room) => room.id === "room-213");
+    expect(sent).toMatchObject({ status: "opptatt", pending: true });
+    expect(sent?.toConfirm).toBeUndefined();
+    // Confirmed free in the booking system (neither to confirm nor pending): a green Klar again.
+    expect(withHeld(rooms, ["room-209"], [], []).find((room) => room.id === "room-213")?.status).toBe("klar");
   });
 });

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HotelScreen } from "./HotelScreen";
 
 const SAMPLE = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
+const DEMO = readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8");
 
 beforeEach(() => {
   // The demo night only; the local viewer server is not running.
@@ -62,6 +63,18 @@ describe("HotelScreen", () => {
     expect(select).toHaveValue("");
   });
 
+  it("counts the night with the one tally Natteskift and Overlevering use: done of the robot's tasks, and what went to a person", async () => {
+    await renderReady();
+    const { nightOutcomes } = await import("@/features/nightshift/outcomes");
+    const { parseRunLog } = await import("@/features/nightshift/runlog");
+    // The replay starts at the end of the night; the sample's tally is what Natteskift shows for it.
+    const { tally } = nightOutcomes(parseRunLog(SAMPLE).lines);
+    const figures = screen.getByRole("group", { name: "Natten i tall" });
+    expect(within(figures).getByText("Oppdrag fullført").previousElementSibling).toHaveTextContent(`${tally.done}av ${tally.total}`);
+    expect(within(figures).getByText("Ga videre til en person").previousElementSibling).toHaveTextContent(String(tally.handedBack));
+    expect(figures).not.toHaveTextContent("Ikke fullført");
+  });
+
   it("asks no viewer server when NEXT_PUBLIC_VIEWER_URL is unset: the recording plays and the console stays clean", async () => {
     await renderReady();
     const asked = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
@@ -79,5 +92,47 @@ describe("HotelScreen", () => {
     render(<HotelScreen viewerUrl="http://127.0.0.1:8765" />);
     expect(await screen.findByRole("button", { name: "Direkte" })).toBeInTheDocument();
     expect(vi.mocked(fetch).mock.calls.map(([input]) => String(input))).toContain("http://127.0.0.1:8765/api/runs");
+  });
+});
+
+describe("HotelScreen on the demo night: the map says what the room check says", () => {
+  it("shows 209 (an arriving guest's bags in a room booked to tomorrow) as Sjekk rommet, never a green Klar, on the map, in the list and on its card", async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/runs/demo.jsonl")) return new Response(DEMO);
+      throw new TypeError("Failed to fetch");
+    });
+    const select = await renderReady();
+    expect(within(select).getAllByRole("option").find((option) => option.getAttribute("value") === "room-209")).toHaveTextContent("Rom 209 · Sjekk rommet");
+    const tile = screen.getByRole("button", { name: "Rom 209: Sjekk rommet" });
+    expect(tile.querySelector("rect")?.getAttribute("fill")).not.toBe("var(--success)");
+    // 213, the sleeper to sell after reception confirms, is not a green Klar either (its own test below).
+    expect(screen.queryByRole("button", { name: "Rom 213: Klar" })).not.toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: "room-209" } });
+    const card = within(screen.getByRole("complementary", { name: "Status nå" }));
+    expect(card.getByText("Sjekk rommet")).toBeInTheDocument();
+    expect(card.queryByText("Klar")).not.toBeInTheDocument();
+    // Overlevering's words (round 7): never "dobbelt tildelt?", never "holdt tilbake" (a guest is booked there).
+    expect(card.getByText("Robotens minne og øyne er uenige: bagasje levert 01:29, meldt tomt 03:47. Sjekk rommet.")).toBeInTheDocument();
+    expect(card.queryByText(/Dobbelt tildelt|Holdt tilbake/)).not.toBeInTheDocument();
+  });
+
+  it("shows 213 (due out 7.11, check-out never recorded, found empty) as Bekreft først, never a green Klar, with the room check's words on its card", async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/runs/demo.jsonl")) return new Response(DEMO);
+      throw new TypeError("Failed to fetch");
+    });
+    const select = await renderReady();
+    expect(within(select).getAllByRole("option").find((option) => option.getAttribute("value") === "room-213")).toHaveTextContent("Rom 213 · Bekreft først");
+    const tile = screen.getByRole("button", { name: "Rom 213: Bekreft først" });
+    expect(tile.querySelector("rect")?.getAttribute("fill")).not.toBe("var(--success)");
+
+    fireEvent.change(select, { target: { value: "room-213" } });
+    const card = within(screen.getByRole("complementary", { name: "Status nå" }));
+    expect(card.getByText("Bekreft først")).toBeInTheDocument();
+    expect(card.queryByText("Klar")).not.toBeInTheDocument();
+    expect(
+      card.getByText(/^Systemet: opptatt i natt \(Ola Nygård\), skulle reist .+\. Utsjekk ikke registrert\. Roboten fant rommet tomt og ryddig kl\. 04:24\. Bekreft med resepsjonen, så kan det selges\.$/),
+    ).toBeInTheDocument();
   });
 });

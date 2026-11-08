@@ -1,0 +1,73 @@
+Forecast for the final (scripts/forecast.py on docs/runs/ledger.csv; regenerate after new live nights)
+
+Model: log(score) = build effect + seed effect, least squares over the complete live build nights
+  67 build x seed cells, 19 builds, 20 seeds, residual SD 0.063 on the log scale (about +7 %), 29 degrees of freedom
+  target build 8de9ffc: played seeds 5 10 16 23; 16 seeds it never played: 1 2 3 4 6 7 8 9 11 12 13 14 15 31 32 41
+
+Seed difficulty (the seed effect, against the average seed; nights behind it):
+  seed 10:  +33 %  (11 nights, played by the target)
+  seed 31:  +30 %  (1 night, unseen by the target)
+  seed 16:  +20 %  (12 nights, played by the target)
+  seed 15:  +19 %  (1 night, unseen by the target)
+  seed  5:  +18 %  (9 nights, played by the target)
+  seed 13:  +18 %  (1 night, unseen by the target)
+  seed 14:  +11 %  (1 night, unseen by the target)
+  seed 23:   +6 %  (9 nights, played by the target)
+  seed 32:   +5 %  (1 night, unseen by the target)
+  seed 11:   -3 %  (2 nights, unseen by the target)
+  seed 12:   -5 %  (1 night, unseen by the target)
+  seed  4:   -6 %  (2 nights, unseen by the target)
+  seed  7:   -6 %  (2 nights, unseen by the target)
+  seed  9:  -10 %  (3 nights, unseen by the target)
+  seed  8:  -13 %  (2 nights, unseen by the target)
+  seed  6:  -13 %  (2 nights, unseen by the target)
+  seed  1:  -15 %  (2 nights, unseen by the target)
+  seed  2:  -19 %  (3 nights, unseen by the target)
+  seed 41:  -21 %  (2 nights, unseen by the target)
+  seed  3:  -21 %  (2 nights, unseen by the target)
+
+Leave-seed-out check: d4e445c's nights on seeds 9 and 11 (never tuned live), predicted from a fit without them:
+  seed 9: predicted 1,865, played 1,965 (+5 %)
+  seed 11: predicted 2,245, played 1,914 (-15 %)
+  tuning penalty (mean gap, log scale): -0.054, about -5 % (n = 2), standard error 0.106
+  leave-one-cell-out RMSE over the 58 predictable cells: 0.088 on the log scale (the in-sample residual SD is 0.063)
+
+8de9ffc on the 16 seeds it never played (model, mean night): 2,106 before the tuning penalty, 1,996 after it; on the seeds it played: 2,591
+
+FORECAST, the final (mean of the best 9 of 10 unseen seeds), 8de9ffc (head of hamad/final, the build that plays at 12:00):
+  median 2,050, 80 % interval 1,759 - 2,393
+  (20,000 simulated finals: seed effects drawn from the 16 unseen seeds, the leave-one-cell-out residual 0.088, the tuning penalty drawn per final from N(-0.054, 0.106); random seed 20261108)
+
+Sensitivity (median, 80 % interval):
+  penalty fixed, in-sample residual (round 4's method)  2,042 (80 %: 1,903 - 2,196)
+  no tuning penalty    2,163 (80 %: 2,008 - 2,336)
+  penalty doubled      1,942 (80 %: 1,667 - 2,268)
+  one build left out   the median moves between 1,948 (without 3fcd572) and 2,139 (80 %: 1,831 - 2,496) (without d2a2ba7, 12 unseen seeds left)
+
+Why lower than the tuned nights (2,591 -> 2,050, -21 %): mostly seed difficulty.
+  The seeds 8de9ffc played average +19 % against the average seed, the unseen ones -4 %: that alone is -19 %.
+  The tuning penalty we can measure adds -5 % (two nights); dropping the worst night of ten pulls the final's mean back up a little.
+
+Out-of-sample check: the dress rehearsal, 8de9ffc on 10 seeds no build had played (22 34 53 55 67 70 78 83 86 93)
+  started Sun 05:02; complete nights 10 of 10: seed 22 2,085, seed 34 2,166, seed 53 2,481, seed 55 2,138, seed 67 2,312, seed 70 2,186, seed 78 2,008, seed 83 2,236, seed 86 1,786, seed 93 1,969
+  forecast committed before it: b57e4c1 (Sun 04:08, for c3801e0), final median 2,035 (80 %: 1,898 - 2,186), mean night 1,989 after the tuning penalty (2,105 before)
+  mean night 2,137 against 1,989 forecast (+7 %; +2 % against the forecast without the penalty)
+  RESULT, mean of the best 9 of 10: 2,176 against the committed median 2,035: inside the committed 80 % interval
+  the rehearsal's own forecast for the final (bootstrap of its 10 nights, best 9 of 10): 2,168 (80 %: 2,091 - 2,243)
+  (no model and no tuned seed in it, but only as many seeds as it has; the map and tasks of the final may differ)
+
+Caveats: the unseen seeds' effects rest on 1-3 nights each, mostly from early builds; the penalty is
+estimated from n = 2 (its uncertainty is in the band); the replay bed screened every change on all 20
+practice seeds (9 and 11 included), so no ledger seed is truly untuned for this build. Practice seeds go to
+999: the held-out nights are the dress rehearsal's (22 34 53 55 67 70 78 83 86 93), above. The model
+assumes a seed is equally much harder for every build (no build-by-seed term beyond the residual). The
+final may use a different map and other tasks (docs/research/wybe-api.md § 1): that distribution shift is
+not in any band here and is a larger risk than the tuning penalty.
+
+SECOND FORECAST, the final (mean of the best 9 of 10), from the dress rehearsal alone (8de9ffc, committed before 12:00):
+  median 2,170, 80 % interval 2,055 - 2,301
+  (posterior predictive of its 10 nights: log scores, mean and SD drawn per final from their posterior (flat prior), 10 new nights, the best 9; 20,000 finals, random seed 20261108; no model, no tuned seed, no tuning penalty)
+  How the ten seeds were chosen is not recorded. The seed hunt (docs/runs/seedhunt-sweep1.log, Sat 21:40-23:38, no work done) estimated each seed's points: the ten average 2,735 (median 2,840) against 2,814 (median 2,834) over the 78 seeds it probed, percentile ranks 8-85: typical seeds, not easy ones.
+
+Both forecasts, committed before the final: the model 2,050 (80 %: 1,759 - 2,393); the rehearsal 2,170 (80 %: 2,055 - 2,301)
+THE FINAL (12:00-13:00, mean of the best 9 of 10): not played yet; filled in after 13:05 (FINAL_RESULT in scripts/forecast.py)

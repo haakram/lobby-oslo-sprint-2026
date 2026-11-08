@@ -9,6 +9,8 @@ import { type CallSummary, useReceptionCalls } from "@/features/dashboard/useRec
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
 import { SourceNote } from "@/features/modules/SourceNote";
 import { formatDate, formatDayClock } from "@/features/reception/format";
+import { pmsLastNight, revenueLastNight } from "@/features/rooms/pms";
+import { useRoomCheck } from "@/features/rooms/useRoomCheck";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, Skeleton, Stat } from "@/ui";
 import { nights, selectGuestDay, type Stay } from "./testData";
 
@@ -51,7 +53,12 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
   const special = list ? specialCases(list) : [];
   const roomStatus = useMemo(() => new Map((rooms ?? []).map((room) => [room.id, room.status])), [rooms]);
   const total = rooms?.length ?? ROOMS_IN_HOTEL;
-  const readyRooms = rooms ? rooms.filter((room) => room.status === "klar").length : null;
+  // Last night's rooms sold, from the one booking system Oversikt and Overlevering read too.
+  const sold = useMemo(() => revenueLastNight(total, pmsLastNight(day.today)).roomsSold, [total, day.today]);
+  // "Klar" is one number everywhere (round 3, design review): the room check's Klare til salg, the figure
+  // Oversikt and Rom show, so a room held back (209) or not yet released (213) is never offered here.
+  const { money } = useRoomCheck(run.status === "ready" ? run.lines : null, rooms, day.today);
+  const readyRooms = rooms && money ? money.readyToSell : null;
   const nightMissing = run.status === "error" || run.status === "empty";
   const ready = calls.kind !== "loading" && run.status !== "loading";
 
@@ -70,7 +77,7 @@ export function GuestsScreen({ viewerUrl }: { viewerUrl?: string }) {
       <FigureRow label="Dagen i tall">
         <Stat label="Ankomster i dag" value={day.arrivals.length} />
         <Stat label="Avreiser i dag" value={day.departures.length} />
-        <Stat label="Belegg i natt" value={day.roomsTonight} unit={`av ${total} rom`} />
+        <Stat label="Belegg i natt" value={sold} unit={`av ${total} rom`} />
         {calls.kind === "loading" ? (
           <div className="flex flex-col gap-1">
             <Skeleton className="h-8 w-16" />
@@ -296,7 +303,7 @@ function StayList({
                 <span className="text-sm text-muted">
                   {stay.guests} {stay.guests === 1 ? "gjest" : "gjester"} · {nights(stay)} {nights(stay) === 1 ? "natt" : "netter"}
                 </span>
-                {stay.source === "resepsjonist" && <Badge tone="accent">Resepsjonisten</Badge>}
+                {stay.source === "resepsjonist" && <Badge tone="neutral">Tatt av resepsjonen</Badge>}
               </div>
               {stay.notes.length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-1">
@@ -312,7 +319,7 @@ function StayList({
               <span className={stay.room ? "font-mono text-sm tabular-nums" : "text-sm font-semibold text-warning"}>{roomWord(stay.room)}</span>
               {!stay.room && (
                 <Link href="/rom" className="py-1 text-sm font-semibold text-accent-text hover:underline">
-                  {readyRooms === null ? "Se rommene" : `${readyRooms} klare rom`}
+                  {readyRooms === null ? "Se rommene" : readyRooms === 1 ? "1 klart rom" : `${readyRooms} klare rom`}
                 </Link>
               )}
               {showStatus && stay.room && look && <span className={`text-sm ${look.word_class}`}>{look.word}</span>}

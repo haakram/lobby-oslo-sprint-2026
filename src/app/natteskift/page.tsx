@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { NightShiftScreen } from "@/features/nightshift/NightShiftScreen";
 
 export const metadata: Metadata = {
-  title: { absolute: "Natteskift | Lobby" },
+  title: "Natteskift",
   description: "Robotens natteskift: hotellet i 3D, klokken og hver beslutning.",
 };
 

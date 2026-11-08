@@ -41,6 +41,7 @@ export function RobotJudgementCard({
   until,
   asOf,
   id = "vurderinger",
+  compact = false,
   className,
 }: {
   lines: readonly RunLine[];
@@ -49,6 +50,8 @@ export function RobotJudgementCard({
   /** "03:12": shown as "fram til 03:12" while the night is not over. */
   asOf?: string | null;
   id?: string;
+  /** Overlevering: the headline facts in three lines, everything else behind "Vis alt" (owner A, round 4). */
+  compact?: boolean;
   className?: string;
 }) {
   const judgement = useMemo(() => robotJudgement(lines, until), [lines, until]);
@@ -76,6 +79,7 @@ export function RobotJudgementCard({
       source={source}
       asOf={asOf}
       id={id}
+      compact={compact}
       className={className}
     />
   );
@@ -104,6 +108,7 @@ export function RobotJudgementView({
   source = null,
   asOf,
   id = "vurderinger",
+  compact = false,
   className,
 }: {
   judgement: RobotJudgement;
@@ -119,6 +124,8 @@ export function RobotJudgementView({
   source?: string | null;
   asOf?: string | null;
   id?: string;
+  /** The headline facts in three lines; the full card behind "Vis alt". */
+  compact?: boolean;
   className?: string;
 }) {
   const { strangers, done, declined, wetFloors, doNotDisturb } = judgement;
@@ -137,57 +144,148 @@ export function RobotJudgementView({
         </p>
       </div>
 
-      {strangers.refusals.length > 0 && <StrangerIncident strangers={strangers} />}
+      {compact && <CompactFacts judgement={judgement} basis={basis} conduct={conduct} blind={crossNight?.blind ?? null} source={source} />}
 
-      <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line pt-4 md:grid-cols-2">
-        <DoneRow basis={basis ?? unsplit(done)} blind={crossNight?.blind ?? null} />
-        {declines ? (
-          <DeclineRow declines={declines} />
-        ) : (
-          <Row icon="search" figure={String(declined.total)} label={declined.total === 1 ? "Melding avvist etter sjekk" : "Meldinger avvist etter sjekk"}>
-            {declined.total === 0 ? "Ingen meldinger måtte avvises." : `${declineText(declined)}.`}
-          </Row>
-        )}
-        {source && conduct?.unfinished && <UnfinishedRow unfinished={conduct.unfinished} />}
-        {!source && (
-          <>
-            <Row icon="flag" figure={String(wetFloors.signed.length)} label="Skilt for vått gulv satt ut">
-              {wetFloors.signed.length > 0 ? `${places(wetFloors.signed)}.` : wetFloors.found.length > 0 ? "Ingen skilt satt ut." : "Ingen våte gulv funnet."}
-              {wetFloors.unsignedAtEnd.length > 0 && (
-                <span className="mt-1 block">Vått uten skilt ved slutten: {places(wetFloors.unsignedAtEnd).toLowerCase()}.</span>
-              )}
-              {slips.map((slip, index) => (
-                <span key={`slip-${index}`} className="mt-1 block">
-                  {slipText(slip)}
-                </span>
-              ))}
-              {wetMoves.map((move, index) => (
-                <span key={`move-${index}`} className="mt-1 block">
-                  Flyttet skiltet fra {place(move.from).toLowerCase()}
-                  {move.clock ? ` kl. ${move.clock.slice(0, 5)}` : ""}
-                  {move.to ? ` til ${place(move.to).toLowerCase()}` : ""} mens gulvet der fortsatt var vått.
-                </span>
-              ))}
-            </Row>
-            {conduct && <MasterKeyRow keys={conduct.keys} />}
-            <Row
-              icon="moon"
-              figure={doNotDisturb.rooms.length > 0 ? String(doNotDisturb.entered.length) : undefined}
-              good={doNotDisturb.rooms.length > 0 && doNotDisturb.entered.length === 0}
-              label={doNotDisturb.rooms.length > 0 ? "Rom med Ikke forstyrr gått inn i" : "Ikke forstyrr"}
-            >
-              {doNotDisturb.rooms.length === 0
-                ? "Ingen dører hadde Ikke forstyrr-skilt i natt."
-                : doNotDisturb.entered.length === 0
-                  ? `${joinNo(doNotDisturb.rooms.map(place))} hadde skiltet. Roboten gikk ikke inn.`
-                  : `Roboten gikk inn i ${joinNo(doNotDisturb.entered.map(place))} etter at skiltet var sett.`}
-            </Row>
-          </>
-        )}
-      </ul>
+      <Expand compact={compact}>
+        {strangers.refusals.length > 0 && <StrangerIncident strangers={strangers} />}
 
-      <HowWeKnow crossNight={crossNight} source={source} />
+        <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line pt-4 md:grid-cols-2">
+          <DoneRow basis={basis ?? unsplit(done)} blind={crossNight?.blind ?? null} />
+          {declines ? (
+            <DeclineRow declines={declines} />
+          ) : (
+            <Row icon="search" figure={String(declined.total)} label={declined.total === 1 ? "Melding avvist etter sjekk" : "Meldinger avvist etter sjekk"}>
+              {declined.total === 0 ? "Ingen meldinger måtte avvises." : `${declineText(declined)}.`}
+            </Row>
+          )}
+          {source && conduct?.unfinished && <UnfinishedRow unfinished={conduct.unfinished} />}
+          {!source && (
+            <>
+              <Row icon="flag" figure={String(wetFloors.signed.length)} label="Skilt for vått gulv satt ut">
+                {wetFloors.signed.length > 0 ? `${places(wetFloors.signed)}.` : wetFloors.found.length > 0 ? "Ingen skilt satt ut." : "Ingen våte gulv funnet."}
+                {wetFloors.unsignedAtEnd.length > 0 && (
+                  <span className="mt-1 block">Vått uten skilt ved slutten: {places(wetFloors.unsignedAtEnd).toLowerCase()}.</span>
+                )}
+                {slips.map((slip, index) => (
+                  <span key={`slip-${index}`} className="mt-1 block">
+                    {slipText(slip)}
+                  </span>
+                ))}
+                {wetMoves.map((move, index) => (
+                  <span key={`move-${index}`} className="mt-1 block">
+                    Flyttet skiltet fra {place(move.from).toLowerCase()}
+                    {move.clock ? ` kl. ${move.clock.slice(0, 5)}` : ""}
+                    {move.to ? ` til ${place(move.to).toLowerCase()}` : ""} mens gulvet der fortsatt var vått.
+                  </span>
+                ))}
+              </Row>
+              {conduct && <MasterKeyRow keys={conduct.keys} />}
+              <Row
+                icon="moon"
+                figure={doNotDisturb.rooms.length > 0 ? String(doNotDisturb.entered.length) : undefined}
+                good={doNotDisturb.rooms.length > 0 && doNotDisturb.entered.length === 0}
+                label={doNotDisturb.rooms.length > 0 ? "Rom med Ikke forstyrr gått inn i" : "Ikke forstyrr"}
+              >
+                {doNotDisturb.rooms.length === 0
+                  ? "Ingen dører hadde Ikke forstyrr-skilt i natt."
+                  : doNotDisturb.entered.length === 0
+                    ? `${joinNo(doNotDisturb.rooms.map(place))} hadde skiltet. Roboten gikk ikke inn.`
+                    : `Roboten gikk inn i ${joinNo(doNotDisturb.entered.map(place))} etter at skiltet var sett.`}
+              </Row>
+            </>
+          )}
+        </ul>
+
+        <HowWeKnow crossNight={crossNight} source={source} />
+      </Expand>
     </section>
+  );
+}
+
+/** The full card, or (compact) the full card behind "Vis alt". */
+function Expand({ compact, children }: { compact: boolean; children: ReactNode }) {
+  if (!compact) return <>{children}</>;
+  return (
+    <details className="group mt-3">
+      <summary className="inline-flex min-h-11 cursor-pointer items-center text-sm font-semibold text-accent-text hover:underline pointer-fine:min-h-8">
+        <span className="group-open:hidden">Vis alt og slik vet vi det</span>
+        <span className="hidden group-open:inline">Vis mindre</span>
+      </summary>
+      {children}
+    </details>
+  );
+}
+
+/**
+ * Overlevering's three lines: "done" with what it rested on and the score-hidden figure; the stranger as one
+ * line; the safety lines (wet floors, the slip, master-key entries without a knock). Same selectors as the
+ * full card, so the two never disagree.
+ */
+function CompactFacts({
+  judgement,
+  basis,
+  conduct,
+  blind,
+  source,
+}: {
+  judgement: RobotJudgement;
+  basis?: DoneBasis;
+  conduct?: Conduct;
+  blind: Precision | null;
+  source: string | null;
+}) {
+  const b = basis ?? unsplit(judgement.done);
+  const { strangers, wetFloors } = judgement;
+  const done: string[] = [];
+  if (b.reported === 0) done.push("Roboten har ikke meldt noe ferdig ennå");
+  else if (b.own.reported > 0) {
+    done.push(`${b.own.confirmed} av ${b.own.reported} på egen vurdering holdt (${ownParts(b.own)})`);
+    if (b.afterRise.reported > 0) done.push(`${b.afterRise.reported} meldt etter at simulatoren hadde bekreftet`);
+  } else if (b.evidence.reported > 0) done.push(`${b.evidence.confirmed} av ${b.evidence.reported} med to signaler`);
+  else done.push(`${b.confirmed} av ${b.reported} bekreftet`);
+  if (blind) done.push(`med poengsummen skjult: ${grouped(blind.credited)} av ${grouped(blind.reported)} (${blind.nights} netter)`);
+
+  const safety: string[] = [];
+  if (!source) {
+    if (wetFloors.signed.length > 0) safety.push(`${wetFloors.signed.length} skilt for vått gulv satt ut`);
+    if (wetFloors.unsignedAtEnd.length > 0) safety.push(`vått uten skilt ved slutten: ${places(wetFloors.unsignedAtEnd).toLowerCase()}`);
+    for (const slip of conduct?.slips ?? []) {
+      safety.push(`skled i ${place(slip.place).toLowerCase()}${slip.clock ? ` ${slip.clock.slice(0, 5)}` : ""}${slip.crossingsAfter > 0 ? `, krysset ${slip.crossingsAfter} ganger til` : ""}${slip.signedAfter ? "" : " uten skilt"}`);
+    }
+    if (conduct && conduct.keys.withoutKnock > 0) safety.push(`${conduct.keys.withoutKnock} av ${conduct.keys.entries.length} nøkkelkortinnganger uten banking`);
+  }
+
+  const times = strangers.refusals.map((refusal) => refusal.clock.slice(0, 5));
+  const facts: { icon: RegenName; lead: string; text: string }[] = [{ icon: "circle-check", lead: "«Ferdig»", text: done.join(" · ") }];
+  if (strangers.refusals.length > 0) {
+    const waits = [...new Set(strangers.keycardWaits)].map((room) => room.replace(/^room-/, ""));
+    facts.push({
+      icon: "shield-check",
+      lead: "Sikkerhet",
+      text: `sa nei ${strangers.refusals.length} ${strangers.refusals.length === 1 ? "gang" : "ganger"} til en ukjent person${
+        times.length > 1 ? ` (${times[0]}–${times.at(-1)}, ${strangers.rooms.length} rom)` : ` (${times[0]})`
+      }${waits.length > 0 ? `; holdt nøkkelkortet ved ${joinNo(waits)}` : ""}`,
+    });
+  }
+  if (safety.length > 0) facts.push({ icon: "flag", lead: "Gulv og dører", text: safety.join(" · ") });
+
+  return (
+    <>
+      <ul className="mt-3 flex flex-col gap-2 border-t border-line pt-3">
+        {facts.map((fact) => (
+          <li key={fact.lead} className="flex gap-3 text-sm">
+            <RegenIcon name={fact.icon} size={18} className="mt-0.5 shrink-0 text-muted" />
+            <p className="min-w-0 text-muted">
+              <span className="font-semibold text-text">{fact.lead}:</span> {fact.text}.
+            </p>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-sm text-muted">
+        <span className="font-semibold text-text">I et ekte hotell</span> bekrefter låsloggen og robotens foto «ferdig». Ett signal alene står som «ikke
+        bekreftet».
+      </p>
+    </>
   );
 }
 

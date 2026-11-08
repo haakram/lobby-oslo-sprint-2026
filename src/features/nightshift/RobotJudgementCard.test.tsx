@@ -86,6 +86,25 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(disclosure).toHaveTextContent(/Kilde: docs\/runs\/ledger\.csv \(\d+ live-starter, siste \d\d\.11 \d\d:\d\d\), regnet ut av scripts\/ledger\.py/);
   });
 
+  it("has a compact variant for Overlevering: three lines of headline facts, the full card behind Vis alt", () => {
+    render(<RobotJudgementCard lines={DEMO} compact />);
+    const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });
+    const { blind } = crossNightPrecision(shiftOf(DEMO));
+    const facts = within(card).getAllByRole("list")[0];
+    expect(within(facts).getAllByRole("listitem")).toHaveLength(3);
+    expect(facts).toHaveTextContent(
+      `«Ferdig»: 9 av 9 på egen vurdering holdt (5 romsjekker og 4 søl) · 64 meldt etter at simulatoren hadde bekreftet · med poengsummen skjult: ${blind!.credited} av ${blind!.reported} (${blind!.nights} netter).`,
+    );
+    expect(facts).toHaveTextContent("Sikkerhet: sa nei 7 ganger til en ukjent person (01:17–05:11, 7 rom); holdt nøkkelkortet ved 209 og 304.");
+    expect(facts).toHaveTextContent(
+      "Gulv og dører: 4 skilt for vått gulv satt ut · vått uten skilt ved slutten: korridor 1c, 2b og 3d · skled i korridor 2b 23:51, krysset 27 ganger til uten skilt · 10 av 15 nøkkelkortinnganger uten banking.",
+    );
+    const more = card.querySelector("details")!;
+    expect(more.open).toBe(false);
+    expect(within(more).getByText("Vis alt og slik vet vi det")).toBeInTheDocument();
+    expect(more).toHaveTextContent("Sa nei 7 ganger til en ukjent person"); // the full card, folded
+  });
+
   it("says how far into the night it counts while the replay runs", () => {
     render(<RobotJudgementCard lines={DEMO} until={4 * 3600} asOf="02:00:00" />);
     const card = screen.getByRole("region", { name: "Robotens vurderinger i natt" });

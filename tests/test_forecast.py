@@ -39,7 +39,7 @@ def test_the_fit_recovers_build_and_seed_effects_and_skips_board_tests_and_cut_n
         {"shift": "w2-x", "kind": "board-test", "complete": "True", "commit": "c3801e0", "seed": 41, "score": 9999},
         {"shift": "w2-y", "kind": "build", "complete": "False", "commit": "c3801e0", "seed": 41, "score": 10},
     ])
-    cells, _ = forecast.read_cells(path)
+    cells, _ = forecast.read_cells(path, "c3801e0")
     assert ("c3801e0", 41) not in cells
     fit = forecast.Fit(forecast.component(cells, "c3801e0"))
     assert fit.residual_sd < 1e-3  # the synthetic scores are exactly build + seed (up to rounding)
@@ -59,5 +59,45 @@ def test_report_has_the_leave_seed_out_check_the_forecast_and_is_the_same_every_
     assert text == forecast.report(path, "c3801e0")
     assert "seed 9: predicted" in text and "seed 11: predicted" in text
     assert re.search(r"tuning penalty \(mean gap, log scale\): [+-]0\.000", text)  # an exact model leaves no gap
-    assert "FORECAST, the final (mean of the best 9 of 10 unseen seeds), c3801e0:" in text
+    assert "FORECAST, the final (mean of the best 9 of 10 unseen seeds), c3801e0 (head of hamad/final" in text
     assert "3 seeds it never played: 9 11 41" in text
+    assert "leave-one-cell-out RMSE" in text
+    assert "Out-of-sample check: the dress rehearsal" in text and "not started yet" in text
+    assert "the final is the only real holdout" not in text
+
+
+def test_the_penalty_s_uncertainty_widens_the_band() -> None:
+    effects = [0.1, -0.1, 0.0, 0.2, -0.2]
+    fixed = forecast.simulate(7.6, effects, 0.05, -0.05)
+    drawn = forecast.simulate(7.6, effects, 0.05, -0.05, 0.1)
+    width = lambda v: forecast.quantile(v, 0.9) - forecast.quantile(v, 0.1)
+    assert width(drawn) > 1.3 * width(fixed)
+    assert forecast.best_mean([1, 10, 10, 10, 10, 10, 10, 10, 10, 10]) == 10
+
+
+def test_the_rehearsal_is_kept_out_of_the_fit_and_compared_with_the_forecast_committed_before_it(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "ledger.csv"
+    seeds = forecast.REHEARSAL_SEEDS
+    rows = [{"shift": f"w2-r{seed}", "kind": "build", "complete": "True", "commit": "c3801e0", "seed": seed,
+             "score": 2000 + 10 * i, "started": "2026-11-08T05:02:33+01:00"} for i, seed in enumerate(seeds)]
+    fields = ["shift", "kind", "complete", "commit", "seed", "score", "started"]
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fields)
+        writer.writeheader()
+        for build, played in PLAYED.items():
+            for seed in played:
+                writer.writerow({"shift": f"w2-{build}{seed}", "kind": "build", "complete": "True", "commit": build,
+                                 "seed": seed, "score": round(math.exp(BUILDS[build] + SEEDS[seed])),
+                                 "started": "2026-11-08T03:00:00+01:00"})
+        writer.writerows(rows)
+    committed = ("b57e4c1", "2026-11-08T04:08:43+01:00",
+                 "c3801e0 on the 16 seeds it never played (model, mean night): 2,105 before the tuning penalty, 1,989 after it\n"
+                 "FORECAST, the final (mean of the best 9 of 10 unseen seeds), c3801e0:\n  median 2,035, 80 % interval 1,898 - 2,186\n")
+    monkeypatch.setattr(forecast, "committed_before", lambda when: committed)
+    cells, _ = forecast.read_cells(path, "c3801e0")
+    assert not any(seed in seeds for _, seed in cells)
+    text = "\n".join(forecast.rehearsal_check(path, "c3801e0"))
+    assert "complete nights 10 of 10" in text
+    assert "final median 2,035 (80 %: 1,898 - 2,186), mean night 1,989" in text
+    best9 = sum(sorted(2000 + 10 * i for i in range(10))[1:]) / 9
+    assert f"RESULT, mean of the best 9 of 10: {round(best9):,} against the committed median 2,035: inside the committed 80 % interval" in text

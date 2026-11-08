@@ -220,3 +220,29 @@ def test_a_score_blind_night_is_an_experiment_its_done_all_own_judgement_and_a_s
     assert by[blind].commit == "ec84142" and by[blind].commit_source == "start_line"
     assert by[dirty].kind == "board-test" and by[dirty].done_after_rise == 1  # dirty stamp: not a build
     assert list(csv.DictReader(io.StringIO(ledger.builds_csv(list(by.values()))))) == []
+
+
+def test_distinct_claims_count_a_replayed_seed_once_with_a_wilson_interval() -> None:
+    def night(seed: int, claims: list[tuple[str, bool]]) -> object:
+        return ledger.Night(shift=f"w2-{seed:032x}", started="", seed=seed, checkout="x", own_claims=claims)
+
+    nights = [night(23, [("R-001", True), ("R-037", False)]), night(23, [("R-001", True), ("R-037", False)]),
+              night(10, [("R-001", True)])]
+    d = ledger.distinct_own(nights)
+    assert (d["reports"], d["claims"], d["credited"], d["missed"]) == (5, 3, 2, ["23/R-037"])
+    # the data juror's figures: 64 of 65 distinct claims, 95 % 92-99.7 %; the demo night's 9 of 9, 70-100 %.
+    assert ledger.ci_text(ledger.wilson(64, 65), 64, 65) == "92-99.7 %"
+    assert ledger.ci_text(ledger.wilson(9, 9), 9, 9) == "70-100 %"
+    assert ledger.wilson(0, 0) == (0.0, 1.0)
+
+
+def test_a_score_blind_night_counts_its_own_checks_and_the_ones_that_said_no() -> None:
+    night = [
+        {"v": 1, "type": "start", "shift": "w2-" + "b" * 32, "mode": "practice", "seed": 5, "flags": {"score_blind": True}},
+        decision("blind_check", "R-001", None) | {"data": {"request": "R-001", "check": "place", "observed": True}},
+        decision("blind_check", "R-002", None) | {"data": {"request": "R-002", "check": "say", "observed": False}},
+    ]
+    row = ledger.read_night(night)
+    assert (row["blind_checks"], row["blind_said_no"]) == (2, 1)
+    assert ledger.read_night(NIGHT)["blind_checks"] is None  # a sighted night has none
+    assert "own_claims" not in ledger.COLUMNS

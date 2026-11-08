@@ -59,6 +59,14 @@ How each column is computed (the same rules as the app, src/features/nightshift)
 - ``declines_credited`` / ``declines_not_credited``: ``report … declined`` calls whose score went up /
   did not go up between the last score seen before the report and the first one after it
   (``declines_pending``: no score after it, e.g. a log that stops there).
+- ``blind_checks`` / ``blind_said_no`` (score-blind nights only): the agent's ``blind_check`` decisions, and how
+  many of them observed the work as not done (``observed: false``). Zero "no" means the robot's own check never
+  disagreed on those nights: the score was not needed there, which says nothing yet about how well the check
+  catches a failure (jury round 5, the data juror and the Wybe juror).
+- Distinct claims (printed, and ``distinct_own`` in ledger.json; jury round 5, the data juror): the final branch's
+  own-judgement "done" counted once per (seed, request), since its builds replay the same deterministic
+  seeds; a claim is credited only when every report of it was. With a Wilson 95 % interval, as is the demo
+  night's own-judgement figure (``public/runs/demo.jsonl``).
 - ``score``: the ``end`` line's score, else the last score seen (``complete`` says which).
 - ``commit``: from ``agent/data/replay_codes.json`` (the replay bed's map of who played which night)
   when listed there (``commit_source=replay_codes``); otherwise the checkout's first-parent HEAD at the
@@ -95,6 +103,7 @@ BUILDS_CSV = REPO / "docs" / "runs" / "builds.csv"
 LEDGER_JSON = REPO / "src" / "features" / "nightshift" / "data" / "ledger.json"
 FIDELITY_CSV = REPO / "docs" / "runs" / "replay-fidelity.csv"
 FIDELITY_TXT = REPO / "docs" / "runs" / "replay-fidelity.txt"
+DEMO_LOG = REPO / "public" / "runs" / "demo.jsonl"
 
 # Seed-specific board experiments, not builds (see the docstring): their nights are kind=board-test.
 BOARD_CHECKOUTS = frozenset({"lottery", "lawet", "wetoff", "lafinal", "boardtune"})
@@ -150,10 +159,14 @@ class Night:
     done_spill: int | None = None
     done_spill_credited: int | None = None
     done_basis_unknown: int | None = None
+    blind_checks: int | None = None
+    blind_said_no: int | None = None
     t: float = field(default=0.0, repr=False)
+    # (request, credited) for every "done" said on the robot's own judgement: the distinct-claim count.
+    own_claims: list = field(default_factory=list, repr=False)
 
 
-COLUMNS = [f for f in Night.__dataclass_fields__ if f != "t"]
+COLUMNS = [f for f in Night.__dataclass_fields__ if f not in ("t", "own_claims")]
 
 
 def read_jsonl(path: Path) -> list[dict]:
@@ -205,6 +218,8 @@ def read_night(lines: list[dict]) -> dict:
     basis = {"after_rise": 0, "own": 0, "own_credited": 0, "room_check": 0, "room_check_credited": 0, "spill": 0,
              "spill_credited": 0, "unknown": 0}
     open_tasks: dict[str, list] = {}  # request -> [kind, rose since its task_start]
+    own_claims: list[tuple[str, bool]] = []
+    blind_checks = blind_said_no = 0
     for index, line in enumerate(lines):
         kind = line.get("type")
         if line.get("clock"):
@@ -231,6 +246,9 @@ def read_night(lines: list[dict]) -> dict:
                     open_tasks[request] = [(line.get("data") or {}).get("kind"), False]
                 else:
                     open_tasks.pop(request, None)
+        if kind == "decision" and line.get("kind") == "blind_check":
+            blind_checks += 1
+            blind_said_no += (line.get("data") or {}).get("observed") is False
         if kind == "decision" and line.get("kind") == "request":
             request = (line.get("data") or {}).get("request")
             if isinstance(request, str):
@@ -260,6 +278,7 @@ def read_night(lines: list[dict]) -> dict:
                 else:
                     basis["own"] += 1
                     basis["own_credited"] += thanked
+                    own_claims.append((str(args.get("request")), bool(thanked)))
                     if task[0] in ("room_check", "spill"):
                         basis[task[0]] += 1
                         basis[f"{task[0]}_credited"] += thanked
@@ -301,6 +320,9 @@ def read_night(lines: list[dict]) -> dict:
         "points_lost": lost,
         "min_battery": round(min_battery, 1) if min_battery is not None else None,
         **{f"done_{key}" if key != "unknown" else "done_basis_unknown": value for key, value in basis.items()},
+        "blind_checks": blind_checks if blind else None,
+        "blind_said_no": blind_said_no if blind else None,
+        "own_claims": own_claims,
     }
 
 
@@ -434,6 +456,7 @@ def ledger_csv(nights: list[Night]) -> str:
     for night in nights:
         row = asdict(night)
         row.pop("t")
+        row.pop("own_claims")
         writer.writerow({k: ("" if v is None else v) for k, v in row.items()})
     return out.getvalue()
 
@@ -502,17 +525,61 @@ def basis_text(label: str, nights: list[Night]) -> str:
             + (f"; basis unknown {s['done_basis_unknown']}" if s["done_basis_unknown"] else ""))
 
 
+def wilson(successes: int, n: int, z: float = 1.959964) -> tuple[float, float]:
+    """The Wilson score interval for successes of n (95 % by default): honest at small n and at 100 %."""
+    if n == 0:
+        return (0.0, 1.0)
+    p = successes / n
+    denom = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denom
+    half = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5) / denom
+    return (max(0.0, centre - half), min(1.0, centre + half))
+
+
+def distinct_own(nights: list[Night]) -> dict:
+    """The robot's own-judgement "done" over `nights`, counted once per (seed, request), not once per replay
+    (jury round 5, the data juror: four near-identical builds on the same deterministic seeds repeat the same
+    claims). A distinct claim counts as credited only when every report of it was credited."""
+    claims: dict[tuple, bool] = {}
+    reports = 0
+    for night in nights:
+        for request, credited in night.own_claims:
+            reports += 1
+            key = (night.seed, request)
+            claims[key] = claims.get(key, True) and credited
+    credited = sum(claims.values())
+    low, high = wilson(credited, len(claims))
+    missed = sorted(f"{seed}/{request}" for (seed, request), ok in claims.items() if not ok)
+    return {"nights": len(nights), "reports": reports, "claims": len(claims), "credited": credited,
+            "ci95": [round(low, 4), round(high, 4)], "missed": missed}
+
+
+def ci_text(ci: list[float] | tuple[float, float], credited: int, n: int) -> str:
+    """"92-99.7 %": whole per cent, one decimal where a whole number would round up to 100 % with a miss."""
+    low, high = 100 * ci[0], 100 * ci[1]
+    top = f"{high:.1f}" if credited < n and round(high) >= 100 else f"{high:.0f}"
+    return f"{low:.0f}-{top} %"
+
+
 def ledger_json(nights: list[Night]) -> str:
     keep = ["shift", "started", "seed", "commit", "kind", "complete", "score", "done_reports", "done_credited",
             "declines_credited", "declines_not_credited", "done_after_rise", "done_own", "done_own_credited",
             "done_room_check", "done_room_check_credited", "done_spill", "done_spill_credited"]
-    rows = [{k: asdict(n)[k] for k in keep} for n in counted(nights)]
+    rows = []
+    for n in counted(nights):
+        row = {k: getattr(n, k) for k in keep}
+        if n.kind == EXPERIMENT:
+            row["blind_checks"], row["blind_said_no"] = n.blind_checks, n.blind_said_no
+        rows.append(row)
+    final = [n for n in nights if n.log and n.complete and n.kind == BUILD and n.commit in FINAL_BUILDS]
     doc = {
         "_doc": "Generated by scripts/ledger.py from the live run logs; do not edit. One row per live "
                 "practice shift whose log was found, board tests (kind=board-test) only when complete "
                 "(docs/runs/ledger.csv has every live start).",
         "live_starts": len(nights),
         "latest_start": max((n.started for n in nights), default=None),
+        # The final branch's own-judgement "done" as distinct (seed, request) claims with a Wilson 95 % interval.
+        "distinct_own": {"scope": "final branch's last four builds", "commits": list(FINAL_BUILDS), **distinct_own(final)},
         "nights": rows,
     }
     return json.dumps(doc, ensure_ascii=False, indent=1) + "\n"
@@ -578,6 +645,10 @@ def main(argv: list[str] | None = None) -> int:
     final = [n for n in complete if n.kind == BUILD and n.commit in FINAL_BUILDS]
     if final:
         print("done split, " + basis_text("final branch's last four builds", final))
+        d = distinct_own(final)
+        print(f"distinct own-judgement claims, final branch's last four builds: {d['credited']} of {d['claims']} "
+              f"(95 % CI {ci_text(d['ci95'], d['credited'], d['claims'])}; {d['reports']} reports counting replays; "
+              f"missed: {', '.join(d['missed']) or 'none'})")
     print("done split, " + basis_text("all nights the card counts", [n for n in counted(nights) if (n.done_reports or 0) > 0]))
     blind = [n for n in experiments if n.log]
     if blind:
@@ -586,7 +657,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"score-blind experiment ({len(blind)} nights, {sum(1 for n in blind if n.complete)} complete; seeds "
               f"{' '.join(str(n.seed) for n in blind)}; scores {' '.join(str(n.score) for n in blind)}): "
               f"{s['done_credited']} of {s['done_reports']} 'done' credited{rate}, "
-              f"false done {s['done_reports'] - s['done_credited']}")
+              f"false done {s['done_reports'] - s['done_credited']}; the robot's own check said no "
+              f"{sum(n.blind_said_no or 0 for n in blind)} of {sum(n.blind_checks or 0 for n in blind)} times")
+    demo = DEMO_LOG.is_file() and start_line(read_jsonl(DEMO_LOG)).get("shift")
+    night = next((n for n in nights if n.shift == demo), None)
+    if night and night.done_own:
+        ci = wilson(night.done_own_credited or 0, night.done_own)
+        print(f"demo night ({demo[:11]}, seed {night.seed}): own judgement {night.done_own_credited} of {night.done_own} "
+              f"credited (95 % CI {ci_text(ci, night.done_own_credited or 0, night.done_own)})")
     builds = [n for n in complete if n.kind == BUILD and n.score is not None]
     if builds:
         best = max(builds, key=lambda n: n.score or 0)

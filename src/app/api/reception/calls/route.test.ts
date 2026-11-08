@@ -18,6 +18,7 @@ describe("GET /api/reception/calls", () => {
   beforeEach(() => {
     vi.stubEnv("ELEVENLABS_API_KEY", "test-eleven-key-value-0000");
     vi.stubEnv("ELEVENLABS_RECEPTION_AGENT_ID", AGENT);
+    vi.stubEnv("RECEPTION_CALLS_SINCE", "");
     sdk.list.mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
@@ -60,5 +61,36 @@ describe("GET /api/reception/calls", () => {
     expect(sdk.list).toHaveBeenCalledWith(
       expect.objectContaining({ agentId: AGENT, pageSize: 20, summaryMode: "include", dataCollectionIds: expect.arrayContaining(["caller_name", "guests"]) }),
     );
+    expect(sdk.list.mock.calls[0]?.[0]).not.toHaveProperty("callStartAfterUnix");
+  });
+
+  it("leaves out every call before RECEPTION_CALLS_SINCE, at ElevenLabs and again on our side", async () => {
+    vi.stubEnv("RECEPTION_CALLS_SINCE", "2026-11-08T05:30:00+01:00");
+    const cutoff = Date.UTC(2026, 10, 8, 4, 30) / 1000;
+    const call = (id: string, at: number, name: string) => ({
+      conversationId: id,
+      startTimeUnixSecs: at,
+      callDurationSecs: 30,
+      status: "done",
+      dataCollectionResults: { caller_name: { value: name } },
+    });
+    // The team's test call of 7 Nov comes back anyway (an API that ignores the filter): it must still not show.
+    sdk.list.mockResolvedValue({
+      conversations: [call("conv_demo", cutoff + 60, "Demo Gjest"), call("conv_test", cutoff - 86_400, "Ekte Testperson")],
+      hasMore: false,
+    });
+    const response = await GET();
+    expect(response.status).toBe(200);
+    expect(sdk.list).toHaveBeenCalledWith(expect.objectContaining({ callStartAfterUnix: cutoff }));
+    const body = await response.text();
+    expect(body).toContain("Demo Gjest");
+    expect(body).not.toContain("Ekte Testperson");
+  });
+
+  it("fails closed (503, nothing read) when RECEPTION_CALLS_SINCE is not an ISO time with an offset", async () => {
+    vi.stubEnv("RECEPTION_CALLS_SINCE", "8. november");
+    const response = await GET();
+    expect(response.status).toBe(503);
+    expect(sdk.list).not.toHaveBeenCalled();
   });
 });

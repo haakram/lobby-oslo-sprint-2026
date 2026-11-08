@@ -51,8 +51,11 @@ function field(results: Record<string, unknown> | null | undefined, id: string):
   return entry && typeof entry === "object" && "value" in entry ? entry.value : entry;
 }
 
-/** Turns the ElevenLabs conversations list into staff-readable notes; malformed items are dropped. */
-export function toCallNotes(raw: unknown): CallNote[] {
+/**
+ * Turns the ElevenLabs conversations list into staff-readable notes; malformed items are dropped, and so is
+ * every call that started before `sinceUnixSecs` (RECEPTION_CALLS_SINCE, read by the route).
+ */
+export function toCallNotes(raw: unknown, { sinceUnixSecs = null }: { sinceUnixSecs?: number | null } = {}): CallNote[] {
   const list = raw && typeof raw === "object" && "conversations" in raw ? raw.conversations : null;
   if (!Array.isArray(list)) return [];
   const notes: { at: number; note: CallNote }[] = [];
@@ -60,6 +63,7 @@ export function toCallNotes(raw: unknown): CallNote[] {
     const parsed = summarySchema.safeParse(item);
     if (!parsed.success) continue;
     const s = parsed.data;
+    if (sinceUnixSecs !== null && s.startTimeUnixSecs < sinceUnixSecs) continue;
     const data = s.dataCollectionResults;
     const guests = field(data, "guests");
     const callback = text(field(data, "callback_number"));

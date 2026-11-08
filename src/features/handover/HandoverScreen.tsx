@@ -193,7 +193,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
 
         {/* The robot's judgement calls (owner C's card, the whole night): the stranger it refused, every "done" confirmed. */}
         {ready && run.lines.length > 0 && (
-          <div data-enter className="lg:col-start-1 lg:row-start-3">
+          <div data-enter className="lg:col-span-2 lg:row-start-3">
             <RobotJudgementCard lines={run.lines} id="vurderinger-overlevering" />
           </div>
         )}

@@ -357,304 +357,273 @@ three jurors were locked out for minutes during the night's reviews. So nobody t
 
 ## 6. Judge questions
 
-### 6.1 The jurors' questions (round-3 reviews, Sun 8 Nov about 04:00) and the honest answers
+### 6.1 The jurors' questions (round-4 reviews, Sun 8 Nov about 05:00) and the honest answers
 
 Each juror brings one question from their field. The answer is what we can say **truthfully today**;
 **[fill]** marks a fact the team must supply first, **[if]** a line to say only if it is true by then,
 **PENDING** a result still being measured. If a [fill] stays empty, say the honest version given after
 it. The creative juror and the design juror share a field and both ask the testing question: give both the same numbers.
+What drops any answer to 6: robot numbers where the question is about hotels, "hours saved", a
+percentage from a handful of calls, or a number that isn't in a file.
 
-**The security juror (IT and security).** *"I just curled your production login page: it
-serves a weaker CSP than the build you're showing me, with no `connect-src`. What's your biggest
-technical risk, and why should I trust the hardened one?"* (Hamad)
+**The security juror (IT and security).** *"What is your biggest technical risk, and what's the
+one thing an attacker or a hotel's own IT would get past today?"* (Hamad)
 
-> "You're right, and the README and PRIVACY.md say so: the public URL serves `main`, Saturday's build
-> under the old name. The hardened headers are on the branch we're demoing, which our team lead keeps
-> off `main` until he has reviewed it. [if redeployed: 'We redeployed at [time]; here's the header
-> live.'] On this build the policy starts from `default-src 'self'`; `connect-src` allows only our
-> origin and ElevenLabs; `object-src 'none'`, `frame-ancestors 'none'`, no `eval` in production;
-> `'unsafe-inline'` stays because Next.js streams page data as inline scripts, and a per-request nonce is
-> the next step. Our biggest technical risk is cost on the paid AI routes, so we defend it in layers.
-> The proxy rejects anyone without a session before any provider is reached. A per-user limit fires
-> before any Claude or ElevenLabs call: identify stops at 40 a minute, then a 429 with Retry-After, and I
-> can trip it on screen with empty requests that never reach Claude. [if set in both consoles: 'And the
-> hard ceiling is a provider-side spend cap at Anthropic and ElevenLabs, because the first two live per
-> server instance and reset on a cold start.'] [if not set: 'The provider-side cap is the one layer not
-> set yet; until it is, our ceiling is per server instance.'] Authorization is enforced in the proxy,
-> not the client; watch: admin, view as robot, open Oversikt, and the server answers 403. Before a
-> pilot: limiters in a shared store and per-session revocation, both written up as known gaps."
+> "Two honest ones. First, sessions are stateless 12-hour HMAC tokens and the team's accounts share
+> one password (the jury has its own, made for the event and deleted after it). A leaked token stays
+> valid until it expires or we rotate the secret, which logs everyone out. For a pilot: one account per
+> person, a shorter session, and revocation through the user list. Second, our limiters live in memory
+> per server instance, so on serverless N instances allow N times the limit. [if set in both consoles:
+> 'The hard ceiling is a provider-side spend cap at Anthropic and ElevenLabs.'] [if not: 'The
+> provider-side spend cap is the one layer not set yet.'] What we closed this morning: the data and
+> paid routes check the origin themselves now, a 403 before the rate limit or any backend, the same
+> check as the login, so it's defence in depth, not SameSite alone. Forged cookies fail the HMAC in
+> constant time, login is enumeration- and CSRF-safe, every paid route is limited before it costs a
+> cent, and this is the production build: `default-src 'self'`, no eval, a Secure cookie. The public
+> URL still serves Saturday's `main` with an older header, and the README says so."
 
-Show it (10 seconds, his suggested moment): as `siri` (admin), switch the view to *robot* and open
-`/oversikt`: the server answers 403 *Ingen tilgang*. If he decodes the session cookie: "signed, not
-encrypted; nothing secret inside; change one byte and the HMAC check rejects it."
+Show it (30 seconds, his suggested moment): DevTools on Overlevering → the response headers (the CSP),
+and a logged-out tab on `/api/reception/calls` → 401 JSON. Or, as `siri` (admin), switch the view to
+*robot* and open `/oversikt`: the server answers 403 *Ingen tilgang*.
 
-**The data juror (data and ML soundness).** *"Your robot reads the referee's score before it says
-'done'. Take those out: how often is it right on its own judgement, and what does that predict for a
-hotel where there is no referee?"* (Hamad)
+**The data juror (data and ML soundness).** *"Your score-blind run made the same decisions as the
+sighted build, call for call on three of four seeds. How many times did the robot's own observation say
+'not done'? If that's zero, what does your 0.3 % false-done rate measure, and what is the number when an
+action really fails?"* (Hamad)
 
-> "64 of the 73 'done' on this night came only after the score had risen. That's the simulator's
-> verifier, and we don't count it as trust. 9 were the robot's own judgement: 5 room checks, where it
-> looked inside and reported what it saw, and 4 spill reports. All 9 were credited. Over the final
-> branch's 18 nights that's 189 claims on its own judgement and 185 credited, 97.9 %; room checks 117 of
-> 117. The 4 misses are one deliberate probe, the same request on seed 23 (R-037) in all four builds,
-> because what the agent learns in a shift resets every shift. In a hotel there's no score, so the
-> room-check path is the one that carries over: 'done' needs an observation, and that's the path with
-> the clean record. And with the score hidden from its decisions altogether, four live nights this
-> morning: 290 of 291 credited. Both lines are on the judgement card, and the columns are in `ledger.csv`. On the
-> score: we committed a forecast before the final, from a build-plus-seed model fitted on every complete live build night (`scripts/forecast.py`, output in `docs/runs/forecast.txt`): a median of **2,035, with 80 % between 1,898 and 2,186**. It's lower than the 2,591 this build scored on its tuned seeds mostly because those seeds are easy: seed difficulty alone accounts for about −19 %. The tuning penalty we can measure is about −6 %, from two nights, so treat it as rough. [After 13:05: 'The final came in at [Y].']"
+> "Zero: 0 of 265 checks on those four nights. You're right, so it shows the score wasn't needed on
+> those nights, not that the robot catches a failure, and we've stopped quoting a false-done rate from
+> it. [if the fault-injection result is in: 'We measured that separately: in the offline fake we
+> injected failures at known rates, a place that lands outside the room, a message nobody heard, a sign
+> beside the spill, and the score-blind gate caught [X of Y], with [Z] false dones and [M] false
+> refusals; it's behind Slik vet vi det and in docs/runs.'] [if not: 'The test with injected failures
+> is next; until it exists, one signal on the handover reads ikke bekreftet.'] Counting distinct
+> claims, not the same seed replayed, the final branch's own-judgement record is 64 of 65, a 95 %
+> interval of 92 to 99.7 %. The demo night's 9 of 9 has a lower bound of 70 %, and its own log
+> contradicts one of the 9, 209, so the card says 8 of 9. The forecast is for the build that plays at
+> noon, `8de9ffc`, with the penalty's uncertainty in the band: median 2,050, 80 % between 1,759 and
+> 2,393. And there was a real holdout: seeds go to 999, so at five this morning the build played ten
+> seeds no build had seen. The forecast we committed at 04:08 expected 1,989 a night; the first four
+> came in at 2,218, 11 % above. [after 13:05: 'The final came in at [Y].'] The simulator's observations
+> are cleaner than real sensors, so the pilot's first deliverable is the same confusion matrix against
+> the lock log."
 
 Follow-ups he may ask:
 
-- *"Did you write the PMS test data after you saw the log?"* "Yes, and each of those rows says so on
-  screen (*Testdata: bookingen er lagt inn av teamet*). The robot's side is the real log; the bookings
-  show what the join does. In a pilot it reads the hotel's booking system."
-- *"Your holdout is used up."* "Yes. The replay bed screened changes on all 20 seeds, 9 and 11
-  included, so for the build that plays at 12:00 no seed in the ledger is untuned. The final is the only
-  true holdout, which is why the forecast is committed before it."
-- *"The sim is deterministic."* "Yes: the same code on the same seed scores the same, so a per-seed
-  difference between builds is exact and the uncertainty is between seeds. `cb72845` → `8eac151` was
-  +53, −1, −94, −25 on four seeds: a mean of −17 with a standard error of about 31. Four nights can't
-  separate ±20."
-- *"Show me a bad night."* Seed 23 is our worst: even there, 70 of 71 'done' credited on the build in
-  the app (`cb72845`), and the one that wasn't cost −30.
+- *"Did you write the PMS test data after you saw the log?"* "Yes, and the screen says so. 209 no longer
+  needs it: the robot's own log contradicts its own report. 213's booking is test data, labelled; in a
+  pilot the booking system is the hotel's, read-only."
+- *"Can I regenerate your ledger?"* "The script is in the repo and `--check` says whether the committed
+  files are current; the 109 MB of logs are on Hamad's laptop, not in the repo, so today it runs only
+  there. Committing the 22 logs behind the headline numbers is the fix." (not done)
+- *"The sim is deterministic."* "Yes: the same code on the same seed scores the same, so the
+  uncertainty is between seeds. `cb72845` → `8eac151` was +53, −1, −94, −25 on four seeds: a mean of −17
+  with a standard error of about 31. Four nights can't separate ±20."
+- *"Are your room checks falsifiable?"* "Not in the sim: its look returns ground truth as text, and
+  209 shows that even there it can miss what the robot put in. That's why perception comes last in a
+  hotel: the lock trail, the energy slot and the PMS first."
 - *"How accurate is the camera?"* "Not measured. The confidence is the model's own label, not
   calibrated." [or: fill from a 20-photo eval]
 
-**The marketing juror (Marketing).** *"How will you get your first 100 users, and since your user is
-someone who taps Kvitter mottatt, which today is saved in one browser, how will you know when you have
-them?"* (ShirazIQ)
+**The marketing juror (Marketing).** *"Who exactly did you talk to this morning, and how do you get
+from them to 100 people signing this handover: through which door, and by when?"* (ShirazIQ)
 
-> [fill from § 8.1, raw numbers only] "Hotels first, software only. This morning we called [10] Oslo
-> hotels of 60–200 rooms and reached [N]; [M] hand over in a notebook or in PMS notes, [K] said yes or
-> maybe to a free four-week pilot, and the phrase they used most was '[their words]'. They told us
-> [3–6] people sign the morning handover, so 100 users is about [20] hotels. Hotel one is [type and
-> size]; they get a printed Overlevering of their own night on Monday. Hotels two to five come from
-> independents through VisBook and De Historiske; robot makers come after: we asked Wybe at their stand
-> and they said [answer]. A user is someone who signs the handover three times a week. In the pilot
-> every sign-off is an event on our server, no guest data, so that number is on our own dashboard from
-> day one. No paid ads: Norway has about 93,000 hotel rooms, about 33 million kroner a year at full
-> share, so the scale is the Nordics through the Mews and Apaleo marketplaces. If fewer than two of ten
-> hotels take the pilot by 8 December, we stop and test the robot-maker channel."
+> [fill from § 8.1, raw counts only] "This morning at [time], while the night desks were still on, we
+> called [10] Oslo hotels of 60 to 200 rooms and reached [N]. [M] hand over in a paper book or PMS
+> notes. [K] said yes or maybe to a free four-week pilot, no robot needed, and the phrase we heard most
+> was '[their words]'. They told us about [S] people sign the handover in a week, so 100 users is about
+> [100 ÷ S] hotels. We count a user as someone who signs every shift they work, and a hotel as active
+> when 5 of 7 mornings are signed; in the pilot both are one event on our server, with no guest data.
+> At this morning's rate that's about [N] conversations, which two of us can make by [date]. Hotel one
+> is live on 16 November with its own night printed and a one-page data agreement; the stop rule is 8
+> December. The first door is the phone; the second is the staff, because a night manager who moves
+> takes the page to her next hotel. No ads."
 
-Honest version if the round wasn't run (she scores it 6): "We haven't asked a hotel yet; Monday we
-call ten Oslo night desks with four questions and bring a printed handover of their own night. We'll
-know we have a user the way the pilot counts it: a sign-off three times a week, each one an event on
-our server. Today the sign-off is kept on one device, and the screen says so."
+Honest version if the round wasn't run (she scores it 6): "We haven't asked a hotel yet. The slide
+shows the arithmetic with the gaps marked: 100 users is hotels times signers per hotel, and both the
+signers and the yes-rate come from calls we haven't made. What's fixed is how we count: a person who
+signs every shift they work, a hotel signed on 5 of 7 mornings, and the stop rule on 8 December."
 
-**The Wybe juror (Wybe Robotics; the Night Shift challenge).** *"Every 'done' your agent sends is checked
-against our score first. That's where your 99.7 % comes from. A hotel has no score. Hide the score from
-your agent: what's your false-done rate then, and what replaces our referee on a real robot?"* (Hamad,
-about 40 seconds)
+**The Wybe juror (Wybe Robotics; the Night Shift challenge).** *"Your card shows the robot entered 10 rooms
+without knocking, moved a sign off a floor that was still wet, and crossed a corridor it had slipped on
+27 times. Your final build still does all three. What does following hotel rules cost you on our
+server, which build plays at noon, and which one would you put in a real hotel on Monday?"* (Hamad)
 
-**Score-blind experiment (Sun 8 Nov, side branch `hamad/blind`, `NS_SCORE_BLIND=1`).** Four live
-practice nights on Wybe's server, started at 04:26 on seeds 10, 16, 23 and 5. The agent never used the
-score or the wording of the referee's reply to decide "done"; it decided from what it saw: the place
-reply ("inside room-N"), the guest's answer at the door, the sign "over the spill". **Resultat: 291
-"done", 290 credited by the referee (99.7 %): a false-done rate of 0.3 %.** The one miss is the same spill
-report the sighted build also misses (R-037 on seed 23, "wet-floor sign placed over the spill at
-corridor-3b", reply "Noted."). Scores: identical to the sighted final build (`c3801e0`) on three seeds
-(10: 2,760 · 16: 2,748 · 5: 2,559) and 6 points higher on seed 23 (2,304 against 2,298). The logs carry
-`flags.score_blind` on their start line, the ledger keeps them as `kind=experiment` (out of every build
-figure), and D recounted the four logs (`oslo-wt/blind/temp/runs/`, on Hamad's laptop): 74 + 74 + 73 +
-70 "done", 290 replies "Noted. Thanks.".
-
-> "We ran it this morning: four live practice shifts on your server, seeds 10, 16, 23 and 5, with the
-> score hidden from the agent's decisions. It said 'done' only from what the world told it: the place
-> reply 'inside room-N', the guest's answer at the door, the sign 'over the spill'. It never used the
-> score or your reply's wording. Your referee credited 290 of its 291: a false-done rate of 0.3 %. The
-> one miss is the same spill on seed 23 the sighted build misses too, so on the handover a spill with
-> only the robot's word shows as *ikke bekreftet* until a person looks. And it cost nothing: the same
-> score on three seeds, six points more on the fourth. On a real robot your referee is replaced per
-> kind by evidence: a room check by the lock trail and the robot's photo, never by opening a booked
-> room; a message by the guest's reply; a spill by the sign's placement and a photo; a delivery by the
-> guest's acknowledgement or a compartment sensor. One signal alone reads *ikke bekreftet*. And we're
-> straight about what your score taught our robot: 10 of its 15 master-key entries came without a knock,
-> it kept crossing corridor 2B after slipping there and never signed it, and it moved a sign off a floor
-> that was still wet. Those lines are on its card now, and a pilot runs with them off."
-
-What hotel rules (knock first, no sign moves, a 20 % battery reserve) cost in Wybe's sim is **not
-measured**: don't give a number. The blind run is a side branch, not necessarily the build that plays
-at 12:00: say which one plays.
+> "[if measured: 'We measured it this morning. A hotel-rules switch, a knock before every keycard
+> entry, no sign moves, known wet corridors avoided and a sign where it slipped, played seeds [..] on
+> your server: [N] points a night, [X] % less, with zero entries without a knock and zero signs moved
+> off a wet floor.'] [if not: 'We haven't measured it, so I won't give you a number.'] At noon
+> [fill: the team's decision; the forecast's target is `8de9ffc`, the head of `hamad/final`] plays,
+> because [fill]. In a hotel only the hotel-rules build runs, and the knock isn't politeness: it's a
+> sensor. A voice behind the door stops the entry and goes to the desk; that's how the robot itself
+> would have caught 209. On the verifier: live on your server its own check never disagreed with your
+> score, 0 of 265 times, so the live run alone doesn't prove it. [if in: 'The injected faults do:
+> [X of Y] caught, [M] false refusals.'] And at 06:00 our page tells the manager the robot is not docked
+> and still holds the master keycard, because that's the first thing a hotel wants back."
 
 Don't say "we switched off the sign move": `sign_move` is still in `DEFAULT_EXPERIMENTS` on
-`hamad/final`. Sources for "since about 2014", Relay and Henn na: [Relay Robotics, 2022](https://www.businesswire.com/news/home/20220627005165/en/Relay-Robotics-to-Showcase-Newest-Service-Robot-at-Worlds-Largest-Hospitality-Tech-Conference-HITEC-Orlando);
+`hamad/final`. Sim-to-real gaps to name before he does: in a pilot the robot doesn't open booked rooms
+with a master keycard (occupancy comes from the lock's per-room signal and the energy slot), keys ride
+in a locked compartment, and lifts need a per-building integration, the pilot's hard part. Deployed
+hotel robots are mostly compartment robots, and the run log already has `compartment` and `guest_ack`:
+the Open-RMF sample on Natteskift is shaped like them. Sources for the robot history: [Relay Robotics,
+2022](https://www.businesswire.com/news/home/20220627005165/en/Relay-Robotics-to-Showcase-Newest-Service-Robot-at-Worlds-Largest-Hospitality-Tech-Conference-HITEC-Orlando);
 [IFR 2025](https://ifr.org/ifr-press-releases/news/service-robots-see-global-growth-boom);
-[Hotel Management, "Japan's Henn na Hotel fires half its robot workforce"](https://www.hotelmanagement.net/tech/japan-s-henn-na-hotel-fires-half-its-robot-workforce)
-(after the Wall Street Journal, Jan 2019).
-Sim-to-real gaps to name before he does: in a pilot the robot does **not** open booked rooms with a
-master keycard (occupancy comes from the door-lock audit trail and the keycard energy slot; the robot
-only knocks, or checks rooms the booking system already shows as vacant), keys ride in a locked
-compartment, and lifts need a per-building integration, the pilot's hard part. A room the robot
-delivered to tonight is never offered for sale. The four *Roboten ga videre* items are mostly what was
-left at 06:00, not hand-backs made during the night. The rate-limit probe on Wybe's server
-(`docs/research/wybe-api.md` § 14, on branch `hamad/handoff-score-lobby`, not on this branch yet) was
-one nine-second measurement; the final runs well under it.
+[Hotel Management, "Japan's Henn na Hotel fires half its robot workforce"](https://www.hotelmanagement.net/tech/japan-s-henn-na-hotel-fires-half-its-robot-workforce).
 
-**The law juror (Law).** *"Your first figure, about 1,500 kroner for room 213, comes
-from your robot opening a room at 04:24 that the booking system says is still Ola Nygård's. Your own
-PRD says a real robot won't do that. So in a real hotel, where does that number come from, and who
-answers if the room is resold while the guest still has a right to it?"* (Hamad, about 45 seconds)
+**The law juror (Law).** *"Your Monday pilot reads the hotel's door-lock audit
+trail. That log records when every guest, and every housekeeper, goes into a room. On what basis does
+the hotel hand it to you, and what stops it becoming staff monitoring?"* (Hamad, about 40 seconds)
 
-> "You're right: in Wybe's simulation the robot opens booked rooms, and in a real hotel it never does.
-> The line under 213 on the screen says where a pilot gets that evidence: the door-lock log and the
-> energy slot. 213 is now what a sleeper really is: the guest was due out yesterday and the check-out
-> was never recorded, so his check-out time has passed, and the booking system still blocks the room.
-> Nothing is resold on the robot's word: the desk confirms the guest has left, then the manager
-> releases the room, two steps, and a room the robot delivered to tonight, 209, is held back. The hotel
-> is the controller and owns the room decision; we'd be its processor under an Art. 28 agreement. The
-> sub-processors, checked this morning against primary sources: ElevenLabs and Vercel are on the EU-US
-> Data Privacy Framework list; Anthropic isn't, so the standard contractual clauses in its DPA carry that
-> transfer, and a transfer impact assessment comes before a pilot. The camera fails closed: if the
-> person detector isn't running, no image leaves the phone, and the start screen says exactly that.
-> Resepsjon tells callers before the call that it goes to ElevenLabs and Claude in the USA and that the
-> text is deleted after 30 days. Before a pilot: a DPIA, a discussion with the staff representatives
-> under arbeidsmiljøloven chapter 9, and Datatilsynet's view on whether a moving camera falls under the
-> camera regulation. The name: the searches at Patentstyret, EUIPO and WIPO are still to do, including
-> whether Ferrero's reputation reaches us. [if done: 'They're clear in classes 9, 42 and 43 as of
-> [time].']"
+> "We never take the log. The hotel gives us one signal per room: when a guest card was last used,
+> or none since six in the evening, and whether the energy slot is empty. Staff, master and emergency
+> cards are removed at the source, so no employee's movements reach us, and it isn't a control measure
+> under arbeidsmiljøloven chapter 9; the regulators' own guide says access logs aren't for other
+> purposes, which is exactly why we never see the staff entries. The hotel's basis is the compatibility
+> test in Article 6(4): the link to why the log exists, what a guest expects, one value per room,
+> deleted after 24 hours, and a processor bound by Article 28. It's one page in PRIVACY.md, section 10,
+> with one sentence for the hotel's privacy notice, and a legitimate-interest balancing beside it as
+> belt and braces. We sign the Commission's standard Article 28 clauses as the hotel's processor: the
+> draft is in docs/DPA.md, sub-processors and transfer bases in the annex. And the signal never sells a
+> room: a named receptionist confirms the folio, the bags and the key card, then it goes to reception,
+> and the booking system decides. Where the locks are offline, the pilot runs on the night clerk's own
+> room check. Slower, but nothing legal stops it."
 
-Background if he digs (details and links in `docs/PRIVACY.md` § 3.1, § 7 and § 9):
+What earns the 10 (PENDING): one hotel's DPO or one lock vendor saying yes to the derived signal, by
+name and date. Background if he digs (`docs/PRIVACY.md` § 3.1, § 6, § 7, § 9, § 10):
 
-- **The Norwegian acts in force today:** personopplysningsloven; arbeidsmiljøloven chapter 9;
-  forskrift om kameraovervåking i virksomhet (FOR-2018-07-02-1107); produktansvarsloven (1988) for
-  liability today, while the new Product Liability Directive (EU) 2024/2853 is due in EU law by 9 Dec
-  2026 and reaches Norway only through the EEA; markedsføringsloven for price claims.
-- **Dates, with the EEA caveat:** AI Act Art. 50 (say you're an AI) applies in the EU from 2 August
-  2026, and the receptionist says it is an AI; in Norway it applies once taken into the EEA Agreement
-  and Norwegian law (status **to verify**). The Machinery Regulation (EU) 2023/1230 applies in the EU
-  from 20 January 2027.
-- **The handover is evidence both ways:** with an owner and a deadline on every hazard it shows
-  reasonable care; without, it shows the hotel knew. That is a reason insurers may care.
-- **AI haggling:** the receptionist's discount steps are fixed in a tool and the same for every caller
-  who pushes back, at most 10 % under the direct price: a published ladder, not a price personalised by
-  automated decision-making (the Omnibus rules).
-- **The stranger:** the log says "a man in a bathrobe … asked to be let in", never "suspicious". In a
-  hotel with cameras that becomes data about a possibly innocent guest: neutral words, short retention.
-- **Children:** a camera robot in a family hotel films children; they're covered like any person and
-  never cropped. The DPIA says so.
-- **The camera rule:** "we treat a robot's or a phone's camera as camera surveillance at work until
-  Datatilsynet says otherwise."
+- **In force in Norway today:** personopplysningsloven; arbeidsmiljøloven chapter 9; forskrift om
+  kameraovervåking i virksomhet (FOR-2018-07-02-1107); produktansvarsloven; markedsføringsloven;
+  skadeserstatningsloven § 2-1 for the employer's liability.
+- **EEA status, read on EEA-Lex Sun 8 Nov:** the AI Act is "under scrutiny for incorporation", so it
+  doesn't apply in Norway yet (we follow Art. 50 anyway: the receptionist says it is an AI); the
+  Machinery Regulation is taken in by Joint Committee decision 171/2025, entry into force pending; the
+  Product Liability Directive (EU deadline 9 Dec 2026) is under scrutiny. Under it, liability to an
+  injured guest can't be capped by contract, so the safety case comes before the first pilot.
+- **The DPF:** the General Court dismissed *Latombe* (T-553/23) on 3 Sep 2025; an appeal is reported
+  (to verify). ElevenLabs and Vercel are on the list; Anthropic relies on the SCCs in its DPA, and the
+  pilot doesn't use Anthropic or ElevenLabs at all.
+- **Safety as evidence of care:** a safety item reads *straks* with when the night staff were alerted,
+  not a fixed 06:30 (round 5, owner A); the robot's knowledge of a hazard is the hotel's.
+- **The phone caller's notice:** a known gap, a team item (`docs/PRIVACY.md` § 6).
+- **The name:** the searches at Patentstyret, EUIPO and WIPO are still to do (§ 9). [if done: 'They're
+  clear in classes 9, 42 and 43 as of [time].']
 
-**The product juror (Opera; Product).** *"You showed me one page, but your sidebar has thirteen modules and a
-second market. For the first pilot hotel, which of them did you delete, and what number in four weeks
-tells you this one page works?"* (ShirazIQ)
+**The product juror (Opera; Product).** *"Your business slide says hotel number one has no robot. Take every
+line the robot wrote off this page: what is left at 06:00 on their first Monday, who typed it, and which
+one number tells you in four weeks that this page replaced their logbook?"* (ShirazIQ, about 40 s, with
+the switch on screen)
 
-> "For the pilot the manager sees four things: Overlevering, Rom, Forespørsler, and the robot's night as
-> evidence. [Point at the sidebar: everything else sits under *Utenfor piloten*, collapsed.] Stock,
-> staff and guests belong to someone else's system of record. The camera and the phone are other
-> buyers; we built them this weekend for Holio and ElevenLabs, and they're not in the pilot. The host
-> view isn't either. We also cut a database, any write-back to the PMS (the PMS stays the truth), and
-> *Timer spart* and *Gjester fornøyd* from the first screen. We'll know on two numbers against a
-> week-zero baseline from their own logbook: minutes from 06:00 to the first room released, and kroner
-> of rooms released in Fettero and sold the same day according to the PMS. [fill from § 8.2: 'This
-> morning [N] people who'd never seen it found room 213 in [S] seconds.'] Our kill rule: if fewer than
-> three of the hotel's morning managers tap *Kvitter* three times a week by week two, this page isn't
-> their handover, and we stop."
+> "Let me show you." [Tap *Uten robot*.] "Same night, no robot lines. 213 is still here: the door lock
+> shows no guest card and the energy slot has been empty since 22:10, and Kjersti tapped it 'tom og
+> ryddig' on her phone. Reception confirms the folio, the bags and the key, it goes to reception, and it
+> waits for the booking system: even our own button never says sold. The safety items are the ones
+> Kjersti entered. What's gone is what only a robot sees: the wet floor it slipped on, the stranger at
+> seven doors. That's why the robot is phase two and a price lever, not a precondition. One number:
+> minutes from 06:00 to the first room sent to reception, against a week of their own logbook before
+> the pilot. Second: a hotel is active when 5 of 7 mornings are signed; if it isn't by week two, this
+> isn't their handover, and we stop. What we cut for it: a database, payments, writing to the PMS, it's
+> read-only and the PMS stays the truth, multi-hotel, and eight screens under *Utenfor piloten*; the
+> pilot accounts land on this page, not a dashboard."
 
-What drops it to 6–7: listing the cuts without showing the sidebar, or "hours saved" as the metric.
-His AI angle, one sentence for beat 3 if asked: "There's no language model on this page: every line is a
-projection of logs, so it can't make anything up; the simulator's referee was our eval."
+Re-read the *Uten robot* lines off the screen at the rehearsal (owner B's sample entries and door-lock
+sample; what the switch shows is the truth, not this paragraph). What drops it to 6: answering with
+the robot's numbers, "hours saved", or saying read-only while the code plans write-back (it doesn't
+any more: the release is *Send til resepsjonen*).
 
-**The creative juror (Opera) and the design juror; Creative and design.** *"How have
-you tested this with users, and what did you change because of it?"* (ShirazIQ)
+**The creative juror (Opera) and the design juror; Creative and design.** *"How have you
+tested this with users, and show me one thing a real person got wrong on this page and what you changed
+because of it."* (ShirazIQ)
 
 > [fill from § 8.2, raw numbers] "This morning we put [three] people who had never seen Fettero in front
-> of it, cold: four tasks, a stopwatch, no help. [N of 3] found the room they could sell in [S]
+> of this page, cold, with four tasks and a stopwatch. [N of 3] found the room they could sell in [S]
 > seconds; [where the others got lost], so we changed [one thing] (commit [`…`]), and [two new people]
-> then found it in [S] seconds. The raw notes are in DEMO.md § 8. We also called [N] Oslo receptions:
-> [tally, one quote with permission]. What we haven't done is watch a real 06:00 manager use it in a
-> real hotel; that's Monday, with a printed handover of their own night."
+> then found it in [S] seconds. The raw notes are in DEMO.md § 8.2. What we haven't done is watch a real
+> 06:00 manager use it in a real hotel; that's Monday, with their own night printed on one page."
 
-Honest version if § 8 wasn't run (both jurors cap it at 6): "Not with users yet. We ran structured
-reviews of every screen, AI-assisted, one per juror's field, and changed what they found: what's open
-now takes the wide column, the proof sits behind *Slik vet vi det*, and the sign-off moved to the end,
-after the robot's judgement. That isn't user testing; a hallway test is the next thing we'd do." Why
-this look: a calm operations tool for 06:00. One grotesk and one mono, light working screens, night
+Honest version if § 8 wasn't run (both cap it at 6): "Not with users yet. We ran structured reviews of
+every screen, AI-assisted, one per juror's field, and changed what they found: the money step is now the
+one orange action, the four figures jump to their rows, the test-data labels became one quiet band, and
+the robot's proof became three figures. That's review, not testing; a hallway test is the next thing."
+Why this look: a calm operations tool for 06:00. One grotesk and one mono, light working screens, night
 steel for the robot's world, one orange action per screen, states always in words, red and amber only
-in the bell (`DESIGN.md`). If the name comes up: "Fettero is our team's name; it means nothing, and the
-line says what we do." (Said aloud it is close to Ferrero: `docs/PRIVACY.md` § 9.)
+for what is urgent (`DESIGN.md`). Accessibility, in one sentence (the design juror): a skip link, a visible focus
+ring, contrast that passes, states in words as well as colour, and 44 px touch targets. The name: "Fettero
+is our team's coined name; the line says what we do." Said aloud it is close to Ferrero (`docs/PRIVACY.md`
+§ 9), so say the line right after the name.
 
-**The Holio juror (Holio; warehouse).** *"Warehouses solved 'is it really done?' twenty years ago:
-you scan the bin and the item. Your page says nothing reads 'done' unless it's confirmed, but confirmed
-by a simulator's referee. Why hasn't anyone built this handover for hotels before, and what plays the
-referee in a real hotel on Monday?"* (Hamad)
+**The Holio juror (Holio; warehouse).** *"In a warehouse, 'done' means the scanner confirmed the bin
+and the item. Here the referee was a simulator. On Monday, in a real hotel, what exactly is the second
+signal for room 213, have you seen it in a real lock system's export, and why hasn't the PMS or lock
+vendor built this already?"* (Hamad)
 
-> "Because the evidence was never in one place. The PMS knows bookings, the lock knows doors, the
-> housekeeping app knows tasks and the robot knows what it saw. Each vendor builds a dashboard for its
-> own data: hotelkit, Quore and Optii for tasks, Relay and Pudu for their fleets. Nobody signs it into
-> one handover with owners. In a real hotel, 'confirmed' means what your scan means: a second,
-> independent signal. A delivery is the robot's drop plus the door-lock event. An empty room is the lock
-> trail plus the energy slot plus the robot's photo. A spill is the photo plus the sign placed. Each line
-> names its signal, and a line with only one says *ikke bekreftet*; that rule is on the judgement card.
-> The simulator's referee was how we tested the robot's honesty; on its own judgement it was right 185
-> times out of 189. In the pilot the lock trail plays that role, and we measure the same thing: robot
-> 'done' that a person had to redo."
+> "Each vendor owns one silo. The PMS knows the booking and the folio, the lock knows the door,
+> housekeeping knows the task. None of them owns the 06:00 handover, which today is a paper logbook or a
+> chat thread. For 213 the second signal is the lock: no guest-card entry since the evening before
+> departure; the third is the energy slot, empty since then. [Point at the row, with *Uten robot* on.]
+> Here they are, as a sample in the run-log format, labelled. A 'done' counts as confirmed only with at
+> least one signal from outside the robot, and one tap never releases a room. We have **not** looked at a
+> real export yet: that's step one on Monday, and many hotels' locks are offline, where the night clerk's
+> check is the signal. What we measure in the pilot is your number: how often a 'done' had to be redone
+> by a person."
 
-At the Holio stand he asks: *"Scanners have been around for 20 years. Why is the item with no barcode
-still unsolved, and what did your 20 items show?"* (ShirazIQ)
+At the Holio stand he asks: *"Show me an item the camera is unsure about, and walk me from that result to
+the pick list. Then tell me your number on 20 items."* (ShirazIQ)
 
-> "Because it needed a model trained per catalogue, and Holio's customers are hundreds of small web
-> shops whose catalogues change every week. A vision-language model reads the pack with no training.
-> The open purchase order, or the return's original order, gives it 5 to 40 candidates, not 20,000, so
-> it's most accurate exactly where unknown items appear. [fill from a 20-item eval: 'R right, U unsure
-> and stopped for the label, W wrong and caught by the label check, median S seconds, about K øre a
-> scan', or:] It isn't measured yet. When the model isn't sure, nothing goes on the pick list until the
-> worker types the SKU from the label and it agrees; on a TC27 that would be the hardware scanner.
-> Against a list sorted by shelf, the pick round is 16 metres, 10 %, shorter on our four-shelf test
-> map, and nothing uses order history yet. Give us your test catalogue with product images and a TC27
-> for a week, and we'll measure it on your returns desk."
+> [Show it live: tap an item with no readable text.] "Unsure: the SKU stays hidden and there's no *Vis
+> vei* and no *Legg i plukkliste*. It waits for the label: I type 1004, it agrees, and only then can it go
+> on the list and get a route. Type another product's SKU and the label wins. [fill from a 20-item eval:
+> 'R right, U unsure and stopped for the label, W wrong and caught by it, median S seconds, about K øre a
+> scan', or:] It isn't measured yet, so I won't give you a number. Give us your test catalogue and a TC27
+> for a week on your returns desk, and we'll measure it there."
 
 Full status per pain: `docs/HOLIO.md`.
 
-**The founder juror (Founders).** *"Room 213's guest was due to leave today, so any PMS already
-sells that room tonight. Where do the 1,500 kroner really come from, who has told you they'd pay NOK 30
-a room for this, and what do you do on Monday morning if you win?"* (Hamad)
+**The founder juror (Founders).** *"Your page says room 213 would otherwise stand unsold. In a
+normal hotel, housekeeping finds an empty room with no luggage by late morning. Who outside this building
+has told you they lose money on rooms like that, how many a week, and what number does your Monday pilot
+have to hit before they pay you NOK 30 a room?"* (Hamad)
 
-> "You're right, and we fixed it this morning. A due-out room is already in tonight's inventory. The
-> money is in rooms the booking system still blocks: a guest due out yesterday whose check-out nobody
-> recorded. On the demo night that's 213: one room-night, extra only on a night the rest of the hotel
-> sells; Oslo hotels sold 72 % of their rooms last year, SSB says. [fill from § 8.1: 'This morning we
-> called ten Oslo hotels and reached [N]. [M] hand over on paper or in PMS notes. [K] find a room in the
-> wrong state [X times a week], and [hotel type, about R rooms] said yes to a free four-week pilot.'] [if
-> asked at the Wybe stand: 'Wybe said [answer] when we asked about a pilot hotel.'] We've picked one
-> wedge: independent and chain hotels of 60 to 200 rooms, software first, the robot optional, because
-> the 06:00 handover exists in every hotel tonight, robot or not, so the pilot needs no hardware. Monday
-> at nine ShirazIQ calls back the yes with a printed handover of their own night. The pilot measures one
-> number: rooms found in the wrong state and then sold or checked in early, in kroner, against our
-> price. Both of us work on this full-time for four weeks. If fewer than two of ten hotels take a pilot
-> by 8 December, we stop the hotel wedge and sell through robot makers. Norway alone is about 33 million
-> kroner a year at our price, the four big Nordic countries about 130 million, so the scale path is the
-> PMS marketplaces, then a robot connector per robot per month."
+> "It doesn't say that any more, because you're right: housekeeping finds it. What Fettero buys is the
+> hours: the page says 213 was found free before the round, worth about 1,500 kroner if the night sells
+> out, with tonight's bookings beside it. [fill from § 8.1: 'This morning we called [10] Oslo night desks
+> while the handover was happening and reached [N]. [K] said housekeeping finds rooms like 213 around
+> [time]; they sell out about [N] nights a month.'] The pilot converts at 30 kroner a room if, in four
+> weeks, we find at least two rooms ready before the housekeeping round, or move the first release
+> earlier by the minutes we agree on day one; and we offer paid from day one, money back if we miss it.
+> Hotel one has no robot: the night clerk taps the room check on her phone, which we built this morning,
+> and we read their PMS read-only. Both of us full-time for four weeks; if fewer than 2 of 10 hotels
+> take a pilot by 8 December, we stop the hotel wedge and sell through robot makers. [if asked at the
+> Wybe stand: 'Wybe said [answer as given].']"
 
-Honest version if the calls didn't happen (he scores it 6–7): "We haven't spoken to a hotel yet; that's
-Monday's first job: ten calls and a printed handover of their own night. Until then the kroner are one
-room on one night, not a promise."
+Honest version if the calls didn't happen (he scores it 6): "Nobody outside this building has told us
+yet; that's Monday's first job. So we don't claim a room-night saved; we claim hours, and the
+conversion rule says what the pilot must hit." What drops it to 5: defending the 1,500 kroner as a
+room-night that would otherwise be lost.
 
-**The Wybe engineer (Wybe Robotics; Founders and robots).** *"Take out the bookings you wrote: 213
-was due out today, and on seed 16 our night manager told your robot 209 was empty for an arriving guest.
-What is left on this page that comes from the robot alone, would a hotel or a robot maker pay for it,
-and what exactly does a robot have to send you on Monday?"* (Hamad, about 40 seconds)
+**The Wybe engineer (Wybe Robotics; Founders and robots).** *"At 01:29 your robot put luggage-209
+inside room 209. At 03:47 it looked in, saw 'nobody, tidy', reported the room empty, and our referee
+credited it. That's one of your '9 of 9'. So does your card measure what's true in the room, or agreement
+with our simulator? And on a real robot, which signal would have caught it?"* (Hamad, about 40 s)
 
-> "You're right on both, and the screen says so now. The bookings are our test data, written after the
-> night to show the join; each of those rows says *Testdata: bookingen er lagt inn av teamet*, and it
-> says Fettero held 209 back, not the robot. We also made 213 a real sleeper in that test data: due out
-> yesterday, never checked out. What comes from the robot alone, last night: three wet floors with place
-> and time, one it slipped on and one it took its own sign from; a stranger at seven doors, refused
-> every time, with the keycard held at 209 and 304 until he'd gone; bags for three arrivals in 212 and
-> two in 304, flagged for the desk to check; 10 of its 15 master-key entries without a knock, on its
-> card; 73 'done', 9 of them on its own judgement and all 9 credited, and 4 hand-backs, each with a
-> reason. None of that needs a PMS. Who pays first: the hotel, software only. Robot makers next, per
-> robot per month, because their hotel pilots stall on 'did it help'. What a robot sends us: one JSON line per event, in `docs/runlog.schema.json`: tasks (start, done or handed back, each 'done' with the signals it rests on: lock, photo, the guest's acknowledgement, a compartment sensor), room status, hazards, security events, position and battery. On Natteskift, switch *Robotlogg* to *Open-RMF (eksempel)*: an Open-RMF task-state sample, written by us and labelled as an example, goes through an adapter onto the same judgement card, with no referee, and a 'done' counts as confirmed only with two different signals.
-> In a hotel there's no referee, so 'done' without evidence shows as unconfirmed. [if asked at the
-> stand: 'We asked you this morning, and you said [answer as given].']"
+> "Agreement with your simulator, and 209 is the proof. Your look didn't show the bags our robot had
+> placed two hours earlier; the referee credited 'empty', and the robot's own task log said otherwise.
+> That's why Fettero never acts on one signal: it checked the robot's report against the robot's own
+> actions and held 209 back, with no booking system involved. The card now says 8 of 9 hold against the
+> robot's own log, not 9 of 9. On a real robot perception comes last: the lock trail shows the 01:29
+> delivery entry, the PMS shows the assignment, and a person confirms before any sale. A 'done' counts as
+> confirmed only when at least one signal didn't come from the robot; two of its own read *robotens egen
+> observasjon*. [if measured: 'We also measured what hotel rules cost in your sim: [X] points a night,
+> [Y] %.'] And at 06:00 our handover says the robot is not docked, at 20 %, holding the master keycard,
+> because that's the first thing a hotel wants back."
 
-What drops it to 6: defending the 1,500 kroner as found by the robot, or "the PMS is just test data"
-without saying it was written to fit.
-
-Prior art to name: delivery robots since about 2014 (Savioke, now Relay Robotics), Pudu and Keenon;
-ops and handover software (hotelkit, Quore, ALICE, Optii, Flexkeeping); door locks and energy systems
-that already see occupancy (ASSA ABLOY, Salto, dormakaba). Our gap: one handover that signs every
-source's evidence with owners, and the robot's own evidence at night.
+If he follows with "what's next if you win": the Wybe-stand answer as given **[fill]**, the number of
+hotels with online locks from the phone round **[fill]**, and the stop rule (fewer than 2 of 10 by 8
+December). Prior art to name: delivery robots since about 2014 (Savioke, now Relay Robotics), Pudu and
+Keenon; ops and handover software (hotelkit, Quore, ALICE, Optii, Flexkeeping); locks and energy systems
+that already see occupancy (ASSA ABLOY, Salto, dormakaba). Each robot vendor's cloud counts tasks
+dispatched, not tasks verified; hotel ops tools don't ingest robot data; a hotel has one or two robots,
+so no single vendor has a reason to build the cross-vendor layer.
 
 ### 6.2 Other likely questions
 
@@ -664,8 +633,10 @@ source's evidence with owners, and the robot's own evidence at night.
 | Why Fettero, not Lobby? | Lobby is a funded Zurich hotel-AI company (USD 2.2 M, Mar 2026) sold through Apaleo's Agent Hub, our planned channel. Fettero is coined and already our team's and robot's name. The team lead decides whether `main` follows. | ShirazIQ |
 | Doesn't the PMS do this? | The PMS automates the night's accounting (Mews has no night-audit button). Room discrepancies in OPERA or protel are fed by housekeeping in the morning. Nobody puts a robot's night, the phone and the staff into one signed handover. | Hamad |
 | 85 requests a night in a 36-room hotel? | That's game density. A real hotel sees a handful of night requests, which is why we price on rooms found and released, not on tasks or hours saved. | Hamad |
-| What if the robot calls a room empty and the guest's bag is behind the door? | That happened on the demo night, and it's on the screen: 209 was empty and tidy at 03:47, but the robot carried an arriving guest's bags in at 04:35 and 05:16, so Fettero holds it back instead of offering it. A room is offered only if it was empty after 01:00 and the robot delivered nothing to it later, and selling it takes two steps: the desk confirms the guest has left, then the manager marks it. The bookings on those rows are our test data, and each row says so. | ShirazIQ |
-| Is the money real? | It's gross room revenue at last night's average rate in the test PMS (NOK 1,467), for a real sleeper: 213's guest was due out yesterday, the check-out was never recorded, so the system still held the room tonight. It's extra only on a night the rest of the hotel sells; Oslo sold 72 % of its rooms in 2025 at NOK 1,631 a room (SSB table 14169). Say "on the demo night", never "per night". | Hamad |
+| What if the robot calls a room empty and the guest's bag is behind the door? | That happened on the demo night, and it's the first thing on the page: at 01:29 the robot carried bags into 209 itself, and at 03:47 it reported 209 "empty and tidy", which the simulator credited. Fettero checks the robot's report against the robot's own actions and holds 209 back, with no booking needed; the card counts it as a miss (8 of 9). A room goes to reception only after a named receptionist confirms the folio, the bags and the key card. | ShirazIQ |
+| Is the money real? | It's gross room revenue at last night's average rate in the test PMS (NOK 1,467), for a real sleeper: 213's guest was due out yesterday and the check-out was never recorded. Housekeeping would find it by late morning, so what Fettero buys is hours: the kroner are real only if the night sells out (the demo hotel has 31 of 36 sold tonight) or for an early check-in; Oslo sold 72 % of its rooms in 2025 at NOK 1,631 a room (SSB table 14169). Say "on the demo night", never "per night". | Hamad |
+| Doesn't the night audit catch 213? (the product juror) | The PMS knows the booking, not the room: its due-out report can't tell "left without checking out" from "still asleep, extended at the desk". The missing piece is physical evidence: the lock, the energy slot, a look inside. We ask hotels when they find such rooms today (§ 8.1 Q3). | Hamad |
+| Why doesn't Mews or the lock vendor just build this? (the founder juror) | They could build the page; each sees only its own silo. Our piece is cross-vendor evidence in one signed record: the staff, the lock, the phone and any robot. "Nobody positions on trust" is positioning, not a moat, and we say so. | ShirazIQ |
 | What does the robot add that the lock doesn't? | Its own night as evidence: what it delivered where (bags for three arrivals in 212 is now an open item for the desk), hazards with place and time, refusals of a stranger, and its own faults (10 of 15 master-key entries without a knock). Finding sleepers is the lock log's job, which is why hotel number one needs no robot. | Hamad |
 | What would you cut first? | Already cut: linen counting by camera, voice-to-work-order, translation between guest and staff, a database, the red alert band. Kept: one handover story that runs end to end. | ShirazIQ |
 | Where did "Timer spart" go? | Off the screens in round 4, on Oversikt and in the host view: it was an estimate (tasks × assumed minutes) on a first screen that should carry only what the data proves. The pilot measures minutes from 06:00 to the first room released instead. | Hamad |

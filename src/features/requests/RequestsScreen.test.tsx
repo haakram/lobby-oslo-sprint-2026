@@ -347,9 +347,14 @@ describe("RequestsScreen: the robot's refusals are a decision for a person (jury
     expect(screen.queryByText(/falsk/)).not.toBeInTheDocument();
     const avvist = screen.getByRole("heading", { name: /^Avvist etter sjekk/ }).parentElement as HTMLElement;
     const [first, second] = within(avvist).getAllByRole("listitem");
-    expect(within(first).getByText("Ikke godkjent av dommeren: se på denne først.")).toBeInTheDocument();
+    // Plain words with the source on the row; the referee only behind Slik vet vi det (round 5, the design juror).
+    expect(within(first).getByText("Ikke bekreftet av simulatoren: se på denne først.")).toBeInTheDocument();
     expect(within(first).getByRole("button", { name: "Sjekk likevel: Søl" })).toBeInTheDocument();
-    expect(within(second).getByText("Godkjent av dommeren.")).toBeInTheDocument();
+    expect(within(second).getByText("Bekreftet av simulatoren.")).toBeInTheDocument();
+    expect(within(avvist).queryByText(/dommer/i, { selector: "li *, h3, h3 + p" })).not.toBeInTheDocument();
+    const proof = within(avvist).getByText("Slik vet vi det").closest("details") as HTMLElement;
+    expect(proof).not.toHaveAttribute("open");
+    expect(within(proof).getByText(/dommeren i Wybe Night Shift-simulatoren ga poeng for avvisningen/)).toBeInTheDocument();
     expect(within(second).getByText("Roboten sjekket først · din beslutning")).toBeInTheDocument();
 
     fireEvent.click(water);

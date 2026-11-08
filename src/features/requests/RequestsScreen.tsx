@@ -125,15 +125,19 @@ function handlerLine(request: RequestView, now: number): string {
   }
 }
 
-/** The referee's word on a refusal, after the robot's reason. */
+/**
+ * Whether a refusal was confirmed, after the robot's reason, in a manager's words with its source (round 5,
+ * the design juror): "bekreftet av simulatoren", as Oversikt and Natteskift say it. The referee behind it is named
+ * only under the lane's *Slik vet vi det*.
+ */
 function judgeLine(request: RequestView): string | null {
   switch (request.decline?.judged) {
     case "credited":
-      return "Godkjent av dommeren.";
+      return "Bekreftet av simulatoren.";
     case "not_credited":
-      return "Ikke godkjent av dommeren: se på denne først.";
+      return "Ikke bekreftet av simulatoren: se på denne først.";
     case "pending":
-      return "Dommeren har ikke svart ennå.";
+      return "Venter på svar fra simulatoren.";
     default:
       return null;
   }
@@ -373,9 +377,10 @@ export function RequestsScreen({
                       {inLane.length > 0 && <span className="font-normal text-muted tabular-nums">{inLane.length}</span>}
                     </h3>
                     {lane === "avvist" && split && (
-                      <p className="mt-0.5 text-sm text-muted">
-                        {split} Dommeren er Wybe Night Shift-simulatoren. Gjesten kan likevel få det: ett trykk.
-                      </p>
+                      <>
+                        <p className="mt-0.5 text-sm text-muted">{split} Gjesten kan likevel få det: ett trykk.</p>
+                        <DeclineProof />
+                      </>
                     )}
                     {limited.length > 0 && (
                       <ol className="mt-1 divide-y divide-line">
@@ -527,6 +532,24 @@ function Row({
       </div>
       {undo && <UndoStatus key={undo.key} className="mt-2" message={undo.message} onUndo={undo.onUndo} undoLabel={undo.label} />}
     </li>
+  );
+}
+
+/**
+ * Behind *Slik vet vi det* under Avvist etter sjekk: who stands behind "bekreftet" and "godkjent" on a
+ * refusal. The referee's words live here, never on a row (round 5, the design juror). Quiet ink, as on Overlevering.
+ */
+function DeclineProof() {
+  return (
+    <details className="text-sm text-muted">
+      <summary className="inline-flex min-h-11 cursor-pointer items-center font-semibold text-text underline decoration-line-strong underline-offset-4 hover:decoration-text pointer-fine:min-h-8">
+        Slik vet vi det
+      </summary>
+      <p className="max-w-[60ch] pb-1">
+        «Bekreftet» og «godkjent» betyr her at dommeren i Wybe Night Shift-simulatoren ga poeng for avvisningen; «ikke bekreftet» at den ikke
+        gjorde det. Et ekte hotell har ingen dommer: der bekrefter gjesten, resepsjonen eller dørlåsloggen.
+      </p>
+    </details>
   );
 }
 

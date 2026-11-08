@@ -54,7 +54,7 @@ Why it matters (sourced; use one or two on the hook slide, never all):
   was never recorded, so the booking system still has him in house. **Never "otherwise unsold"
   (the founder juror, the Wybe engineer):** housekeeping's round would find the room by late morning. What Fettero buys is
   the hours: found free before the round, worth the kroner only **if the night sells out** (the demo
-  hotel has 31 of 36 sold tonight, and the screen shows it) or for an early check-in. Say "on the demo
+  hotel has 31 of 36 booked tonight, and the money figure says so) or for an early check-in. Say "on the demo
   night", never "per night" or "per hotel".
 - A room whose guest is **due out today** is not a sleeper: every PMS already sells it tonight. What
   finding it empty early buys is an early clean and an early check-in, not a room-night.
@@ -660,7 +660,7 @@ so no single vendor has a reason to build the cross-vendor layer.
 | Doesn't the PMS do this? | The PMS automates the night's accounting (Mews has no night-audit button). Room discrepancies in OPERA or protel are fed by housekeeping in the morning. Nobody puts a robot's night, the phone and the staff into one signed handover. | Hamad |
 | 85 requests a night in a 36-room hotel? | That's game density. A real hotel sees a handful of night requests, which is why we price on rooms found and released, not on tasks or hours saved. | Hamad |
 | What if the robot calls a room empty and the guest's bag is behind the door? | That happened on the demo night, and it's the first thing on the page: at 01:29 the robot carried bags into 209 itself, and at 03:47 it reported 209 "empty and tidy", which the simulator credited. Fettero checks the robot's report against the robot's own actions and holds 209 back, with no booking needed; the card counts it as a miss (8 of 9). A room goes to reception only after a named receptionist confirms the folio, the bags and the key card. | ShirazIQ |
-| Is the money real? | It's gross room revenue at last night's average rate in the test PMS (NOK 1,467), for a real sleeper: 213's guest was due out yesterday and the check-out was never recorded. Housekeeping would find it by late morning, so what Fettero buys is hours: the kroner are real only if the night sells out (the demo hotel has 31 of 36 sold tonight) or for an early check-in; Oslo sold 72 % of its rooms in 2025 at NOK 1,631 a room (SSB table 14169). Say "on the demo night", never "per night". | Hamad |
+| Is the money real? | It's gross room revenue at last night's average rate in the test PMS (NOK 1,467), for a real sleeper: 213's guest was due out yesterday and the check-out was never recorded. Housekeeping would find it by late morning, so what Fettero buys is hours: the kroner are real only if the night sells out (the demo hotel has 31 of 36 booked tonight) or for an early check-in; Oslo sold 72 % of its rooms in 2025 at NOK 1,631 a room (SSB table 14169). Say "on the demo night", never "per night". | Hamad |
 | Doesn't the night audit catch 213? (the product juror) | The PMS knows the booking, not the room: its due-out report can't tell "left without checking out" from "still asleep, extended at the desk". The missing piece is physical evidence: the lock, the energy slot, a look inside. We ask hotels when they find such rooms today (§ 8.1 Q3). | Hamad |
 | Why doesn't Mews or the lock vendor just build this? (the founder juror) | They could build the page; each sees only its own silo. Our piece is cross-vendor evidence in one signed record: the staff, the lock, the phone and any robot. "Nobody positions on trust" is positioning, not a moat, and we say so. | ShirazIQ |
 | What does the robot add that the lock doesn't? | Its own night as evidence: what it delivered where (bags for three arrivals in 212 is now an open item for the desk), hazards with place and time, refusals of a stranger, and its own faults (10 of 15 master-key entries without a knock). Finding sleepers is the lock log's job, which is why hotel number one needs no robot. | Hamad |
@@ -707,7 +707,7 @@ operations add-ons charge per room per month: HelloShift USD 1.25–4
 for a sleeper: the end-of-day routine and housekeeping's morning round, which finds an empty room with
 no bags by late morning. So the money line on screen says what is true: the room was *found free hours
 earlier*, worth about NOK 1,500 **if the night sells out**, with tonight's bookings beside it (the demo
-hotel is not full: 31 of 36 sold on Oversikt). On the demo night that is one room to send to reception
+hotel is not full: *31 av 36 booket i kveld* sits under the money figure). On the demo night that is one room to send to reception
 after the desk confirms (213: the guest was due out yesterday and the check-out was never recorded, so
 the booking system still held the room; NOK 1,467, last night's average rate in the test PMS) and one
 held back (209: the robot's own log contradicts its "empty" report). It's gross room revenue, and it

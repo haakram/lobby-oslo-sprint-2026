@@ -7,7 +7,7 @@ confirmed. ***Fettero finner rommene der bookingsystemet og dørlåsen er uenige
 det.*** (It finds the rooms your booking system and your door locks disagree about, before
 housekeeping does.) For independent and chain hotels of 60–200 rooms, software first: hotel number one
 needs no robot, because Fettero reads the booking system (read-only), one signal per room from the door
-lock (never who, never when) and the night clerk's own entries.
+lock (no card id, no clock) and the night clerk's own entries.
 
 The robot in the demo is our AI agent, which played Wybe's live hotel simulation on its own, and we hold
 it to the same rule. On the night in the app it said "done" 73 times: 64 after it had seen the
@@ -44,7 +44,7 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
       as its own link and *Slik regner vi*; *5 saker · Sikkerhet, straks*, with how many were told to
       nobody; and the robot's *73 av 77*. One quiet band says what is test data.
    2. **The switch *Natten fra: Med robot | Uten robot*.** *Uten robot* builds the same page from the
-      booking system, one signal per room from the door lock (never who) and the night clerk's own
+      booking system, one signal per room from the door lock (no card id, no clock) and the night clerk's own
       entries (*Nattevaktens logg*, `/natt`), with no robot line: the product hotel number one buys.
    3. **Where the lock and the booking system disagree, shown as sources:** 210 is in use with no
       booking (*Dørlåsen · kort i rommet*, *Nattevakt · ikke tomt 23:24*); 213 was due out yesterday,
@@ -163,10 +163,11 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   live night with a log, every version, the app's judgement card recomputes the plain credited share
   from the ledger, so it moves as nights are logged. It declined 112 requests as false or impossible; the referee credited 93 of those declines
   and gave 19 nothing.
-- **Board:** best practice score **2,807**, **#8 of 20** on Wybe's practice board at 04:10 Sun (top 3,448;
-  we played 242 practice shifts, the leader 1,556). That night came from a board test (the `lottery`
-  checkout, seed 10), a seed-specific test branch, so it is not in the final; the final branch's best,
-  2,760 (`8eac151` and `c3801e0`), would sit at #11.
+- **Board:** best practice score **2,808**, **#10 of 20** on Wybe's practice board at 07:37 Sun, one
+  point above #11 (top 3,448; we had played 360 practice shifts, the leader 1,556;
+  `nightshift-board.wybe.me/data`). That night came from a board test (the `lottery` checkout,
+  `d7040b7`, seed 10, started 05:55), a seed-specific test branch, so it is not in the final; the
+  final branch's best, 2,760 (`8eac151` and `c3801e0`), would sit at #12.
 - **The night in the app** (`public/runs/demo.jsonl`, seed 16, 2,680, `cb72845`): 85 requests, 73
   "done", **all 73 credited**, 64 of them after the score rose and **9 on its own judgement (5 room
   checks, 4 spills), all 9 credited (95 % interval 70–100 %)**. But one of the 9 is contradicted by
@@ -217,9 +218,9 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
 - **Where the numbers come from:** [`docs/runs/ledger.csv`](./docs/runs/ledger.csv) (one row per live
   start) and [`docs/runs/builds.csv`](./docs/runs/builds.csv) (one row per commit), rebuilt from the run
   logs by `python3 scripts/ledger.py`, with the "done" split in its own columns (`done_after_rise`,
-  `done_own`, `done_own_credited`). Board tests (53 seed-specific nights from test checkouts by 04:08,
-  52 of them on seeds 10 and 16, best 2,807) are marked `kind=board-test` in the ledger and kept out of
-  the build rows.
+  `done_own`, `done_own_credited`). Board tests (seed-specific nights from test checkouts: 134 started by
+  07:00, 129 of them ran to 06:00, 126 of those on seeds 10 and 16, best 2,808; the four hotel-rules
+  nights count here too) are marked `kind=board-test` in the ledger and kept out of the build rows.
 - **What it learned about the undocumented API:** [`docs/research/wybe-api.md`](./docs/research/wybe-api.md).
 - **Run it:** the commands are in [`CLAUDE.md`](./CLAUDE.md) § How to run / test
   (`.venv/bin/python -m agent run --seed 1` plays offline against a fake server by default).

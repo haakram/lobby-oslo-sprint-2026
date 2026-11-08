@@ -10,6 +10,11 @@
 > are used unchanged; we fill in the choices and the four annexes. Background: `docs/PRIVACY.md`.
 > **Open before anyone signs:** Fettero is not yet a company with an organisation number, and the
 > pilot's server store (where data lives once it leaves the hotel's device) is not built.
+> **Changed at about 07:45 (legal review):** room 210's purpose in *Formål* (the occupant's safety
+> and a right guest register, revenue a side effect; the Art. 6(4) test in `docs/PRIVACY.md` § 10.2),
+> point 4 says *aldri kort-id, aldri klokkeslett*, point 5 rules out investigating staff and
+> per-person response times, point 6 and *Varighet* agree on who keeps the safety extract, and
+> Vercel's plan and region are a team check (Vedlegg IV).
 
 ## Avtalen
 
@@ -27,16 +32,21 @@
    - Tillegg som ikke strider mot vilkårene (klausul 2): punkt 3–6 her.
 3. **Ingen skriving i hotellets systemer.** Piloten leser bookingsystemet (lesetilgang). Fettero
    endrer aldri en booking og selger aldri et rom; et rom går til resepsjonen, som gjør endringen.
-4. **Ett signal per rom fra dørlåsen, aldri hvem eller når.** Fettero tar ikke imot dørlåsens logg.
+4. **Ett signal per rom fra dørlåsen, aldri kort-id, aldri klokkeslett.** Fettero tar ikke imot dørlåsens logg.
    Hotellet (eller låsleverandørens rapport) gir per gjesterom ett signal uten klokkeslett: et gjestekort
    står i energibryteren, eller ingen gjestekort er brukt i døra eller satt i energibryteren siden
    kl. 18:00. Kort for ansatte, hovedkort og nødkort fjernes før noe sendes. Har hotellet
    ikke en slik rapport, bruker piloten nattevaktens egen romsjekk i stedet.
 5. **Ingen ytelsesmåling av ansatte.** Navn på ansatte står i overleveringen for å vise hvem som eier
-   og har bekreftet hva. Fettero lager aldri statistikk per person.
-6. **Slutt.** Når piloten slutter (fire uker, eller tidligere), sletter Fettero alt innen **30 dager**,
-   eller leverer det tilbake hvis hotellet ber om det, og bekrefter slettingen skriftlig (art. 28 nr. 3
-   bokstav g).
+   og har bekreftet hva. Fettero lager aldri statistikk per person, heller ikke av svartider (når
+   noen kvitterte for eller ble varslet om en sak). **Fettero brukes aldri til å finne ut hvem som
+   kodet et kort eller til å granske en ansatt;** et avvik som et rom i bruk uten booking løses med
+   gjesten og registreringen, ikke med låsens ansattlogg, som Fettero heller ikke mottar (punkt 4).
+6. **Slutt.** Når piloten slutter (fire uker, eller tidligere), leverer Fettero sikkerhetsutdraget
+   (vedlegg II, *Varighet og lagring*) til hotellet, sletter deretter alt, også sin kopi av utdraget,
+   innen **30 dager**, eller leverer alt tilbake hvis hotellet ber om det, og bekrefter slettingen
+   skriftlig (art. 28 nr. 3 bokstav g). Fettero beholder ingenting etter pilotens slutt; hvor lenge
+   utdraget oppbevares, bestemmer hotellet som behandlingsansvarlig.
 
 Signert for hotellet: ______________________ Dato: ________
 Signert for Fettero: _______________________ Dato: ________
@@ -52,13 +62,13 @@ Signert for Fettero: _______________________ Dato: ________
 
 | | |
 |---|---|
-| **Formål** | Lage hotellets overlevering kl. 06:00 på én side: åpne saker med eier og frist, rom som kan selges etter at resepsjonen har bekreftet, hva som ble gjort i natt, og kvitteringen. |
+| **Formål** | Lage hotellets overlevering kl. 06:00 på én side: åpne saker med eier og frist, rom som kan selges etter at resepsjonen har bekreftet, hva som ble gjort i natt, og kvitteringen. Dørlåssignalet brukes til to ting: (1) rom som står tomme etter avreise, så resepsjonen kan bekrefte og selge dem; (2) **rom i bruk uten registrert opphold, så ingen ny gjest selges inn i et bebodd rom og hotellets gjesteregister er riktig** (utlendingsforskriften § 4-25; rutiner for evakuering, forskrift om brannforebygging § 12 b). Formålet med (2) er gjestens sikkerhet og å vite hvem som er i bygget; en natt som blir fakturert, er en bivirkning, ikke formålet. Art. 6(4)-vurderingen: `docs/PRIVACY.md` § 10.2. |
 | **Registrerte** | Hotellets gjester (bookede og innsjekkede); hotellets ansatte som står i overleveringen (navn og rolle); nattevakten som registrerer. |
 | **Opplysninger** | Fra bookingsystemet: gjestens navn, rom, ankomst og avreise, om utsjekken er registrert. Fra dørlås og energibryter: ett signal per rom (se punkt 4), aldri kort-id, navn, klokkeslett eller ansattes kort. Fra nattevakten: rom, funn, klokkeslett, hennes navn og et kort notat. Fra overleveringen: hvem som bekreftet et rom og hva som ble sjekket (folio, bagasje, nøkkelkort), hvem som kvitterte og når. **Ingen** betalingskort, fødselsnummer eller helseopplysninger. |
 | **Særlige kategorier** | Ingen. Nattevaktens notat gjelder rommet og oppgaven, aldri en gjests helse. |
 | **Behandlingen** | Lese, sammenstille og vise siden; skrive den ut. Ingen språkmodell på siden: hver linje er avledet av kildene. |
-| **Varighet og lagring** | Pilotens fire uker. Dørlåssignalet slettes 24 timer etter overleveringen det inngikk i. Nattevaktens registreringer slettes etter **30 dager** på enheten (konstanten `RETENTION_DAYS` i `src/features/staffinput/retention.ts`, brukt når loggen leses og skrives). En overlevering lagres [hotellet bestemmer; forslag 30 dager, samme tall], deretter slettes den. Sikkerhetslinjene uten navn (sted, siden når, om skilt ble satt ut, hvem som ble varslet og når) beholdes [hotellet bestemmer; forslag tre år, foreldelsesfristen for et personskadekrav, foreldelsesloven § 9]. Utskriften makuleres etter vakten (står på arket), bortsett fra sikkerhetslinjene. |
-| **Hvor** | I pilotbygget ligger registreringer og kvitteringer i nettleseren på hotellets egen enhet. Før noe lagres på en server: en EU-region hos Vercel (ikke satt ennå) og en ny versjon av dette vedlegget. |
+| **Varighet og lagring** | Pilotens fire uker. Dørlåssignalet slettes 24 timer etter overleveringen det inngikk i. Nattevaktens registreringer slettes etter **30 dager** på enheten (konstanten `RETENTION_DAYS` i `src/features/staffinput/retention.ts`, brukt når loggen leses og skrives). En overlevering lagres [hotellet bestemmer; forslag 30 dager, samme tall], deretter slettes den. Sikkerhetslinjene uten navn (sted, siden når, om skilt ble satt ut, **hvilken rolle** som ble varslet og når: vaktmester, resepsjon) er sikkerhetsutdraget. Det beholdes **av hotellet**, ikke av Fettero [hotellet bestemmer; forslag tre år som standard, den relative foreldelsesfristen for et erstatningskrav, foreldelsesloven § 9 nr. 1; en linje knyttet til en meldt skade holdes til kravet er avgjort, fordi fristen løper fra skadelidte fikk kunnskap, og § 9 nr. 2 har en ytre grense på 20 år]. Ved pilotens slutt leverer Fettero utdraget til hotellet (punkt 6); i pilotbygget er utdraget den signerte utskriften. Utskriften makuleres etter vakten (står på arket), bortsett fra sikkerhetslinjene. |
+| **Hvor** | I pilotbygget ligger registreringer og kvitteringer i nettleseren på hotellets egen enhet. Appen kjører hos Vercel; uten satt region kjører funksjonene i Vercels standardregion `iad1` (Washington, D.C.). Før piloten: regionen settes til `arn1` (Stockholm) og skrives inn her (vedlegg IV). Før noe lagres på en server: en ny versjon av dette vedlegget. |
 
 ## Vedlegg III: Tekniske og organisatoriske tiltak
 
@@ -73,18 +83,23 @@ tilgang fjernes samme dag en ansatt slutter. Kjente hull som må lukkes før pil
 
 | Underdatabehandler | Hva | Overføringsgrunnlag (sjekket 8.11.2026, `docs/PRIVACY.md` § 3.1) | I piloten? |
 |---|---|---|---|
-| Vercel Inc. (USA) | Drift av appen; hver forespørsel går gjennom den | EU–US Data Privacy Framework (aktiv til 29.4.2027); databehandleravtalen gjelder Pro- og Enterprise-planer, **hvilken plan prosjektet har: sjekkes** | Ja |
+| Vercel Inc. (USA) | Drift av appen; hver forespørsel går gjennom den. **Region:** ingen satt i dag, så standarden `iad1` (Washington, D.C.); i piloten `arn1` (Stockholm) ([Vercel, *Regions*](https://vercel.com/docs/regions)) | EU–US Data Privacy Framework (aktiv til 29.4.2027); databehandleravtalen gjelder Pro- og Enterprise-planer. **Teamsjekk før signering (teamleder): hvilken plan prosjektet har, og at regionen er satt; skriv begge inn her med dato** | Ja |
 | Anthropic (USA) | Bare kameraet (Robotens øyne) | Standardkontraktsvilkår (2021/914) i Anthropics databehandleravtale; ikke på DPF-listen | **Nei**, avslått |
 | ElevenLabs (Eleven Labs Inc., USA) | Bare AI-resepsjonisten | EU–US Data Privacy Framework (aktiv til 9.2.2027); standardkontraktsvilkår som reserve | **Nei**, avslått |
 
 ## Before a pilot starts (not part of the agreement)
 
-- A lawyer reads this draft and `docs/PRIVACY.md` § 10 (the Art. 6(4) test for the lock signal).
+- A lawyer reads this draft and `docs/PRIVACY.md` § 10 (the Art. 6(4) test for the lock signal, now
+  with a column for room 210, and the two Norwegian provisions it leans on, marked **to verify**).
+- **Team check (team lead, minutes):** the Vercel plan (its DPA covers only Pro and Enterprise) and
+  the function region (`arn1`, Stockholm, set in `vercel.json` or the project settings); write both
+  into Vedlegg IV with the date (`docs/PRIVACY.md` § 7). **Not done.**
 - A DPIA, not just a screening (legal review): the software-only pilot combines datasets (the booking
   system, the lock signal and the night clerk's entries) and covers employees, two of the criteria in
   the Article 29 Working Party's DPIA guidelines (WP248 rev.01, endorsed by the EDPB), and two criteria
   is the usual sign that one is needed. Two pages: purpose, the data flow (`docs/PRIVACY.md` § 10), the
-  risks (re-identification through the booking system, staff monitoring creep, a room resold wrongly),
+  risks (re-identification through the booking system, staff monitoring creep, a room resold wrongly,
+  the 210 row used to find who coded a card, response times added up per person),
   the measures, the residual risk. Checked also against Datatilsynet's list of processing that always
   needs a DPIA (Art. 35(4)). The camera and the robot need their own before they are switched on
   (`docs/PRIVACY.md` § 7). **To do.**

@@ -86,7 +86,7 @@ own log** (the card's 209 rule run over every night by `scripts/ledger.py`: the 
 doesn't see what the robot delivered; on the dress rehearsal's never-played seeds, 88 of 101 hold). With the score hidden from its decisions (four live nights on a side branch,
 Sun 04:26), it made the same 291 decisions and the referee credited 290; its own check never said "not
 done" on those nights (0 of 265), so that shows the score wasn't needed there, not how well the robot
-catches a failure. Best practice score anywhere: 2,807, **#8 of 20** on Wybe's board at 04:10 Sun, from a board test (a seed-specific test branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build; the final branch's best is 2,760. On the night in the app (seed
+catches a failure. Best practice score anywhere: 2,808, **#10 of 20** on Wybe's board at 07:37 Sun, from a board test (a seed-specific test branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build; the final branch's best is 2,760. On the night in the app (seed
 16, 2,680, `cb72845`) it reported "done" 73 times: 64 after the score rose and 9 on its own judgement,
 all 9 credited by the referee (95 % interval 70–100 %); but one of them, 209 reported empty and tidy at
 03:47 after the robot itself carried bags in at 01:29, is contradicted by its own log, so the card says
@@ -102,7 +102,7 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 2. **Act first** (0:16–0:28): the safety figure lands on the wet floor the robot slipped on at 23:51,
    *6 t 9 min uten at noen ble varslet*; *Varsle Trond Eikeland* records who was told and when.
 3. ***Uten robot*** (0:28–0:40): hotel number one has no robot; the same page from the booking system,
-   one signal per room from the door lock (never who, never when) and the night clerk's entries.
+   one signal per room from the door lock (no card id, no clock) and the night clerk's entries.
 4. **Where the lock and the booking system disagree** (0:40–0:57): 210 in use with no booking (a night
    nobody bills, about 1,500 kroner) and 213 booked but empty (five hours before housekeeping), each
    with its sources as chips, *Bekreftet av to kilder*, no robot.

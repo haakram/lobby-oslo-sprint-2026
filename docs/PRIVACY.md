@@ -7,7 +7,9 @@
 > DPF list, each vendor's DPA) at about 04:00 the same morning. The pilot's own data sources (the
 > door-lock signal, the energy slot and the night clerk's entries, § 10) and the EEA status of the EU
 > acts (§ 7) were read against primary sources at about 05:30 (Lovdata, EUR-Lex, EFTA's EEA-Lex,
-> Datatilsynet). A data processing agreement a hotel can sign is in [`docs/DPA.md`](./DPA.md). Not legal
+> Datatilsynet). Room 210's purpose (§ 10.2), the staff-investigation line (§ 10.3), the limitation
+> periods and Vercel's default region (§ 3, § 7) were added at about 07:45 against Lovdata and Vercel's
+> documentation. A data processing agreement a hotel can sign is in [`docs/DPA.md`](./DPA.md). Not legal
 > advice; a pilot needs a lawyer's review. The full threat model for login and roles is in
 > [`docs/checks/threat-model.md`](./checks/threat-model.md).
 
@@ -23,7 +25,7 @@ test calls never reach a screen, and the team also deletes them in ElevenLabs be
 Camera frames and voice go to two AI processors, **Anthropic (Claude API)** and **ElevenLabs**, both
 outside the EEA. Nothing identifies people: there is no face recognition anywhere in the code. The
 pilot (software only) uses neither: it reads the booking system, **one signal per room from the door
-lock and the energy slot, never who**, and the night clerk's own entries (§ 10).
+lock and the energy slot, no card id, no clock**, and the night clerk's own entries (§ 10).
 
 ## 2. What personal data the demo touches
 
@@ -32,7 +34,7 @@ lock and the energy slot, never who**, and the night clerk's own entries (§ 10)
 | Guest names, rooms, arrivals, special needs | No: invented test data | `src/features/guests/testData.ts` (`TODO(phase-3)`: PMS integration) |
 | Staff names and shifts | No: invented | `src/features/staff/testData.ts` |
 | The night clerk's entries (rooms checked, hazards, notes, her name) | No: a sample night (Kjersti Lund, invented), labelled; anything typed on `/natt` stays on that device | `src/features/staffinput/` (§ 10.3) |
-| The door lock's per-room signal | No: a team-written sample, labelled; one signal per room, never who | `src/features/doorlock/feed.ts` (§ 10.1) |
+| The door lock's per-room signal | No: a team-written sample, labelled; one signal per room, no card id, no clock | `src/features/doorlock/feed.ts` (§ 10.1) |
 | Who at reception confirmed a room, and what they checked | Invented names (the default is the night receptionist on Ansatte) | `src/features/rooms/SellSteps.tsx`, stored on the device |
 | Guest names in the robot's night ("Dr Silva", "Ms Rossi") | No: Wybe's simulation | `public/runs/demo.jsonl` (live practice night of the final agent, seed 16) |
 | The host view's flats, guests and messages | No: invented | `src/features/host/demoData.ts` |
@@ -47,7 +49,7 @@ lock and the energy slot, never who**, and the night clerk's own entries (§ 10)
 |---|---|---|---|
 | **Anthropic (Claude API)** | Product crops and some whole camera frames (Øyne); request text from the simulation when the agent's parser can't read it (rare: the agent's whole Claude spend this weekend is about USD 0.001, `temp/spend.json`) | `src/features/eyes/identify.ts`, `src/features/eyes/scene.ts`, `agent/brain.py` | US company; outside the EEA |
 | **ElevenLabs** | Voice audio, transcripts, post-call fields (`caller_name`, `callback_number`, dates, room type, guests, summary); uses Claude as the LLM inside its agents (billed by ElevenLabs, so Anthropic is a sub-processor there) | `src/features/voice/agentConfig.ts`, `src/features/reception/agentConfig.ts` | Outside the EEA |
-| **Vercel** | Hosting: every request passes through it | the deployment | US company; no function region is set in the repo, so the platform default applies (check in the project settings) |
+| **Vercel** | Hosting: every request passes through it | the deployment | US company; no function region is set in the repo (no `vercel.json`), so functions run in Vercel's default, `iad1`, Washington, D.C. ([Vercel docs, *Regions*](https://vercel.com/docs/regions), "Compute defaults"); an EU region such as `arn1` (Stockholm) is a **team check** before a pilot (§ 7) |
 
 ### 3.1 Transfer basis per processor (checked Sun 8 Nov, about 04:00)
 
@@ -232,6 +234,15 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   tells callers where to write.
 - **An EU hosting path, to check before a pilot (not done):** Claude through an EU region of a cloud
   provider, ElevenLabs EU data residency, and an EU function region on Vercel (none is set today).
+- **Vercel, the pilot's only sub-processor: a team check (team lead, minutes, not done).** Two facts
+  to read off the Vercel dashboard and write here and in `docs/DPA.md` Vedlegg IV with the time:
+  (1) **the plan**: Vercel's DPA applies to Pro and Enterprise plans (§ 3.1), so on a Hobby plan the
+  pilot has no processor agreement with Vercel at all; (2) **the function region**: with no
+  `vercel.json` and no project setting, functions run in `iad1`, Washington, D.C., Vercel's default;
+  `"regions": ["arn1"]` in `vercel.json` puts them in Stockholm
+  ([Vercel docs, *Regions*](https://vercel.com/docs/regions), region list and "Compute defaults").
+  The DPF still carries the transfer to Vercel Inc. either way (§ 3.1); the region keeps the
+  processing in the EU.
 - **The robot in rooms:** in a pilot the robot does not open occupied rooms; it knocks, or checks rooms
   the PMS already shows as vacant, and takes no images behind a guest's door. Keys ride in a locked
   compartment.
@@ -309,12 +320,19 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   the print footer says it holds personal data and is shredded after the shift; on the demo's test
   night it reads *Testdata: ingen ekte gjester.* instead, because there is nothing real to shred.
 - **The safety lines are the exception to shredding (legal review; proposal, not built).** A slip claim
-  runs three years from when the injured person learned of the harm and who is liable
-  ([foreldelsesloven § 9](https://lovdata.no/dokument/NL/lov/1979-05-18-18)), and the safety lines
-  (the place, since when, whether a sign went out, who was told and when) are the hotel's best evidence
-  of care. So the pilot keeps a name-free safety extract for that period and shreds the rest; the hotel
-  sets it in the DPA. Until the pilot's server store exists (append-only, server time), the signed
-  print-out is the real record: `localStorage` can be edited or wiped at the desk.
+  runs three years from when the injured person learned of the harm and who is liable, with an outer
+  limit of 20 years from the harmful act, and for some personal injury in a business none
+  ([foreldelsesloven § 9](https://lovdata.no/dokument/NL/lov/1979-05-18-18/KAPITTEL_2) nr. 1 and
+  nr. 2). The safety lines (the place, since when, whether a sign went out, **which role** was told and
+  when: *vaktmester*, *resepsjon*, not a name) are the hotel's best evidence of care. So the proposal
+  is: the hotel keeps a name-free safety extract for three years as standard, and **any line tied to a
+  reported injury is held until that claim is closed**, because three years from the incident can
+  run out before the deadline does. **Who keeps it:** the hotel, as controller. At the pilot's end
+  Fettero hands the extract to the hotel and deletes its own copy within the same 30 days as
+  everything else (`docs/DPA.md` point 6); Fettero itself keeps nothing for three years. In the pilot
+  build the extract is the signed print-out (an export is `TODO(phase-3)`). Until the pilot's server
+  store exists (append-only, server time), the signed print-out is the real record: `localStorage` can
+  be edited or wiped at the desk.
 
 ## 8. Security basics already in place (checked in code)
 
@@ -388,13 +406,14 @@ lock, the energy slot and the night clerk's own entries. Not the camera, not the
 answers the question a hotel's lawyer asks first (the legal review's question): on what basis does the hotel hand
 over its door-lock data, and what stops it becoming staff monitoring. Read against primary sources on
 Sun 8 Nov, about 05:30: the GDPR in Norwegian on Lovdata (Art. 6(4), 13, 28), arbeidsmiljøloven
-chapter 9 on Lovdata, and the regulators' joint guide on control and monitoring at work
+chapter 9 on Lovdata (and, at about 07:45, for room 210: utlendingsforskriften § 4-25 and forskrift om
+brannforebygging § 12), and the regulators' joint guide on control and monitoring at work
 ([*Veileder om kontroll og overvåking i arbeidslivet*](https://www.datatilsynet.no/personvern-pa-ulike-omrader/personvern-pa-arbeidsplassen/veileder-om-kontroll-og-overvaking-i-arbeidslivet/),
 Datatilsynet, Arbeidstilsynet and Petroleumstilsynet with the social partners, 2019; the section
 *Adgangskontroll*, pp. 34–35 of the [PDF](https://www.arbeidstilsynet.no/contentassets/04ec2eb566d44942bd6693e9e3a0c99e/veileder-om-kontroll-og-overvaking-2019.pdf)).
 Our reading, not legal advice.
 
-### 10.1 What Fettero takes: one signal per room, never who
+### 10.1 What Fettero takes: one signal per room, no card id, no clock
 
 | Source at the hotel | What it holds | What reaches Fettero | Never |
 |---|---|---|---|
@@ -403,7 +422,12 @@ Our reading, not legal advice.
 | The night clerk's phone (§ 10.3) | What she checked and wrote | Room, finding, time, her name | — |
 
 On screen the signal reads *rom 213: ingen kort i energibryteren siden kl. 18:00* (the window, not a
-guest's time) or *kort i energibryteren* (a yes): **ett signal per rom, aldri hvem eller når.** In the
+guest's time) or *kort i energibryteren* (a yes): **ett signal per rom, aldri kort-id, aldri
+klokkeslett.** We no longer say *aldri hvem* (legal review): next to the booking, *no guest card in 213
+since 18:00* is information about the guest booked there, Ola Nygård, so it is personal data
+(Art. 4(1)) even with no card id and no clock. (Two screens still carry the old phrase, *aldri hvem
+eller når* on `/natt`, `src/features/staffinput/NightClerkScreen.tsx`, and *aldri hvem* in the line
+under the switch, `src/features/nightsource/SourceSwitch.tsx`: to change, not done.) In the
 demo it is a team-written sample in the run-log format, one `room_signal` line per room (`no_card` with
 only the window, or `card_in` with no clock, source `door_lock`; `src/features/doorlock/feed.ts`,
 labelled *Testdata: dørlåsens signal er skrevet av teamet*). A time a feed sends on `card_in` anyway is
@@ -432,28 +456,52 @@ or seen yet.
 ### 10.2 The hotel's basis: the Art. 6(4) compatibility test
 
 The hotel is the controller of its lock log and collected it to secure the rooms and control who
-enters them. Telling whether a room the booking system still holds is actually empty is a further
-purpose. Where a further purpose rests neither on consent nor on law, Art. 6(4) has the controller
-weigh, among other things, five points
-([Lovdata](https://lovdata.no/dokument/NL/lov/2018-06-15-38/KAPITTEL_gdpr-2)). The hotel's test, one
-line each:
+enters them. The page uses the per-room signal for **two further purposes**, and each gets its own
+test:
 
-| Art. 6(4) | For the per-room signal |
-|---|---|
-| (a) the link between the purposes | Both are about who uses the room the guest paid for; the further one serves the same rooms. |
-| (b) the context, the relation between guest and hotel | The guest's card opens the guest's own room; that the hotel knows a room hasn't been entered since the departure date is within what a guest expects, and the hotel's privacy notice says it (below). |
-| (c) the nature of the data | No special categories, nothing on offences; one value per room, not a movement trail. |
-| (d) the possible consequences for the guest | The worst case is a room offered while a guest still has a right to it. It can't be sold on the signal: a named receptionist confirms first, and the booking system decides. |
-| (e) safeguards | Reduced on the hotel's side, no card ids or names, staff cards removed at the source, deleted after 24 hours, a processor bound by Art. 28 (`docs/DPA.md`). |
+- **Room 213, empty after departure:** the booking system still holds a room the guest has left.
+  Purpose: tell it early, so reception can confirm and re-let it.
+- **Room 210, in use with no booking** (the page's lead money figure, added after the legal review):
+  a guest card sits in the slot of a room the booking system has free. Purpose: **the occupant's
+  safety and knowing who is in the building**: no second guest sold into an occupied room, and a guest
+  register that is right. The hotel must keep a register of *everyone* who stays overnight
+  (utlendingsforskriften § 4-25: *«Den som driver hotell, pensjonat, losjihus, leirplass og lignende
+  skal føre fortegnelse over alle som overnatter»*,
+  [Lovdata](https://lovdata.no/dokument/SF/forskrift/2009-10-15-1286/KAPITTEL_4), under utlendingsloven
+  § 20), and the user of a building must have *«rutiner for evakuering og redning ved brann»*
+  (forskrift om brannforebygging § 12 b,
+  [Lovdata](https://lovdata.no/dokument/SF/forskrift/2015-12-17-1710/KAPITTEL_3)). That an evacuation
+  routine counts heads against the register is common practice and our reading, not a quoted duty
+  (**to verify** with a lawyer and the fire service). **The kroner are a side effect, not the
+  purpose:** an unregistered occupant is first a safety and registration gap; the unbilled night
+  follows from closing it.
+
+Where a further purpose rests neither on consent nor on law, Art. 6(4) has the controller weigh, among
+other things, five points ([Lovdata](https://lovdata.no/dokument/NL/lov/2018-06-15-38/KAPITTEL_gdpr-2)).
+The hotel's test, one line per point and purpose:
+
+| Art. 6(4) | Room 213: empty after departure | Room 210: in use with no booking |
+|---|---|---|
+| (a) the link between the purposes | Both are about who uses the room the guest paid for; the further one serves the same rooms. | Close: the lock exists to control who is in the rooms; knowing a room is occupied when the register says nobody is there is that same control, and serves a duty the hotel already has (§ 4-25 above). |
+| (b) the context, the relation between guest and hotel | The guest's card opens the guest's own room; that the hotel knows a room hasn't been entered since the departure date is within what a guest expects, and the hotel's privacy notice says it (below). | An occupant expects the hotel to know someone is in the room, and to register them; a guest checking in later expects not to be sold an occupied room. The privacy notice says it (below). |
+| (c) the nature of the data | No special categories, nothing on offences; one value per room, not a movement trail. | The same one value per room (a guest card in the slot, no clock, no card id). Who coded the card is never asked (§ 10.3). |
+| (d) the possible consequences for the guest | The worst case is a room offered while a guest still has a right to it. It can't be sold on the signal: a named receptionist confirms first, and the booking system decides. | For the occupant: being asked to register, or to pay for a night they used. For the next guest: protection from being walked into an occupied room. Nothing happens on the signal alone: the desk checks with the guest and the registration. |
+| (e) safeguards | Reduced on the hotel's side, no card ids or names, staff cards removed at the source, deleted after 24 hours, a processor bound by Art. 28 (`docs/DPA.md`). | The same, plus the contract line that Fettero is never used to find out who coded a card or to investigate an employee (`docs/DPA.md` point 5, § 10.3). |
+
+Our reading: 210 is the stronger of the two compatibility cases under (a) and (d), as long as it is
+run as occupant safety and not as a billing hunt (**to verify** with a lawyer before the pilot).
 
 Recital 50: where the further purpose is compatible, no legal basis separate from the one that
 allowed the collection is required. Because views differ on how far that reaches, the hotel also writes
 down a legitimate-interest balancing (Art. 6(1)(f)) for the same use: belt and braces, and a lawyer
 confirms before the pilot (**to verify**).
 
-One sentence for the hotel's privacy notice: *«Vi bruker dørlåsens logg til å se om et rom står tomt
-etter avreise, slik at det kan selges igjen. Bare ett signal per rom, aldri hvem, går til vår
-leverandør Fettero, og det slettes etter 24 timer.»*
+Two sentences for the hotel's privacy notice: *«Vi bruker dørlåsens logg til å se om et rom står tomt
+etter avreise, slik at det kan selges igjen, og om et rom er i bruk uten registrert opphold, så ingen
+ny gjest selges inn i et bebodd rom og gjestelisten er riktig. Fra dørlåsen får vår leverandør
+Fettero bare ett ja/nei per rom, aldri kort-id, aldri klokkeslett; sammen med bookingen er det en
+opplysning om deg, og den slettes etter 24 timer.»* (It no longer says *aldri hvem*: next to the
+booking the signal is about the booked guest, and a notice must not tell a guest otherwise.)
 
 ### 10.3 Staff: not a control measure, and the night clerk's entries
 
@@ -467,6 +515,21 @@ leverandør Fettero, og det slettes etter 24 timer.»*
   belastning for arbeidstakeren»*), to be discussed with the employees' representatives *«så tidlig som
   mulig»* (§ 9-2) before rollout. That is weeks, not Monday; excluding staff cards at the source is
   what lets the pilot start.
+- **Room 210 points at the desk, and Fettero does not follow it (legal review).** A guest card in a
+  room with no booking was coded by someone, and the lock's encoder log can name who. The moment a
+  manager uses the 210 row to find out who, the handover has become a control measure under § 9-1,
+  and the guide's *«I utgangspunktet kan ikke opplysningene i adgangskontrollsystemet brukes til andre
+  formål»* applies. So the contract says it: **Fettero brukes aldri til å finne ut hvem som kodet et
+  kort eller til å granske en ansatt** (`docs/DPA.md` point 5). A 210 is resolved with the guest and
+  the registration, not with the lock's staff log; Fettero never receives an encoder or staff event,
+  so it couldn't answer the question anyway. If a hotel wants the encoder log for an investigation,
+  that is the hotel's own control measure, discussed under § 9-2 first, and outside the pilot.
+- **Response times are about a named person too.** *Kjersti Lund kvitterte kl. 23:53, etter 2 min*
+  and *Varslet … · Siri Haugen · nå* are times tied to a name, kept 30 days; a manager could add them
+  up into a per-person response time. The DPA's point 5 names response times explicitly as something
+  Fettero never aggregates per person, and the § 9-2 conversation with the employee representatives
+  covers the *Kvitter* even for the software-only pilot, because it is new compared with the paper
+  *vaktbok*.
 - **The night clerk's entries** (*Nattevaktens logg*, `/natt`, `src/features/staffinput/`; the input
   behind *Uten robot*, `docs/DEMO.md` § 2): she taps a room (*Tom og ryddig*, *Ikke tom*, *Trenger
   vask*), a safety item with its place (*Vått gulv*, *Dør*, *Person*), or writes a short note (at most

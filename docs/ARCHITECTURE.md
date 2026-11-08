@@ -154,7 +154,7 @@ same PR that first reads it.
 | `WYBE_NIGHTSHIFT_URL` | Track A agent | no (default in `.env.example`) | `.env.example` |
 | `WYBE_NIGHTSHIFT_KEY` | Track A agent | **yes**: one team, one key | Hamad's `.env`, sent privately |
 | `ANTHROPIC_API_KEY` | Track A agent, Track B server | **yes** | Hamad's `.env`, sent privately |
-| `ANTHROPIC_BUDGET_USD` | everything that calls Claude | no (default 30) | `.env.example` |
+| `ANTHROPIC_BUDGET_USD` | Track A agent (`agent/config.py`, the event's USD 30 cap); the Next app reads `APP_CLAUDE_BUDGET_USD` instead | no (default 30) | `.env.example` |
 | `NIGHTSHIFT_MAX_RPS` | Track A agent client | no (default 5) | `.env.example` |
 | `SECRETS_CLEAR_AFTER` | `scripts/secrets.sh` | no (default 60) | `.env.example` |
 | `VIEWER_ALLOWED_ORIGINS` | Track A viewer server (CORS on `/api/*`) | no (default `http://localhost:3000,http://127.0.0.1:3000`) | `.env.example` |
@@ -164,6 +164,7 @@ same PR that first reads it.
 | `ELEVENLABS_AGENT_ID` | Track B server (`/api/voice/token`), `src/features/voice/setup-agent.ts` | no (blank in `.env.example`; printed by `setup-agent.ts`) | `.env` and Vercel project settings |
 | `APP_CLAUDE_BUDGET_USD` | Track B server (Claude spend meter) | no (default 5) | `.env.example` |
 | `ELEVENLABS_RECEPTION_AGENT_ID` | Track B server (`/api/reception/token`, `/api/reception/calls`), `src/features/reception/setup-agent.ts` | no: not a secret; defaults to the team's agent (`RECEPTION_AGENT_ID_DEFAULT` in `src/lib/env.ts`), set it only to use another agent | `src/lib/env.ts`; optional override in `.env` |
+| `RECEPTION_CALLS_SINCE` | Track B server (`/api/reception/calls`): calls that started earlier are never read or shown | no: an ISO time with its offset, e.g. `2026-11-08T05:30:00+01:00`; blank = every call; a malformed value fails closed (503) | `.env.local` and Vercel project settings |
 | `RECEPTION_PUBLIC_URL` | `src/features/reception/setup-agent.ts` (webhook mode; `https://` only) | no (blank in `.env.example`) | `.env` when setting up the phone agent |
 | `RECEPTION_TOOL_SECRET` | Track B server (`/api/reception/tools/[tool]`), `src/features/reception/setup-agent.ts` | **yes**: at least 24 characters, also stored at ElevenLabs as a workspace secret | `.env` and Vercel project settings |
 | `LOBBY_AUTH_SECRET` | Lobby app: `src/proxy.ts`, `/api/auth/*`, `getSession()` (HMAC key of the session cookie) | **yes**: at least 32 random bytes (`node scripts/lobby-hash.mjs --secret`); rotating it logs everyone out; missing = nobody logs in | `.env` and Vercel project settings |

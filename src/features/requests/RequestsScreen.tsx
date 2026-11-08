@@ -18,6 +18,7 @@ import { relativeTime, stampNow, useNowMs } from "@/ui/stamp";
 import { CallSheet } from "./CallSheet";
 import { assignPhoneTask, type PhoneTask } from "./phoneTasks";
 import {
+  byLane,
   countRequests,
   hotelRoomsOf,
   orderStatusOf,
@@ -83,6 +84,8 @@ function verbOf(request: RequestView): string | null {
 type Last = {
   key: number;
   id: string;
+  /** Its status before the action: it keeps its place in the list by it until the next action. */
+  from: RequestStatus;
   /** The group the row stood in when it was acted on: it stays there until the next action, so nothing jumps. */
   lane: RequestLane;
   what: string;
@@ -188,7 +191,9 @@ export function RequestsScreen({
   );
   const counts = countRequests(requests);
   const totals = requestTotals(requests);
-  const shown = source ? requests.filter((request) => request.source === source) : requests;
+  const filtered = source ? requests.filter((request) => request.source === source) : requests;
+  // The row just acted on keeps its place (its old group, its old position) until the next action, so nothing jumps.
+  const shown = last ? [...filtered].sort((a, b) => byLane(a.id === last.id ? { ...a, status: last.from } : a, b.id === last.id ? { ...b, status: last.from } : b)) : filtered;
   const runLoading = run.status === "loading";
   const phoneDown = calls.kind === "error" || calls.kind === "not-set-up";
   // The phone's own place in the list: held while its calls are on their way, so they never push the robot's rows.
@@ -218,6 +223,7 @@ export function RequestsScreen({
     setLast({
       key: seq.current,
       id: request.id,
+      from: request.status,
       lane: requestLane(request),
       what: describe(request),
       to,

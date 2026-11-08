@@ -357,11 +357,11 @@ export function selectRequests({
 const JUDGED_FIRST: Record<NonNullable<RequestView["decline"]>["judged"], number> = { not_credited: 0, pending: 1, credited: 2 };
 
 /**
- * Lane by lane (REQUEST_LANES); inside one, the newest first, except: in the phone's group a guest waiting
+ * Lane by lane (REQUEST_LANES); inside one, the newest first (by the night's clock), except: in the phone's group a guest waiting
  * in a room the hotel has (a phone task) before a callback or an unknown room; among the refusals, the one
  * the referee did not approve first (the likeliest to be wrong).
  */
-function byLane(a: RequestView, b: RequestView): number {
+export function byLane(a: RequestView, b: RequestView): number {
   const lane = REQUEST_LANES.indexOf(requestLane(a)) - REQUEST_LANES.indexOf(requestLane(b));
   if (lane !== 0) return lane;
   const phone = Number(Boolean(b.phone)) - Number(Boolean(a.phone));
@@ -370,7 +370,15 @@ function byLane(a: RequestView, b: RequestView): number {
     const judged = (a.decline ? JUDGED_FIRST[a.decline.judged] : 3) - (b.decline ? JUDGED_FIRST[b.decline.judged] : 3);
     if (judged !== 0) return judged;
   }
-  return (b.at ?? "").localeCompare(a.at ?? "");
+  return nightOrder(b.at) - nightOrder(a.at);
+}
+
+/** "22:10" before "05:55": a night's clock read from noon, so the newest of the night comes first. */
+function nightOrder(at: string | null): number {
+  const match = at ? /^(\d{1,2}):(\d{2})/.exec(at) : null;
+  if (!match) return -1;
+  const hour = Number(match[1]);
+  return (hour < 12 ? hour + 24 : hour) * 60 + Number(match[2]);
 }
 
 export function countRequests(requests: readonly RequestView[]): Record<RequestStatus, number> {

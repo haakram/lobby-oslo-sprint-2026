@@ -27,16 +27,37 @@ describe("the robot's room checks against the booking system", () => {
     expect(result).toMatchObject({ checked: 4, agree: 1 });
   });
 
-  it("reads the recorded demo night: 213 to sell (due out today), 209 held (the robot carried an arrival's bags in), 210 a guest without a booking", () => {
+  it("reads the recorded demo night: 213 to sell (due out yesterday, check-out never recorded), 209 held (the robot carried arrivals' bags in), 210 a guest without a booking", () => {
     const today = osloToday();
-    const result = reconcileNight(demoLines(), pmsLastNight(today));
-    expect(result.sellable).toEqual([{ room: "room-213", guest: "Ola Nygård", at: "04:24:42", departure: today }]);
+    const result = reconcileNight(demoLines(), pmsLastNight(today), today);
+    // A real sleeper: the system still holds 213 tonight, so releasing it is a room-night that would stand unsold.
+    expect(result.sellable).toEqual([{ room: "room-213", guest: "Ola Nygård", at: "04:24:42", departure: addDays(today, -1) }]);
+    expect(result.dueOut).toEqual([]);
     expect(result.held).toHaveLength(1);
     const [held] = result.held;
-    expect(held).toMatchObject({ room: "room-209", guest: "Hiroshi Sato", at: "03:47:31", departure: addDays(today, 1), deliveredAt: "05:16:33", arrival: true });
+    expect(held).toMatchObject({ room: "room-209", guest: "Hiroshi Sato", at: "03:47:31", departure: addDays(today, 1), deliveredAt: "05:16:33", arrival: true, arrivals: 3 });
     expect(held.deliveries.map((delivery) => delivery.at)).toEqual(["01:29:26", "04:35:26", "05:16:33"]);
     expect(result.guestFound.map((row) => row.room)).toEqual(["room-210"]);
     expect(result.agree).toBe(result.checked - 3);
+  });
+
+  it("flags rooms the robot carried bags into for more than one arrival, from its own log, 209 already held", () => {
+    const result = reconcileNight(demoLines(), pmsLastNight(osloToday()), osloToday());
+    expect(result.crowded).toEqual([
+      { room: "room-212", arrivals: 3, at: ["00:31:11", "01:58:59", "04:43:43"] },
+      { room: "room-304", arrivals: 2, at: ["00:50:35", "04:17:06"] },
+    ]);
+    // No booking system needed: the same flags with an empty one.
+    expect(reconcileNight(demoLines(), new Map()).crowded.map((row) => row.room)).toEqual(["room-209", "room-212", "room-304"]);
+  });
+
+  it("does not sell a guest due out today: that room is already in tonight's inventory, an early clean at most", () => {
+    const today = osloToday();
+    const pms = new Map([["room-311", { room: "room-311", guest: "Silje Mørk", departure: today, rate: 1450 }]]);
+    const result = reconcileRooms(robotRoomChecks(TEST_NIGHT), pms, new Map(), today);
+    expect(result.sellable).toEqual([]);
+    expect(result.dueOut).toEqual([{ room: "room-311", guest: "Silje Mørk", at: "03:14:30", departure: today }]);
+    expect(result.agree).toBe(result.checked - result.dueOut.length - result.guestFound.length - result.tooEarly.length);
   });
 
   it("lists what the robot put in each room tonight, and which of it was an arriving guest's bags", () => {

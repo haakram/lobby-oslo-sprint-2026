@@ -41,8 +41,11 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
   const assignments = useMemo(() => (rooms ? assignRooms(rooms, cleanersToday()) : null), [rooms]);
   // "Klare til salg" is the one figure Oversikt shows too: ready, free in the booking system or released today.
   const { money } = useRoomCheck(ready ? run.lines : null, rackRooms);
-  // The rack says what the room check says: a room held back is taken, not a green Klar.
-  const boardRooms = useMemo(() => (rackRooms && money ? withHeld(rackRooms, money.held.map((row) => row.room)) : rackRooms), [rackRooms, money]);
+  // The rack says what the room check says: a room held back is taken, and one still to confirm is not a green Klar.
+  const boardRooms = useMemo(
+    () => (rackRooms && money ? withHeld(rackRooms, money.held.map((row) => row.room), money.toSell.map((row) => row.room)) : rackRooms),
+    [rackRooms, money],
+  );
 
   const [sheet, setSheet] = useState<{ room: string; open: boolean } | null>(initialRoom ? { room: initialRoom, open: true } : null);
   const openRoom = useCallback((room: string | null) => {

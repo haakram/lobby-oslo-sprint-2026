@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { formatKroner } from "@/features/dashboard/format";
 import { parseRunLog } from "@/features/nightshift/runlog";
-import { moneyHeadline, releasedLine, roomMoney, shortDate } from "./money";
+import { selectGuestDay, stays, stayStatus } from "@/features/guests/testData";
+import { moneyHeadline, moneyMethod, releasedLine, roomMoney, shortDate } from "./money";
 import { pmsLastNight, revenueLastNight, sellableValue } from "./pms";
 import { reconcileNight, type RoomCheckMark } from "./reconcile";
 
@@ -44,6 +45,20 @@ describe("the room check's money: one reading for Oversikt, Rom and Overlevering
     const closed = roomMoney({ reconciliation, marks: {}, revenue, rooms: rooms.map((room) => (room.id === "room-314" ? { ...room, closed: true } : room)), pms });
     expect(closed.readyToSell).toBe(0);
     expect(roomMoney({ reconciliation, marks: {}, revenue, rooms: null, pms }).readyToSell).toBeNull();
+  });
+
+  it("213 is a real sleeper: due out yesterday, the check-out never recorded, so the system still holds it tonight", () => {
+    const ola = stays(TODAY).find((stay) => stay.room === "room-213");
+    expect(ola).toMatchObject({ name: "Ola Nygård", departure: "2026-11-07", checkoutMissing: true });
+    expect(stayStatus(ola!, TODAY)).toBe("in-house");
+    expect(ola!.notes[0]).toBe("Skulle reist 7.11, utsjekk ikke registrert");
+    // In the system last night and tonight (31 of 36 sold stands), and not one of today's departures.
+    expect(pms.get("room-213")).toMatchObject({ guest: "Ola Nygård", departure: "2026-11-07" });
+    expect(revenue.roomsSold).toBe(31);
+    expect(selectGuestDay(TODAY).departures.some((stay) => stay.room === "room-213")).toBe(false);
+    expect(selectGuestDay(TODAY).inHouse.some((stay) => stay.room === "room-213")).toBe(true);
+    // The method says why the kroner are real and when they are extra.
+    expect(moneyMethod(money())).toMatch(/^Brutto romsinntekt: 1 × snittprisen i natt, .+ kr \(testdata\)\. Systemet holder rommet til resepsjonen registrerer at gjesten har reist, så uten romsjekken står det usolgt i natt\. Ekstra inntekt for hotellet bare en natt det ellers ville blitt utsolgt\. Til sammenligning solgte hotellene i Oslo 72 % av rommene i 2025, til snittpris 1 631 kr \(SSB, tabell 14169\)\.$/);
   });
 
   it("says nothing when there is nothing to sell or hold, and writes dates the way a desk does", () => {

@@ -9,11 +9,29 @@ import { stays } from "@/features/guests/testData";
  * are made-up names, never real people. Rooms with no stay last night were vacant in the system.
  */
 
+/**
+ * The booking system behind the room check is the team's test data, written after the night to show
+ * the join (jury round 3, the Wybe engineer/the Wybe juror): every row the room check derives from it says so on screen.
+ * False once the PMS integration reads a real hotel's bookings.
+ */
+export const PMS_IS_TEST_DATA = true;
+/** The calm label on every room-check row while the bookings are test data. */
+export const TEST_BOOKING_LABEL = "Testdata: bookingen er lagt inn av teamet";
+/**
+ * Where a pilot gets the same evidence without the robot opening a booked room (jury round 3,
+ * the law juror/the Holio juror; PRD § 6: in a pilot the robot only checks rooms the system has as vacant).
+ */
+export const PILOT_EVIDENCE = "I en pilot: dørlåsloggen og energibryteren. Roboten går ikke inn i rom som er booket.";
+
 export type PmsRoom = {
   room: string;
   /** The guest on the booking, when the system has one. */
   guest: string | null;
-  /** The booking's departure, YYYY-MM-DD: today is a guest due out (a sleeper when the room is empty). */
+  /**
+   * The booking's departure, YYYY-MM-DD. Before today: the check-out was never recorded, so the system
+   * still holds the room tonight (a sleeper when the room is empty). Today: a guest due out, already in
+   * tonight's inventory. After today: a stay-over.
+   */
   departure: string;
   /** Last night's room rate, NOK, breakfast included. */
   rate: number;
@@ -36,11 +54,15 @@ const RATES: Readonly<Record<string, number>> = {
 };
 const STANDARD_RATE = 1450;
 
-/** Room id → the booking system's occupied room last night (a stay that began before today and ends today or later). */
+/**
+ * Room id → the booking system's occupied room last night: a stay that began before today and ends
+ * today or later, or one whose check-out was never recorded (the system still has that guest in house).
+ */
 export function pmsLastNight(today: string = osloToday()): ReadonlyMap<string, PmsRoom> {
   const occupied = new Map<string, PmsRoom>();
   for (const stay of stays(today)) {
-    if (!stay.room || stay.arrival >= today || stay.departure < today) continue;
+    if (!stay.room || stay.arrival >= today) continue;
+    if (stay.departure < today && !stay.checkoutMissing) continue;
     occupied.set(stay.room, { room: stay.room, guest: stay.name, departure: stay.departure, rate: RATES[stay.room] ?? STANDARD_RATE });
   }
   return occupied;

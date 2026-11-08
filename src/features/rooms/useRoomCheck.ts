@@ -19,7 +19,7 @@ export function useRoomCheck(lines: readonly RunLine[] | null, rooms: readonly R
   const marks = ROOM_CHECK_MARKS.use()[today] ?? NO_MARKS;
   const pms = useMemo(() => pmsLastNight(today), [today]);
   const revenue = useMemo(() => revenueLastNight(rooms?.length || 36, pms), [rooms?.length, pms]);
-  const reconciliation = useMemo(() => (lines ? reconcileNight(lines, pms) : null), [lines, pms]);
+  const reconciliation = useMemo(() => (lines ? reconcileNight(lines, pms, today) : null), [lines, pms, today]);
   const money = useMemo(() => (reconciliation ? roomMoney({ reconciliation, marks, revenue, rooms, pms }) : null), [reconciliation, marks, revenue, rooms, pms]);
   return { reconciliation, money, marks, revenue, pms };
 }

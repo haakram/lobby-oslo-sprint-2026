@@ -200,4 +200,14 @@ describe("withHeld: the rack says what the room check says", () => {
     expect(countRooms(rack).klar).toBe(countRooms(rooms).klar - 1);
     expect(withHeld(rooms, [])).toBe(rooms);
   });
+
+  it("shows a room still to confirm (213, the system holds it) as not ready, so the legend counts the same Klare til salg as the figure", () => {
+    const night = foldNight(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
+    const rooms = selectRooms(night);
+    const rack = withHeld(rooms, ["room-209"], ["room-213"]);
+    expect(rack.find((room) => room.id === "room-213")).toMatchObject({ status: "opptatt", toConfirm: true });
+    expect(countRooms(rack).klar).toBe(countRooms(rooms).klar - 2);
+    // Released: no longer to confirm, a green Klar again.
+    expect(withHeld(rooms, ["room-209"], []).find((room) => room.id === "room-213")?.status).toBe("klar");
+  });
 });

@@ -12,8 +12,10 @@ import { osloToday } from "@/features/reception/dates";
 import { formatClock } from "@/features/reception/format";
 import { Badge, Button, Card, RegenIcon, Skeleton } from "@/ui";
 import { actionStamp, stampNow, useNowMs } from "@/ui/stamp";
+import { BookingEvidence } from "./BookingEvidence";
+import { PMS_IS_TEST_DATA, TEST_BOOKING_LABEL } from "./pms";
 import { moneyHeadline, moneyMethod, releasedLine, shortDate } from "./money";
-import { type GuestFound, type Held, markRoom, type RoomCheckMark, type Sellable } from "./reconcile";
+import { type Crowded, type GuestFound, type Held, markRoom, type RoomCheckMark, type Sellable } from "./reconcile";
 import { SellSteps } from "./SellSteps";
 import { useRoomCheck } from "./useRoomCheck";
 
@@ -27,9 +29,11 @@ function clocks(times: readonly (string | null)[]): string {
 
 /**
  * Rom og renhold's panel for the robot's room checks against the booking system: the rooms the system
- * thought were occupied that can be sold after reception confirms (two steps, never one tap), the rooms
- * the robot held back because it delivered into them tonight (a double allocation caught), and the
- * rooms where the robot met a guest the system doesn't have. Marked per day in this browser.
+ * holds tonight that can be sold after reception confirms (two steps, never one tap), the rooms Fettero
+ * held back because the robot delivered into them tonight (a double allocation caught), the rooms where
+ * the robot met a guest the system doesn't have, and, from the robot's log alone, rooms that got bags
+ * for more than one arrival. Every row that rests on the bookings says they are test data, and where a
+ * pilot gets the evidence without the robot opening a booked room. Marked per day in this browser.
  * TODO(phase-3): *Merk som ledig for salg* writes the room status to the PMS; the task goes to the
  * shared request desk.
  */
@@ -55,6 +59,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
 
   const sellable = result?.sellable.length ?? 0;
   const held = result?.held.length ?? 0;
+  const crowded = result?.crowded.length ?? 0;
   const headline = money ? moneyHeadline(money) : null;
   const allReleased = money ? money.toSell.length === 0 && money.released.length > 0 : false;
 
@@ -79,7 +84,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
             <h3 className="text-base font-semibold">Roboten har ikke sjekket noen rom ennå</h3>
             <p className="text-base text-muted">Når roboten sjekker rom i natt, sammenligner Fettero det den finner med bookingsystemet her.</p>
           </div>
-        ) : sellable === 0 && held === 0 && result.guestFound.length === 0 ? (
+        ) : sellable === 0 && held === 0 && crowded === 0 && result.guestFound.length === 0 ? (
           <p className="mt-3 flex items-start gap-2 text-base">
             <RegenIcon name="circle-check" size={20} className="mt-0.5 shrink-0 text-success" />
             <span>
@@ -141,8 +146,27 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
                   </ul>
                 </div>
               )}
+              {crowded > 0 && (
+                <div className="min-w-0">
+                  <h3 className="flex items-baseline gap-2 text-sm font-semibold">
+                    Flere ankomster i samme rom <span className="font-normal text-muted tabular-nums">{crowded}</span>
+                  </h3>
+                  <ul className="mt-1 divide-y divide-line">
+                    {result.crowded.map((row) => (
+                      <CrowdedRow key={row.room} row={row} guestsLink={guestsLink} />
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
+        )}
+
+        {result && result.dueOut.length > 0 && (
+          <p className="mt-4 text-sm text-muted">
+            Reiser i dag: {result.dueOut.map((row) => `rom ${number(row.room)} (tomt ${hhmm(row.at)})`).join(", ")}. Rommet er allerede ledig for salg i natt i
+            systemet, så det er ingen ekstra romnatt: det kan vaskes først og være klart for tidlig innsjekk.
+          </p>
         )}
 
         {result && result.tooEarly.length > 0 && (
@@ -157,16 +181,29 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
   );
 }
 
-/** What the booking system says about a booked room: who, and until when ("skulle reise i dag 8.11"). */
+/** What the booking system says about a booked room: who, and until when ("skulle reist 7.11. Utsjekk ikke registrert"). */
 export function bookingLine(row: Pick<Sellable, "guest" | "departure">, today: string): string {
   const who = row.guest ? ` (${row.guest})` : "";
   if (!row.departure) return `Systemet: opptatt${who}`;
-  return row.departure <= today
-    ? `Systemet: opptatt${who}, skulle reise i dag ${shortDate(row.departure)}. Utsjekk ikke registrert`
-    : `Systemet: opptatt${who} til ${shortDate(row.departure)}`;
+  if (row.departure < today) return `Systemet: opptatt i natt${who}, skulle reist ${shortDate(row.departure)}. Utsjekk ikke registrert`;
+  if (row.departure === today) return `Systemet: opptatt${who}, reiser i dag ${shortDate(row.departure)}`;
+  return `Systemet: opptatt${who} til ${shortDate(row.departure)}`;
 }
 
-/** "Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til 9.11. Dobbelt tildelt?" */
+/** "Bagasje for 3 ankomster i natt (00:31, 01:58 og 04:43)." */
+export function crowdedLine(row: Crowded): string {
+  const at = clocks(row.at);
+  return `Bagasje for ${row.arrivals} ankomster i natt${at ? ` (${at})` : ""}.`;
+}
+
+/** Rom's held row: "Bagasje for 3 ankomster levert, sist 05:16, men bookingen har gjest til 9.11. Dobbelt tildelt?" */
+export function heldRowLine(row: Held): string {
+  const until = row.departure ? ` til ${shortDate(row.departure)}` : "";
+  if (row.arrival && row.arrivals > 1) return `Bagasje for ${row.arrivals} ankomster levert, sist ${hhmm(row.deliveredAt)}, men bookingen har gjest${until}. Dobbelt tildelt?`;
+  return heldLine(row);
+}
+
+/** "Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til 9.11. Dobbelt tildelt?" (3D-kart's room card reads it too). */
 export function heldLine(row: Held): string {
   const until = row.departure ? ` til ${shortDate(row.departure)}` : "";
   if (row.arrival) return `Bagasje levert ${hhmm(row.deliveredAt)} for dagens ankomst, men bookingen har gjest${until}. Dobbelt tildelt?`;
@@ -207,6 +244,26 @@ function SellableRow({ row, mark, today }: { row: Sellable; mark: RoomCheckMark 
       <p className="text-muted">
         Roboten fant rommet tomt og ryddig <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>.
       </p>
+      <BookingEvidence className="mt-1.5" />
+    </RowFrame>
+  );
+}
+
+/** From the robot's log alone: more arrivals' bags in one room than it holds (jury round 3, the Wybe juror). */
+function CrowdedRow({ row, guestsLink }: { row: Crowded; guestsLink: boolean }) {
+  return (
+    <RowFrame
+      room={row.room}
+      action={
+        guestsLink ? (
+          <Link href="/gjester" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
+            Åpne Gjester
+          </Link>
+        ) : null
+      }
+    >
+      <p className="font-semibold">{crowdedLine(row)}</p>
+      <p className="text-muted">Ett rom tar én ankomst: sjekk med resepsjonen hvem som skal bo der.</p>
     </RowFrame>
   );
 }
@@ -221,7 +278,7 @@ function HeldRow({ row, today, guestsLink }: { row: Held; today: string; guestsL
         <>
           <Badge tone="success">
             <RegenIcon name="shield-check" size={14} className="mr-1 inline-block align-[-0.15em]" />
-            Roboten stoppet salget
+            Fettero holdt rommet tilbake
           </Badge>
           {guestsLink && (
             <Link href="/gjester" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
@@ -231,11 +288,12 @@ function HeldRow({ row, today, guestsLink }: { row: Held; today: string; guestsL
         </>
       }
     >
-      <p className="font-semibold">{heldLine(row)}</p>
+      <p className="font-semibold">{heldRowLine(row)}</p>
       <p className="text-muted">
         {bookingLine(row, today)}. Roboten fant rommet tomt og ryddig <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>
         {earlier.length > 0 ? `, og bar inn bagasje også kl. ${clocks(earlier)}` : ""}. Flytt én av dem før innsjekk kl. 15:00.
       </p>
+      <BookingEvidence className="mt-1.5" />
     </RowFrame>
   );
 }
@@ -289,6 +347,7 @@ function GuestRow({
       <p className="text-muted">
         {seen} <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>.
       </p>
+      {PMS_IS_TEST_DATA && <p className="mt-1.5 text-xs text-muted"><span className="rounded-sm bg-sunken px-1.5 py-0.5 font-mono">{TEST_BOOKING_LABEL}</span></p>}
     </RowFrame>
   );
 }

@@ -100,7 +100,7 @@ function RoomTile({ room, clock, onOpen }: { room: RoomView; clock: string | nul
   const avvik = room.openOrders > 0;
   const stale = room.statusAt && clock ? hoursBetween(room.statusAt, clock) >= STALE_HOURS : false;
   // Closed today (out of order): the tile says so, as the bell and "Ute av drift" do.
-  const word = room.closed ? "Ute av drift" : room.held ? "Holdt tilbake" : look.word;
+  const word = room.closed ? "Ute av drift" : room.held ? "Holdt tilbake" : room.toConfirm ? "Bekreft først" : look.word;
   const label = `Rom ${room.number}: ${word}${avvik ? `, ${room.openOrders} åpne avvik` : ""}${stale ? `, sjekket ${hhmm(room.statusAt)}` : ""}`;
 
   return (

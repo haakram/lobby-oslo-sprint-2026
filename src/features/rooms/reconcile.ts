@@ -3,10 +3,14 @@ import { createLocalStore, recordOf } from "@/features/modules/localStore";
 import type { PmsRoom } from "./pms";
 
 /**
- * The robot's room checks against the booking system (hotels call these room discrepancies). Two kinds
- * matter in the morning:
- * - **Kan selges**: the system says occupied, the robot's room check found the room empty and tidy
- *   (a guest who left without checking out). The room can be sold again today.
+ * The robot's room checks against the booking system (hotels call these room discrepancies). The kinds
+ * that matter in the morning:
+ * - **Kan selges**: the system holds the room tonight (a guest due out before today whose check-out was
+ *   never recorded, or a stay-over), and the robot's room check found it empty and tidy. Released, it
+ *   is a room-night that would otherwise stand unsold.
+ * - **Reiser i dag**: empty and tidy, but the guest is due out today: the room is already in tonight's
+ *   inventory in every booking system (jury round 3, the founder juror/the Wybe engineer/the Wybe juror), so it is no extra sale, only
+ *   an early clean and an early check-in.
  * - **Gjest uten booking**: the system says vacant, the robot met a guest (a knock answered) or a
  *   Do-Not-Disturb sign. Reception checks the registration.
  * - **Holdt tilbake**: the system says occupied and the room check found it empty, but the robot put
@@ -14,8 +18,10 @@ import type { PmsRoom } from "./pms";
  *   in later"), or anything delivered after the check. Never offered for sale (jury round 2, 209: the
  *   robot carried a late arrival's bags in at 01:29, 04:35 and 05:16 while the booking has another
  *   guest there until tomorrow, a double allocation).
+ * - **Flere ankomster**: the robot carried bags for two or more arrivals into one room tonight (jury
+ *   round 3, the Wybe juror: 212 got three, 304 two). Read from the robot's own log, no booking system needed.
  * Read from the run log's `room_status` decisions (docs/ARCHITECTURE.md § 4.3), the last one per room,
- * and its `place` calls. Pure: no clock, no I/O.
+ * and its `place` calls. Pure: no clock, no I/O (today is passed in).
  */
 
 export type RoomCheck = {
@@ -56,21 +62,28 @@ export type Delivery = {
   item: string;
   /** An arriving guest's bags (a luggage item, or a `bags` task: "… the guest checks in later"). */
   arrival: boolean;
+  /** The request the robot was working on (one arrival per bags request), when the log names it. */
+  request: string | null;
 };
 
 /** What the robot put inside each room tonight (`place` calls that worked), oldest first. */
 export function robotDeliveries(lines: readonly RunLine[]): Map<string, Delivery[]> {
   const deliveries = new Map<string, Delivery[]>();
   let task: string | null = null;
+  let request: string | null = null;
   for (const line of lines) {
-    if (line.type === "decision" && line.kind === "task_start") task = text((line.data as Record<string, unknown> | undefined)?.kind);
+    if (line.type === "decision" && line.kind === "task_start") {
+      const data = line.data as Record<string, unknown> | undefined;
+      task = text(data?.kind);
+      request = text(data?.request);
+    }
     if (line.type !== "call" || line.cmd !== "place" || !line.ok) continue;
     const args = line.args as Record<string, unknown> | undefined;
     const room = text(args?.where);
     const item = text(args?.item);
     if (!room?.startsWith("room-") || !item) continue;
     const list = deliveries.get(room) ?? [];
-    list.push({ room, at: line.clock ?? null, item, arrival: /^luggage/i.test(item) || task === "bags" });
+    list.push({ room, at: line.clock ?? null, item, arrival: /^luggage/i.test(item) || task === "bags", request });
     deliveries.set(room, list);
   }
   return deliveries;
@@ -101,7 +114,10 @@ export type Sellable = {
   room: string;
   guest: string | null;
   at: string | null;
-  /** The booking's departure (YYYY-MM-DD): today is a guest due out who never checked out. */
+  /**
+   * The booking's departure (YYYY-MM-DD). Before today: the check-out was never recorded (the system
+   * still holds the room). After today: a stay-over the desk must confirm gone.
+   */
   departure: string | null;
 };
 export type GuestFound = { room: string; at: string | null; source: string | null; who: string | null };
@@ -112,6 +128,16 @@ export type Held = Sellable & {
   deliveries: Delivery[];
   /** An arriving guest's bags among them: the room is promised to today's arrival. */
   arrival: boolean;
+  /** How many arrivals' bags went in (distinct bags requests): 3 at 209 on the demo night. */
+  arrivals: number;
+};
+/** A room the robot carried bags into for two or more arrivals tonight: more guests than it holds. */
+export type Crowded = {
+  room: string;
+  /** Distinct arrivals (bags requests). */
+  arrivals: number;
+  /** When each arrival's bags went in, HH:MM:SS, oldest first. */
+  at: (string | null)[];
 };
 
 export type Reconciliation = {
@@ -127,7 +153,23 @@ export type Reconciliation = {
   tooEarly: Sellable[];
   /** System: occupied. Robot: empty and tidy, but it delivered into the room tonight (bags for an arrival, or after the check). */
   held: Held[];
+  /** System: due out today. Robot (after 01:00): empty and tidy. Already in tonight's inventory: no extra sale. */
+  dueOut: Sellable[];
+  /** Bags for two or more arrivals in one room (from the robot's log alone), rooms not already held. */
+  crowded: Crowded[];
 };
+
+/** One per arrival: the bags requests (or, without one, the luggage items) that went into a room. */
+function arrivalsOf(deliveries: readonly Delivery[]): Delivery[] {
+  const seen = new Set<string>();
+  return deliveries.filter((delivery) => {
+    if (!delivery.arrival) return false;
+    const key = delivery.request ?? delivery.item;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 /** "Ms Bakke opens the door of room-328." → "Ms Bakke". */
 export function personAtDoor(note: string | null): string | null {
@@ -146,39 +188,56 @@ function holding(deliveries: readonly Delivery[] | undefined, checkedAt: string 
   return (deliveries ?? []).filter((delivery) => delivery.arrival || nightMinute(delivery.at) > after);
 }
 
+/**
+ * `today` (YYYY-MM-DD) splits a guest due out today (no extra sale) from a room the system holds
+ * tonight; without it every empty-and-tidy booked room counts as one to sell.
+ */
 export function reconcileRooms(
   checks: ReadonlyMap<string, RoomCheck>,
   pms: ReadonlyMap<string, PmsRoom>,
   deliveries: ReadonlyMap<string, readonly Delivery[]> = new Map(),
+  today?: string,
 ): Reconciliation {
   const sellable: Sellable[] = [];
   const guestFound: GuestFound[] = [];
   const tooEarly: Sellable[] = [];
   const held: Held[] = [];
+  const dueOut: Sellable[] = [];
   for (const check of checks.values()) {
     const booked = pms.get(check.room);
     if (booked && check.status === "klar" && check.source === "room_check") {
       const row: Sellable = { room: check.room, guest: booked.guest, at: check.at, departure: booked.departure };
       const holds = holding(deliveries.get(check.room), check.at);
-      if (holds.length > 0) held.push({ ...row, deliveredAt: holds.at(-1)?.at ?? null, deliveries: holds, arrival: holds.some((delivery) => delivery.arrival) });
-      else (lateEnough(check.at) ? sellable : tooEarly).push(row);
+      if (holds.length > 0) {
+        held.push({ ...row, deliveredAt: holds.at(-1)?.at ?? null, deliveries: holds, arrival: holds.some((delivery) => delivery.arrival), arrivals: arrivalsOf(holds).length });
+      } else if (!lateEnough(check.at)) tooEarly.push(row);
+      else if (today !== undefined && booked.departure === today) dueOut.push(row);
+      else sellable.push(row);
     } else if (!booked && (check.status === "opptatt" || check.status === "ikke_forstyrr")) {
       guestFound.push({ room: check.room, at: check.at, source: check.source, who: personAtDoor(check.note) });
     }
   }
+  const heldRooms = new Set(held.map((row) => row.room));
+  const crowded: Crowded[] = [];
+  for (const [room, list] of deliveries) {
+    const arrivals = arrivalsOf(list);
+    if (arrivals.length >= 2 && !heldRooms.has(room)) crowded.push({ room, arrivals: arrivals.length, at: arrivals.map((delivery) => delivery.at) });
+  }
   return {
     checked: checks.size,
-    agree: checks.size - sellable.length - guestFound.length - tooEarly.length - held.length,
+    agree: checks.size - sellable.length - guestFound.length - tooEarly.length - held.length - dueOut.length,
     sellable: sellable.sort(byRoom),
     guestFound: guestFound.sort(byRoom),
     tooEarly: tooEarly.sort(byRoom),
     held: held.sort(byRoom),
+    dueOut: dueOut.sort(byRoom),
+    crowded: crowded.sort(byRoom),
   };
 }
 
 /** The room check of a whole night: the robot's checks and deliveries against the booking system. */
-export function reconcileNight(lines: readonly RunLine[], pms: ReadonlyMap<string, PmsRoom>): Reconciliation {
-  return reconcileRooms(robotRoomChecks(lines), pms, robotDeliveries(lines));
+export function reconcileNight(lines: readonly RunLine[], pms: ReadonlyMap<string, PmsRoom>, today?: string): Reconciliation {
+  return reconcileRooms(robotRoomChecks(lines), pms, robotDeliveries(lines), today);
 }
 
 // ---------------------------------------------------------------------------------------------

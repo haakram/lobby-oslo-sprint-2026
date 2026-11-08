@@ -53,8 +53,11 @@ export function useHotelData(viewerUrl?: string) {
   const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
   // The same room check as Rom and Overlevering: a release on either moves Oversikt's figure and the money line.
   const { money } = useRoomCheck(lines, rackRooms, osloToday());
-  // The rack and the money line agree: a room held back is taken, not a green Klar.
-  const heldRooms = useMemo(() => (rackRooms && money ? withHeld(rackRooms, money.held.map((row) => row.room)) : rackRooms), [rackRooms, money]);
+  // The rack and the money line agree: a room held back is taken, and one still to confirm is not a green Klar.
+  const heldRooms = useMemo(
+    () => (rackRooms && money ? withHeld(rackRooms, money.held.map((row) => row.room), money.toSell.map((row) => row.room)) : rackRooms),
+    [rackRooms, money],
+  );
   const shift = shiftAt(hour);
 
   const data: DashboardData = useMemo(

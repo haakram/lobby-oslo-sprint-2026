@@ -1,10 +1,12 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
 import { formatKroner } from "@/features/dashboard/format";
-import type { RunLine } from "@/features/nightshift/runlog";
-import { pmsLastNight, revenueLastNight, sellableValue } from "./pms";
+import { parseRunLog, type RunLine } from "@/features/nightshift/runlog";
+import { PILOT_EVIDENCE, pmsLastNight, revenueLastNight, sellableValue, TEST_BOOKING_LABEL } from "./pms";
 import { RoomChecksPanel } from "./RoomChecksPanel";
 import { TEST_NIGHT } from "./testNight";
 
@@ -30,12 +32,20 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
     render(asDesk(<RoomChecksPanel lines={TEST_NIGHT} today={TODAY} />));
     // The money, first, and honest: a person confirms before it is sold, and it is gross revenue.
     expect(screen.getByText(`1 rom kan selges etter bekreftelse · ca. ${ONE_ROOM} kr`)).toBeInTheDocument();
-    expect(screen.getByText(`Frigitt i dag: ingen ennå. Brutto romsinntekt: 1 × snittprisen i natt, ${plain(formatKroner(REVENUE.adr))} kr (testdata). Ekstra inntekt bare en natt hotellet ellers ville vært utsolgt.`)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `Frigitt i dag: ingen ennå. Brutto romsinntekt: 1 × snittprisen i natt, ${plain(formatKroner(REVENUE.adr))} kr (testdata). Systemet holder rommet til resepsjonen registrerer at gjesten har reist, så uten romsjekken står det usolgt i natt. Ekstra inntekt for hotellet bare en natt det ellers ville blitt utsolgt. Til sammenligning solgte hotellene i Oslo 72 % av rommene i 2025, til snittpris 1 631 kr (SSB, tabell 14169).`,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("1 av 4 sjekkede rom stemmer med systemet.")).toBeInTheDocument();
     const sell = rowOf("311");
     expect(within(sell).getByText("Systemet: opptatt (Silje Mørk) til 9.11.")).toBeInTheDocument();
     expect(within(sell).getByText("kl. 03:14")).toBeInTheDocument();
+    // The bookings are the team's test data, and a pilot gets the evidence without the robot opening a booked room.
+    expect(within(sell).getByText(TEST_BOOKING_LABEL)).toBeInTheDocument();
+    expect(within(sell).getByText(PILOT_EVIDENCE)).toBeInTheDocument();
     expect(within(rowOf("210")).getByText(/Ms Bakke åpnet/)).toBeInTheDocument();
+    expect(within(rowOf("210")).getByText(TEST_BOOKING_LABEL)).toBeInTheDocument();
     // A check at 22:40 is not taken as proof the room is empty.
     expect(screen.getByText(/Teller ikke: rom 301 \(sjekket 22:40\)/)).toBeInTheDocument();
   });
@@ -75,9 +85,25 @@ describe("RoomChecksPanel (Rom: the robot's room checks against the booking syst
     expect(screen.getByText("Ingen rom å selge i dag · 1 holdt tilbake")).toBeInTheDocument();
     const held = rowOf("311");
     expect(within(held).getByText("Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til 9.11. Dobbelt tildelt?")).toBeInTheDocument();
-    expect(within(held).getByText("Roboten stoppet salget")).toBeInTheDocument();
+    // What the join did, not the robot (jury round 3, the Wybe engineer): Fettero held the room back.
+    expect(within(held).getByText("Fettero holdt rommet tilbake")).toBeInTheDocument();
+    expect(within(held).queryByText("Roboten stoppet salget")).not.toBeInTheDocument();
     expect(within(held).queryByRole("button")).not.toBeInTheDocument();
     expect(within(held).getByRole("link", { name: "Åpne Gjester" })).toHaveAttribute("href", "/gjester");
+  });
+
+  it("on the demo night: 213 a real sleeper, 209 held with three arrivals' bags, 212 and 304 flagged from the robot's own log", () => {
+    const demo = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
+    render(asDesk(<RoomChecksPanel lines={demo} today={TODAY} />));
+    expect(within(rowOf("213")).getByText("Systemet: opptatt i natt (Ola Nygård), skulle reist 7.11. Utsjekk ikke registrert.")).toBeInTheDocument();
+    expect(within(rowOf("209")).getByText("Bagasje for 3 ankomster levert, sist 05:16, men bookingen har gjest til 9.11. Dobbelt tildelt?")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Flere ankomster i samme rom 2" })).toBeInTheDocument();
+    const crowded = rowOf("212");
+    expect(within(crowded).getByText("Bagasje for 3 ankomster i natt (00:31, 01:58 og 04:43).")).toBeInTheDocument();
+    expect(within(crowded).getByText("Ett rom tar én ankomst: sjekk med resepsjonen hvem som skal bo der.")).toBeInTheDocument();
+    // From the robot's log alone: no test-data label on it.
+    expect(within(crowded).queryByText(TEST_BOOKING_LABEL)).not.toBeInTheDocument();
+    expect(within(rowOf("304")).getByText("Bagasje for 2 ankomster i natt (00:50 og 04:17).")).toBeInTheDocument();
   });
 
   it("makes a task for reception for the guest the system doesn't have, with a way to Forespørsler", () => {

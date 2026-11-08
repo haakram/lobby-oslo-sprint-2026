@@ -9,9 +9,10 @@ import type { Held, Reconciliation, RoomCheckMark, Sellable } from "./reconcile"
  * Pure: the screens pass the reconciliation, today's marks and the booking system in, so a release
  * recomputes every screen that reads it.
  *
- * - **To sell**: rooms the system has as occupied that the robot found empty and tidy after 01:00, not
- *   released yet. Selling takes two steps: reception confirms the guest has left, then the room is
- *   marked free to sell.
+ * - **To sell**: rooms the system holds tonight (a check-out never recorded, or a stay-over) that the
+ *   robot found empty and tidy after 01:00, not released yet. A guest due out today is not one: that
+ *   room is already in tonight's inventory. Selling takes two steps: reception confirms the guest has
+ *   left, then the room is marked free to sell.
  * - **Released**: marked free to sell today.
  * - **Held**: the robot delivered into the room tonight (bags for an arrival), so it is never offered.
  * - **Ready to sell**: the one "Klare til salg" figure: a room the robot found ready (klar, not closed)
@@ -19,8 +20,16 @@ import type { Held, Reconciliation, RoomCheckMark, Sellable } from "./reconcile"
  *   sell until a person released it.
  *
  * The kroner are gross room revenue: rooms × last night's average rate (ADR), to the hundred, so
- * "ca. 1 500 kr". It is money only on a night the hotel would otherwise sell out.
+ * "ca. 1 500 kr": a room-night that would otherwise stand unsold. It is extra money for the hotel only
+ * on a night it would otherwise sell out.
  */
+
+/**
+ * The sourced market line under "Slik regner vi", so the test-data rate sits next to a real one: SSB
+ * statbank table 14169 (Omsetning og kapasitetsutnytting på hotell, 2025, published 4 Feb 2026), as
+ * owner D sourced it in docs/DEMO.md § 1.
+ */
+export const MONEY_SOURCE: string | null = "Til sammenligning solgte hotellene i Oslo 72 % av rommene i 2025, til snittpris 1 631 kr (SSB, tabell 14169).";
 
 export type RoomMoney = {
   toSell: Sellable[];
@@ -90,10 +99,17 @@ export function releasedLine(money: RoomMoney): string {
   return money.released.length > 0 ? `Frigitt i dag: ${money.released.length} rom · ${kr(money.releasedValue)}` : "Frigitt i dag: ingen ennå";
 }
 
-/** "Brutto romsinntekt: 1 × snittprisen i natt, 1 467 kr (testdata)": how the kroner are made. */
+/** "Brutto romsinntekt: 1 × snittprisen i natt, 1 467 kr (testdata). …": how the kroner are made. */
 export function moneyMethod(money: RoomMoney): string {
   const rooms = money.toSell.length > 0 ? money.toSell.length : money.released.length;
-  return `Brutto romsinntekt: ${rooms} × snittprisen i natt, ${formatKroner(money.adr)} kr (testdata). Ekstra inntekt bare en natt hotellet ellers ville vært utsolgt.`;
+  return [
+    `Brutto romsinntekt: ${rooms} × snittprisen i natt, ${formatKroner(money.adr)} kr (testdata).`,
+    "Systemet holder rommet til resepsjonen registrerer at gjesten har reist, så uten romsjekken står det usolgt i natt.",
+    "Ekstra inntekt for hotellet bare en natt det ellers ville blitt utsolgt.",
+    MONEY_SOURCE,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /** "8.11" from "2026-11-08": a date the way a front desk writes it. */

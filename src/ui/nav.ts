@@ -1,5 +1,13 @@
 import { canAccess, type Role } from "@/features/auth/roles";
-import { type HotelModule, MODULE_GROUPS, MODULES, type ModuleGroupId, type ModuleService } from "@/features/modules/registry";
+import {
+  type HotelModule,
+  MODULE_GROUPS,
+  MODULES,
+  type ModuleGroupId,
+  type ModuleService,
+  moduleById,
+  PILOT_MODULES,
+} from "@/features/modules/registry";
 import type { RegenName } from "./icons/regenPaths";
 
 export type NavItem = {
@@ -15,7 +23,25 @@ export type NavItem = {
   needs?: ModuleService;
 };
 
-export type NavGroup = { id: ModuleGroupId; label: string; items: readonly NavItem[] };
+/**
+ * A group in the menu: one of the registry's, or one of the admin's pilot cut (`start`: Oversikt alone, no
+ * label; `pilot`: the four pilot screens; `outside`: every other hotel screen, behind a disclosure).
+ */
+export type NavGroupId = ModuleGroupId | "start" | "pilot" | "outside";
+
+export type NavGroup = {
+  id: NavGroupId;
+  /** Shown above the group; empty for the start page, which stands on its own. */
+  label: string;
+  items: readonly NavItem[];
+  /** Starts folded behind a button with its label and count; opens by itself while one of its screens is on. */
+  collapsible?: boolean;
+};
+
+export const PILOT_LABEL = "Piloten";
+export const OUTSIDE_LABEL = "Utenfor piloten";
+/** The line under *Utenfor piloten* once it is open: what these screens are, without selling them. */
+export const OUTSIDE_HINT = "Bygget, men ikke med i piloten.";
 
 /**
  * What the menu needs beyond the role. `services`: what this server has set up (undefined: unknown, so
@@ -53,22 +79,44 @@ export function onHostScreen(pathname: string): boolean {
 /**
  * The groups a role sees, with the screens it may open; empty groups are dropped. The admin's rail is
  * the hotel's (jury round 1: 18 entries was too many for the demo): the host's group shows only while an
- * admin is on one of its screens, and the user plate links to it otherwise. A screen whose service the
- * server lacks (Stemme without the voice agent) stays out of the menu, for every role.
+ * admin is on one of its screens, and the user plate links to it otherwise; and it is cut to the pilot
+ * (`pilotCut`). A screen whose service the server lacks (Stemme without the voice agent) stays out of the
+ * menu, for every role.
  */
 export function groupsFor(role: Role, context: NavContext = {}): NavGroup[] {
   const { services, pathname } = context;
   const hostGroup = role === "host" || (pathname !== undefined && onHostScreen(pathname));
   const available = (item: NavItem) => !item.needs || services === undefined || services.includes(item.needs);
-  return NAV_GROUPS.filter((group) => group.id !== "utleie" || hostGroup)
+  const groups = NAV_GROUPS.filter((group) => group.id !== "utleie" || hostGroup)
     .map((group) => ({ ...group, items: group.items.filter((item) => canAccess(role, item.href) && available(item)) }))
     .filter((group) => group.items.length > 0);
+  return role === "admin" ? pilotCut(groups) : groups;
+}
+
+/**
+ * The admin's menu, cut to the pilot (jury round 3, the product juror: 13 modules in the sidebar for a four-screen pilot):
+ * Oversikt as the start page, *Piloten* (`PILOT_MODULES`, in that order), the host's group while on one of
+ * its screens, then every other hotel screen under one collapsed *Utenfor piloten*: reachable, not in the way.
+ * Only the menu changes; the admin may still open everything.
+ */
+function pilotCut(groups: readonly NavGroup[]): NavGroup[] {
+  const hotel = groups.filter((group) => group.id !== "utleie").flatMap((group) => group.items);
+  const start = hotel.filter((item) => item.href === "/");
+  const pilot = PILOT_MODULES.flatMap((id) => hotel.filter((item) => item.href === moduleById(id).route));
+  const outside = hotel.filter((item) => !start.includes(item) && !pilot.includes(item));
+  const cut: NavGroup[] = [
+    { id: "start", label: "", items: start },
+    { id: "pilot", label: PILOT_LABEL, items: pilot },
+    ...groups.filter((group) => group.id === "utleie"),
+    { id: "outside", label: OUTSIDE_LABEL, items: outside, collapsible: true },
+  ];
+  return cut.filter((group) => group.items.length > 0);
 }
 
 /**
  * A role's own phone bar, when it differs from the registry's pins. The admin (the demo's morning manager,
  * `siri`) reaches the 06:00 handover in one tap from anywhere (jury round 3, the product juror): Oversikt, Overlevering,
- * Rom, Forespørsler, then Meny. Gjester stays one tap away in Meny.
+ * Rom, Forespørsler, then Meny, where Natteskift leads and the rest sits under *Utenfor piloten*.
  */
 const BAR_FOR: Partial<Record<Role, readonly string[]>> = {
   admin: ["/", "/overlevering", "/rom", "/foresporsler"],

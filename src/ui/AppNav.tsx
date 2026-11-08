@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useId, useState, useSyncExternalStore } from "react";
 import { homeFor, type Role } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import type { ModuleService } from "@/features/modules/registry";
 import { APP_NAME } from "./brand";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
-import { barItemsFor, groupsFor, isActive, type NavGroup, type NavItem, onHostScreen } from "./nav";
+import { barItemsFor, groupsFor, isActive, type NavGroup, type NavItem, OUTSIDE_HINT, onHostScreen } from "./nav";
 import { Sheet } from "./Sheet";
 import { UserPlate } from "./UserPlate";
 
@@ -40,7 +40,8 @@ function readDesktop() {
 /**
  * The navigation, grouped by job (Hotellet · Drift · Roboten · Resepsjon · Utleie, from the module
  * registry) and filtered by what the effective role may open (`groupsFor`: the admin's rail is the hotel's,
- * and a screen whose service is missing, `services`, stays out). Desktop: a rail on the Natt surface with the user plate bottom-left.
+ * cut to the pilot with the rest under a folded *Utenfor piloten*, and a screen whose service is missing,
+ * `services`, stays out). Desktop: a rail on the Natt surface with the user plate bottom-left.
  * Phone: a slim top bar (the name and the bell) and a bottom bar with the first screens and Meny,
  * which opens the whole list as a sheet. `bell` (the hotel's notifications, from the layout) sits at the top
  * of the rail on desktop and in the top bar on a phone: on every hotel page, for every hotel role (the
@@ -85,9 +86,8 @@ function Rail({ groups, pathname, bell, home, place }: { groups: NavGroup[]; pat
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-3 pb-4">
-        {groups.map((group) => (
-          <div key={group.label}>
-            <p className="px-3 pb-1 text-xs font-medium text-muted">{group.label}</p>
+        {groups.map((group) => {
+          const list = (
             <ul className="flex flex-col gap-0.5">
               {group.items.map((item) => (
                 <li key={item.href}>
@@ -95,14 +95,61 @@ function Rail({ groups, pathname, bell, home, place }: { groups: NavGroup[]; pat
                 </li>
               ))}
             </ul>
-          </div>
-        ))}
+          );
+          return group.collapsible ? (
+            <Folded key={group.id} group={group} pathname={pathname} size="rail">
+              {list}
+            </Folded>
+          ) : (
+            <div key={group.id}>
+              {group.label && <p className="px-3 pb-1 text-xs font-medium text-muted">{group.label}</p>}
+              {list}
+            </div>
+          );
+        })}
       </div>
 
       <div className="border-t border-line p-2">
         <UserPlate />
       </div>
     </nav>
+  );
+}
+
+/**
+ * A group behind a disclosure (the admin's *Utenfor piloten*): its label and how many screens it holds, one
+ * tap to open. Folded until opened, except while one of its screens is on (the current screen is never
+ * hidden); after a tap it stays as the person left it.
+ */
+function Folded({ group, pathname, size, children }: { group: NavGroup; pathname: string; size: "rail" | "sheet"; children: ReactNode }) {
+  const id = useId();
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const holdsCurrent = group.items.some((item) => isActive(item.href, pathname));
+  const open = choice ?? holdsCurrent;
+  const count = group.items.length;
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        aria-label={`${group.label}, ${count} ${count === 1 ? "skjerm" : "skjermer"}`}
+        onClick={() => setChoice(!open)}
+        className={cx(
+          "flex w-full items-center gap-2 rounded-sm text-xs font-medium text-muted hover:bg-sunken hover:text-text",
+          "transition-colors duration-[120ms] ease-standard",
+          size === "rail" ? "min-h-10 px-3 pointer-coarse:min-h-11 focus-visible:outline-offset-[-2px]" : "min-h-12 px-0 focus-visible:outline-offset-2",
+        )}
+      >
+        <span className="flex-1 text-left">{group.label}</span>
+        <span className="font-mono tabular-nums">{count}</span>
+        <RegenIcon name={open ? "chevron-up" : "chevron-down"} size={16} className="shrink-0" />
+      </button>
+      <div id={id} hidden={!open}>
+        <p className={cx("pb-2 text-xs text-muted", size === "rail" && "px-3")}>{OUTSIDE_HINT}</p>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -204,9 +251,8 @@ function Bar({
 
       <Sheet open={menu} onClose={() => setMenu(false)} title="Meny" surface="dark">
         <div className="flex flex-col gap-5">
-          {groups.map((group) => (
-            <div key={group.label}>
-              <p className="pb-1 text-xs font-medium text-muted">{group.label}</p>
+          {groups.map((group) => {
+            const list = (
               <ul className="flex flex-col">
                 {group.items.map((item) => {
                   const active = isActive(item.href, pathname);
@@ -231,8 +277,18 @@ function Bar({
                   );
                 })}
               </ul>
-            </div>
-          ))}
+            );
+            return group.collapsible ? (
+              <Folded key={group.id} group={group} pathname={pathname} size="sheet">
+                {list}
+              </Folded>
+            ) : (
+              <div key={group.id}>
+                {group.label && <p className="pb-1 text-xs font-medium text-muted">{group.label}</p>}
+                {list}
+              </div>
+            );
+          })}
         </div>
         <div className="mt-5 border-t border-line pt-3">
           <UserPlate onSwitched={() => setMenu(false)} />

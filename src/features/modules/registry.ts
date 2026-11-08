@@ -104,6 +104,15 @@ export const MODULES: readonly HotelModule[] = [
   { id: "vert-drift", name: "Forsyninger og vedlikehold", short: "Drift", hint: "Håndklær, papir og kaffe per bolig, og det som skal fikses", icon: "archive", route: "/vert/drift", group: "utleie", roles: ["host"], pinned: true, data: "test" },
 ];
 
+/**
+ * The pilot (jury round 3, the product juror: "ship the cut you claim"): the four screens the first pilot hotel's
+ * morning manager works in, in this order. The admin's menu (the siri, jury and admin accounts) shows these
+ * under *Piloten*, with Oversikt as the start page above them; every other hotel module stays reachable
+ * under one collapsed *Utenfor piloten* group (`groupsFor` in `src/ui/nav.ts`). The other roles keep their
+ * own menus, and nothing here changes who may open what.
+ */
+export const PILOT_MODULES: readonly ModuleId[] = ["overlevering", "rom", "foresporsler", "natteskift"];
+
 export function moduleById(id: ModuleId): HotelModule {
   const found = MODULES.find((module) => module.id === id);
   if (!found) throw new Error(`Unknown module ${id}`);

@@ -4,11 +4,18 @@
 over a hotel at 06:00 the night on one page: what needs a person now and who owns it, which rooms can be
 sold today and for how much, and what the night robot did and refused to do. Nothing on it says "done"
 unless it was confirmed. For independent and chain hotels of 60–200 rooms, software first: hotel
-number one needs no robot, because Fettero reads the booking system and the door-lock log. The robot in
-the demo is our AI agent, which played Wybe's live hotel simulation on its own. On the night in the app
-it said "done" 73 times: 64 after it had seen the simulator's score rise, and 9 on its own judgement (5
-room checks, 4 spills), all 9 credited. Over the final branch's 18 live nights, 185 of its 189
-own-judgement claims were credited (97.9 %).
+number one needs no robot, because Fettero reads the booking system (read-only), one signal per room
+from the door lock (never who) and the night clerk's own entries. The robot in the demo is our AI
+agent, which played Wybe's live hotel simulation on its own. On the night in the app it said "done" 73
+times: 64 after it had seen the simulator's score rise, and 9 on its own judgement (5 room checks, 4
+spills). The simulator credited all 9, but the robot's own log contradicts one (it reported 209 empty at
+03:47 after carrying bags in at 01:29), so the card says **8 of 9 hold against its own log**. On the
+final branch, 64 of its 65 distinct own-judgement claims were credited (95 % interval 92–99.7 %).
+
+**For** 60–200-room hotels, the manager who takes over at 06:00 · **Price** NOK 30 per room per month ·
+**First channel** direct, from the Sunday phone round (`docs/DEMO.md` § 8.1, not run yet) · **Ask** a
+free four-week pilot, software only, read-only on the booking system, with a one-page data processing
+agreement ([`docs/DPA.md`](./docs/DPA.md)).
 
 Built in 48 hours at **Oslo Sprint 2026** by **Team Fettero** (Hamad, ShirazIQ), for the main prize,
 Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is the demo hotel.
@@ -59,9 +66,11 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
 - **Where:** the final agent is on the `hamad/final` branch ([`agent/`](./agent/) in Python, tests in
   [`tests/agent/`](./tests/agent/); `agent/` on this branch is older until `hamad/final` is merged to
   `main`). It plays Wybe's simulated hotel robot through Wybe's API and is scored only by Wybe's server.
-  It plans on exact simulation time, reports "done" for a delivery only after the server's score rises
-  (room checks and spills are credited on the report itself, and it may try a "done" once to learn an
-  unproven rule), and refuses unsafe moves in code. The work is done by rule-based flows per request type, found by probing an
+  It plans on exact simulation time, reports "done" for a delivery only after the server's score rises,
+  and refuses unsafe moves in code. Room checks and spill reports rest on what it saw (it looked inside;
+  its sign stands over the patch), because the server credits those on the report itself; that a spill
+  report is credited is a rule it learned from Saturday's nights (`spill_done` on `hamad/final`), and if
+  a shift's first spill report goes uncredited it sends no more that shift. The work is done by rule-based flows per request type, found by probing an
   undocumented API; Claude is only a guarded fallback (about USD 0.001 spent all weekend).
 - **Every live night of the last four builds, pinned to the commit** (Wybe practice shifts, Sun 8 Nov;
   Wybe's final ranks the mean of ten unseen nights with the worst dropped):
@@ -73,26 +82,45 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   | `8eac151` | 01:50–01:58 | **10: 2,760** · 16: 2,679 · 23: 2,240 · 5: 2,559 | 2,560 |
   | `c3801e0`: the head of `hamad/final` at 03:30 (`8eac151`'s agent plus the end-of-night battery guard and a spill look) | 03:26 | **10: 2,760** · 16: 2,748 · 23: 2,298 · 5: 2,559 | 2,591 (not played on 9 or 11) |
 
-- **What we expect in the final: a median of 2,035, 80 % between 1,898 and 2,186, not 2,760**
-  ([`docs/runs/forecast.txt`](./docs/runs/forecast.txt), from `python3 scripts/forecast.py`, committed
-  04:08 Sun, before the final). The model is log score = build + seed, fitted on every complete live
-  build night (63 build×seed cells), then 20,000 simulated finals of the best 9 of 10 unseen seeds. Why
-  lower than the 2,591 on tuned seeds: **mostly seed difficulty**. The four seeds the branch head
-  played are easy ones, which alone is −19 %; the tuning penalty we can measure is about −6 %, from two
-  nights (`d4e445c` on seeds 9 and 11), so it is rough. The replay bed screened changes on all 20 seeds,
-  so the final is the only true holdout.
-- **"Done" is checked, and we say what it rests on:** over those 18 nights the agent said "done" 1,267
+  **The build that plays at 12:00 is the head of `hamad/final`: `8de9ffc` at 05:30** (`c3801e0` plus a
+  corridor closed for cleaning avoided for 90 minutes instead of 30; `013f90d` has the same agent). On
+  the tuned seeds (04:50) it scored 10: 2,759 · 16: 2,748 · 23: 2,298 · 5: 2,559 (mean 2,591). **The
+  dress rehearsal, on ten seeds no build had ever played** (22, 34, 53, 55, 67, 70, 78, 83, 86, 93,
+  started 05:02): 4 of 10 complete at 05:30, **22: 2,085 · 34: 2,166 · 53: 2,481 · 55: 2,138, mean
+  2,218**, with 231 of 231 "done" credited ([`docs/runs/builds.csv`](./docs/runs/builds.csv)). If the
+  head moves before 12:00, the forecast below is regenerated for it.
+
+- **What we expect in the final: a median of 2,050, 80 % between 1,759 and 2,393, not 2,760**, for
+  `8de9ffc` ([`docs/runs/forecast.txt`](./docs/runs/forecast.txt), from `python3 scripts/forecast.py`,
+  regenerated 05:30 Sun, before the final). The model is log score = build + seed, fitted on every
+  complete live build night (67 build×seed cells), then 20,000 simulated finals of the best 9 of 10
+  unseen seeds. Why lower than the 2,591 on tuned seeds: **mostly seed difficulty**. The four seeds the
+  build played are easy ones, which alone is −19 %; the tuning penalty we can measure is about −5 %,
+  from two nights (`d4e445c` on seeds 9 and 11), so it is rough, and the band now carries its
+  uncertainty (drawn per simulated final) and the leave-one-cell-out error (the data juror; round 4's
+  narrower method gave 1,903–2,196). **Out of sample:** the forecast committed at 04:08, before the
+  dress rehearsal, expected a mean night of 1,989 on unseen seeds; the four rehearsal nights complete at
+  05:30 average 2,218, **11 % above it** (5 % above the forecast without the tuning penalty). Practice
+  seeds go to 999, so a holdout was always there; the larger risk no band covers is that the final may
+  use another map and other tasks (the note at the top of `docs/research/wybe-api.md`).
+- **"Done" is checked, and we say what it rests on:** over the 18 nights of the four builds in the
+  table the agent said "done" 1,267
   times and the referee (Wybe's server) credited 1,263, 99.7 %. But **1,078** of them were sent after
   the agent had already seen the score rise, so they are credited by construction. **On its own
   judgement it made 189 claims and 185 were credited (97.9 %): room checks 117 of 117, spill reports 68
-  of 72**; the 4 misses are one probe on seed 23 repeated in every build. That is the figure that
-  carries over to a hotel, which has no score. **And with the score hidden:** four live practice nights
-  on a side branch (`hamad/blind`, Sun 04:26, seeds 10, 16, 23 and 5) where the agent never used the
-  score or the referee's wording to decide "done", only what it saw (the place reply, the guest's
-  answer, the sign over the spill): **290 of 291 credited, a false-done rate of 0.3 %**; the one miss is
-  the same spill on seed 23, and the scores matched the sighted build on three seeds (+6 on the fourth). Over every live night with a log, every version, the
-  app's judgement card recomputes the plain credited share from the ledger, so it moves as nights are
-  logged. It declined 112 requests as false or impossible; the referee credited 93 of those declines
+  of 72**; the 4 misses are one probe on seed 23 repeated in every build. Those 189 are the same
+  claims replayed: counted once per (seed, request), **64 of 65 distinct claims were credited (95 %
+  interval 92–99.7 %)**. That is the figure that carries over to a hotel, which has no score.
+  **With the score hidden:** four live practice nights on a side branch (`hamad/blind`, Sun 04:26,
+  seeds 10, 16, 23 and 5) where the agent never used the score or the referee's wording to decide
+  "done", only what it saw (the place reply, the guest's answer, the sign over the spill). It made the
+  same 291 "done" reports as the sighted build `c3801e0` (the same score on three seeds, +6 on the
+  fourth), and the referee
+  credited 290. Its own check never said "not done" on those nights (0 of 265 checks), so this shows
+  the score wasn't needed there, **not how well the robot catches a failure**; a test with injected
+  failures measures that (PENDING: the result goes behind *Slik vet vi det* when it is in). Over every
+  live night with a log, every version, the app's judgement card recomputes the plain credited share
+  from the ledger, so it moves as nights are logged. It declined 112 requests as false or impossible; the referee credited 93 of those declines
   and gave 19 nothing.
 - **Board:** best practice score **2,807**, **#8 of 20** on Wybe's practice board at 04:10 Sun (top 3,448;
   we played 242 practice shifts, the leader 1,556). That night came from a board test (the `lottery`
@@ -100,9 +128,19 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   2,760 (`8eac151` and `c3801e0`), would sit at #11.
 - **The night in the app** (`public/runs/demo.jsonl`, seed 16, 2,680, `cb72845`): 85 requests, 73
   "done", **all 73 credited**, 64 of them after the score rose and **9 on its own judgement (5 room
-  checks, 4 spills), 9 of 9**; 8 declined, of which the referee credited 7 (6 orders that never existed,
-  1 already delivered) and not 1 (a spill report on floor 3); 4 still open at 06:00; one penalty (−15,
-  it slipped on a wet floor at 23:51).
+  checks, 4 spills), all 9 credited (95 % interval 70–100 %)**. But one of the 9 is contradicted by
+  the robot's own log: at 01:29 it placed luggage-209 inside room 209, and at 03:47 it reported the room
+  "empty and tidy" (R-049), which the referee credited. So the card says **8 of 9 hold against its own
+  log**: the simulator's look is a text oracle, and a real room check has false negatives. 8 declined,
+  of which the referee credited 7 (6 orders that never existed, 1 already delivered) and not 1 (a spill
+  report on floor 3); 4 still open at 06:00; one penalty (−15, it slipped on a wet floor at 23:51).
+  At 06:00 it is not docked and still holds the master keycard (battery about 20 %): the handover lists
+  that as an item with an owner.
+- **What hotel rules cost** (the Wybe juror, the Wybe engineer): a knock before every keycard entry, no sign moved off a
+  wet floor, known wet corridors avoided. The build that plays still does all three for Wybe's game
+  (`sign_move` is on, the bags flow enters with the master key, a known wet corridor is priced at its
+  sim cost); a pilot runs with them off. **The cost in Wybe's sim: PENDING** (being measured on a side
+  branch; filled in only with the measured number).
 - **How we test a change before a live shift:** a replay bed (`agent/replaybed.py` on `hamad/final`)
   rebuilds every full live night offline from its log (72 when we ran it at 02:55 Sun). Replayed with the code
   that played them, 50 nights land within 61 points of live on average (**3.2 %**, 48 of 50 within

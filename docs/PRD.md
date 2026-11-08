@@ -9,10 +9,12 @@
 
 ## 1. One-line description
 
-**Fettero** helps **the hotel's 06:00 handover manager** **take over the night in a minute, sell the
-rooms that are free and hand on what is still open** by **turning the night robot's run log, the AI
-receptionist's calls and the staff's notes into one signed handover page, where nothing says "done"
-unless it was confirmed.** The one line: *Natten, ærlig overlevert.*
+**Fettero** helps **the hotel's 06:00 handover manager** **take over the night in a minute, get the
+rooms that are free to reception hours earlier and hand on what is still open** by **turning the night
+clerk's entries, one signal per room from the door lock, the booking system (read-only), the AI
+receptionist's calls and, where there is one, the night robot's run log into one signed handover page,
+where nothing says "confirmed" without a signal from outside the robot.** The one line: *Natten, ærlig
+overlevert.*
 
 ## 2. Who it's for
 
@@ -23,8 +25,10 @@ optional. Often new in the job, sometimes working in a second language. Needs to
 still waiting, what broke or went wrong overnight, and who does what next.
 
 **Buyer (signs the contract): the hotel's general or operations manager** of an independent or chain
-hotel in that band. The buyer reads money: rooms released for sale, kroner recovered. The user reads
-"nothing is lost at 06:00". Price, channel and the first 100 users: `docs/DEMO.md` § 7.
+hotel in that band. The buyer reads money and care: rooms ready before the housekeeping round (worth a
+room-night only when the night sells out), and a record that every hazard had an owner. The user reads
+"nothing is lost at 06:00". Price, channel and the first 100 users: `docs/DEMO.md` § 7. The data
+processing agreement a pilot hotel signs: `docs/DPA.md`.
 
 Secondary users the app serves (shown only in Q&A, not in the 2-minute demo):
 
@@ -38,9 +42,11 @@ Secondary users the app serves (shown only in Q&A, not in the 2-minute demo):
 
 **The pain, as we read it (not yet confirmed by a hotel: see § 8 and `docs/DEMO.md` § 8):** at 06:00
 the night's events are spread over the robot, the phone, staff notes and the PMS. Rooms that are empty
-but still marked occupied tonight ("sleepers": a guest due out yesterday whose check-out was never
-recorded) can't be sold until someone finds them; a room due out today is not one, since the PMS
-already sells it. A guest whose request failed is still waiting; safety events and faults surface late.
+but still marked occupied ("sleepers": a guest due out yesterday whose check-out was never recorded)
+wait until housekeeping's round finds them, usually by late morning; a room due out today is not one,
+since the PMS already sells it. So what Fettero buys is hours, which are money on a night that sells
+out and for an early check-in. A guest whose request failed is still waiting; safety events and faults
+surface late.
 
 **Evidence we can cite** (links in `docs/DEMO.md` § 1):
 
@@ -73,11 +79,16 @@ its own judgement. Numbers per build, pinned to commits on `hamad/final`, not a 
 head at 03:30 (`c3801e0`) averaged 2,591 on its four tuned seeds (best 2,760, seed 10; `8eac151` before
 it, 2,560). Our forecast for the final's unseen seeds, from a build-plus-seed model fitted on every complete live build night (`scripts/forecast.py`, `docs/runs/forecast.txt`), is **a median of 2,035, 80 % between 1,898 and 2,186**: lower than the tuned nights mostly because those seeds are easier (about −19 %), plus a measured tuning penalty of about −6 % (from two nights). Over the 18 live nights of the last four builds the referee credited 1,263 of
 1,267 "done" reports (99.7 %); taking out the ones sent after the score rose, **185 of 189 claims on its
-own judgement were credited (97.9 %), room checks 117 of 117**; and with the score hidden from its
-decisions (four live nights on a side branch, Sun 04:26), 290 of 291 were credited, a false-done rate of
-0.3 %. Best practice score anywhere: 2,807, **#8 of 20** on Wybe's board at 04:10 Sun, from a board test (a seed-specific test branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build; the final branch's best is 2,760. On the night in the app (seed
-16, 2,680, `cb72845`) it reported "done" 73 times: 64 after the score rose, 9 on its own judgement, 9 of
-9 credited. Full table and the replay bed's limits: `docs/DEMO.md` § 1.1.
+own judgement were credited (97.9 %), room checks 117 of 117**; those 189 are 65 distinct claims
+(seed, request) replayed across near-identical builds, so the honest count is **64 of 65 (95 %
+interval 92–99.7 %)**. With the score hidden from its decisions (four live nights on a side branch,
+Sun 04:26), it made the same 291 decisions and the referee credited 290; its own check never said "not
+done" on those nights (0 of 265), so that shows the score wasn't needed there, not how well the robot
+catches a failure. Best practice score anywhere: 2,807, **#8 of 20** on Wybe's board at 04:10 Sun, from a board test (a seed-specific test branch, `kind=board-test` in the ledger, kept out of every build figure), not the final build; the final branch's best is 2,760. On the night in the app (seed
+16, 2,680, `cb72845`) it reported "done" 73 times: 64 after the score rose and 9 on its own judgement,
+all 9 credited by the referee (95 % interval 70–100 %); but one of them, 209 reported empty and tidy at
+03:47 after the robot itself carried bags in at 01:29, is contradicted by its own log, so the card says
+**8 of 9 hold against its own log**. Full table and the replay bed's limits: `docs/DEMO.md` § 1.1.
 
 ## 4. The demo story
 
@@ -181,10 +192,17 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
 
 ## 6. Out of scope — cut, with the reason
 
+- **Writing to the PMS. Decided Sun 8 Nov (round 5): the pilot is read-only.** Fettero never changes
+  a booking and never sells a room: the step after the desk confirms is *Send til resepsjonen*, and
+  reception makes the change in its own system; the row then waits for the PMS (*Venter på PMS-en*)
+  and would turn green only when the booking system shows the room free (the connector that reads the
+  check-out back is `TODO(phase-3)`, so in the demo the row stays waiting). The PMS stays the truth.
 - **PMS, inventory, staff-planning and maintenance integrations.** Test data stands in, marked
   `TODO(phase-3)` in code and with a `SourceNote` on screen. The PMS test data was written after we saw
   the robot's log, to show what the join does; in a pilot it reads the hotel's PMS. Integration is pilot
-  work, not demo work.
+  work, not demo work. No lock system is connected either: the door-lock and energy-slot signal in the
+  demo is a team-written sample, and many hotels run offline locks with no signal at night, where the
+  night clerk's room check is the evidence (`docs/PRIVACY.md` § 10).
 - **A database or shared backend.** Statuses, sign-offs and receptionist records live in the browser
   (`localStorage`); one desk doesn't see another's ticks, and *Kvitter mottatt* is not an audit record
   yet. A pilot writes these as append-only events beside the robot's.
@@ -193,13 +211,20 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
   - For deliveries, *done* is gated by Wybe's score rising; a hotel has no score. So the card splits
     them: on the demo night 64 "done" came after the score rose and 9 on the robot's own judgement (9
     of 9 credited); over the final branch's 18 nights, 185 of 189 own-judgement claims. A pilot needs a
-    second, independent signal instead (lock audit log, the guest's acknowledgement, a photo of the
-    item, a cart slot going empty, the clerk's confirmation); one signal alone shows as *ikke
-    bekreftet*, for a person. **With the score hidden** (side branch `hamad/blind`, four live nights at
-    04:26 Sun on seeds 10, 16, 23 and 5), the agent decided "done" only from what it saw (the place
-    reply, the guest's answer, the sign over the spill): 290 of 291 credited, a false-done rate of
-    0.3 %, the one miss the same spill on seed 23 the sighted build misses; scores the same on three
-    seeds and +6 on the fourth (`docs/DEMO.md` § 6.1, the Wybe juror).
+    second signal instead, and **at least one from outside the robot** (the lock's guest-card entry,
+    the guest's acknowledgement or PIN, the clerk's check, the PMS); two signals from the robot alone
+    (its own lock credential and its own photo) read *robotens egen observasjon*, one signal *ikke
+    bekreftet* (`src/features/nightshift/conduct.ts`). **With the score hidden** (side branch
+    `hamad/blind`, four live nights at 04:26 Sun on seeds 10, 16, 23 and 5), the agent decided "done"
+    only from what it saw (the place reply, the guest's answer, the sign over the spill): the same 291
+    decisions as the sighted build, 290 credited; its own check never said "not done" (0 of 265), so
+    the run shows the score wasn't needed on those nights, not how well the robot catches a failure
+    (`docs/DEMO.md` § 6.1, the data juror and the Wybe juror).
+  - **The simulator's room check is a text oracle, and 209 shows its limit:** at 01:29 the robot placed
+    luggage-209 inside room 209; at 03:47 its look said "Nobody is here. The room is tidy." and the
+    referee credited the report. A real occupancy check has false negatives (a guest under the duvet,
+    someone in the bathroom), so in a hotel the order is the lock trail, the energy slot and the PMS,
+    with the camera last, and a person confirms before anything is sold.
   - In the simulation the robot fetches a master keycard and checks rooms the PMS shows as occupied. In
     a pilot it does not open occupied rooms: occupancy comes from the door-lock audit trail and the
     keycard energy slot, the robot only knocks or checks rooms the PMS already shows as vacant, and keys
@@ -254,7 +279,7 @@ robot, on Overlevering 06:00, scrolled from top to bottom):
   robot per month (`docs/DEMO.md` § 7).
 - Have we any hotel person to quote? None so far. The phone round and hallway test (`docs/DEMO.md`
   § 8) are planned for Sunday morning, run by ShirazIQ while Hamad is at the Wybe final (team to
-  confirm at 09:00).
+  confirm). The night desks are reachable before 06:45, the buyers 08:00–09:30 (§ 8.1).
 - Does `main` trade as Fettero too? (Team lead.) The public URL, lobby-sandy.vercel.app, serves `main`
   under the old name and an older CSP; `hamad/jury-loop` isn't deployed (team lead's rule).
 - The name isn't cleared. A quick web check on Sun 8 Nov found FETTERO registered in the US for

@@ -25,6 +25,18 @@ export const SOURCE_WORD: Record<RequestSource, string> = {
   stemme: "Stemme",
 };
 
+/** The source filter's chips, in order. */
+export const SOURCES: readonly RequestSource[] = ["telefon", "stemme", "personale", "robot"];
+
+/**
+ * `?filter=robot` opens Forespørsler on one source (Overlevering's hand-back item links there, jury round
+ * 3). Here, not in the screen: the page (a server component) reads it.
+ */
+export function sourceFromQuery(value: string | string[] | undefined): RequestSource | null {
+  const filter = Array.isArray(value) ? value[0] : value;
+  return SOURCES.find((source) => source === filter) ?? null;
+}
+
 /**
  * `avvist`: the robot checked and refused on good grounds (no order on record, already delivered).
  * `avlyst`: the night manager called it off. Neither is a failure, and neither needs a person.

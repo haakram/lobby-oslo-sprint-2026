@@ -31,19 +31,13 @@ import {
   requestTotals,
   selectRequests,
   SOURCE_WORD,
+  SOURCES,
 } from "./select";
 import { type RequestAct, REQUEST_STAMPS, type RequestStamp, stampRequest } from "./stamps";
 import { useRequestInputs } from "./useRequestInputs";
 import { focusAction, UndoStatus } from "./UndoStatus";
 
 const DONE_SHOWN = 8;
-const SOURCES: readonly RequestSource[] = ["telefon", "stemme", "personale", "robot"];
-
-/** `?filter=robot` opens the list on one source (Overlevering's hand-back item links there, jury round 3). */
-export function sourceFromQuery(value: string | string[] | undefined): RequestSource | null {
-  const filter = Array.isArray(value) ? value[0] : value;
-  return SOURCES.find((source) => source === filter) ?? null;
-}
 
 const LANE_TITLE: Record<RequestLane, string> = {
   handback: "Roboten ga videre",

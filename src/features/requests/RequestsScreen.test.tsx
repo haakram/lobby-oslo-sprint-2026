@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
-import { RequestsScreen, sourceFromQuery } from "./RequestsScreen";
+import { RequestsScreen } from "./RequestsScreen";
+import { sourceFromQuery } from "./select";
 
 // A short night: the robot fails one request (towels, Rom 108) and leaves one open when the shift ends
 // (room service, Rom 104). Its look from corridor 1a shows room 134 (the radiator call's room).

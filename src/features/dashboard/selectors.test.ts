@@ -10,6 +10,7 @@ import {
   HOTEL_ROOMS,
   nextOrderStatus,
   selectCleaning,
+  withHeld,
   selectKpis,
   selectRobot,
   selectRoomNight,
@@ -185,5 +186,18 @@ describe("humanizeText", () => {
     expect(humanizeText("Vått gulv ved corridor-3a")).toBe("Vått gulv ved korridor 3A");
     expect(humanizeText("ikke forstyrr-skilt på room-208")).toBe("ikke forstyrr-skilt på rom 208");
     expect(humanizeText("Gjesteklage fra rom 319")).toBe("Gjesteklage fra rom 319");
+  });
+});
+
+describe("withHeld: the rack says what the room check says", () => {
+  it("shows a room held back (an arriving guest's bags inside) as taken, never Klar, and leaves the rest", () => {
+    const night = foldNight(parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines);
+    const rooms = selectRooms(night);
+    expect(rooms.find((room) => room.id === "room-209")?.status).toBe("klar");
+    const rack = withHeld(rooms, ["room-209"]);
+    expect(rack.find((room) => room.id === "room-209")).toMatchObject({ status: "opptatt", held: true });
+    expect(rack.find((room) => room.id === "room-213")?.status).toBe("klar");
+    expect(countRooms(rack).klar).toBe(countRooms(rooms).klar - 1);
+    expect(withHeld(rooms, [])).toBe(rooms);
   });
 });

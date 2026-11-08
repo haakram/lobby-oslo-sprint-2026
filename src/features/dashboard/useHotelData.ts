@@ -5,6 +5,7 @@ import type { Role } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { reviewScore, selectGuestDay } from "@/features/guests/testData";
 import { nightSafety } from "@/features/handover/safety";
+import { declineSplit } from "@/features/nightshift/declines";
 import { lowStock, STOCK } from "@/features/inventory/testData";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
 import { useOsloHour } from "@/features/modules/useNow";
@@ -14,7 +15,7 @@ import { useRequestInputs } from "@/features/requests/useRequestInputs";
 import { useRoomCheck } from "@/features/rooms/useRoomCheck";
 import { byRole, onShift, shiftAt } from "@/features/staff/testData";
 import type { DashboardData } from "./data";
-import { withClosed } from "./selectors";
+import { withClosed, withHeld } from "./selectors";
 import { useNight } from "./useNight";
 import { useOrderStatuses } from "./useOrderStatuses";
 import { useReceptionCalls } from "./useReceptionCalls";
@@ -49,8 +50,11 @@ export function useHotelData(viewerUrl?: string) {
   const guests = useMemo(() => selectGuestDay(), []);
   const lines = run.status === "ready" ? run.lines : null;
   const safety = useMemo(() => (lines ? nightSafety(lines) : null), [lines]);
+  const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
   // The same room check as Rom and Overlevering: a release on either moves Oversikt's figure and the money line.
   const { money } = useRoomCheck(lines, rackRooms, osloToday());
+  // The rack and the money line agree: a room held back is taken, not a green Klar.
+  const heldRooms = useMemo(() => (rackRooms && money ? withHeld(rackRooms, money.held.map((row) => row.room)) : rackRooms), [rackRooms, money]);
   const shift = shiftAt(hour);
 
   const data: DashboardData = useMemo(
@@ -61,9 +65,10 @@ export function useHotelData(viewerUrl?: string) {
       loading: run.status === "loading",
       nightStatus: run.status,
       night,
-      rooms: rackRooms,
+      rooms: heldRooms,
       safety,
       money,
+      declines,
       robot,
       requests,
       maintenance,
@@ -77,7 +82,7 @@ export function useHotelData(viewerUrl?: string) {
       shift,
       onShift: onShift(shift),
     }),
-    [role, user, hour, run.status, night, rackRooms, safety, money, robot, requests, maintenance, outOfOrder, guests, calls, retryCalls, shift],
+    [role, user, hour, run.status, night, heldRooms, safety, money, declines, robot, requests, maintenance, outOfOrder, guests, calls, retryCalls, shift],
   );
 
   return { data, run, night, robot };

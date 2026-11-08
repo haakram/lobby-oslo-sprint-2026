@@ -8,7 +8,7 @@ import { placeLabel } from "@/features/dashboard/labels";
 import { RoomBoard } from "@/features/dashboard/RoomBoard";
 import { RoomSheet } from "@/features/dashboard/RoomSheet";
 import { RunBadge } from "@/features/dashboard/TopBar";
-import { cleaningHref, countRooms, DAY_ROUND, selectRoomNight, withClosed } from "@/features/dashboard/selectors";
+import { cleaningHref, countRooms, DAY_ROUND, selectRoomNight, withClosed, withHeld } from "@/features/dashboard/selectors";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
@@ -41,6 +41,8 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
   const assignments = useMemo(() => (rooms ? assignRooms(rooms, cleanersToday()) : null), [rooms]);
   // "Klare til salg" is the one figure Oversikt shows too: ready, free in the booking system or released today.
   const { money } = useRoomCheck(ready ? run.lines : null, rackRooms);
+  // The rack says what the room check says: a room held back is taken, not a green Klar.
+  const boardRooms = useMemo(() => (rackRooms && money ? withHeld(rackRooms, money.held.map((row) => row.room)) : rackRooms), [rackRooms, money]);
 
   const [sheet, setSheet] = useState<{ room: string; open: boolean } | null>(initialRoom ? { room: initialRoom, open: true } : null);
   const openRoom = useCallback((room: string | null) => {
@@ -114,7 +116,7 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
       <RoomChecksPanel lines={ready ? run.lines : null} rooms={rackRooms} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] lg:items-start lg:gap-8">
-        <RoomBoard rooms={rackRooms} clock={robot?.clock ?? null} onOpen={openRoom} />
+        <RoomBoard rooms={boardRooms} clock={robot?.clock ?? null} onOpen={openRoom} />
 
         <div className="flex min-w-0 flex-col gap-6 lg:gap-8">
           {/* The route itself is the header's action; the panel says what it will cover. */}

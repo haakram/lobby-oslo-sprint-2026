@@ -3,6 +3,7 @@ import type { GuestDay } from "@/features/guests/testData";
 import type { NightSafety } from "@/features/handover/safety";
 import type { StockItem } from "@/features/inventory/testData";
 import type { WorkOrderView } from "@/features/maintenance/select";
+import type { DeclineSplit } from "@/features/nightshift/declines";
 import type { RunStatus } from "@/features/nightshift/useRun";
 import type { RequestView } from "@/features/requests/select";
 import type { RoomMoney } from "@/features/rooms/money";
@@ -29,6 +30,8 @@ export type DashboardData = {
   safety: NightSafety | null;
   /** The room check's money and the one Klare til salg figure (rooms/money.ts); moves when a room is released. */
   money: RoomMoney | null;
+  /** The robot's refusals split by the referee's verdict (nightshift/declines.ts); null until the night is in. */
+  declines?: DeclineSplit | null;
   robot: RobotView | null;
   requests: RequestView[];
   maintenance: WorkOrderView[];

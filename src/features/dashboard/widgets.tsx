@@ -176,7 +176,7 @@ function RoomsWidget({ data, className }: WidgetProps) {
                       const look = STATUS_LOOK[room.status];
                       const avvik = room.openOrders > 0;
                       // Closed today: the bell's "Rom 137 er stengt i dag" and the tile say the same.
-                      const word = room.closed ? "Ute av drift" : look.word;
+                      const word = room.closed ? "Ute av drift" : room.held ? "Holdt tilbake" : look.word;
                       return (
                         <li key={room.id}>
                           <Link

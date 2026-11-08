@@ -289,12 +289,25 @@ export type RoomView = HotelRoom & {
   openOrders: number;
   /** Out of order today (an open work order closes it): not sold, whatever the robot saw. */
   closed?: boolean;
+  /** Held back by the room check (the robot carried an arriving guest's bags in): taken, never "Klar" on a rack. */
+  held?: boolean;
 };
 
 /** The rooms with today's closed ones marked, so the rack says "Ute av drift" where the bell says "stengt". */
 export function withClosed(rooms: readonly RoomView[], closed: readonly string[]): RoomView[] {
   const set = new Set(closed);
   return rooms.map((room) => (set.has(room.id) ? { ...room, closed: true } : room));
+}
+
+/**
+ * The rooms the room check held back (rooms/reconcile.ts): the robot found them tidy, but it carried an
+ * arriving guest's bags in, so the rack shows them taken ("Holdt tilbake"), never as a green Klar
+ * beside the money line that says they are held (jury round 3).
+ */
+export function withHeld(rooms: readonly RoomView[], held: readonly string[]): RoomView[] {
+  if (held.length === 0) return rooms as RoomView[];
+  const set = new Set(held);
+  return rooms.map((room) => (set.has(room.id) && room.status === "klar" ? { ...room, status: "opptatt", held: true } : room));
 }
 
 export function selectRooms(night: Night, resolved: ReadonlySet<string> = NONE, map: HotelMap = BASE_HOTEL): RoomView[] {

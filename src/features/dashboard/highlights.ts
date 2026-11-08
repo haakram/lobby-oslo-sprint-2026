@@ -1,6 +1,7 @@
 import { canAccess } from "@/features/auth/roles";
 import { moneyHeadline } from "@/features/rooms/money";
 import { occupancy, revenueLastNight } from "@/features/rooms/pms";
+import { type DeclineSplit, declineSplitText } from "@/features/nightshift/declines";
 import type { DashboardData } from "./data";
 import { formatKroner } from "./format";
 import { requestKindLabel } from "./labels";
@@ -285,7 +286,7 @@ export function selectHighlights(data: DashboardData): Highlight[] {
       label: "Robotens oppdrag i natt",
       value: totals ? totals.done : null,
       unit: totals ? `av ${totals.total}` : undefined,
-      detail: night ? robotDetail(night) : undefined,
+      detail: night ? robotDetail(night, data.declines) : undefined,
       source: "run-log",
       tone: "success",
       route: "/",
@@ -332,11 +333,21 @@ export function selectHighlights(data: DashboardData): Highlight[] {
   return all.filter((figure) => canAccess(data.role, figure.route)).slice(0, MAX_HIGHLIGHTS);
 }
 
-/** "Godkjent av dommeren (Wybe Night Shift-simulatoren): 73 av 73 · 8 avvist uten bestilling": the robot figure's line. */
-export function robotDetail(night: Night): string {
+/**
+ * The robot's refusals in short, split by the referee's verdict (owner C's declineSplit, the judgement
+ * card's count): "7 falske klager avvist · 1 ikke godkjent". Without the run log's split, the plain count.
+ */
+export function declineShort(split: DeclineSplit | null | undefined, declined: number): string | null {
+  if (split && split.total > 0) return declineSplitText(split).replace(" (godkjent av dommeren)", "");
+  return declined > 0 ? `${declined} avvist etter sjekk` : null;
+}
+
+/** "Godkjent av dommeren (Wybe Night Shift-simulatoren): 73 av 73 · 7 falske klager avvist · 1 ikke godkjent": the robot figure's line. */
+export function robotDetail(night: Night, declines?: DeclineSplit | null): string {
   const { tally } = night;
   const parts = [`Godkjent av dommeren (Wybe Night Shift-simulatoren): ${tally.done} av ${tally.reported}`];
-  if (tally.declined > 0) parts.push(`${tally.declined} avvist uten bestilling`);
+  const refused = declineShort(declines, tally.declined);
+  if (refused) parts.push(refused);
   if (tally.cancelled > 0) parts.push(`${tally.cancelled} avlyst`);
   return parts.join(" · ");
 }

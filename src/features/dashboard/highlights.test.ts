@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { selectGuestDay } from "@/features/guests/testData";
 import { lowStock, STOCK } from "@/features/inventory/testData";
+import { declineSplit } from "@/features/nightshift/declines";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import type { RequestView } from "@/features/requests/select";
 import type { DashboardData } from "./data";
@@ -15,6 +16,7 @@ import {
   greeting,
   greetingWord,
   daySummary,
+  declineShort,
   hoursLabel,
   MAX_HIGHLIGHTS,
   MINUTES_PER_HANDBACK,
@@ -23,6 +25,7 @@ import {
   nightSummary,
   nightTotals,
   nightVerdict,
+  robotDetail,
   selectHighlights,
   shiftHour,
   timeSaved,
@@ -164,5 +167,18 @@ describe("selectHighlights (the figures)", () => {
     expect(hoursLabel(717)).toBe("12");
     expect(hoursLabel(270)).toBe("4,5");
     expect([atNight("23:40"), atNight("05:59"), atNight("06:00"), atNight("21:59"), atNight(null)]).toEqual([true, true, false, false, false]);
+  });
+});
+
+describe("the robot figure's refusals, split by the referee (the judgement card's count)", () => {
+  it("on the demo night: 7 false claims refused and approved, 1 not approved, never \"8 avvist uten bestilling\"", () => {
+    const lines = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
+    const night = foldNight(lines);
+    const detail = robotDetail(night, declineSplit(lines));
+    expect(detail).toBe(`Godkjent av dommeren (Wybe Night Shift-simulatoren): ${night.tally.done} av ${night.tally.reported} · 7 falske klager avvist · 1 ikke godkjent`);
+    expect(detail).not.toMatch(/uten bestilling/);
+    // Without the split, the plain count.
+    expect(declineShort(null, 3)).toBe("3 avvist etter sjekk");
+    expect(declineShort(null, 0)).toBeNull();
   });
 });

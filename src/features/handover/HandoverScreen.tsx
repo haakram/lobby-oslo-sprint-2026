@@ -4,7 +4,8 @@ import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { canAccess, useSession } from "@/features/auth";
 import { formatKroner, nightLabel } from "@/features/dashboard/format";
-import { nightFacts } from "@/features/dashboard/highlights";
+import { declineShort, nightFacts } from "@/features/dashboard/highlights";
+import { type DeclineSplit, declineSplit } from "@/features/nightshift/declines";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
@@ -56,6 +57,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   // The same room check, marks and money as Rom and Oversikt: a release here moves them too.
   const { reconciliation, marks, revenue, pms } = useRoomCheck(lines, rooms, today);
   const safety = useMemo(() => (lines ? nightSafety(lines) : null), [lines]);
+  const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
 
   const handover = useMemo(() => {
     if (!night || !rooms || !reconciliation || !safety) return null;
@@ -153,7 +155,7 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
           value={figures?.robot.done}
           unit={figures ? `av ${figures.robot.total}` : undefined}
           tone="success"
-          detail={figures ? robotLine(figures) : undefined}
+          detail={figures ? robotLine(figures, declines) : undefined}
         />
         <Figure
           label="Gjestesaker løst"
@@ -271,11 +273,14 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
   );
 }
 
-/** "Godkjent av dommeren (Wybe Night Shift-simulatoren): 73 av 73 · 8 avvist uten bestilling · nattevakten 3 · AI tok 2 samtaler". */
-function robotLine({ robot, staffDone, calls }: { robot: { done: number; reported: number; declined: number; cancelled: number }; staffDone: number; calls: number }): string {
+/** "Godkjent av dommeren (Wybe Night Shift-simulatoren): 73 av 73 · 7 falske klager avvist · 1 ikke godkjent · nattevakten 3 · AI tok 2 samtaler". */
+function robotLine(
+  { robot, staffDone, calls }: { robot: { done: number; reported: number; declined: number; cancelled: number }; staffDone: number; calls: number },
+  declines: DeclineSplit | null,
+): string {
   return [
     `Godkjent av dommeren (Wybe Night Shift-simulatoren): ${robot.done} av ${robot.reported}`,
-    robot.declined > 0 ? `${robot.declined} avvist uten bestilling` : null,
+    declineShort(declines, robot.declined),
     robot.cancelled > 0 ? `${robot.cancelled} avlyst` : null,
     staffDone > 0 ? `nattevakten ${staffDone}` : null,
     `AI tok ${calls} ${calls === 1 ? "samtale" : "samtaler"}`,

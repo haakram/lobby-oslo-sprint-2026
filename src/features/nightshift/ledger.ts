@@ -53,7 +53,7 @@ export const LEDGER_META: { liveStarts: number | null; latestStart: string | nul
 
 /**
  * The final branch's own-judgement "done" counted once per (seed, request), not once per replay of the same
- * deterministic seed (jury round 5, the data juror), with a Wilson 95 % interval; null in an older file.
+ * deterministic seed (jury round 5, data review), with a Wilson 95 % interval; null in an older file.
  */
 export type DistinctClaims = {
   scope: string;

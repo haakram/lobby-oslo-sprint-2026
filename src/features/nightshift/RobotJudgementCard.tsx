@@ -53,14 +53,14 @@ import type { RunLine } from "./runlog";
 /**
  * "Robotens vurderinger i natt": the calls the robot made on its own, from its run log, in the
  * hotel's words. The refusals of the stranger come first, as one security incident with its times;
- * then every "done" split by what it rested on (jury round 4, the data juror and the Wybe juror): said on the robot's own
+ * then every "done" split by what it rested on (jury round 4, data and domain reviews): said on the robot's own
  * judgement (room checks, spills: no score rise during the task) or only after the simulator had
- * confirmed the work, with one line on what confirms "done" in a real hotel (the Holio juror); the refusals,
+ * confirmed the work, with one line on what confirms "done" in a real hotel (domain review); the refusals,
  * in a manager's words, handed to reception where a guest may still want the thing; the wet floors with
- * the slip and the moved sign; the master-key entries without a knock (the Wybe juror); the Do-Not-Disturb doors.
+ * the slip and the moved sign; the master-key entries without a knock (domain review); the Do-Not-Disturb doors.
  * The referee, the simulator, the score-hidden runs, the cross-night figures from the evidence ledger, commit
- * hashes and repo paths sit behind "Slik vet vi det" (the design juror; round 5: never on the manager's main read).
- * Each own-judgement "done" is also checked against the robot's own log (round 5, the Wybe engineer): 209 reported
+ * hashes and repo paths sit behind "Slik vet vi det" (design review; round 5: never on the manager's main read).
+ * Each own-judgement "done" is also checked against the robot's own log (round 5, domain review): 209 reported
  * empty after the robot put bags inside it makes the demo night 8 of 9, not 9 of 9. Calm and factual (round 6): the
  * robot's faults are amber with the words "Robotens feil" (they are what the manager acts on), its wins in ink, never
  * green; no red.
@@ -188,13 +188,13 @@ export function RobotJudgementView({
       {compact && !open && <CompactFigures judgement={judgement} declines={declines} basis={basis} conduct={conduct} source={source} />}
 
       {compact && (
-        // "Vis alt" replaces the three figures with the full card; it never repeats them (the design juror, round 4).
+        // "Vis alt" replaces the three figures with the full card; it never repeats them (design review, round 4).
         <button
           type="button"
           aria-expanded={open}
           aria-controls={fullId}
           onClick={() => setOpen((value) => !value)}
-          // Quiet, not orange: on Overlevering the money step is the page's one orange action (round 5, owner A, the design juror).
+          // Quiet, not orange: on Overlevering the money step is the page's one orange action (round 5, owner A, design review).
           className="mt-3 inline-flex min-h-11 cursor-pointer items-center text-sm font-semibold text-muted underline underline-offset-4 hover:text-text pointer-fine:min-h-8"
         >
           {open ? "Vis mindre" : "Vis alt og slik vet vi det"}
@@ -293,7 +293,7 @@ function faultLine(): string | null {
 }
 
 /**
- * Overlevering's card (round 5, the creative juror and the Wybe engineer): three figures with plain labels and one short line
+ * Overlevering's card (round 5, marketing and domain reviews): three figures with plain labels and one short line
  * each, then the real-hotel rule. The same selectors as the full card, so the two never disagree; no
  * simulator, referee or score-hidden figure here (those are behind "Slik vet vi det").
  */
@@ -434,7 +434,7 @@ function ownParts(own: DoneBasis["own"]): string {
 /**
  * The night's "done", split by what it rested on. The figure is the part that carries over to a hotel with
  * no referee: what the robot said on its own judgement, and how much of it holds against its own log
- * (round 5, the Wybe engineer: 209). The simulator and the score-hidden runs are behind "Slik vet vi det".
+ * (round 5, domain review: 209). The simulator and the score-hidden runs are behind "Slik vet vi det".
  */
 function DoneRow({ basis, contradictions = [] }: { basis: DoneBasis; contradictions?: readonly SelfContradiction[] }) {
   const { reported, confirmed, own, afterRise, unknown } = basis;
@@ -594,7 +594,7 @@ function shortStamp(iso: string): string {
 
 /**
  * "Slik vet vi det": the referee, the rule behind "egen vurdering", the same figures over every live night
- * and the demo build's, and where they come from (commit hash, repo paths). Off the main read (the design juror).
+ * and the demo build's, and where they come from (commit hash, repo paths). Off the main read (design review).
  */
 const SIGNAL_NAMES: Record<string, string> = {
   lock: "låslogg",
@@ -856,7 +856,7 @@ function FaultBed() {
 }
 
 /**
- * What the hotel's rules cost, behind "Slik vet vi det" (round 5, the Wybe juror and the Wybe engineer): the hotel-rules mode live
+ * What the hotel's rules cost, behind "Slik vet vi det" (round 5, domain reviews): the hotel-rules mode live
  * on four seeds against the final build's nights on the same seeds, the knocks counted from the logs, and the
  * replay bed's cost over 164 nights (data/hotel-rules.json, hamad/hotelrules).
  */

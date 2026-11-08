@@ -67,7 +67,7 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(disclosure).toHaveTextContent("Den banket på før 59 av 59 innganger med nøkkelkort (finalebygget 26 av 61 de samme nettene).");
     expect(disclosure).toHaveTextContent("Gjenspilt på 164 ekte netter koster reglene −125,8 poeng natten; det meste er skiltene, for lageret har bare 3.");
     expect(disclosure).toHaveTextContent("I natt godkjente simulatoren 9 av 9 på egen vurdering (få tilfeller: 95 %-intervall 70–100 %); én av dem motsies av robotens egen logg (rom 209).");
-    // The simulator, the referee, the score, the ledger path and the commit hash only inside "Slik vet vi det" (the design juror, round 5).
+    // The simulator, the referee, the score, the ledger path and the commit hash only inside "Slik vet vi det" (design review, round 5).
     const main = card.cloneNode(true) as HTMLElement;
     main.querySelector("details")?.remove();
     expect(main).not.toHaveTextContent(/dommer|simulator|poengsum|Wybe|ledger\.csv|cb72845|falsk|290 av 291/i);
@@ -132,7 +132,7 @@ describe("RobotJudgementCard on the demo night", () => {
           `romsjekker ${grouped(allOwn!.roomChecks.credited)} av ${grouped(allOwn!.roomChecks.reported)}.`,
       ),
     );
-    // The demo build's own "290 av 291" read like a copy of the score-blind line (the Wybe juror, the Wybe engineer): it is gone.
+    // The demo build's own "290 av 291" read like a copy of the score-blind line (domain reviews): it is gone.
     expect(build).toMatchObject({ commit: "cb72845", nights: 4, credited: 290, reported: 291 });
     expect(disclosure).not.toHaveTextContent("Samme versjon som i natt");
     expect(disclosure.textContent!.match(/290 av 291/g) ?? []).toHaveLength(0);
@@ -183,7 +183,7 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(card).not.toHaveTextContent(/Feiltest|innlagte feil/);
     // No jury words on the manager's read, and no second "290 av 291".
     expect(card).not.toHaveTextContent(/simulator|dommer|poengsum|290 av 291|cb72845/i);
-    // "Vis alt" replaces the figures with the full card; it never shows both (the design juror).
+    // "Vis alt" replaces the figures with the full card; it never shows both (design review).
     const toggle = within(card).getByRole("button", { name: "Vis alt og slik vet vi det" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(card).not.toHaveTextContent("Sa nei 7 ganger til en ukjent person");

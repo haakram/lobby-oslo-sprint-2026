@@ -63,7 +63,7 @@ export function HotelScreen({ viewerUrl }: { viewerUrl?: string }) {
   const ready = replay.status === "ready";
   const snapshot = replay.snapshot;
   // The one tally of the robot's night (nightshift/outcomes.ts), as Oversikt, Natteskift and Overlevering count it
-  // (round 5, the Wybe juror and the Wybe engineer: 3D-kart said "9 Ikke fullført" where the others said 4 to a person and 8 declined).
+  // (round 5, domain reviews: 3D-kart said "9 Ikke fullført" where the others said 4 to a person and 8 declined).
   const tally = useMemo(
     () => (replay.timeline && snapshot ? outcomesAt(replay.timeline, snapshot.eventCount, snapshot.t).tally : null),
     [replay.timeline, snapshot],

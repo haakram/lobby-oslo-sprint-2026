@@ -23,7 +23,7 @@ describe("on the demo night (seed 16, 2,680 points)", () => {
       other: { reported: 0, confirmed: 0 },
     });
     expect(basis.own.confirmedRequests).toHaveLength(9);
-    // the Wybe engineer: R-049 (209 "empty and tidy" at 03:47) contradicts the robot's own 01:29 placement there.
+    // domain review: R-049 (209 "empty and tidy" at 03:47) contradicts the robot's own 01:29 placement there.
     expect(ownAgainstLog(basis, selfContradictions(DEMO))).toMatchObject({ reported: 9, holds: 8, contradicted: [{ request: "R-049", room: "209" }] });
   });
 

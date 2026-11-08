@@ -74,7 +74,7 @@ function add(into: Tally, confirmed: boolean): void {
 }
 
 /**
- * Where a signal comes from (jury round 5, the Wybe engineer; owner B's door lock and night clerk use the same rule).
+ * Where a signal comes from (jury round 5, domain review; owner B's door lock and night clerk use the same rule).
  * Only `robot` is the robot talking about itself; everything else is a signal from outside it.
  * - robot: what the robot's own sensors or actions say (its camera, its compartment, "placed inside", a
  *   knock it heard answered, a sign it put down, a lock opened with its own credential);
@@ -121,7 +121,7 @@ export function signalOrigin(entry: EvidenceSignal): SignalOrigin {
 }
 
 /**
- * The evidence rule (jury round 5, the Wybe engineer; owner B): "bekreftet" needs two different signals, at least
+ * The evidence rule (jury round 5, domain review; owner B): "bekreftet" needs two different signals, at least
  * one of them from outside the robot (door lock, energy slot, guest, staff, the PMS). Two or more signals
  * that all come from the robot read "robotens egen observasjon", a tier below. Fewer than two read
  * "ikke bekreftet". Signals count once each, by name.
@@ -209,7 +209,7 @@ export function doneBasis(lines: readonly RunLine[], until?: number): DoneBasis 
 }
 
 /**
- * The robot's own-judgement "done" checked against its own log (jury round 5, the Wybe engineer): of the ones the
+ * The robot's own-judgement "done" checked against its own log (jury round 5, domain review): of the ones the
  * referee confirmed, how many no `selfContradictions` line disputes. 209 makes the demo night 8 of 9.
  */
 export function ownAgainstLog(basis: DoneBasis, contradictions: readonly SelfContradiction[]): { reported: number; holds: number; contradicted: SelfContradiction[] } {

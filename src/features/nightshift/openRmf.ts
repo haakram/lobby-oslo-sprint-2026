@@ -2,7 +2,7 @@ import { doneBasis, type SignalOrigin, signalOrigin, unfinishedTasks } from "./c
 import { type RunLine, runLine } from "./runlog";
 
 /**
- * A second producer for run log v1 (jury round 4, item C6; the Wybe engineer): Open-RMF's task_state and
+ * A second producer for run log v1 (jury round 4, item C6; domain review): Open-RMF's task_state and
  * fleet_state messages (rmf_api_msgs) turned into the lines the handover reads (docs/runlog.schema.json),
  * so a robot that is not Wybe's simulator gets the same judgement card. Pure; no network.
  *

@@ -1,5 +1,5 @@
 {
- "_doc": "The offline fault bed's result (jury round 5, the Wybe juror and the data juror: give the done check negatives). Failures injected at a known rate into 20 rebuilt real nights x 5 fault draws, 13 fault types, the score-blind done check and the sighted agent on the same faults (640 nights). Run on branch hamad/faults at 4571de3 (agent/faultbed.py, output in temp/faults/ of that checkout); figures as reported by the controller on Sun 8 Nov, 05:40. Offline only: no Wybe server. The fault wordings are written by the team, so the misses show the kind of reply that fools the check, not how often it happens.",
+ "_doc": "The offline fault bed's result (jury round 5, domain and data reviews: give the done check negatives). Failures injected at a known rate into 20 rebuilt real nights x 5 fault draws, 13 fault types, the score-blind done check and the sighted agent on the same faults (640 nights). Run on branch hamad/faults at 4571de3 (agent/faultbed.py, output in temp/faults/ of that checkout); figures as reported by the controller on Sun 8 Nov, 05:40. Offline only: no Wybe server. The fault wordings are written by the team, so the misses show the kind of reply that fools the check, not how often it happens.",
  "branch": "hamad/faults",
  "commit": "4571de3",
  "nights": 640,

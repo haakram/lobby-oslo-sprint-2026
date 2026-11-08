@@ -157,7 +157,7 @@ const PLAIN_KIND: Record<DeclineKind, (n: number) => string> = {
 };
 
 /**
- * The split in a manager's words, no referee and no hackathon wording (jury round 4, the design juror): "6 meldinger
+ * The split in a manager's words, no referee and no hackathon wording (jury round 4, design review): "6 meldinger
  * uten bestilling og 1 alt levert · 1 ikke godkjent". The credited refusals by kind, then the ones not
  * credited, then the ones still waiting. The referee behind "godkjent" is named in the card's "Slik vet vi det".
  */

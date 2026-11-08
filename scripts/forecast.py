@@ -1,4 +1,4 @@
-"""The final's forecast: a build + seed model fitted on the evidence ledger (jury round 4, item C4; the data juror).
+"""The final's forecast: a build + seed model fitted on the evidence ledger (jury round 4, item C4; data review).
 
 The Wybe simulator is deterministic: the same code on the same seed plays the same night. So the
 spread between nights is not noise in a build, it is between seeds (how hard a night is) and between
@@ -14,7 +14,7 @@ settle; no numpy, so it runs in the repo's venv and in CI).
 Then:
 
 The target is the build that plays at 12:00: the head of ``hamad/final``, read from git (jury round 5,
-The data juror and the Wybe juror), and every commit whose agent code (``agent/``) is identical to it counts as the same
+data and domain reviews), and every commit whose agent code (``agent/``) is identical to it counts as the same
 build (``013f90d`` and ``8de9ffc`` differ only in a test).
 
 1. **Leave-seed-out check.** The only build nights on seeds no build of the final branch was tuned on
@@ -25,7 +25,7 @@ build (``013f90d`` and ``8de9ffc`` differ only in a test).
 2. **The final.** The final plays 10 unseen seeds and ranks on the mean of the best 9. Simulate it:
    draw 10 seed effects from the seeds the target build never played (bootstrap), add the residual and
    the tuning penalty, drop the worst night, average the rest. 20,000 finals, a fixed random seed, so
-   the output is the same on every run. Round 5 (the data juror): the residual is the leave-one-cell-out RMSE
+   the output is the same on every run. Round 5 (data review): the residual is the leave-one-cell-out RMSE
    (how well the model predicts a cell it did not see), not the in-sample SD, and the penalty is drawn
    once per simulated final from a normal with its mean and its standard error (n = 2), so the band
    carries the penalty's uncertainty instead of treating it as known.

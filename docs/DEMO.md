@@ -255,11 +255,13 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
 1. **Problem, story first, then money and safety (1 min; Real problem, Founders, Marketing).** Open
    on the image (design review): the 3D replay for 8 seconds, the robot at 209 at 01:27 with the stranger,
    then the page, where the night clerk's note says *«Rolig natt.»* beside three wet floors and a man at
-   seven doors. "From the desk it *was* a calm night. The robot saw the rest. And we check the robot
-   too: at 01:29 it carried bags into 209, at 03:47 it reported 209 empty. Fettero held the room back.
-   And it found the rooms where the booking system and the door lock disagree: 210 in use with no
-   booking, a night nobody bills, about 1,500 kroner; 213 free five hours before housekeeping, though
-   the guest was due out yesterday. And every wet floor had an owner at 06:00." Then one SSB figure (staff churn). Then, inside the first 20 seconds of
+   seven doors. "Kjersti wrote 'a calm night', and in the same note she heard a guest in 210 at 23:20,
+   a room the booking system has free. On paper that note is lost by six. Here it's a billed night with
+   an owner by eight, about 1,500 kroner (round-7 product review). The robot saw the rest. And we check
+   the robot too: at 01:29 it carried bags into 209, at 03:47 it reported 209 empty, so Fettero says
+   check the room. And 213 was free five hours before housekeeping, though the guest was due out
+   yesterday. The wet floor waited six hours for a person; in a pilot it reaches the night clerk at
+   23:51, and the 06:00 page shows whether anyone acted." Then one SSB figure (staff churn). Then, inside the first 20 seconds of
    the business part: "Hotel number one needs no robot" and the *Uten robot* switch. Then what we heard
    on the phone this morning (§ 8) **[fill; if the round wasn't run, say "we haven't asked a hotel yet;
    that's step one"]**.

@@ -315,7 +315,11 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 - **A real problem:** the hook uses only sourced figures (`docs/DEMO.md` § 1) and, if the Sunday phone
   round ran, its real tally with date and count; no unsourced claim.
 - **Innovation:** the agent's numbers are real and checkable in its run logs (the distribution in
-  `docs/DEMO.md` § 1.1; 73 of 73 "done" confirmed on the night shown; one penalty on that night).
+  `docs/DEMO.md` § 1.1; on the night shown 73 of 77 tasks completed and, as the screens say, *72 av 73
+  holder · 1 motsagt av egen logg (rom 209)*: the referee credited all 73 "done", the robot's own log
+  contradicts one; the card's *5 romsjekker og 4 søl gjort · 1 svar uenig med egen logg: rom 209*; one
+  penalty on that night). Anyone can rebuild the build-level figures from the 28 committed run logs:
+  `python3 scripts/ledger.py --root docs/runs/logs --check` (SHA-256 checked, about 0.2 s, in the gate).
 - **Design:** a juror understands Overlevering without narration (the hallway test in `docs/DEMO.md`
   § 8.2: three people, time to the first right tap), run by ShirazIQ (team to confirm).
 - **Team efficiency:** the cut list (§ 6) is said aloud when asked; the gate (`./scripts/check.sh`) is

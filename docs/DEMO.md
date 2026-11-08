@@ -568,8 +568,8 @@ with the robot). The list below says both; the founder juror reads that as undec
 
 **Channel, in order.**
 1. **Direct** for hotel 1: from Sunday's phone round (§ 8), a visit with a printed Overlevering of
-   their own night. The printed page carries the name (*Fettero · Natten, ærlig overlevert. · Laget fra
-   robotens kjøringslogg og bookingsystemet · Kontakt: Team Fettero*), so it works as the leave-behind;
+   their own night. The printed page carries the name (*Fettero · Natten, ærlig overlevert. · Team Fettero, Oslo
+   Sprint 2026*; no contact address on it yet), so it works as the leave-behind;
    print the demo night (*Skriv ut*) and hold it up in the final.
 2. **Robot makers** (Wybe, on this jury, and others): Fettero is the manager's screen that ships with
    the robot. Two Wybe founders are here; ask them this weekend whether they would introduce one

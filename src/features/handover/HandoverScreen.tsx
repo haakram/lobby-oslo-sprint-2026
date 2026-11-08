@@ -265,9 +265,10 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
         </section>
       </div>
 
-      {/* The printed page is the leave-behind a hotel keeps (jury round 2, the marketing juror): it carries the name and where it came from. */}
+      {/* The printed page is the leave-behind a hotel keeps (jury round 2, the marketing juror): the name, the line and who made it.
+          No contact address exists yet, so none is printed (no e-mail, no invented domain). */}
       <footer className="hidden border-t border-line pt-3 text-xs text-muted print:block">
-        {APP_NAME} · {TAGLINE} · Laget fra robotens kjøringslogg og bookingsystemet{label ? ` · ${label}` : ""} · Kontakt: Team Fettero (Hamad og ShirazIQ), Oslo Sprint 2026
+        {APP_NAME} · {TAGLINE} · Team Fettero, Oslo Sprint 2026
       </footer>
     </ModulePage>
   );

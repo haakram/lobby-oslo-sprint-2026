@@ -130,8 +130,10 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     const figures = screen.getByRole("region", { name: "Natten i tall" });
     expect(within(figures).getByText("Frigitt for salg i dag")).toBeInTheDocument();
     expect(within(figures).getByText(/^Frigitt i dag: 1 rom · ca\. [\d\s\u00a0]+ kr$/)).toBeInTheDocument();
-    // The print carries the name, the line and where it came from.
-    expect(screen.getByText(/^Fettero · Natten, ærlig overlevert\. · Laget fra robotens kjøringslogg og bookingsystemet/)).toBeInTheDocument();
+    // The print carries the name, the line and who made it; no contact address exists, so none is invented.
+    const footer = screen.getByText("Fettero · Natten, ærlig overlevert. · Team Fettero, Oslo Sprint 2026");
+    expect(footer.tagName).toBe("FOOTER");
+    expect(footer.textContent).not.toMatch(/@|kontakt|https?:|www\./i);
   });
 
   it("says when there is no night yet, and when the night failed to load, with Prøv igjen", async () => {

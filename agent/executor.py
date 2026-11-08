@@ -17,6 +17,11 @@ takes instead what the robot observed itself: the place reply putting the item i
 answer to what was said, the sign reply putting it over the spill. No report's reply refutes an experiment
 and a sign is movable from a spill the robot itself reported done (not one the server thanked for). The
 scores are still read where they were (same calls) and logged on a `blind_check` line, to be measured later.
+Automatic (the final's guard): the first `status` that shows no number for `score` (no key, or null; the
+final hides scores from the board, and its status may hide them too) switches the shift to score-blind for
+the rest of the night, with one `score_blind_auto` decision line. While every status carries a score,
+nothing changes. A refutation made before the switch stands; a status with no score still counts as
+"trusted" for the call economy (the score it would show cannot decide anything).
 
 The final's shifts differ from seed 1 (same plan, other metres, moved stock), so the JSON map is a
 belief and what the robot sees is the truth: every look and move updates the world model, each
@@ -291,6 +296,7 @@ class Executor:
         self.signs_placed: dict[str, str] = {}  # place -> the spill request its wet-floor sign serves, oldest first
         self.verified: set[str] = set()  # requests whose "done" report the server thanked for
         self.blind = score_blind()  # NS_SCORE_BLIND=1: no score or report reply decides a "done"
+        self.score_hidden = False  # a status showed no score: score-blind since (switch_score_blind)
         self.reported_done: set[str] = set()  # "done" reports the server accepted (the robot's own call)
         self.guest_rooms: dict[str, str | None] = {}  # H-named: the clerk is asked once per name
         # Task 10: requests that delivered their own numbered tray or bags (tray-104-7): the server
@@ -344,6 +350,17 @@ class Executor:
         if self.blind:
             return name in self.experiments
         return name in self.experiments and self.experiments[name] is not False
+
+    def switch_score_blind(self, reason: str) -> None:
+        """The first status without a number for `score`: score-blind for the rest of the night, one
+        `score_blind_auto` line. Experiments already refuted this shift stay off (blind, experiment()
+        reads only whether a name is switched on)."""
+        if self.score_hidden:
+            return
+        self.score_hidden = True
+        self.blind = True
+        self.experiments = {n: v for n, v in self.experiments.items() if v is not False}
+        self.log("score_blind_auto", reason=reason)
 
     def done_gate(self, check: str, observed: bool, evidence: str, before, after) -> bool:
         """The gate in front of a "done" (a place in a room, a message or a quiet word said, a sign set):
@@ -502,7 +519,11 @@ class Executor:
         self._status_cache = (reply.result, self._calls, time.monotonic())
         score = reply.result.get("score")
         trusted = isinstance(score, int | float) and not isinstance(score, bool)
-        self._score_trusted_at = self._calls if trusted else None
+        if not trusted and not self.score_hidden:
+            self.switch_score_blind("status had no score" if "score" not in reply.result
+                                    else f"status score was {score!r}, not a number"[:120])
+        # Hidden: nothing to compare, so the call economy treats it as a score that holds.
+        self._score_trusted_at = self._calls if trusted or self.score_hidden else None
         self._note_battery(reply.result.get("battery"))
         snap = {k: getattr(self.state, k) for k in STATE_FIELDS}
         snap = {k: list(v) if isinstance(v, list) else v for k, v in snap.items()}
@@ -546,7 +567,7 @@ class Executor:
 
     def score_now(self) -> int | None:
         score = self.refresh().get("score")
-        return score if isinstance(score, int | float) else None
+        return score if isinstance(score, int | float) and not isinstance(score, bool) else None
 
     def score_before(self) -> int | None:
         """The score to compare a rewarding action (place, say) against, without a status call
@@ -556,6 +577,8 @@ class Executor:
         always a real status (score_now)."""
         at = self._score_trusted_at
         score = self.state.score
+        if at is not None and self._calls - at <= SCORE_TRUST_CALLS and self.score_hidden:
+            return None  # the status shows no score: no status call just to read nothing
         if (at is not None and self._calls - at <= SCORE_TRUST_CALLS
                 and isinstance(score, int | float) and not isinstance(score, bool)):
             return score

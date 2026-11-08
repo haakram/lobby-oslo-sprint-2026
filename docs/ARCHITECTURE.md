@@ -130,6 +130,9 @@ Tasks and requests:
 - `blind_check`: `{request, check: "place" | "say" | "sign", observed, evidence, score_before, score_after}`;
   score-blind runs only (`NS_SCORE_BLIND=1`, side branch `hamad/blind`, real environment only): the
   observation that decided a "done" gate instead of the score; the scores are log fields, never read.
+- `score_blind_auto`: `{reason}`; the final's guard: the first `status` with no number for `score` (no key,
+  or null) switched the shift to score-blind for the rest of the night (`blind_check` lines follow). Never
+  written while every status carries a score.
 - `executor_error`: `{request, error, message, where}`; `after_task_failed`: `{request, reason}`;
   `opening_failed`: `{step, reason}`; `wybe_error`: `{error, streak}` or `{error, during: "end_shift"}`;
   `end_failed`: `{error}`.

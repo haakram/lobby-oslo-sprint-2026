@@ -13,6 +13,11 @@ import { ProductRow, StopList } from "./StopList";
 import { bestTour, listOrderMetres, savings, tourLegs } from "./tour";
 import type { RouteMatrix } from "./types";
 
+/** Shelf ids in location-code order: "shelf-1a" < "shelf-1b" < "shelf-2a" < "shelf-10a". */
+export function byShelf(a: string, b: string): number {
+  return a.localeCompare(b, "nb", { numeric: true });
+}
+
 /** Groups the pick list by shelf (first product decides the list order) and finds the best tour. */
 function plan(m: RouteMatrix, products: Product[]) {
   const productsAt = new Map<string, Product[]>();
@@ -21,11 +26,15 @@ function plan(m: RouteMatrix, products: Product[]) {
   const tour = bestTour(m, stops);
   if ("error" in tour) return { ok: false as const, missing: tour };
   const naive = listOrderMetres(m, stops);
+  // How a warehouse system prints a pick list: by location code (1A, 1B, 2A, 2B). The fair baseline (the Holio juror).
+  const shelfMetres = listOrderMetres(m, [...stops].sort(byShelf));
   return {
     ok: true as const,
     tour,
     naive,
     saved: savings(tour.metres, naive),
+    shelfMetres,
+    savedOnShelves: savings(tour.metres, shelfMetres),
     legs: tourLegs(m, tour.order),
     productsAt,
   };
@@ -156,6 +165,8 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
             seconds={result.tour.seconds}
             naiveMetres={result.naive}
             saved={result.saved}
+            shelfMetres={result.shelfMetres}
+            savedOnShelves={result.savedOnShelves}
           />
           <Card className="p-4 sm:p-5">
             <FloorMap matrix={m} legs={result.legs} order={result.tour.order} />

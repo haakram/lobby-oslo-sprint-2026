@@ -135,14 +135,20 @@ describe("RoutesScreen, Renhold", () => {
     expect(within(await screen.findByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem")).toHaveLength(1);
   });
 
-  it("shows the saving against the order given, with the best route's metres", async () => {
+  it("names both baselines in metres, and leads with the round when room-number order is as short", async () => {
     const rooms = ["room-319", "room-104", "room-201", "room-317"];
     const plan = planCleaning(hotelForRun(parseRunLog(NIGHT).lines), { start: "laundry", rooms, cart: true });
     if (!plan || "error" in plan) throw new Error("expected a plan");
+    // Room-number order (104, 201, 317, 319) is already the best round here; the order in the link is 100 m longer.
+    expect(plan.savedOnNumbers.metres).toBe(0);
     renderRoutes({ rom: rooms.join(",") });
     const band = await screen.findByRole("region", { name: "Rutetall" });
-    expect(band).toHaveTextContent(`${plan.saved.metres} m spart · ${plan.saved.percent} % kortere`);
-    expect(within(band).getByText(String(Math.round(plan.tour.metres)))).toBeInTheDocument();
+    expect(band).toHaveTextContent(`${Math.round(plan.tour.metres)} m · ca.`);
+    expect(band).not.toHaveTextContent("spart");
+    expect(band).toHaveTextContent(`Mot romnummer-rekkefølge:${Math.round(plan.numberMetres)} m, beste rute er like kort`);
+    expect(band).toHaveTextContent(
+      `Mot rekkefølgen i lenken:${Math.round(plan.givenMetres)} m, beste rute er ${plan.saved.metres} m kortere (${plan.saved.percent} %) og har 2 heisturer færre`,
+    );
     expect(within(band).getByText(String(plan.elevatorRides))).toBeInTheDocument();
   });
 
@@ -242,10 +248,13 @@ describe("RoutesScreen, Plukkliste", () => {
     expect(screen.getByText(/Eksempelordre: påfyll til etasjeskapene/)).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Plukkrekkefølge" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(4);
-    // 2B, 1B, 2A, 1A as written: 216 m; the best round 146 m.
+    // 2B, 1B, 2A, 1A as written: 216 m; sorted by shelf (1A, 1B, 2A, 2B): 162 m; the best round 146 m.
+    // The saving leads against shelf order, the baseline a warehouse system prints (16 m, 10 %), never the 32 % alone.
     const stats = screen.getByRole("region", { name: "Rutetall" });
-    expect(within(stats).getByText("70")).toBeInTheDocument();
-    expect(within(stats).getByText("32")).toBeInTheDocument();
+    expect(within(stats).getByText("Spart mot hyllerekkefølge").previousElementSibling).toHaveTextContent("16m");
+    expect(within(stats).getByText("Kortere").previousElementSibling).toHaveTextContent("10%");
+    expect(stats).toHaveTextContent("Mot hyllerekkefølge:162 m (10 % kortere)");
+    expect(stats).toHaveTextContent("Mot listerekkefølgen:216 m (32 % kortere)");
   });
 
   it("shows the empty state once the example is emptied, and the example never comes back", () => {
@@ -262,15 +271,15 @@ describe("RoutesScreen, Plukkliste", () => {
     expect(within(screen.getByRole("list", { name: "Plukkrekkefølge" })).getAllByRole("listitem")).toHaveLength(3);
   });
 
-  it("shows total metres, saved metres and saved percent for three SKUs", () => {
+  it("says 'like kort' when shelf order is already the best round, and still names the list order", () => {
     renderWith(THREE);
     const stats = screen.getByRole("region", { name: "Rutetall" });
     expect(within(stats).getByText("144")).toBeInTheDocument();
-    expect(within(stats).getByText("60")).toBeInTheDocument();
-    expect(within(stats).getByText("29")).toBeInTheDocument();
-    expect(within(stats).getAllByText("m")).toHaveLength(2);
-    expect(within(stats).getByText("%")).toBeInTheDocument();
-    expect(within(stats).getByText(/204 m/)).toBeInTheDocument();
+    // 1A, 2A, 2B in shelf order is the best round: no saving is claimed against it.
+    expect(within(stats).queryByText("Spart mot hyllerekkefølge")).not.toBeInTheDocument();
+    expect(stats).toHaveTextContent("Mot hyllerekkefølge:144 m (like kort)");
+    expect(stats).toHaveTextContent("Mot listerekkefølgen:204 m (29 % kortere)");
+    expect(within(stats).getByText("Gangtid")).toBeInTheDocument();
   });
 
   it("lists one numbered stop per shelf, in walking order", () => {

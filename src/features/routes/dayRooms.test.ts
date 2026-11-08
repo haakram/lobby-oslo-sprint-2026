@@ -29,16 +29,17 @@ describe("dayRooms on the demo night", () => {
     expect(day.at(-1)).toEqual({ room: "room-203", why: "utsjekk", at: "14:00" });
   });
 
-  it("saves time and lift rides against walking them as they come free, across three floors", () => {
+  it("compares metres only: as short as room-number order, 9 % shorter and 3 lift rides fewer than as they come free", () => {
     const plan = planCleaning(hotelForRun(DEMO), { start: "laundry", rooms: day.map((entry) => entry.room), cart: true });
     if (!plan || "error" in plan) throw new Error("expected a plan");
     expect(plan.elevatorRides).toBe(3);
     expect(plan.givenRides).toBe(6);
-    expect(plan.saved.metres).toBeGreaterThan(0);
     const win = cleaningSavings(plan);
-    expect(win).toMatchObject({ lead: "time", rides: 3 });
-    expect(win.minutes).toBeGreaterThanOrEqual(3);
-    expect(win.timePercent).toBeGreaterThanOrEqual(25);
+    // Room-number order is the baseline the optimiser plays by too; on this night it is just as short, so the round leads.
+    expect(win).toMatchObject({ lead: "none", comparable: true, rides: 3, onNumbers: { metres: 0, percent: 0 } });
+    expect(win.onGiven).toEqual({ metres: 26, percent: 9 });
+    expect(Math.round(plan.givenMetres)).toBe(286);
+    expect(Math.round(plan.tour.metres)).toBe(260);
   });
 
   it("leaves out a departure behind a Do-Not-Disturb sign, and never lists a room twice", () => {

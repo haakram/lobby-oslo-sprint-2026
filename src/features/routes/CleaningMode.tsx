@@ -192,6 +192,7 @@ export function CleaningMode({ map, log, initial }: { map: HotelGraph; log: Nigh
                 ? "Mot rekkefølgen i lenken"
                 : "Mot rekkefølgen rommene ble valgt i"
           }
+          givenNote={source === "dag" ? "Beste rute ser bort fra når rommene blir ledige; romnummer-rekkefølge gjør det samme." : undefined}
         />
       ) : plan && "error" in plan ? (
         <Card className="p-4 sm:p-5">

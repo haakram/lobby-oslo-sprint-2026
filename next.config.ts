@@ -25,16 +25,45 @@ export function connectSources(env: Record<string, string | undefined> = process
   return sources.join(" ");
 }
 
+/**
+ * The whole Content-Security-Policy: everything comes from our own origin unless named here.
+ *
+ * - script-src: our own files, plus three things the app cannot run without. 'unsafe-inline': the App
+ *   Router streams each page's data as small inline <script> chunks; the stricter way, a per-request nonce,
+ *   needs src/proxy.ts to mint it on every request (TODO(phase-3)). 'wasm-unsafe-eval': Øyne's detector
+ *   (MediaPipe, served from public/mediapipe) compiles WebAssembly; it allows WebAssembly only, not eval().
+ *   blob:: the ElevenLabs client (Stemme, Resepsjon) loads its audio worklet from a blob: URL it makes
+ *   itself; no other origin can create one. Development only: 'unsafe-eval', which React's dev build uses
+ *   for its error stacks.
+ * - style-src 'unsafe-inline': server-rendered style="" attributes (the room tiles, the crop preview) and
+ *   Next's own style tags; scripts stay the line that matters.
+ * - img-src data:: the crop preview on Øyne is a data: URL made on the phone.
+ * - No other host anywhere: no CDN, no analytics, no fonts from Google at run time (next/font serves them
+ *   from our origin).
+ */
+export function contentSecurityPolicy(env: Record<string, string | undefined> = process.env): string {
+  const dev = env.NODE_ENV === "development";
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:${dev ? " 'unsafe-eval'" : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    `connect-src ${connectSources(env)}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
 // Baseline browser hardening for the public deployment (Vercel adds HSTS itself). Camera and microphone
 // stay allowed for this origin only: Øyne and Stemme/Resepsjon need them, nothing else may ask.
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "X-Frame-Options", value: "DENY" },
-  {
-    key: "Content-Security-Policy",
-    value: `frame-ancestors 'none'; base-uri 'self'; object-src 'none'; connect-src ${connectSources()}`,
-  },
+  { key: "Content-Security-Policy", value: contentSecurityPolicy() },
   { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=(), payment=(), usb=()" },
 ];
 

@@ -2,6 +2,7 @@
 
 import type { ObjectDetector } from "@mediapipe/tasks-vision";
 import { useEffect, useRef, useState, type RefObject } from "react";
+import { blockMediaPipeTelemetry } from "./noTelemetry";
 import { smoothBoxes, type Box } from "./smoothBoxes";
 
 export type DetectorStatus = "loading" | "ready" | "failed";
@@ -11,6 +12,8 @@ const WASM_BASE = "/mediapipe";
 const MODEL = "/models/efficientdet_lite0.tflite";
 
 async function createDetector(delegate: "GPU" | "CPU"): Promise<ObjectDetector> {
+  // MediaPipe's usage log to Google is answered on the phone and never sent (noTelemetry.ts).
+  blockMediaPipeTelemetry();
   const { FilesetResolver, ObjectDetector } = await import("@mediapipe/tasks-vision");
   const fileset = await FilesetResolver.forVisionTasks(WASM_BASE);
   return ObjectDetector.createFromOptions(fileset, {

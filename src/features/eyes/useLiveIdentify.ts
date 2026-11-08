@@ -47,9 +47,10 @@ export function useLiveIdentify(
     recent: [] as RecentResult[],
   });
 
-  const record = useCallback((box: Box, result: IdentifyResult) => {
+  /** `at`: when the answer was given (a reuse keeps the original time). */
+  const record = useCallback((box: Box, result: IdentifyResult, at = performance.now()) => {
     book.current.attempted.add(box.id);
-    book.current.recent = [...book.current.recent.slice(-9), { box, result, at: performance.now() }];
+    book.current.recent = [...book.current.recent.slice(-9), { box, result, at }];
     setResults((current) => ({ ...current, [box.id]: result }));
   }, []);
 
@@ -110,7 +111,7 @@ export function useLiveIdentify(
         stopped: state.stopped || outside.current.stopped,
         recent: state.recent,
       });
-      if (decision?.kind === "reuse") record(decision.box, decision.result);
+      if (decision?.kind === "reuse") record(decision.box, decision.result, decision.at);
       if (decision?.kind === "identify" && video.current) {
         const image = cropFrame(video.current, decision.box);
         // A failed live attempt stays quiet: the box keeps its class name and a tap tries again.

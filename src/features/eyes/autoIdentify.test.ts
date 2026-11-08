@@ -124,11 +124,17 @@ describe("nextAutoIdentify", () => {
         kind: "reuse",
         box: box("a"),
         result: shampoo,
+        at: NOW - 1000,
       });
     });
 
     it("reuses even while a request is in flight or the quota is gone, since it costs nothing", () => {
       expect(nextAutoIdentify(input({ recent: recent(), inFlight: true, stopped: true }))?.kind).toBe("reuse");
+    });
+
+    it("hands back the original answer time, so a chain of reuses can't outlive the 10 s window", () => {
+      const decision = nextAutoIdentify(input({ recent: recent({ at: NOW - 9000 }) }));
+      expect(decision).toMatchObject({ kind: "reuse", at: NOW - 9000 });
     });
 
     it("does not reuse a result older than 10 s", () => {

@@ -114,7 +114,8 @@ export function BoxOverlay({
   if (scale <= 0) return <div ref={container} className="absolute inset-0 overflow-hidden" />;
 
   return (
-    <div ref={container} className="absolute inset-0 overflow-hidden">
+    // isolate: the boxes' z-index stays inside the overlay, so they never cover the switches or the shutter.
+    <div ref={container} className="absolute inset-0 isolate overflow-hidden">
       {landmarks.map((mark) => {
         const left = mark.x * videoSize.width * scale + offsetX;
         const top = mark.y * videoSize.height * scale + offsetY;

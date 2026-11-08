@@ -32,7 +32,8 @@ export type AutoInput = {
 
 export type AutoDecision =
   | { kind: "identify"; box: Box }
-  | { kind: "reuse"; box: Box; result: IdentifyResult }
+  /** `at`: when the reused answer was first given, so reuse never stretches the window. */
+  | { kind: "reuse"; box: Box; result: IdentifyResult; at: number }
   | null;
 
 /** The first-seen time of every current box; boxes that are gone are forgotten. */
@@ -62,7 +63,7 @@ export function nextAutoIdentify(input: AutoInput): AutoDecision {
         input.now - entry.at <= REUSE_WINDOW_MS &&
         iou(entry.box, box) >= MIN_IOU,
     );
-    if (match) return { kind: "reuse", box, result: match.result };
+    if (match) return { kind: "reuse", box, result: match.result, at: match.at };
   }
 
   if (input.stopped || input.inFlight) return null;

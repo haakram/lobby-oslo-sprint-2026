@@ -67,6 +67,17 @@ describe("BoxOverlay", () => {
   });
 });
 
+describe("BoxOverlay stacking", () => {
+  beforeEach(() => vi.stubGlobal("ResizeObserver", FakeResizeObserver));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("keeps the boxes' z-index inside the overlay, so they never cover the switches or the shutter", () => {
+    renderOverlay([box("a")]);
+    const overlay = screen.getByRole("button", { name: "Tannkrem, i katalogen, vis kortet" }).parentElement!.parentElement!;
+    expect(overlay.className).toContain("isolate");
+  });
+});
+
 describe("BoxOverlay on a cropped video", () => {
   beforeEach(() => vi.stubGlobal("ResizeObserver", FakeResizeObserver));
   afterEach(() => vi.unstubAllGlobals());

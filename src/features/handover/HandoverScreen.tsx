@@ -401,8 +401,9 @@ function OpenRow({ item, marks, today }: { item: OpenItem; marks: Readonly<Recor
     // On paper the owner and the deadline sit beside the text, so the list fits one sheet.
     <li className="flex flex-col gap-1.5 py-2.5 print:grid print:break-inside-avoid print:grid-cols-[minmax(0,1fr)_11rem] print:gap-x-4 print:py-1">
       <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-          <p className={cx("min-w-0 flex-1 text-base print:text-sm", item.done && "text-muted")}>
+        {/* The text claims 16rem before the badge sits beside it: on a phone the badge wraps under the text instead of squeezing it into a narrow column (209's row at 390 px). */}
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+          <p className={cx("min-w-0 grow basis-64 text-base print:text-sm", item.done && "text-muted")}>
             {item.safety && <RegenIcon name="alert-triangle" size={18} className="mr-1.5 inline-block align-[-0.2em]" />}
             {item.text}
           </p>

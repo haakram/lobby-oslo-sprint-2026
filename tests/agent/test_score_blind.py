@@ -130,6 +130,16 @@ def test_blind_message_not_taken_in_is_failed_despite_a_rise(tmp_path, blind, mo
     assert [c["observed"] for c in checks(session)] == [False, False]
 
 
+def test_blind_message_counts_the_guest_who_took_it_in_beside_one_who_did_not(tmp_path, blind, monkeypatch):
+    # two doors open at once (replay seed 11, R-042): the addressee thanks, the neighbour asks "what was that?"
+    fake, session, ex = setup(tmp_path, rids={"R-003"})
+    scripted_say(fake, monkeypatch, ['Mr Berg calls back: "Thanks!"', 'Ms Dahl calls back: "Sorry, what was that?"'],
+                 credit=True)
+    out = ex.run(next_task(ex, session, "R-003"))
+    assert out.status == "done", out
+    assert len(calls(fake, "say")) == 1 and [c["observed"] for c in checks(session)] == [True]
+
+
 # --- gate 3: a noise complaint (flows_extra.noise) -----------------------------------------------------
 
 

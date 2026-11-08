@@ -204,7 +204,8 @@ def score_blind() -> bool:
 
 def placed_inside(reply: Reply, item: str, room: str) -> bool:
     """What the robot saw of a place in a room: the reply puts the item inside the room
-    (live: "Placed towel inside room-303.", 3,500+ such replies)."""
+    (live: "Placed towel inside room-303."; 5,170 of the 5,205 such replies with a score read after them
+    came with a rise, 155 live logs)."""
     text = str(reply.result).lower()
     return reply.ok and "inside" in text and room.lower() in text and item.lower() in text
 
@@ -217,14 +218,17 @@ def heard(reply: Reply) -> str:
 
 NOT_UNDERSTOOD = ("what was that", "pardon", "didn't catch", "excuse me?")
 MESSAGE_ACK = ("thank", "got it", "will do", "okay", "great", "cheers")  # live: Ms Okafor calls back: "Thanks!"
+# (1,078 of 1,078 with a rise)
 NOISE_ACK = (*MESSAGE_ACK, "stops", "sorry", "quiet", "turns it down", "silence")  # live: The music stops. A
-# muffled "sorry!" (1,116 of 1,116); an empty `heard` came with no rise; the offline fake: a guest's "Thanks!"
+# muffled "sorry!" (1,365 of 1,365 with a rise); an empty `heard` came with none; the offline fake: "Thanks!"
 
 
 def answered(reply: Reply, words: tuple[str, ...]) -> bool:
-    """Someone at the door answered what the robot said, in words that take it in (not a "what was that?")."""
-    text = heard(reply).lower()
-    return reply.ok and any(w in text for w in words) and not any(w in text for w in NOT_UNDERSTOOD)
+    """Someone at a door answered what the robot said in words that take it in: one `heard` entry with one
+    of `words` and no "what was that?" (another guest at an open door may not have understood)."""
+    result = reply.result if isinstance(reply.result, dict) else {}
+    entries = [str(h).lower() for h in result.get("heard") or [] if h]
+    return reply.ok and any(any(w in e for w in words) and not any(w in e for w in NOT_UNDERSTOOD) for e in entries)
 
 
 def experiment_names() -> list[str]:

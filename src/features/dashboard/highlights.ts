@@ -1,7 +1,9 @@
 import { canAccess } from "@/features/auth/roles";
 import { moneyHeadline } from "@/features/rooms/money";
 import { occupancy, revenueLastNight } from "@/features/rooms/pms";
+import { type DoneBasis, ownAgainstLog, type SelfContradiction } from "@/features/nightshift/conduct";
 import { type DeclineSplit, declineSplitPlain } from "@/features/nightshift/declines";
+import { PILOT_MODULES, moduleById } from "@/features/modules/registry";
 import type { DashboardData } from "./data";
 import { formatKroner } from "./format";
 import { requestKindLabel } from "./labels";
@@ -157,8 +159,10 @@ export function nightVerdict(data: Pick<DashboardData, "nightStatus" | "robot">,
 }
 
 export type NightFacts = {
-  /** What is done, said in green: "73 oppgaver bekreftet". */
+  /** What is done, said in green: "73 oppgaver bekreftet" ("73 oppgaver ferdig" when the basis is known). */
   done: string;
+  /** What the done rested on, said plainly after it (round 5, the Wybe juror): "64 bekreftet av simulatoren, 9 på robotens egen vurdering". */
+  basis?: string;
   /** What can hurt a guest and needs a person, said plainly: "3 våte gulv og 1 ukjent person trenger en eier". */
   attention: string | null;
 };
@@ -168,11 +172,33 @@ export type NightFacts = {
  * three unsigned wet floors and a stranger at seven doors). Green only for what is truly done: the
  * robot's "done" the referee confirmed. What needs a person is named, calmly, with its count.
  */
-export function nightFacts({ confirmed, wetFloors, stranger }: { confirmed: number; wetFloors: number; stranger: boolean }): NightFacts {
-  const done = `${confirmed} ${confirmed === 1 ? "oppgave" : "oppgaver"} bekreftet`;
+export function nightFacts({
+  confirmed,
+  wetFloors,
+  stranger,
+  basis,
+  contradictions = [],
+}: {
+  confirmed: number;
+  wetFloors: number;
+  stranger: boolean;
+  /** What each "done" rested on (conduct.ts doneBasis): the green line then says how many the robot judged itself. */
+  basis?: DoneBasis;
+  contradictions?: readonly SelfContradiction[];
+}): NightFacts {
+  const split = basis && basis.own.reported > 0 ? basisLine(basis, contradictions) : undefined;
+  const done = `${confirmed} ${confirmed === 1 ? "oppgave" : "oppgaver"} ${split ? "ferdig" : "bekreftet"}`;
   const needs = [wetFloors > 0 ? `${wetFloors} ${wetFloors === 1 ? "vått gulv" : "våte gulv"}` : null, stranger ? "1 ukjent person" : null].filter((part): part is string => part !== null);
-  if (needs.length === 0) return { done, attention: null };
-  return { done, attention: `${needs.join(" og ")} trenger en eier` };
+  const facts: NightFacts = { done, attention: needs.length > 0 ? `${needs.join(" og ")} trenger en eier` : null };
+  if (split) facts.basis = split;
+  return facts;
+}
+
+/** "64 bekreftet av simulatoren, 9 på robotens egen vurdering (8 holder mot egen logg)". */
+export function basisLine(basis: DoneBasis, contradictions: readonly SelfContradiction[] = []): string {
+  const held = ownAgainstLog(basis, contradictions);
+  const own = `${basis.own.confirmed} på robotens egen vurdering${held.contradicted.length > 0 ? ` (${held.holds} holder mot egen logg)` : ""}`;
+  return basis.afterRise.confirmed > 0 ? `${basis.afterRise.confirmed} bekreftet av simulatoren, ${own}` : own;
 }
 
 /** What the day starts with: the rooms to clean before check-in (null for a role without Rom). */
@@ -241,7 +267,7 @@ export function selectHighlights(data: DashboardData): Highlight[] {
   const rooms = data.rooms;
   // Klare til salg: the one figure Rom and Overlevering show too (rooms/money.ts), "av 36" everywhere.
   const ready = data.money?.readyToSell ?? null;
-  const moneyLine = data.money ? moneyHeadline(data.money) : null;
+  const moneyLine = data.money ? readyDetail(data) ?? moneyHeadline(data.money) : null;
   const checked = rooms ? rooms.filter((room) => room.status !== "ukjent").length : null;
   const total = rooms?.length ?? ROOMS_IN_HOTEL;
   const revenue = revenueLastNight(total);
@@ -277,7 +303,7 @@ export function selectHighlights(data: DashboardData): Highlight[] {
       value: totals ? totals.done : null,
       unit: totals ? `av ${totals.total}` : undefined,
       detail: night ? robotShort(night.tally) : undefined,
-      method: night ? [robotDetail(night, data.declines)] : undefined,
+      method: night ? [robotDetail(night, data.declines, data.basis)] : undefined,
       methodLabel: "Slik vet vi det",
       source: "run-log",
       tone: "success",
@@ -286,7 +312,7 @@ export function selectHighlights(data: DashboardData): Highlight[] {
     },
     {
       id: "klare",
-      label: "Rom klare til salg",
+      label: "Rom klare til salg nå",
       value: ready,
       unit: ready !== null ? `av ${total}` : undefined,
       detail: moneyLine ?? undefined,
@@ -309,7 +335,36 @@ export function selectHighlights(data: DashboardData): Highlight[] {
     },
   ];
 
-  return all.filter((figure) => canAccess(data.role, figure.route)).slice(0, MAX_HIGHLIGHTS);
+  // The pilot accounts (admin) see the pilot's figures only, the same cut as the rail (round 5, the product juror, the creative juror):
+  // the night's sales context, the robot's night, the rooms to sell and the rooms it checked.
+  const shown = data.role === "admin" ? all.filter((figure) => PILOT_FIGURES.has(figure.id)) : all.filter((figure) => canAccess(data.role, figure.route));
+  return shown.slice(0, MAX_HIGHLIGHTS);
+}
+
+/** The pilot's figures on Oversikt: the routes behind them are pilot screens (Rom, Overlevering) or Oversikt itself. */
+export const PILOT_FIGURES: ReadonlySet<string> = new Set(["belegg", "oppgaver", "klare", "sjekket"]);
+/** The pilot's routes, for a test that the figures link nowhere outside it. */
+export const PILOT_ROUTES: ReadonlySet<string> = new Set(["/", ...PILOT_MODULES.map((id) => moduleById(id).route)]);
+
+/**
+ * The "Klare til salg" figure's line, naming the rooms so its "1" and the room check's "1" can't be read as
+ * one room (round 5, the creative juror, the design juror): "Klar nå: rom 314 · etter bekreftelse: rom 213, ca. 1 500 kr hvis
+ * utsolgt · holdt tilbake: rom 209". Null when the rack's ready rooms don't add up to the figure (then the
+ * plain money line).
+ */
+export function readyDetail(data: Pick<DashboardData, "money" | "rooms">): string | null {
+  const money = data.money;
+  if (!money || money.readyToSell === null || !data.rooms) return null;
+  const readyRooms = data.rooms.filter((room) => room.status === "klar" && !room.closed && !room.held && !room.toConfirm);
+  if (readyRooms.length !== money.readyToSell) return null;
+  const names = (ids: readonly string[]) => (ids.length === 0 ? "" : `rom ${ids.map((id) => id.replace(/^room-/, "")).join(", ")}`);
+  const parts: string[] = [];
+  if (readyRooms.length > 0 && readyRooms.length <= 4) parts.push(`Klar nå: ${names(readyRooms.map((room) => room.id))}`);
+  if (money.toSell.length > 0) parts.push(`etter bekreftelse: ${names(money.toSell.map((row) => row.room))}, ca. ${formatKroner(money.toSellValue)} kr hvis utsolgt`);
+  if (money.released.length > 0) parts.push(`sendt til resepsjonen: ${names(money.released.map((row) => row.room))}, venter på PMS-en`);
+  if (money.caught.length > 0) parts.push(`holdt tilbake: ${names(money.caught)}`);
+  if (parts.length === 0) return null;
+  return parts.map((part, index) => (index === 0 ? part.charAt(0).toUpperCase() + part.slice(1) : part)).join(" · ");
 }
 
 /**
@@ -330,10 +385,14 @@ export function robotShort(robot: { done: number; reported: number; handedBack: 
   return robot.handedBack > 0 ? `${confirmed} · ${robot.handedBack} til en person` : confirmed;
 }
 
-/** "Godkjent av dommeren (Wybe Night Shift-simulatoren): 73 av 73 · 7 falske klager avvist · 1 ikke godkjent": the robot figure's line. */
-export function robotDetail(night: Night, declines?: DeclineSplit | null): string {
+/**
+ * "Bekreftet av Wybe Night Shift-simulatoren: 73 av 73 «ferdig» (64 etter at poengsummen steg, 9 på robotens egen
+ * vurdering) · …": the robot figure's "Slik vet vi det" (round 5: the simulator is named there, never the referee).
+ */
+export function robotDetail(night: Night, declines?: DeclineSplit | null, basis?: DoneBasis | null): string {
   const { tally } = night;
-  const parts = [`Godkjent av dommeren (Wybe Night Shift-simulatoren): ${tally.done} av ${tally.reported}`];
+  const split = basis && basis.own.reported > 0 ? ` (${basis.afterRise.reported} etter at poengsummen steg, ${basis.own.reported} på robotens egen vurdering)` : "";
+  const parts = [`Bekreftet av Wybe Night Shift-simulatoren, som ikke finnes i et ekte hotell: ${tally.done} av ${tally.reported} «ferdig»${split}`];
   const refused = declineShort(declines, tally.declined);
   if (refused) parts.push(refused);
   if (tally.cancelled > 0) parts.push(`${tally.cancelled} avlyst`);

@@ -26,14 +26,21 @@ export function Greeting({ data }: { data: DashboardData }) {
   const lost = new Set(data.maintenance.filter((order) => order.status === "lost").map((order) => order.id));
   const facts =
     totals && data.safety && data.robot?.ended !== false && data.nightStatus === "ready"
-      ? nightFacts({ confirmed: totals.done, wetFloors: openWetFloors(data.safety.wetFloors, (id) => lost.has(id)).length, stranger: data.safety.stranger !== null })
+      ? nightFacts({
+          confirmed: totals.done,
+          wetFloors: openWetFloors(data.safety.wetFloors, (id) => lost.has(id)).length,
+          stranger: data.safety.stranger !== null,
+          basis: data.basis ?? undefined,
+          contradictions: data.contradictions ?? undefined,
+        })
       : null;
   const staff = totals && totals.staffDone > 0 ? `Nattevakten ordnet ${totals.staffDone} til.` : null;
   const day = daySummary(data);
   const rest = [staff, day].filter(Boolean).join(" ");
 
-  const cleaning =
-    dirty.length > 0 ? (
+  // Ruter is outside the pilot: the pilot accounts (admin) get no cleaning-route button (round 5, the product juror).
+  const pilot = data.role === "admin";
+  const cleaning = pilot ? null : dirty.length > 0 ? (
       // Ruter opens on Dagens renhold: the night's dirty rooms and today's departures, with the saving.
       <Link href={DAY_ROUND} className={buttonClasses(handover ? "secondary" : "primary")}>
         Lag renholdsrute
@@ -58,6 +65,7 @@ export function Greeting({ data }: { data: DashboardData }) {
               <RegenIcon name="circle-check" size={20} strokeWidth={2} className="mr-1.5 inline-block align-[-0.2em]" />
               {facts.done}
             </span>
+            {facts.basis && <span> ({facts.basis})</span>}
             {facts.attention && <span className="font-semibold text-text"> · {facts.attention}.</span>}
             {rest && ` ${rest}`}
           </p>

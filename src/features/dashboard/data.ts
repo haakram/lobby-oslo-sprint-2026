@@ -3,6 +3,7 @@ import type { GuestDay } from "@/features/guests/testData";
 import type { NightSafety } from "@/features/handover/safety";
 import type { StockItem } from "@/features/inventory/testData";
 import type { WorkOrderView } from "@/features/maintenance/select";
+import type { DoneBasis, SelfContradiction } from "@/features/nightshift/conduct";
 import type { DeclineSplit } from "@/features/nightshift/declines";
 import type { RunStatus } from "@/features/nightshift/useRun";
 import type { RequestView } from "@/features/requests/select";
@@ -32,6 +33,9 @@ export type DashboardData = {
   money: RoomMoney | null;
   /** The robot's refusals split by the referee's verdict (nightshift/declines.ts); null until the night is in. */
   declines?: DeclineSplit | null;
+  /** What each "done" rested on, and the room checks the robot's own log disputes (nightshift/conduct.ts); null until the night is in. */
+  basis?: DoneBasis | null;
+  contradictions?: SelfContradiction[] | null;
   robot: RobotView | null;
   requests: RequestView[];
   maintenance: WorkOrderView[];

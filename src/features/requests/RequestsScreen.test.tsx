@@ -196,6 +196,8 @@ describe("RequestsScreen (Forespørsler)", () => {
     release(new Response(NIGHT, { status: 200 }));
     expect(await screen.findByRole("button", { name: "Ta over: Utstyr, Rom 108" })).toBeInTheDocument();
     expect(screen.queryByText("Henter robotens natt")).not.toBeInTheDocument();
+    // One number per fact (round 5): the figure counts every source and names the robot's share, the figure Oversikt shows.
+    expect(screen.getByText(/^Fullført, alle kilder · roboten 0 av 2$/)).toBeInTheDocument();
   });
 
   it("files the AI receptionist's calls as tasks (Telefon (AI)) and sends one to the robot in one tap; Angre takes it back", async () => {

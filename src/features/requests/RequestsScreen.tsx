@@ -191,6 +191,8 @@ export function RequestsScreen({
   );
   const counts = countRequests(requests);
   const totals = requestTotals(requests);
+  // The robot's own share, the same figure as Oversikt's "Robotens oppdrag" and Natteskift (round 5: one number per fact).
+  const robotTotals = requestTotals(requests.filter((request) => request.source === "robot"));
   const filtered = source ? requests.filter((request) => request.source === source) : requests;
   // The row just acted on keeps its place (its old group, its old position) until the next action, so nothing jumps.
   const shown = last ? [...filtered].sort((a, b) => byLane(a.id === last.id ? { ...a, status: last.from } : a, b.id === last.id ? { ...b, status: last.from } : b)) : filtered;
@@ -289,7 +291,12 @@ export function RequestsScreen({
     <ModulePage module="foresporsler" ready={!runLoading} lede="Alt gjestene ber om, fra telefon, robot, personale og stemme. Det roboten ga videre står først.">
       <FigureRow label="Forespørslene i tall">
         {/* What got done first, in green; the rest are plain counts (what needs a person is in the bell). */}
-        <Stat label="Fullført" value={figure(totals.done)} unit={runLoading ? undefined : `av ${totals.total}`} tone={runLoading ? "default" : "success"} />
+        <Stat
+          label={runLoading || robotTotals.total === 0 ? "Fullført, alle kilder" : `Fullført, alle kilder · roboten ${robotTotals.done} av ${robotTotals.total}`}
+          value={figure(totals.done)}
+          unit={runLoading ? undefined : `av ${totals.total}`}
+          tone={runLoading ? "default" : "success"}
+        />
         <Stat label="Venter" value={figure(counts.venter)} />
         <Stat label="Feilet" value={figure(counts.feilet)} />
         {/* Not failures: the robot refused a claim with no order on record, or the night manager called it off. */}

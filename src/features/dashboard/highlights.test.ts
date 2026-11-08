@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { selectGuestDay } from "@/features/guests/testData";
 import { lowStock, STOCK } from "@/features/inventory/testData";
+import { doneBasis, selfContradictions } from "@/features/nightshift/conduct";
 import { declineSplit } from "@/features/nightshift/declines";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import type { RequestView } from "@/features/requests/select";
@@ -23,6 +24,8 @@ import {
   minutesSaved,
   nightFacts,
   nightSummary,
+  PILOT_ROUTES,
+  readyDetail,
   nightTotals,
   nightVerdict,
   robotDetail,
@@ -106,6 +109,16 @@ describe("the night in facts, by its own clock", () => {
     expect(nightFacts({ confirmed: 40, wetFloors: 0, stranger: false })).toEqual({ done: "40 oppgaver bekreftet", attention: null });
   });
 
+  it("says what the done rested on when the basis is known (round 5, the Wybe juror): 64 confirmed by the simulator, 9 on the robot's own judgement, 8 holding", () => {
+    const demo = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
+    const facts = nightFacts({ confirmed: 73, wetFloors: 3, stranger: true, basis: doneBasis(demo), contradictions: selfContradictions(demo) });
+    expect(facts).toEqual({
+      done: "73 oppgaver ferdig",
+      basis: "64 bekreftet av simulatoren, 9 på robotens egen vurdering (8 holder mot egen logg)",
+      attention: "3 våte gulv og 1 ukjent person trenger en eier",
+    });
+  });
+
   it("greets by the shift clock of the night on screen, and says what the day starts with", () => {
     expect(shiftHour({ clock: "05:58:07" })).toBe(5);
     expect(greeting(shiftHour({ clock: "05:58:07" }) ?? 14, "Siri Haugen")).toBe("God morgen, Siri Haugen");
@@ -117,13 +130,15 @@ describe("the night in facts, by its own clock", () => {
 });
 
 describe("selectHighlights (the figures)", () => {
-  it("gives the admin six good-news figures, green where the figure is good, each with its source, and no vanity figure", () => {
+  it("gives the pilot admin the pilot's figures only, green where the figure is good, each with its source, and no vanity figure", () => {
     const figures = selectHighlights(data());
-    expect(figures.map((figure) => figure.label)).toEqual(["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Rom klare til salg", "Nye bookinger i dag", "Rom sjekket av roboten"]);
+    // Round 5 (the product juror, the creative juror): the pilot's cut on Oversikt too; no Losjiinntekt, no bookings of the day.
+    expect(figures.map((figure) => figure.label)).toEqual(["Belegg i natt", "Robotens oppdrag i natt", "Rom klare til salg nå", "Rom sjekket av roboten"]);
     // Jury round 3 (the product juror): no hours-saved estimate and no test-data guest rating on screen one.
     expect(figures.some((figure) => figure.id === "spart" || figure.id === "fornoyd")).toBe(false);
-    expect(figures).toHaveLength(MAX_HIGHLIGHTS);
-    const by = Object.fromEntries(figures.map((figure) => [figure.id, figure]));
+    expect(figures.length).toBeLessThanOrEqual(MAX_HIGHLIGHTS);
+    expect(PILOT_ROUTES.has("/overlevering") && PILOT_ROUTES.has("/rom") && !PILOT_ROUTES.has("/gjester")).toBe(true);
+    const by = Object.fromEntries([...figures, ...selectHighlights(data({ role: "receptionist" }))].map((figure) => [figure.id, figure]));
     const rooms = data().rooms!.length;
     const revenue = revenueLastNight(rooms);
     expect(by.belegg).toMatchObject({ value: occupancy(revenue, rooms), unit: "%", detail: `${revenue.roomsSold} av ${rooms} rom solgt`, source: "test" });
@@ -133,10 +148,11 @@ describe("selectHighlights (the figures)", () => {
     // One line a manager reads; the referee is one tap away, behind "Slik vet vi det".
     expect(by.oppgaver.detail).toBe(robotShort(NIGHT.tally));
     expect(by.oppgaver).toMatchObject({ methodLabel: "Slik vet vi det" });
-    expect(by.oppgaver.method?.[0]).toMatch(new RegExp(`^Godkjent av dommeren \\(Wybe Night Shift-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`));
-    // One Klare til salg on every screen: ready and free in the booking system (or released), "av 36", with the money line.
+    expect(by.oppgaver.method?.[0]).toMatch(new RegExp(`^Bekreftet av Wybe Night Shift-simulatoren, som ikke finnes i et ekte hotell: ${NIGHT.tally.done} av ${NIGHT.tally.reported} «ferdig»`));
+    expect(by.oppgaver.method?.[0]).not.toMatch(/dommer/);
+    // One Klare til salg on every screen: ready and free in the booking system (or released), "av 36", with the rooms named.
     expect(by.klare).toMatchObject({ value: MONEY.readyToSell, unit: `av ${data().rooms!.length}` });
-    expect(by.klare.detail).toBe(moneyHeadline(MONEY) ?? undefined);
+    expect(by.klare.detail).toBe(readyDetail(data()) ?? moneyHeadline(MONEY) ?? undefined);
     // Nothing on the row is a warning or a danger.
     expect(figures.every((figure) => figure.tone === "success" || figure.tone === "default")).toBe(true);
   });
@@ -155,9 +171,20 @@ describe("selectHighlights (the figures)", () => {
 
   it("names under the row which figures are the robot's log, which test data, which estimates", () => {
     const line = figureSources(selectHighlights(data()));
-    expect(line).toBe(
-      "Fra robotens natt (kjøringsloggen): Robotens oppdrag i natt, Rom klare til salg, Rom sjekket av roboten. Testdata til bookingsystemet er koblet til: Belegg i natt, Losjiinntekt i natt, Nye bookinger i dag.",
+    expect(line).toBe("Fra robotens natt (kjøringsloggen): Robotens oppdrag i natt, Rom klare til salg nå, Rom sjekket av roboten. Testdata til bookingsystemet er koblet til: Belegg i natt.");
+    expect(figureSources(selectHighlights(data({ role: "receptionist" })))).toBe(
+      "Fra robotens natt (kjøringsloggen): Robotens oppdrag i natt, Rom klare til salg nå. Testdata til bookingsystemet er koblet til: Belegg i natt, Losjiinntekt i natt, Nye bookinger i dag.",
     );
+  });
+
+  it("names the rooms behind Klare til salg, so its 1 and the room check's 1 are never read as one room (round 5, the creative juror)", () => {
+    const room = (id: string, status: "klar" | "opptatt", extra: { held?: boolean; toConfirm?: boolean } = {}) =>
+      ({ ...selectRooms(NIGHT)[0], id, number: id.slice(5), status, closed: false, ...extra });
+    const money = { ...MONEY, readyToSell: 1, toSell: [{ ...MONEY.toSell[0], room: "room-213" }], released: [], caught: ["room-209"], toSellValue: 1500 } as typeof MONEY;
+    const rooms = [room("room-314", "klar"), room("room-213", "opptatt", { toConfirm: true }), room("room-209", "opptatt", { held: true }), room("room-101", "opptatt")];
+    expect(readyDetail({ money, rooms })?.replace(/\s/g, " ")).toBe("Klar nå: rom 314 · etter bekreftelse: rom 213, ca. 1 500 kr hvis utsolgt · holdt tilbake: rom 209");
+    // When the rack and the figure disagree, the plain money line instead of a wrong name.
+    expect(readyDetail({ money: { ...money, readyToSell: 2 }, rooms })).toBeNull();
   });
 
   it("estimates the hours the robot saved from the credited tasks, less what it handed back", () => {
@@ -177,8 +204,10 @@ describe("the robot figure's refusals, split by the referee (the judgement card'
   it("on the demo night: the refusals in a manager's words (never \"falske klager\"), 1 not approved, never \"8 avvist uten bestilling\"", () => {
     const lines = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
     const night = foldNight(lines);
-    const detail = robotDetail(night, declineSplit(lines));
-    expect(detail).toBe(`Godkjent av dommeren (Wybe Night Shift-simulatoren): ${night.tally.done} av ${night.tally.reported} · 6 meldinger uten bestilling og 1 alt levert · 1 ikke godkjent`);
+    const detail = robotDetail(night, declineSplit(lines), doneBasis(lines));
+    expect(detail).toBe(
+      `Bekreftet av Wybe Night Shift-simulatoren, som ikke finnes i et ekte hotell: ${night.tally.done} av ${night.tally.reported} «ferdig» (64 etter at poengsummen steg, 9 på robotens egen vurdering) · 6 meldinger uten bestilling og 1 alt levert · 1 ikke godkjent`,
+    );
     expect(detail).not.toMatch(/8 avvist uten bestilling|falsk/);
     expect(robotShort(night.tally)).toBe(`Alle ${night.tally.done} «ferdig» bekreftet · ${night.tally.handedBack} til en person`);
     // Without the split, the plain count.

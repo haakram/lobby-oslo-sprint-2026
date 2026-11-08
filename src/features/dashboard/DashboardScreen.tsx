@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { canAccess } from "@/features/auth/roles";
-import { MODULES } from "@/features/modules/registry";
+import { MODULES, PILOT_MODULES } from "@/features/modules/registry";
 import { Button, Card, cx, ErrorState } from "@/ui";
 import { nightLabel } from "./format";
 import { Greeting } from "./Greeting";
@@ -20,7 +20,9 @@ import { WIDE, WIDGETS } from "./widgets";
  */
 export function DashboardScreen({ viewerUrl }: { viewerUrl?: string }) {
   const { data, run, night, robot } = useHotelData(viewerUrl);
-  const widgets = MODULES.filter((module) => module.widget && canAccess(data.role, module.route));
+  // The pilot accounts (admin) see the pilot's widgets only, the same cut as the rail (round 5, the product juror, the creative juror):
+  // no Lager, Ansatte, Vedlikehold, Gjester, Resepsjon or 3D widget for a manager whose pilot is four screens.
+  const widgets = MODULES.filter((module) => module.widget && canAccess(data.role, module.route) && (data.role !== "admin" || PILOT_MODULES.includes(module.id)));
 
   const ready = run.status !== "loading";
   const scope = useRef<HTMLDivElement>(null);

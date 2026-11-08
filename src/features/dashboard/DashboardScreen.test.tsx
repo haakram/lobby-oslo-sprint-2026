@@ -5,12 +5,13 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { canAccess, type Role } from "@/features/auth/roles";
 import { SessionProvider } from "@/features/auth/SessionProvider";
-import { type ModuleId, MODULES } from "@/features/modules/registry";
+import { type ModuleId, MODULES, PILOT_MODULES } from "@/features/modules/registry";
+import { doneBasis, selfContradictions } from "@/features/nightshift/conduct";
 import { parseRunLog } from "@/features/nightshift/runlog";
 import { MANUAL_REQUESTS } from "@/features/requests/testData";
 import { occupancy, revenueLastNight } from "@/features/rooms/pms";
 import { DashboardScreen } from "./DashboardScreen";
-import { atNight } from "./highlights";
+import { atNight, basisLine } from "./highlights";
 import { placeLabel } from "./labels";
 import { foldNight, selectRobot, selectRooms } from "./selectors";
 
@@ -26,7 +27,10 @@ const ROBOT = selectRobot(NIGHT);
 const STAFF_DONE = MANUAL_REQUESTS.filter((request) => atNight(request.at) && request.status === "fullfort").length;
 const DONE = NIGHT.tally.done;
 const TOTAL = NIGHT.tally.total;
-const ADMIN_FIGURES = ["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Rom klare til salg", "Nye bookinger i dag", "Rom sjekket av roboten"];
+// The pilot accounts (admin) get the pilot's figures only (round 5): no Losjiinntekt, no bookings of the day.
+const ADMIN_FIGURES = ["Belegg i natt", "Robotens oppdrag i natt", "Rom klare til salg nå", "Rom sjekket av roboten"];
+const LINES = parseRunLog(DEMO).lines;
+const BASIS = doneBasis(LINES);
 
 /** The widget's heading as the registry names the module; the robot's widget is "Roboten". */
 function widgetName(id: ModuleId): RegExp {
@@ -79,7 +83,7 @@ afterEach(() => {
 });
 
 describe("DashboardScreen (Oversikt, the home page)", () => {
-  it("shows the admin the whole hotel: the top bar, the greeting, the figures and one widget per module", async () => {
+  it("shows the pilot admin the pilot's Oversikt: the top bar, the greeting, the pilot's figures and the pilot's widgets only", async () => {
     route();
     render(as("admin", <DashboardScreen />));
 
@@ -93,37 +97,46 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
 
     // Good news first: the greeting is the page's heading, honest about the time of day.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^(God morgen|God dag|God kveld|Hei), Test$/);
-    // One factual line, not a verdict: green only for what the referee confirmed, then what the day starts with.
-    expect(screen.getByText(`${DONE} oppgaver bekreftet`)).toBeInTheDocument();
+    // One factual line, not a verdict: green for what is done, then what it rested on (round 5), then what the day starts with.
+    if (BASIS.own.reported > 0) {
+      expect(screen.getByText(`${DONE} oppgaver ferdig`)).toBeInTheDocument();
+      expect(screen.getByText(`(${basisLine(BASIS, selfContradictions(LINES))})`)).toBeInTheDocument();
+    } else expect(screen.getByText(`${DONE} oppgaver bekreftet`)).toBeInTheDocument();
     expect(screen.getByText(`Nattevakten ordnet ${STAFF_DONE} til. Ingen rom venter på renhold.`, { exact: false })).toBeInTheDocument();
     expect(screen.queryByText(/Natten gikk fint/)).not.toBeInTheDocument();
     // The product's front door is the one primary action.
     expect(screen.getByRole("link", { name: "Se overleveringen 06:00" })).toHaveAttribute("href", "/overlevering");
 
-    // Six figures along one rule: last night's rooms and money, the robot's night, the rooms, the guests.
+    // The pilot's figures along one rule: last night's sales, the robot's night, the rooms to sell, the rooms checked.
     for (const label of ADMIN_FIGURES) expect(figures().getByText(label)).toBeInTheDocument();
+    expect(figures().queryByText(/Losjiinntekt|Nye bookinger|Varer over minimum/)).not.toBeInTheDocument();
     // One occupancy: the booking system's last night, as on Gjester and Overlevering.
     const revenue = revenueLastNight(ROOMS.length);
     expect(figure("Belegg i natt")).toBe(`${occupancy(revenue, ROOMS.length)}%`);
     expect(figures().getByText(`${revenue.roomsSold} av ${ROOMS.length} rom solgt`)).toBeInTheDocument();
-    expect(figures().getByText(/^Snittpris [\d\s\u00a0]+ kr · RevPAR [\d\s\u00a0]+ kr$/)).toBeInTheDocument();
     // The night's misses are part of its total, not a red count of their own; the server's verdict is said.
     expect(figure("Robotens oppdrag i natt")).toBe(`${DONE}av ${TOTAL}`);
     // One line a manager reads; the referee one tap away, behind "Slik vet vi det".
     expect(figures().getByText(`Alle ${NIGHT.tally.done} «ferdig» bekreftet · ${NIGHT.tally.handedBack} til en person`)).toBeInTheDocument();
     expect(figures().getByText("Slik vet vi det")).toBeInTheDocument();
-    expect(figures().getByText(new RegExp(`^Godkjent av dommeren \\(Wybe Night Shift-simulatoren\\): ${NIGHT.tally.done} av ${NIGHT.tally.reported}`))).toBeInTheDocument();
+    expect(figures().getByText(new RegExp(`^Bekreftet av Wybe Night Shift-simulatoren, som ikke finnes i et ekte hotell: ${NIGHT.tally.done} av ${NIGHT.tally.reported} «ferdig»`))).toBeInTheDocument();
+    // No referee anywhere on the pilot's Oversikt, and no cleaning route (Ruter is outside the pilot).
+    expect(screen.queryByText(/dommer/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^Lag / })).not.toBeInTheDocument();
     expect(screen.queryByText(/feilet/)).not.toBeInTheDocument();
     // No vanity figure on screen one (jury round 3, the product juror): no hours saved, no test-data guest rating.
     expect(figures().queryByText(/Timer spart|Gjester fornøyd/)).not.toBeInTheDocument();
     // Under the row: which figures are the robot's log and which are test data.
-    expect(figures().getByText(/^Fra robotens natt \(kjøringsloggen\): Robotens oppdrag i natt, Rom klare til salg, Rom sjekket av roboten\. Testdata/)).not.toHaveTextContent(/Anslag/);
+    expect(figures().getByText(/^Fra robotens natt \(kjøringsloggen\): Robotens oppdrag i natt, Rom klare til salg nå, Rom sjekket av roboten\. Testdata/)).not.toHaveTextContent(/Anslag/);
 
-    // One widget per module that has one, in registry order; the robot is one small widget.
-    const widgets = WIDGET_MODULES.map((module) => screen.getByRole("region", { name: widgetName(module.id) }));
-    expect(widgets).toHaveLength(8);
-    const order = widgets.map((widget) => widget.compareDocumentPosition(widgets[0]));
-    expect(order.slice(1).every((position) => position & Node.DOCUMENT_POSITION_PRECEDING)).toBe(true);
+    // The pilot's widgets only, in registry order (the rail's cut, the product juror): Rom og renhold and Forespørsler.
+    const pilot = WIDGET_MODULES.filter((module) => PILOT_MODULES.includes(module.id));
+    const widgets = pilot.map((module) => screen.getByRole("region", { name: widgetName(module.id) }));
+    expect(pilot.map((module) => module.id)).toEqual(["rom", "foresporsler"]);
+    for (const entry of WIDGET_MODULES.filter((candidate) => !PILOT_MODULES.includes(candidate.id))) {
+      expect(screen.queryByRole("region", { name: widgetName(entry.id) }), entry.id).not.toBeInTheDocument();
+    }
+    expect(widgets[1].compareDocumentPosition(widgets[0]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
 
     // The key rack in small: every room a tile, linking into Rom og renhold.
     expect(rooms().getAllByRole("link", { name: /^Rom \d{3}:/ })).toHaveLength(ROOMS.length);
@@ -149,11 +162,12 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
 
   it("leads the widgets with what got done: requests and work orders done first, stock above minimum", async () => {
     route();
-    render(as("admin", <DashboardScreen />));
+    render(as("robot", <DashboardScreen />));
     await rooms().findByRole("link", { name: /^Rom 319/ });
 
     const requests = within(screen.getByRole("region", { name: /^Forespørsler/ }));
-    expect(requests.getByText(/av \d+ fullført/)).toBeInTheDocument();
+    // All sources, with the robot's own share named: the same figure as "Robotens oppdrag" (round 5).
+    expect(requests.getByText(/av \d+ forespørsler fullført/)).toHaveTextContent(new RegExp(`\\(roboten ${DONE} av ${TOTAL}, telefon og personale \\d+ av \\d+\\)`));
     expect(requests.getAllByText(/fullført$/).length).toBeGreaterThan(0);
     within(requests.getByRole("list", { name: "Sist fullført" }))
       .getAllByRole("listitem")
@@ -175,7 +189,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
       { v: 1, type: "decision", kind: "room_status", data: { room: "room-201", status: "ma_vaskes", source: "room_check" } },
     ];
     route({ run: night.map((line) => JSON.stringify(line)).join("\n") });
-    render(as("admin", <DashboardScreen />));
+    render(as("receptionist", <DashboardScreen />));
 
     const send = await screen.findByRole("link", { name: "Lag renholdsrute" });
     // Ruter opens on Dagens renhold (the night's dirty rooms and today's departures), where the saving shows.
@@ -190,7 +204,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
 
   it("offers a check round instead when no room must be cleaned and some are unchecked", async () => {
     route();
-    render(as("admin", <DashboardScreen />));
+    render(as("receptionist", <DashboardScreen />));
     const unchecked = ROOMS.filter((room) => room.status === "ukjent").length;
     expect(await screen.findByRole("link", { name: `Lag sjekkrunde for ${unchecked} rom` })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Lag renholdsrute" })).not.toBeInTheDocument();
@@ -211,8 +225,8 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
   });
 
   it.each<[Role, string[], string[]]>([
-    ["receptionist", ["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Rom klare til salg", "Nye bookinger i dag"], ["Rom sjekket av roboten", "Varer over minimum"]],
-    ["robot", ["Robotens oppdrag i natt", "Rom klare til salg", "Rom sjekket av roboten", "Varer over minimum"], ["Belegg i natt", "Losjiinntekt i natt", "Nye bookinger i dag"]],
+    ["receptionist", ["Belegg i natt", "Losjiinntekt i natt", "Robotens oppdrag i natt", "Rom klare til salg nå", "Nye bookinger i dag"], ["Rom sjekket av roboten", "Varer over minimum"]],
+    ["robot", ["Robotens oppdrag i natt", "Rom klare til salg nå", "Rom sjekket av roboten", "Varer over minimum"], ["Belegg i natt", "Losjiinntekt i natt", "Nye bookinger i dag"]],
   ])("shows the %s only the figures of screens they may open", async (role, shown, hidden) => {
     route();
     render(as(role, <DashboardScreen />));
@@ -291,11 +305,10 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
 
   it("shows an error with a retry when the night can't be loaded, and keeps the rest of the hotel", async () => {
     route({ run: "", runStatus: 500 });
-    render(as("admin", <DashboardScreen />));
+    render(as("robot", <DashboardScreen />));
 
     expect(await screen.findByText("Fikk ikke lastet natten")).toBeInTheDocument();
     expect(screen.getByText("Natten er ikke lastet ennå.")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Gjester og bookinger" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: /^Lager og lin/ })).toBeInTheDocument();
     expect(screen.getByText("Ingen data fra natten")).toBeInTheDocument();
     // The night's widgets and figures say it isn't there, instead of loading forever.
@@ -303,7 +316,7 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     expect(within(screen.getByRole("region", { name: "Roboten" })).getByText(/^Ikke lastet/)).toBeInTheDocument();
     expect(figure("Robotens oppdrag i natt")).toBe("–");
     // Today's figures don't hang on the night.
-    expect(figure("Belegg i natt")).toMatch(/^\d+%$/);
+    expect(figure("Varer over minimum")).toMatch(/^\d+av \d+$/);
 
     route();
     fireEvent.click(screen.getByRole("button", { name: "Prøv igjen" }));

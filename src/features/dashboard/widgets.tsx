@@ -160,7 +160,8 @@ function RoomsWidget({ data, className }: WidgetProps) {
             <li className="flex items-center gap-1.5">
               {/* Quiet here: what an avvik needs is on Vedlikehold and in the bell, not in red on Oversikt. */}
               <RegenIcon name={AVVIK.icon} size={14} strokeWidth={2} className="shrink-0 text-muted" />
-              <span className="text-muted">Avvik</span>
+              {/* Rooms with an open work order, not the work orders themselves (Vedlikehold counts those): round 5, the design juror. */}
+              <span className="text-muted">Rom med avvik</span>
               <span className="font-semibold tabular-nums">{counts.avvik}</span>
             </li>
           </ul>
@@ -239,6 +240,8 @@ function GuestsWidget({ data, className }: WidgetProps) {
 /** Requests: what got done first, the latest of it, and how many wait (those are in the bell). Counted as on Forespørsler. */
 function RequestsWidget({ data, className }: WidgetProps) {
   const totals = requestTotals(data.requests);
+  // The robot's share named, so "79 av 87" here and Oversikt's "Robotens oppdrag 73 av 77" read as one night (round 5).
+  const robot = requestTotals(data.requests.filter((request) => request.source === "robot"));
   const done = data.requests.filter((request) => request.status === "fullfort");
   const latest = [...done].sort((a, b) => sinceNoon(b.at) - sinceNoon(a.at)).slice(0, SHOWN);
   return (
@@ -250,7 +253,8 @@ function RequestsWidget({ data, className }: WidgetProps) {
       ) : (
         <>
           <GoodLine>
-            <Good>{totals.done}</Good> av {totals.total} fullført
+            <Good>{totals.done}</Good> av {totals.total} forespørsler fullført
+            {robot.total > 0 && totals.total > robot.total && ` (roboten ${robot.done} av ${robot.total}, telefon og personale ${totals.done - robot.done} av ${totals.total - robot.total})`}
             {totals.waiting > 0 && ` · ${totals.waiting} venter på en person`}
           </GoodLine>
           {latest.length > 0 && (
@@ -443,9 +447,9 @@ function RobotWidget({ data, className }: WidgetProps) {
             </dd>
             {tally && tally.reported > 0 && (
               <>
-                <dt className="text-muted">Godkjent</dt>
+                <dt className="text-muted">Bekreftet</dt>
                 <dd className="tabular-nums">
-                  {tally.done} av {tally.reported} av dommeren
+                  {tally.done} av {tally.reported} «ferdig»
                 </dd>
               </>
             )}

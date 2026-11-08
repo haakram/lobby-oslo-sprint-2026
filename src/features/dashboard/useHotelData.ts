@@ -5,6 +5,7 @@ import type { Role } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import { reviewScore, selectGuestDay } from "@/features/guests/testData";
 import { nightSafety } from "@/features/handover/safety";
+import { doneBasis, selfContradictions } from "@/features/nightshift/conduct";
 import { declineSplit } from "@/features/nightshift/declines";
 import { lowStock, STOCK } from "@/features/inventory/testData";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
@@ -51,6 +52,8 @@ export function useHotelData(viewerUrl?: string) {
   const lines = run.status === "ready" ? run.lines : null;
   const safety = useMemo(() => (lines ? nightSafety(lines) : null), [lines]);
   const declines = useMemo(() => (lines ? declineSplit(lines) : null), [lines]);
+  const basis = useMemo(() => (lines ? doneBasis(lines) : null), [lines]);
+  const contradictions = useMemo(() => (lines ? selfContradictions(lines) : null), [lines]);
   // The same room check as Rom and Overlevering: a release on either moves Oversikt's figure and the money line.
   const { money } = useRoomCheck(lines, rackRooms, osloToday());
   // The rack and the money line agree: a room held back is taken, and one still to confirm is not a green Klar.
@@ -72,6 +75,8 @@ export function useHotelData(viewerUrl?: string) {
       safety,
       money,
       declines,
+      basis,
+      contradictions,
       robot,
       requests,
       maintenance,
@@ -85,7 +90,7 @@ export function useHotelData(viewerUrl?: string) {
       shift,
       onShift: onShift(shift),
     }),
-    [role, user, hour, run.status, night, heldRooms, safety, money, declines, robot, requests, maintenance, outOfOrder, guests, calls, retryCalls, shift],
+    [role, user, hour, run.status, night, heldRooms, safety, money, declines, basis, contradictions, robot, requests, maintenance, outOfOrder, guests, calls, retryCalls, shift],
   );
 
   return { data, run, night, robot };

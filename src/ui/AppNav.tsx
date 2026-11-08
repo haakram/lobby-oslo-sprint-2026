@@ -165,7 +165,7 @@ function Bar({
           {shown.map((item) => {
             const active = isActive(item.href, pathname);
             return (
-              <li key={item.href} className="min-w-0 flex-1">
+              <li key={item.href} className="min-w-0 flex-auto">
                 <Link
                   href={item.href}
                   aria-current={active ? "page" : undefined}
@@ -182,7 +182,7 @@ function Bar({
               </li>
             );
           })}
-          <li className="min-w-0 flex-1">
+          <li className="min-w-0 flex-auto">
             <button
               type="button"
               aria-haspopup="dialog"

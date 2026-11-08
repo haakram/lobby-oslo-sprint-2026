@@ -1,4 +1,4 @@
-import { itemName, placeName, roomNumber } from "./hotel";
+import { itemName, placeInSentence, roomNumber } from "./hotel";
 
 /**
  * The robot's own notes in the hotel's words (jury round 1: English agent strings inside a bokmål UI).
@@ -10,7 +10,7 @@ import { itemName, placeName, roomNumber } from "./hotel";
 type Rule = [RegExp, (...groups: string[]) => string];
 
 const capitalise = (text: string) => (text ? text.charAt(0).toLocaleUpperCase("nb-NO") + text.slice(1) : text);
-const place = (id: string) => placeName(id);
+const place = (id: string) => placeInSentence(id);
 const room = (id: string) => `rom ${roomNumber(id.startsWith("room-") ? id : `room-${id}`)}`;
 const item = (id: string) => itemName(id.replace(/_/g, "-"));
 /** The kind of thing, without its number: the room is already in the sentence ("Brett levert til rom 205"). */
@@ -43,8 +43,8 @@ const NOTES: Rule[] = [
   [/^placed ([\w-]+) inside (room-\d+).*$/i, (what, id) => `${capitalise(thing(what))} satt inn i ${room(id)}`],
   [/^asked (room-\d+) to keep the noise down$/i, (id) => `Ba ${room(id)} dempe støyen`],
   [/^looked inside (room-\d+): (.*)$/i, (id, look) => `Så inn i ${room(id)}: ${lookText(look)}`],
-  [/^wet-floor sign placed over the wet patch at ([\w-]+)$/i, (at) => `Skilt for vått gulv satt ut i ${place(at).toLowerCase()}`],
-  [/^wet-floor sign moved from ([\w-]+) to the wet patch at ([\w-]+)$/i, (from, to) => `Skilt for vått gulv flyttet fra ${place(from).toLowerCase()} til ${place(to).toLowerCase()}`],
+  [/^wet-floor sign placed over the wet patch at ([\w-]+)$/i, (at) => `Skilt for vått gulv satt ut i ${place(at)}`],
+  [/^wet-floor sign moved from ([\w-]+) to the wet patch at ([\w-]+)$/i, (from, to) => `Skilt for vått gulv flyttet fra ${place(from)} til ${place(to)}`],
   [/^told (room-\d+): (.*)$/i, (id, message) => `Ga beskjed til ${room(id)}: ${MESSAGES[message.trim().toLowerCase()] ?? `«${message.trim()}»`}`],
   [/^No ([\w-]+) order from (\d+) on record tonight; nothing was ordered\.?$/i, (what, n) => `Ingen bestilling av ${item(what)} fra ${room(n)} i natt; ingenting å levere`],
   [/^The ([\w-]+) for (\d+) was already delivered under (R-\d+); nothing more to bring\.?$/i, (what, n, request) => `${capitalise(item(what))} til ${room(n)} er alt levert (${request}); ingenting mer å levere`],

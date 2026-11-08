@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseRunLog } from "@/features/nightshift/runlog";
-import { HOTEL_NODES, HOTEL_ROOMS, placeName, roomNumber } from "./hotel";
-import { buildTimeline, clockToSim, robotPoseAt, simToClock, snapshotAt, taskTitle } from "./timeline";
+import { HOTEL_NODES, HOTEL_ROOMS, placeInSentence, placeName, roomNumber } from "./hotel";
+import { buildTimeline, clockToSim, humanise, robotPoseAt, simToClock, snapshotAt, taskTitle } from "./timeline";
 
 const SAMPLE = readFileSync(resolve(process.cwd(), "src/features/nightshift/fixtures/sample.jsonl"), "utf8");
 const { lines } = parseRunLog(SAMPLE);
@@ -171,7 +171,11 @@ describe("snapshotAt", () => {
 describe("names", () => {
   it("speaks the hotel's Norwegian", () => {
     expect(placeName("room-214")).toBe("Rom 214");
-    expect(placeName("corridor-3a")).toBe("Korridor 3a");
+    expect(placeName("corridor-3a")).toBe("Korridor 3A");
+    // In a sentence only the first letter is lowered: "korridor 2B", as Overlevering and the robot card spell it.
+    expect(placeInSentence("corridor-2b")).toBe("korridor 2B");
+    expect(placeInSentence("room-319")).toBe("rom 319");
+    expect(humanise("Slipped at corridor-2b near room-213.")).toBe("Slipped at korridor 2B near rom 213.");
     expect(placeName("kitchen-pass")).toBe("Kjøkkenluke");
     expect(roomNumber("room-214")).toBe("214");
     expect(taskTitle("R-021", "tray", "room-214", "tray-214")).toBe("R-021 · Romservice til 214");

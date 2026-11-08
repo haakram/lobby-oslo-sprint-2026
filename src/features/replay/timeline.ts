@@ -1,6 +1,6 @@
 import { BASE_HOTEL, type HotelMap, hotelForRun, nodeFloorIn, roomsOf } from "@/features/hotel/mapFromRun";
 import type { RunLine } from "@/features/nightshift/runlog";
-import { DOCK_NODE, itemName, placeName, roomNumber, taskKindName } from "./hotel";
+import { DOCK_NODE, itemName, placeInSentence, placeName, roomNumber, taskKindName } from "./hotel";
 import { agentNote, lookText } from "./norsk";
 
 /**
@@ -283,8 +283,8 @@ function describeDecision(kind: string, data: Record<string, unknown>, requests:
       return {
         label: "Ventet",
         text: data.final === true
-          ? `Låste ikke opp ${room ? placeName(room).toLowerCase() : "rommet"}: en ukjent person var der fortsatt`
-          : `Ventet med å låse opp ${room ? placeName(room).toLowerCase() : "rommet"}: en ukjent person var der`,
+          ? `Låste ikke opp ${room ? placeInSentence(room) : "rommet"}: en ukjent person var der fortsatt`
+          : `Ventet med å låse opp ${room ? placeInSentence(room) : "rommet"}: en ukjent person var der`,
         tone: "neutral",
       };
     }
@@ -325,11 +325,11 @@ function describeDecision(kind: string, data: Record<string, unknown>, requests:
   }
 }
 
-/** Node ids inside free text ("room-319", "corridor-1b") in the hotel's own words. */
+/** Node ids inside free text ("room-319", "corridor-1b") in the hotel's own words ("korridor 1B", as every screen spells it). */
 export function humanise(text: string): string {
   return text
     .replace(/\broom-(\d+)\b/g, "rom $1")
-    .replace(/\bcorridor-(\w+)\b/g, "korridor $1")
+    .replace(/\bcorridor-(\w+)\b/g, (_, at: string) => `korridor ${at.toUpperCase()}`)
     .replace(/\belevator-(\d)\b/g, "heis $1")
     .replace(/\bstairwell-(\d)\b/g, "trapp $1")
     .replace(/\bkitchen-pass\b/g, "kjøkkenluka")
@@ -352,7 +352,7 @@ function describeCall(cmd: string, args: Record<string, unknown>, ok: boolean, r
       const where = str(args.where) ?? node;
       return {
         label: "La igjen",
-        text: `${itemName(str(args.item))}${where ? ` ${str(args.where) ? "i" : "ved"} ${placeName(where).toLowerCase()}` : ""}`,
+        text: `${itemName(str(args.item))}${where ? ` ${str(args.where) ? "i" : "ved"} ${placeInSentence(where)}` : ""}`,
         tone: "neutral",
       };
     }

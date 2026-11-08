@@ -201,7 +201,7 @@ describe("NightShiftScreen, live", () => {
     const stats = screen.getByRole("group", { name: "Skiftet i tall" });
     expect(within(stats).getByText("16")).toBeInTheDocument();
     expect(within(stats).getByText("22:05:10")).toBeInTheDocument();
-    expect(within(stats).getByText("Korridor 1b")).toBeInTheDocument();
+    expect(within(stats).getByText("Korridor 1B")).toBeInTheDocument();
   });
 
   it("says the viewer server can't be reached", async () => {

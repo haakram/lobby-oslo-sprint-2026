@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   itemName,
   nodeFloor,
+  placeInSentence,
   placeName,
   type ReplayEvent,
   type RoomStatus,
@@ -192,7 +193,7 @@ export function TaskCard({ snapshot, finished, className }: { snapshot: Snapshot
           <p className="text-lg font-semibold tracking-[-0.01em]">
             {finished ? "Skiftet er ferdig" : robot?.node === "charging-dock" ? "Lader" : "Venter på oppgave"}
           </p>
-          <p className="text-base text-muted">{robot ? `Roboten står ved ${placeName(robot.node).toLowerCase()}.` : "Venter på skiftet."}</p>
+          <p className="text-base text-muted">{robot ? `Roboten står ved ${placeInSentence(robot.node)}.` : "Venter på skiftet."}</p>
         </>
       )}
       {robot && robot.carrying.length > 0 && (

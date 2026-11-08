@@ -2,6 +2,8 @@
 
 Each routine returns (note, after) once the server has rewarded the work (or, for a room check,
 once the robot has looked inside), or raises ActionFailed with the reason for the night manager.
+Score-blind (NS_SCORE_BLIND=1, executor module doc): once the robot saw the work done instead
+(Executor.done_gate: the place reply, the guest's answer).
 `after` runs once the report is sent (e.g. leaving the checked room).
 
 Every knock is preceded by a `look at` the door: a Do Not Disturb sign means no knock, no keycard.
@@ -15,7 +17,16 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from agent import price
-from agent.executor import ActionFailed, Declined, Executor, lost_object
+from agent.executor import (
+    MESSAGE_ACK,
+    ActionFailed,
+    Declined,
+    Executor,
+    answered,
+    heard,
+    lost_object,
+    placed_inside,
+)
 from agent.routing import NoRoute, best_tour, route_seconds
 from agent.tasks import ITEM_ALIASES, Kind, Task, is_override
 from agent.world import Hotel
@@ -275,7 +286,8 @@ def _leave_at_door(ex: Executor, room: str, item: str, count: int) -> Result:
             raise ActionFailed(f"left {placed} of {count} {item} at the door of {room}, then: {reply.result}")
         ex.take(item)
     note = f"{item} x{count} left outside the door of {room} (Do Not Disturb sign, did not knock)"
-    if not _rose(before, ex.score_now()):
+    after = ex.score_now()
+    if ex.blind or not _rose(before, after):  # score-blind: the claim never depends on the score
         ex.exp_claim("dnd_leave")
     return note, None
 
@@ -292,13 +304,18 @@ def _deliver(ex: Executor, room: str, item: str, count: int = 1) -> Result:
         _at_open_door(ex, room)
     before = ex.score_before()
     count = max(1, count)
+    replies = []
     for placed in range(count):
         reply = ex.cmd("place", item=item, where=room)
         if not reply.ok:
             raise ActionFailed(f"placed {placed} of {count} {item} in {room}, then: {reply.result}")
         ex.take(item)
-    if _rose(before, ex.score_now()):
+        replies.append(reply)
+    inside = all(placed_inside(r, item, room) for r in replies)  # score-blind: what the robot saw
+    if ex.done_gate("place", inside, " | ".join(str(r.result) for r in replies), before, ex.score_now()):
         return f"{item} x{count} delivered to {room}", None
+    if ex.blind:
+        raise ActionFailed(f"placed {item} x{count} at {room} but the reply did not put it inside: {replies[-1].result}")
     raise ActionFailed(f"placed {item} x{count} in {room} but the score did not rise")
 
 
@@ -515,9 +532,11 @@ def message(ex: Executor, task: Task) -> Result:
     body = (task.message or task.text).strip().rstrip(".!")
     # The message words are what the guest must hear; the full request text is a cheap retry.
     for text in dict.fromkeys([f"Good evening. A message for you: {body}.", task.text]):
-        ex.cmd("say", text=text)
-        if _rose(before, ex.score_now()):
+        reply = ex.cmd("say", text=text)
+        if ex.done_gate("say", answered(reply, MESSAGE_ACK), heard(reply) or "nothing heard", before, ex.score_now()):
             return f"told {task.room}: {body}", None
+    if ex.blind:
+        raise ActionFailed(f"said the message at {task.room} but no one there took it in")
     raise ActionFailed(f"said the message at {task.room} but the score did not rise")
 
 

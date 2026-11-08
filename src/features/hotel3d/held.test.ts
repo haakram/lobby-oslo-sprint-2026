@@ -6,12 +6,16 @@ import { buildTimeline, clockToSim, snapshotAt } from "@/features/replay";
 import { osloToday } from "@/features/reception/dates";
 import { pmsLastNight } from "@/features/rooms/pms";
 import { reconcileNight } from "@/features/rooms/reconcile";
-import { HELD_WORD, heldOf, roomWord, withHeldRooms } from "./held";
+import { CONFIRM_WORD, checkWord, HELD_WORD, heldOf, roomWord, toConfirmOf, withHeldRooms } from "./held";
 
 const lines = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
 const timeline = buildTimeline(lines);
-// The same reconcile result Rom, Oversikt's rack and Overlevering read (useRoomCheck).
-const held = reconcileNight(lines, pmsLastNight(osloToday())).held;
+// The same reconcile result Rom, Oversikt's rack and Overlevering read (useRoomCheck, with today).
+const today = osloToday();
+const check = reconcileNight(lines, pmsLastNight(today), today);
+const held = check.held;
+// Nothing released yet: every sellable row is still to confirm (money.toSell, the rack's "Bekreft først").
+const toConfirm = check.sellable;
 
 describe("the 3D-kart follows the room check (209 held back, never a green Klar)", () => {
   it("shows 209 at the end of the night as taken, in the rack's words, with every bag delivered", () => {
@@ -21,9 +25,8 @@ describe("the 3D-kart follows the room check (209 held back, never a green Klar)
     expect(shown.rooms["room-209"].status).toBe("opptatt");
     expect(roomWord(shown.rooms["room-209"])).toBe(HELD_WORD);
     expect(heldOf(shown.rooms["room-209"])).toMatchObject({ room: "room-209", deliveredAt: "05:16:33", arrival: true });
-    // 213 is the room to sell (after reception confirms), not held: it stays Klar; the rest are untouched.
+    // Without rooms to confirm, 213 is untouched (it is a sleeper, not held).
     expect(shown.rooms["room-213"].status).toBe("klar");
-    expect(roomWord(shown.rooms["room-213"])).toBe("Klar");
     expect(heldOf(shown.rooms["room-213"])).toBeNull();
     expect(raw.rooms["room-209"].status).toBe("klar"); // the replay's own snapshot is not mutated
   });
@@ -46,5 +49,51 @@ describe("the 3D-kart follows the room check (209 held back, never a green Klar)
     const later = held.map((row) => ({ ...row, deliveries: row.deliveries.map((delivery) => ({ ...delivery, at: "05:59:00" })) }));
     const early = snapshotAt(timeline, clockToSim("05:00:00"));
     expect(withHeldRooms(early, later)).toBe(early);
+  });
+});
+
+describe("the 3D-kart shows 213 as a sleeper (jury round 4), never a green Klar before it is released", () => {
+  it("213 is the room check's sleeper: due out yesterday, check-out never recorded, the robot found it empty at 04:24", () => {
+    expect(toConfirm.map((row) => row.room)).toEqual(["room-213"]);
+    expect(toConfirm[0]).toMatchObject({ guest: "Ola Nygård", at: "04:24:42" });
+    expect(toConfirm[0].departure! < today).toBe(true);
+    expect(check.dueOut.map((row) => row.room)).not.toContain("room-213");
+  });
+
+  it("at the end of the night 213 reads Bekreft først, taken, with its row; 209 stays Holdt tilbake", () => {
+    const raw = snapshotAt(timeline, timeline.duration);
+    expect(raw.rooms["room-213"].status).toBe("klar");
+    const shown = withHeldRooms(raw, held, toConfirm)!;
+    expect(shown.rooms["room-213"].status).toBe("opptatt");
+    expect(roomWord(shown.rooms["room-213"])).toBe(CONFIRM_WORD);
+    expect(checkWord(shown.rooms["room-213"])).toBe("Bekreft først");
+    expect(toConfirmOf(shown.rooms["room-213"])).toMatchObject({ room: "room-213", guest: "Ola Nygård" });
+    expect(heldOf(shown.rooms["room-213"])).toBeNull();
+    expect(roomWord(shown.rooms["room-209"])).toBe(HELD_WORD);
+    expect(toConfirmOf(shown.rooms["room-209"])).toBeNull();
+    expect(raw.rooms["room-213"].status).toBe("klar"); // not mutated
+  });
+
+  it("never paints 213 Klar at any moment while it is still to confirm", () => {
+    for (let t = 0; t <= timeline.duration; t += 60) {
+      const shown = withHeldRooms(snapshotAt(timeline, t), held, toConfirm)!;
+      expect(shown.rooms["room-213"].status, `at ${t}`).not.toBe("klar");
+    }
+  });
+
+  it("is a green Klar again once reception has released it (no longer in money.toSell), as on the rack", () => {
+    const raw = snapshotAt(timeline, timeline.duration);
+    const released = withHeldRooms(raw, held, [])!;
+    expect(released.rooms["room-213"].status).toBe("klar");
+    expect(roomWord(released.rooms["room-213"])).toBe("Klar");
+  });
+
+  it("leaves a room alone that the night has not shown as klar, and never turns a held room into one to confirm", () => {
+    const raw = snapshotAt(timeline, timeline.duration);
+    const notKlar = Object.entries(raw.rooms).find(([, view]) => view.status !== "klar")![0];
+    const fake = { ...toConfirm[0], room: notKlar };
+    expect(withHeldRooms(raw, [], [fake])).toBe(raw);
+    const both = withHeldRooms(raw, held, [{ ...toConfirm[0], room: "room-209" }])!;
+    expect(roomWord(both.rooms["room-209"])).toBe(HELD_WORD);
   });
 });

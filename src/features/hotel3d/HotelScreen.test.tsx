@@ -93,13 +93,32 @@ describe("HotelScreen on the demo night: the map says what the room check says",
     expect(within(select).getAllByRole("option").find((option) => option.getAttribute("value") === "room-209")).toHaveTextContent("Rom 209 · Holdt tilbake");
     const tile = screen.getByRole("button", { name: "Rom 209: Holdt tilbake" });
     expect(tile.querySelector("rect")?.getAttribute("fill")).not.toBe("var(--success)");
-    // 213, the room to sell after reception confirms, stays Klar.
-    expect(screen.getByRole("button", { name: "Rom 213: Klar" }).querySelector("rect")).toHaveAttribute("fill", "var(--success)");
+    // 213, the sleeper to sell after reception confirms, is not a green Klar either (its own test below).
+    expect(screen.queryByRole("button", { name: "Rom 213: Klar" })).not.toBeInTheDocument();
 
     fireEvent.change(select, { target: { value: "room-209" } });
     const card = within(screen.getByRole("complementary", { name: "Status nå" }));
     expect(card.getByText("Holdt tilbake")).toBeInTheDocument();
     expect(card.queryByText("Klar")).not.toBeInTheDocument();
     expect(card.getByText(/^Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til .+\. Dobbelt tildelt\?$/)).toBeInTheDocument();
+  });
+
+  it("shows 213 (due out 7.11, check-out never recorded, found empty) as Bekreft først, never a green Klar, with the room check's words on its card", async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/runs/demo.jsonl")) return new Response(DEMO);
+      throw new TypeError("Failed to fetch");
+    });
+    const select = await renderReady();
+    expect(within(select).getAllByRole("option").find((option) => option.getAttribute("value") === "room-213")).toHaveTextContent("Rom 213 · Bekreft først");
+    const tile = screen.getByRole("button", { name: "Rom 213: Bekreft først" });
+    expect(tile.querySelector("rect")?.getAttribute("fill")).not.toBe("var(--success)");
+
+    fireEvent.change(select, { target: { value: "room-213" } });
+    const card = within(screen.getByRole("complementary", { name: "Status nå" }));
+    expect(card.getByText("Bekreft først")).toBeInTheDocument();
+    expect(card.queryByText("Klar")).not.toBeInTheDocument();
+    expect(
+      card.getByText(/^Systemet: opptatt i natt \(Ola Nygård\), skulle reist .+\. Utsjekk ikke registrert\. Roboten fant rommet tomt og ryddig kl\. 04:24\. Bekreft med resepsjonen, så kan det selges\.$/),
+    ).toBeInTheDocument();
   });
 });

@@ -13,25 +13,37 @@ import {
   type WorkOrder,
   workOrderType,
 } from "@/features/replay";
-import { heldLine } from "@/features/rooms/RoomChecksPanel";
+import { osloToday } from "@/features/reception/dates";
+import type { Sellable } from "@/features/rooms/reconcile";
+import { bookingLine, heldLine } from "@/features/rooms/RoomChecksPanel";
 import { AvvikMark, Badge, type BadgeTone, Button, Card, cx, fadeRise, RegenIcon, RoomStatusTag } from "@/ui";
 import { isRoomStatusKey, ROOM_STATUS } from "@/ui/roomStatus";
-import { HELD_WORD, heldOf, roomWord } from "./held";
+import { checkWord, heldOf, roomWord, toConfirmOf } from "./held";
 
 /** The replay's status as the shared room-status key (avvik is a mark, not a status). */
 function statusKey(status: RoomStatus) {
   return isRoomStatusKey(status) ? status : "ukjent";
 }
 
-/** The rack's "Holdt tilbake" as a key tag: the taken (opptatt) look, never the green of Klar. */
-function HeldTag() {
+/** The rack's "Holdt tilbake" or "Bekreft først" as a key tag: the taken (opptatt) look, never the green of Klar. */
+function CheckTag({ word }: { word: string }) {
   const look = ROOM_STATUS.opptatt;
   return (
     <span className={cx("inline-flex items-center gap-1.5 text-sm font-medium whitespace-nowrap", look.ink)}>
       <span aria-hidden="true" className={cx("h-1.5 w-5 shrink-0 rounded-full", look.tag)} />
-      {HELD_WORD}
+      {word}
     </span>
   );
+}
+
+/**
+ * A sleeper in the room check's words (Rom's row): "Systemet: opptatt i natt (Ola Nygård), skulle reist
+ * 7.11. Utsjekk ikke registrert. Roboten fant rommet tomt og ryddig kl. 04:24. Bekreft med resepsjonen,
+ * så kan det selges."
+ */
+export function toConfirmLine(row: Sellable, today: string = osloToday()): string {
+  const at = row.at ? ` kl. ${row.at.slice(0, 5)}` : "";
+  return `${bookingLine(row, today)}. Roboten fant rommet tomt og ryddig${at}. Bekreft med resepsjonen, så kan det selges.`;
 }
 
 /** One room, as the night has seen it so far: status, the robot's visits, open faults. */
@@ -50,8 +62,10 @@ export function RoomCard({
 }) {
   const room = snapshot.rooms[roomId];
   const status = room?.status ?? "ukjent";
-  // Held back by the room check (held.ts): taken, in the rack's words, with the catch the robot made.
+  // Held back by the room check (held.ts), or a sleeper still to confirm: taken, in the rack's words, with why.
   const held = heldOf(room);
+  const toConfirm = toConfirmOf(room);
+  const word = checkWord(room);
   const tasks = (timeline?.tasks ?? []).filter((task) => task.room === roomId && task.start <= snapshot.t);
   const requests = new Set(tasks.map((task) => task.id));
   const roomWord = `rom ${roomId.replace(/^room-/, "")}`;
@@ -77,7 +91,7 @@ export function RoomCard({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {/* The same tag as the key rack on Rom (src/ui/roomStatus.ts), and the avvik as its quiet mark. */}
-        {held ? <HeldTag /> : <RoomStatusTag status={statusKey(status)} />}
+        {word ? <CheckTag word={word} /> : <RoomStatusTag status={statusKey(status)} />}
         <AvvikMark count={orders.length} />
         {room?.since !== null && room?.since !== undefined && (
           <span className="font-mono text-sm tabular-nums text-muted">siden {simToClock(room.since, false)}</span>
@@ -85,6 +99,7 @@ export function RoomCard({
       </div>
       {room?.note && <p className="text-base text-muted">{room.note}</p>}
       {held && <p className="text-base">{heldLine(held)}</p>}
+      {toConfirm && <p className="text-base">{toConfirmLine(toConfirm)}</p>}
       {orders.length > 0 && (
         <ul aria-label="Arbeidsordre for rommet" className="flex flex-col gap-1">
           {orders.map((order) => (

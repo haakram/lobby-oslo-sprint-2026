@@ -1,5 +1,5 @@
 import { clockToSim, ROOM_STATUS_LABEL, type RoomView, type Snapshot } from "@/features/replay";
-import type { Held } from "@/features/rooms/reconcile";
+import type { Held, Sellable } from "@/features/rooms/reconcile";
 
 /**
  * The 3D-kart says what the room check says (src/features/rooms/reconcile.ts, the same result Rom,
@@ -9,16 +9,27 @@ import type { Held } from "@/features/rooms/reconcile";
  *
  * The map is a replay, so a room is held from the moment of its first holding delivery: before the bags
  * go in, the night had not shown it yet. The row a room carries lists only the deliveries made so far.
+ *
+ * A sleeper (213 on the demo night: the guest was due out 7.11, the check-out never recorded, so the
+ * booking system still holds the room tonight) is not a green "Klar" either until reception has
+ * confirmed and released it: taken, "Bekreft først", as the rack says it (`withHeld`'s `toConfirm`,
+ * read from the same `money.toSell`), from the moment the robot's room check found it empty (jury round 4).
  */
 
-/** A room on the map, with the room check's hold when it has one. */
-export type MapRoomView = RoomView & { held?: Held };
+/** A room on the map, with the room check's hold (or its sleeper row, still to confirm) when it has one. */
+export type MapRoomView = RoomView & { held?: Held; toConfirm?: Sellable };
 
 export const HELD_WORD = "Holdt tilbake";
+/** The rack's word for a room the system still holds that the robot found empty: confirm, then sell. */
+export const CONFIRM_WORD = "Bekreft først";
 
-/** The snapshot with every held room that reads "klar" at its moment shown as taken (status opptatt, `held`). */
-export function withHeldRooms(snapshot: Snapshot | null, held: readonly Held[]): Snapshot | null {
-  if (!snapshot || held.length === 0) return snapshot;
+/**
+ * The snapshot with every held room that reads "klar" at its moment shown as taken (status opptatt,
+ * `held`), and every room still to confirm (`toConfirm`, the room check's sellable rows not yet released)
+ * shown as taken with its row, never a green Klar.
+ */
+export function withHeldRooms(snapshot: Snapshot | null, held: readonly Held[], toConfirm: readonly Sellable[] = []): Snapshot | null {
+  if (!snapshot || (held.length === 0 && toConfirm.length === 0)) return snapshot;
   let rooms: Record<string, MapRoomView> | null = null;
   for (const row of held) {
     const view = snapshot.rooms[row.room];
@@ -32,6 +43,13 @@ export function withHeldRooms(snapshot: Snapshot | null, held: readonly Held[]):
       held: { ...row, deliveries: sofar, deliveredAt: sofar.at(-1)?.at ?? null, arrival: sofar.some((delivery) => delivery.arrival) },
     };
   }
+  for (const row of toConfirm) {
+    const view = (rooms ?? snapshot.rooms)[row.room] as MapRoomView | undefined;
+    // A room the robot has not yet found empty is not shown as one; a held room keeps its hold.
+    if (!view || view.status !== "klar" || view.held) continue;
+    rooms ??= { ...snapshot.rooms };
+    rooms[row.room] = { ...view, status: "opptatt", toConfirm: row };
+  }
   return rooms ? { ...snapshot, rooms } : snapshot;
 }
 
@@ -40,7 +58,18 @@ export function heldOf(view: RoomView | undefined): Held | null {
   return (view as MapRoomView | undefined)?.held ?? null;
 }
 
-/** The room's state in words, as the rack says it: "Holdt tilbake" for a held room, else its status. */
-export function roomWord(view: RoomView | undefined): string {
-  return heldOf(view) ? HELD_WORD : ROOM_STATUS_LABEL[view?.status ?? "ukjent"];
+/** The room's sleeper row, if the system still holds it and the robot found it empty (not yet released). */
+export function toConfirmOf(view: RoomView | undefined): Sellable | null {
+  return (view as MapRoomView | undefined)?.toConfirm ?? null;
 }
+
+/** The room check's own word for the room ("Holdt tilbake", "Bekreft først"), or null when it has none. */
+export function checkWord(view: RoomView | undefined): string | null {
+  return heldOf(view) ? HELD_WORD : toConfirmOf(view) ? CONFIRM_WORD : null;
+}
+
+/** The room's state in words, as the rack says it: "Holdt tilbake", "Bekreft først", else its status. */
+export function roomWord(view: RoomView | undefined): string {
+  return checkWord(view) ?? ROOM_STATUS_LABEL[view?.status ?? "ukjent"];
+}
+

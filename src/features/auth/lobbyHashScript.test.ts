@@ -35,6 +35,28 @@ describe("scripts/lobby-hash.mjs", () => {
     expect(await verifyPassword("test-password", hashes[2]!)).toBe(true);
   }, 20_000);
 
+  it("--users with a second password adds the jury's own admin account, which the team's password does not open", async () => {
+    const line = execFileSync(process.execPath, [SCRIPT, "--users", "-"], {
+      encoding: "utf8",
+      input: "team-password\njury-password\n",
+    }).trim();
+    const config = authConfig({ LOBBY_AUTH_SECRET: "x".repeat(43), LOBBY_USERS: line.slice("LOBBY_USERS=".length) });
+    expect(config.ok).toBe(true);
+    if (!config.ok) return;
+    expect(config.users.size).toBe(6);
+    const jury = config.users.get("jury");
+    expect(jury && { u: jury.u, name: jury.name, role: jury.role }).toEqual({ u: "jury", name: "Jury", role: "admin" });
+    expect(await verifyPassword("jury-password", jury!.hash)).toBe(true);
+    expect(await verifyPassword("team-password", jury!.hash)).toBe(false);
+    expect(await verifyPassword("jury-password", config.users.get("hamad")!.hash)).toBe(false);
+  }, 30_000);
+
+  it("refuses a jury password that is the team's", () => {
+    expect(() =>
+      execFileSync(process.execPath, [SCRIPT, "--users", "same-password", "same-password"], { encoding: "utf8", stdio: "pipe" }),
+    ).toThrow();
+  });
+
   it("--secret prints 32 random bytes in base64url", () => {
     const line = run("--secret");
     expect(line).toMatch(/^LOBBY_AUTH_SECRET=[A-Za-z0-9_-]{43}$/);

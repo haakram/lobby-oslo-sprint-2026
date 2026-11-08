@@ -341,7 +341,8 @@ describe("RequestsScreen: the robot's refusals are a decision for a person (jury
       </SessionProvider>,
     );
     const water = await screen.findByRole("button", { name: "Gi det likevel: Oppfølging, Rom 108" });
-    expect(screen.getByText(/1 falsk klage avvist \(godkjent av dommeren\) · 1 ikke godkjent\./)).toBeInTheDocument();
+    expect(screen.getByText(/1 melding uten bestilling · 1 ikke godkjent\./)).toBeInTheDocument();
+    expect(screen.queryByText(/falsk/)).not.toBeInTheDocument();
     const avvist = screen.getByRole("heading", { name: /^Avvist etter sjekk/ }).parentElement as HTMLElement;
     const [first, second] = within(avvist).getAllByRole("listitem");
     expect(within(first).getByText("Ikke godkjent av dommeren: se på denne først.")).toBeInTheDocument();

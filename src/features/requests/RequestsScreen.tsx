@@ -9,7 +9,7 @@ import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { useReceptionCalls } from "@/features/dashboard/useReceptionCalls";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
 import { type DataSource, SourceNote } from "@/features/modules/SourceNote";
-import { declineSplit, declineSplitText } from "@/features/nightshift/declines";
+import { declineSplit, declineSplitPlain } from "@/features/nightshift/declines";
 import { osloToday } from "@/features/reception/dates";
 import type { DemoCall } from "@/features/reception/demoCalls";
 import { formatClock } from "@/features/reception/format";
@@ -205,7 +205,7 @@ export function RequestsScreen({
   const figure = (value: number) => (runLoading ? <Skeleton className="inline-block h-7 w-10 align-middle" /> : value);
   // The refusals the referee judged, and how many of them someone has given anyway since.
   const given = requests.filter((request) => request.decline && request.status !== "avvist").length;
-  const split = declines && declines.total > 0 ? `${declineSplitText(declines)}${given > 0 ? ` · ${given} gitt likevel` : ""}.` : null;
+  const split = declines && declines.total > 0 ? `${declineSplitPlain(declines)}${given > 0 ? ` · ${given} gitt likevel` : ""}.` : null;
 
   const pickSource = (next: RequestSource | null) => {
     setSource(next);

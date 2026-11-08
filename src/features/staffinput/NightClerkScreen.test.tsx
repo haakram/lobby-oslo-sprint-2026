@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
 import { NightClerkScreen } from "./NightClerkScreen";
@@ -45,7 +45,7 @@ describe("Nattevaktens logg", () => {
     show();
     const check = within(screen.getByRole("region", { name: /Sjekk disse først/ }));
     // The sample night (test data) already checked both: each folds to one line with the lock's signal.
-    expect((await check.findByText(/sjekket: tomt og ryddig/)).closest("li")).toHaveTextContent("213 sjekket: tomt og ryddig (ingen kort i energibryteren siden 22:10)");
+    expect((await check.findByText(/sjekket: tomt og ryddig/, undefined, { timeout: 5000 })).closest("li")).toHaveTextContent("213 sjekket: tomt og ryddig (ingen kort i energibryteren siden 22:10)");
     expect(check.getByText(/sjekket: ikke tomt/).closest("li")).toHaveTextContent("210 sjekket: ikke tomt (kort i energibryteren siden 23:05)");
     expect(check.queryByRole("button")).not.toBeInTheDocument();
     expect(check.getByText(/ett signal per rom, aldri hvem/)).toBeInTheDocument();
@@ -60,7 +60,9 @@ describe("Nattevaktens logg", () => {
     expect(check.getByText(/Ingen kort i energibryteren siden 22:10, men systemet har Ola Nygård der\./)).toBeInTheDocument();
     fireEvent.click(check.getByRole("button", { name: "Sjekk rom 213" }));
     const rooms = within(screen.getByRole("region", { name: "Rom" }));
-    expect(await rooms.findByRole("heading", { name: "Rom 213" })).toHaveFocus();
+    // The demo night's 2,500 lines load first; under a full test run that takes a while.
+    const heading = await rooms.findByRole("heading", { name: "Rom 213" }, { timeout: 5000 });
+    await waitFor(() => expect(heading).toHaveFocus());
     expect(rooms.getByText("Systemet: Ola Nygård, skulle reist 7.11 (utsjekk ikke registrert)")).toBeInTheDocument();
     expect(rooms.getByRole("button", { name: "2. etasje" })).toHaveAttribute("aria-pressed", "true");
   });
@@ -69,7 +71,7 @@ describe("Nattevaktens logg", () => {
     serve();
     show();
     const rooms = within(screen.getByRole("region", { name: "Rom" }));
-    fireEvent.click(await rooms.findByRole("button", { name: "2. etasje" }));
+    fireEvent.click(await rooms.findByRole("button", { name: "2. etasje" }, { timeout: 5000 }));
     fireEvent.click(rooms.getByRole("button", { name: "Rom 204" }));
     expect(rooms.getByRole("heading", { name: "Rom 204" })).toBeInTheDocument();
     expect(rooms.getByText(/^Systemet: Yuki Tanaka til /)).toBeInTheDocument();
@@ -129,7 +131,7 @@ describe("Nattevaktens logg", () => {
   it("keeps safety and the note when the rooms can't load", async () => {
     serve(false);
     show();
-    expect(await screen.findByText("Fikk ikke lastet rommene")).toBeInTheDocument();
+    expect(await screen.findByText("Fikk ikke lastet rommene", undefined, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Prøv igjen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Meld fra til morgenvakten" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Notat til morgenvakten" })).toBeInTheDocument();

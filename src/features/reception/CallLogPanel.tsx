@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Badge, Button, Card, EmptyState, ErrorState, Skeleton } from "@/ui";
 import type { CallNote } from "./callLog";
 import { formatDate, formatDayClock, formatDuration } from "./format";
+import { PhoneLink } from "./PhoneLink";
 
 type LogState =
   | { kind: "loading" }
@@ -25,6 +26,8 @@ const noteSchema = z.object({
   language: nullableText,
   callerName: nullableText,
   callbackNumber: nullableText,
+  // Optional: a server from before the number was masked sends none.
+  callbackTel: nullableText.default(null),
   requestType: nullableText,
   arrival: nullableText,
   departure: nullableText,
@@ -168,7 +171,7 @@ function CallItem({ call }: { call: CallNote }) {
         <span>
           Varighet <span className="font-mono text-text tabular-nums">{formatDuration(call.durationSecs)}</span>
         </span>
-        {call.callbackNumber && <span className="font-mono text-text tabular-nums">{call.callbackNumber}</span>}
+        {call.callbackNumber && <PhoneLink phone={call.callbackNumber} tel={call.callbackTel} />}
         {call.roomType && <span className="text-text">{call.roomType}</span>}
         {stay && <span className="font-mono text-text tabular-nums">{stay}</span>}
         {call.guests !== null && (

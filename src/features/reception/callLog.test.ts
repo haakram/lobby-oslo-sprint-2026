@@ -56,7 +56,8 @@ describe("toCallNotes", () => {
       summary: "Gjesten vil booke.",
       language: "no",
       callerName: "Kari",
-      callbackNumber: "+47 22 33 44 55",
+      callbackNumber: "+47 ••• •• 455",
+      callbackTel: "tel:+4722334455",
       requestType: "booking",
       arrival: "2026-12-01",
       departure: "2026-12-03",
@@ -98,5 +99,26 @@ describe("toCallNotes", () => {
     const notes = toCallNotes({ conversations: many });
     expect(notes).toHaveLength(20);
     expect(notes[0].id).toBe("c24");
+  });
+  it("masks callers' phone numbers in every field a screen shows, and keeps the full one only as the tel: link", () => {
+    const [note] = toCallNotes({
+      conversations: [
+        item({
+          callSummaryTitle: "Tilbakeringing til 90000717",
+          dataCollectionResults: {
+            caller_name: { value: "Olav" },
+            callback_number: { value: "90000717" },
+            summary_no: { value: "Olav (90000717) vil ha ekstra håndklær på rom 214. Ring +47 900 00 493." },
+          },
+        }),
+      ],
+    });
+    expect(note.callbackNumber).toBe("••• •• 717");
+    expect(note.callbackTel).toBe("tel:90000717");
+    expect(note.title).toBe("Tilbakeringing til ••• •• 717");
+    expect(note.summary).toBe("Olav (••• •• 717) vil ha ekstra håndklær på rom 214. Ring +47 ••• •• 493.");
+    const { callbackTel, ...shownOnScreen } = note;
+    expect(callbackTel).toContain("90000717");
+    expect(JSON.stringify(shownOnScreen)).not.toMatch(/9917|93434/);
   });
 });

@@ -4,6 +4,7 @@ import { type ReactNode, type RefObject, useEffect, useRef } from "react";
 import { Badge, type BadgeTone, Button, Card } from "@/ui";
 import { formatClock, formatDate } from "./format";
 import { PERKS, ROOM_TYPES } from "./hotel";
+import { PhoneLink } from "./PhoneLink";
 import type { BookingRecord, MessageRecord, MessageTopic, ReceptionRecord } from "./records";
 import type { StaffMark } from "./useStaffMarks";
 
@@ -144,8 +145,8 @@ function BookingCard({ record, mark, onMark, actionsRef }: CardProps<BookingReco
     >
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-base">
         <Field label="Gjest">{record.name}</Field>
-        <Field label="Telefon" mono>
-          {record.phone}
+        <Field label="Telefon">
+          <PhoneLink phone={record.phone} />
         </Field>
         <Field label="Rom">{roomName(record.room)}</Field>
         <Field label="Ankomst" mono>
@@ -202,8 +203,8 @@ function MessageCard({ record, mark, onMark, actionsRef }: CardProps<MessageReco
       <p className="text-base break-words text-text">{record.message}</p>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 text-base">
         <Field label="Gjest">{record.name}</Field>
-        <Field label="Telefon" mono>
-          {record.phone}
+        <Field label="Telefon">
+          <PhoneLink phone={record.phone} />
         </Field>
       </dl>
     </Shell>

@@ -74,7 +74,9 @@ const NOTE: CallNote = {
   summary: "The caller asked for a double room for two nights.",
   language: "en",
   callerName: "Ola Hansen",
-  callbackNumber: "+47 400 00 000",
+  // Masked by the server (callLog.ts); the full number is only the tel: link.
+  callbackNumber: "+47 ••• •• 000",
+  callbackTel: "tel:+4740000000",
   requestType: "booking",
   arrival: "2026-11-20",
   departure: "2026-11-22",

@@ -27,4 +27,11 @@ describe("RecordCard", () => {
     expect(screen.getByText("Trinn 3 av prutestigen")).toBeInTheDocument();
     expect(screen.getByText("Sen utsjekk kl. 13:00")).toBeInTheDocument();
   });
+  it("masks the guest's number on screen and calls the full number back from the link", () => {
+    const { container } = render(<RecordCard record={haggled} mark={undefined} onMark={vi.fn()} />);
+    const link = screen.getByRole("link", { name: "Ring tilbake, nummeret slutter på 567" });
+    expect(link).toHaveTextContent("+47 ••• •• 567");
+    expect(link).toHaveAttribute("href", "tel:+4791234567");
+    expect(container.textContent).not.toContain("912 34");
+  });
 });

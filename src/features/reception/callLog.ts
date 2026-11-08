@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { maskPhone, maskPhonesInText, telHref } from "./maskPhone";
 import { scrubText } from "./scrub";
 
 export type CallNote = {
@@ -10,7 +11,10 @@ export type CallNote = {
   summary: string | null;
   language: string | null;
   callerName: string | null;
+  /** Masked for the screen: "+47 ••• •• 493" (maskPhone.ts). */
   callbackNumber: string | null;
+  /** The tel: link that calls the guest back; never shown as text. */
+  callbackTel: string | null;
   requestType: string | null;
   arrival: string | null;
   departure: string | null;
@@ -35,6 +39,11 @@ const summarySchema = z.object({
 });
 
 const text = (value: unknown) => (typeof value === "string" && value.trim() ? scrubText(value, MAX_TEXT) : null);
+/** Free text a screen shows: any phone number in it is masked, wherever the note is read (Oversikt, Forespørsler, the bell). */
+const shown = (value: unknown) => {
+  const clean = text(value);
+  return clean && maskPhonesInText(clean);
+};
 
 function field(results: Record<string, unknown> | null | undefined, id: string): unknown {
   const entry = results?.[id];
@@ -53,6 +62,7 @@ export function toCallNotes(raw: unknown): CallNote[] {
     const s = parsed.data;
     const data = s.dataCollectionResults;
     const guests = field(data, "guests");
+    const callback = text(field(data, "callback_number"));
     notes.push({
       at: s.startTimeUnixSecs,
       note: {
@@ -60,15 +70,16 @@ export function toCallNotes(raw: unknown): CallNote[] {
         startedAt: new Date(s.startTimeUnixSecs * 1000).toISOString(),
         durationSecs: s.callDurationSecs,
         status: scrubText(s.status, 40),
-        title: text(s.callSummaryTitle),
-        summary: text(field(data, "summary_no")) ?? text(s.transcriptSummary),
+        title: shown(s.callSummaryTitle),
+        summary: shown(field(data, "summary_no")) ?? shown(s.transcriptSummary),
         language: text(s.mainLanguage),
-        callerName: text(field(data, "caller_name")),
-        callbackNumber: text(field(data, "callback_number")),
-        requestType: text(field(data, "request_type")),
+        callerName: shown(field(data, "caller_name")),
+        callbackNumber: callback && maskPhone(callback),
+        callbackTel: callback && telHref(callback),
+        requestType: shown(field(data, "request_type")),
         arrival: text(field(data, "arrival_date")),
         departure: text(field(data, "departure_date")),
-        roomType: text(field(data, "room_type")),
+        roomType: shown(field(data, "room_type")),
         guests: typeof guests === "number" && Number.isFinite(guests) ? guests : null,
         needsCallback: field(data, "needs_callback") === true,
       },

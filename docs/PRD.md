@@ -64,10 +64,14 @@ is still waiting; safety events and faults surface late.
 **What our agent shows, honestly:** it ran Wybe's live simulation on its own with rule-based flows per
 request type (found by probing an undocumented API), safety rules in code, "done" reported only after
 the server's score rose, and Claude only as a guarded fallback (about USD 0.001 spent all weekend).
-Distribution, not just the best night: 63 complete live practice nights (median 1,888); the final
-build's six live nights averaged 2,364 (median 2,459, range 1,914–2,707); best practice night 2,712,
-#12 of 20 on Wybe's board when written. On the night in the app (seed 16, 2,680 points) it reported
-"done" 73 times and the server confirmed all 73. Full table: `docs/DEMO.md` § 1.1.
+Numbers per build, pinned to commits on `hamad/final`, not a best night: the final build's agent code
+(`8eac151`) averaged 2,560 on its four tuned seeds (best 2,760, seed 10). The only build that played
+seeds it was never tuned on (`d4e445c`) scored 1,940 on seeds 9 and 11 against 2,504 on its tuned
+seeds, so we forecast **about 2,000 (1,900–2,100)** for the final's unseen nights. Over the 14 live
+nights of the last three builds the referee credited 973 of 976 "done" reports (99.7 %). Best practice
+score on the board: 2,798, #9 of 20 at 02:47 Sun, from a test branch that is not the final build. On
+the night in the app (seed 16, 2,680, `cb72845`) it reported "done" 73 times and the referee credited
+all 73. Full table and the replay bed's limits: `docs/DEMO.md` § 1.1.
 
 ## 4. The demo story
 
@@ -160,8 +164,15 @@ Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kje
     confirmation); anything without evidence shows as not confirmed, for a person.
   - In the simulation the robot fetches a master keycard and checks rooms the PMS shows as occupied. In
     a pilot it does not open occupied rooms: occupancy comes from the door-lock audit trail and the
-    keycard energy slot, the robot only knocks or checks rooms the PMS already shows as vacant, keys ride
-    in a locked compartment, and the front desk confirms a sleeper before reselling it.
+    keycard energy slot, the robot only knocks or checks rooms the PMS already shows as vacant, and keys
+    ride in a locked compartment. Already in the build: a room is offered for sale only after the desk
+    confirms the check-out (two steps, never one tap), and a room the robot delivered to later in the
+    night (an arriving guest's bags in 209) is held back as a likely double allocation, never offered.
+  - The simulation's score pays for habits a hotel wouldn't want: declining a guest's "it never came"
+    when there is no order (the guest still has no water), running the battery to 8.6 % before 06:00,
+    and moving a wet-floor sign to a newer spill when the robot is out of signs (`sign_move`, still on in
+    the agent). Fettero turns those into decisions and open items for a person; a real deployment keeps a
+    battery reserve and never takes a sign off a wet floor.
   - Lifts and doors need a per-building integration with the lift maker's API: the pilot's hard part,
     not "only the API adapter changes".
 - **Linen counting by camera** (Drift spec "should"): cut for time; Lager og lin shows test stock.
@@ -198,8 +209,14 @@ Same as `docs/DEMO.md` § 2 (2:00, one user, one story: Siri takes over from Kje
   month, first channel. Proposals until the team agrees.
 - Have we any hotel person to quote? None so far. The phone round and hallway test (`docs/DEMO.md`
   § 8) are planned for Sunday morning: who runs them?
-- Does `main` trade as Fettero too? (Team lead.) Is a 15-minute trademark clearance search for
-  "Fettero" (Patentstyret, EUIPO TMview, WIPO; classes 9 and 42) done before we say "clear"?
+- Does `main` trade as Fettero too? (Team lead.) The public URL, lobby-sandy.vercel.app, serves `main`
+  under the old name and an older CSP; `hamad/jury-loop` isn't deployed (team lead's rule).
+- The name isn't cleared. A quick web check on Sun 8 Nov found FETTERO registered in the US for
+  jewellery (class 14, no conflict with software) and FETUERO registered in the US in class 9
+  (software), close enough to need a proper search: Patentstyret, EUIPO TMview and WIPO in classes 9,
+  42 and 43, plus fettero.no and fettero.com. Until then we don't say "clear".
+- **[decide]** One wedge for the business slide (hotels first, software only; or robot makers first),
+  and one line on commitment and a stop rule (`docs/DEMO.md` § 3 and § 7).
 - Does Holio count three pains in one product for or against us? (CONTEXT § 6, still open; ask at the
   Holio stand before 14:00.)
 - Repo public, or jury access by invitation, before 14:00? (CONTEXT § 11.) The jury account's password

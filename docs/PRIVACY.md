@@ -1,7 +1,7 @@
 # PRIVACY.md — Personal data, processors and security in Fettero
 
 > For the jury's lawyer and security reviewer, and for us. Short and honest: what the hackathon build
-> does today, checked in the code on Sun 8 Nov morning (`hamad/jury-loop`; the product trades as
+> does today, checked in the code on Sun 8 Nov at about 03:00 (`hamad/jury-loop`; the product trades as
 > Fettero there, while code identifiers keep the old `lobby` names), and what a real hotel deployment
 > would still need. Not legal advice; a
 > pilot needs a lawyer's review. The full threat model for login and roles is in
@@ -12,8 +12,10 @@
 The demo touches **no real guest or employee data**. Guests, staff, stock and work orders are made-up
 test data, marked on every screen ("Testdata til integrasjonen er på plass."). The robot's night comes
 from Wybe's hotel simulation, whose guests are fictional. The only real people in the system are the
-team: the login accounts, and our own test calls to the AI receptionist, which **the team deletes in
-ElevenLabs before the Sunday 14:00 demo** so no real caller reaches a projector. There is **no database**.
+team: the login accounts, and our own test calls to the AI receptionist. The app shows **only calls
+after a cut-off** (`RECEPTION_CALLS_SINCE`, set on the demo laptop to Sun 8 Nov 05:30), so our 7 Nov
+test calls never reach a screen, and the team also deletes them in ElevenLabs before 14:00. There is
+**no database**.
 Camera frames and voice go to two AI processors, **Anthropic (Claude API)** and **ElevenLabs**, both
 outside the EEA. Nothing identifies people: there is no face recognition anywhere in the code.
 
@@ -25,8 +27,8 @@ outside the EEA. Nothing identifies people: there is no face recognition anywher
 | Staff names and shifts | No: invented | `src/features/staff/testData.ts` |
 | Guest names in the robot's night ("Dr Silva", "Ms Rossi") | No: Wybe's simulation | `public/runs/demo.jsonl` (live practice night of the final agent, seed 16) |
 | The host view's flats, guests and messages | No: invented | `src/features/host/demoData.ts` |
-| Login accounts (`hamad`, `shiraz`, `resepsjon`, `robot`, `vert`, and `jury` for the event) | Team only; the jury account has its own password and is deleted after the event | `LOBBY_USERS` env var, scrypt hashes, never passwords (`scripts/lobby-hash.mjs`) |
-| Receptionist calls: caller name, call-back number, dates, a summary | Only the team's own test calls, deleted before the demo | Held by ElevenLabs; read back on demand (§ 4); phone numbers masked on every screen |
+| Login accounts (`hamad`, `shiraz`, `resepsjon`, `robot`, `vert`; `siri`, a demo persona with the team's password; and `jury` for the event) | Team only; the jury account has its own password and is deleted after the event | `LOBBY_USERS` env var, scrypt hashes, never passwords (`scripts/lobby-hash.mjs`) |
+| Receptionist calls: caller name, call-back number, dates, a summary | The team's own test calls (7 Nov), hidden by the cut-off and deleted before the demo; anyone who calls on stage | Held by ElevenLabs; read back on demand, only calls after `RECEPTION_CALLS_SINCE` (§ 4); phone numbers masked on every screen |
 | Camera frames | Whatever the phone sees | Øyne (§ 5) |
 | Voices | Whoever speaks to Stemme or Resepsjon | Streamed to ElevenLabs (§ 6) |
 
@@ -56,11 +58,15 @@ and ElevenLabs, so the browser blocks that call (`next.config.ts`).
 | **Our server** | Nothing. No database, no file writes. Logs carry only error types or HTTP status, never bodies (`src/app/api/identify/route.ts`, `src/app/api/voice/token/route.ts`, `src/app/api/reception/tools/[tool]/route.ts`: "Arguments are never logged") | — |
 
 Call notes shown in Resepsjon are read from ElevenLabs on demand (`src/app/api/reception/calls/route.ts`,
-login required), cleaned of card numbers and control characters (`src/features/reception/scrub.ts`), and
-not stored by us. Phone numbers are masked on the server where the notes are mapped ("+47 ••• •• 493",
-`src/features/reception/maskPhone.ts`, `callLog.ts`), so Oversikt, Forespørsler, the bell and Resepsjon
-never show a full number; the full number reaches a logged-in receptionist's or admin's browser only
-inside the *Ring tilbake* `tel:` link.
+receptionist or admin only), cleaned of card numbers and control characters
+(`src/features/reception/scrub.ts`), and not stored by us. Only calls that started after
+`RECEPTION_CALLS_SINCE` are asked for, and checked again when they arrive; a malformed value fails
+closed (503) rather than showing every call (`src/app/api/_lib/callsSince.ts`). Phone numbers are masked
+on the server where the notes are mapped ("+47 ••• •• 493", `src/features/reception/maskPhone.ts`,
+`callLog.ts`), so Oversikt, Forespørsler, the bell and Resepsjon never show a full number as text. The
+full number still reaches a logged-in receptionist's or admin's browser in the call data, and becomes a
+tap-to-call `tel:` link **only on a touch device**; on a laptop it stays masked text with no link, so a
+hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
 
 ## 5. Camera frames (Robotens øyne)
 
@@ -68,16 +74,22 @@ inside the *Ring tilbake* `tel:` link.
   browser; that part sends nothing (`src/features/eyes/useDetector.ts`).
 - **What is sent to Claude** (as a JPEG, through our server, `src/app/api/identify/route.ts` and
   `src/app/api/scene/route.ts`):
-  1. **Automatically:** a crop (at most 768 px) of a box whose class is product-like. **People are
-     never cropped and sent**: `person`, furniture, vehicles and animals keep their free label only
-     (`src/features/eyes/cocoLabels.ts` `PRODUCT_CLASSES`, `src/features/eyes/autoIdentify.ts`).
-  2. **On a tap:** the crop of the tapped box.
+  1. **Automatically:** a crop (at most 768 px) of a box whose class is product-like (bottles, cups,
+     food, a toothbrush …). **People are never cropped and sent**: `person`, furniture, vehicles and
+     animals keep their free label only. **Guests' belongings are never sent either**, live or on a
+     tap: phones, handbags, backpacks, suitcases, books, laptops, keyboards, remotes and the like
+     (`BELONGING_CLASSES`): a phone at an ear or a bag on a shoulder would carry part of the person, and
+     a luggage tag would be read out. **A box whose crop would touch a person** (a bottle in a hand) is
+     never sent automatically; the hint says to tap instead (`src/features/eyes/cocoLabels.ts`,
+     `autoIdentify.ts`, `cropFrame.ts` `touchesPerson`).
+  2. **On a tap:** the crop of the tapped box, with every person the detector found painted over and
+     only the product's own box drawn back, so a held item stays readable.
   3. **"Identifiser hele bildet":** the whole frame, at most 768 px (`src/features/eyes/EyesScreen.tsx`).
   4. **"Omgivelser" scan (off by default; a person must switch it on):** the whole frame, at most 640
      px, once every 10 seconds, to find doors, lifts and signs; the prompt tells Claude to ignore people
      (`src/features/eyes/useScene.ts`, `src/features/eyes/scene.ts`, `EyesScreen.tsx`).
-- **People are painted over on the phone first:** before any whole frame is sent (items 3 and 4), every
-  person the on-device detector found is covered (`src/features/eyes/cropFrame.ts`). The start screen
+- **People are painted over on the phone first:** before any crop or whole frame is sent (items 2–4),
+  every person the on-device detector found is covered (`src/features/eyes/cropFrame.ts`). The start screen
   says what leaves the phone: product crops to Claude (Anthropic, USA), whole frames only on
   *Omgivelser* or *Identifiser hele bildet*, people covered first, nothing stored by us.
 - **Honest gap:** the cover is only as good as the detector. A person it misses (far away, partly in
@@ -131,6 +143,17 @@ inside the *Ring tilbake* `tel:` link.
   (to be confirmed with a lawyer). Product crops only by default, whole-frame scans off, face blur.
 - **Employee monitoring:** the run log shows who did what overnight. Use it for handover, not
   performance tracking, and say so in the staff information.
+- **The robot's run log is personal data in a real hotel:** guest names, room numbers, who was let in
+  or refused, which rooms were empty when. A pilot gives it a retention period (the handover period the
+  hotel sets, then deleted) and redacts guest names before anything leaves the hotel's tenancy. The
+  wording stays neutral: the log says "a man in a bathrobe … asked to be let in", never "suspicious
+  person", because in a hotel with cameras that becomes data about a possibly innocent guest; such
+  incident records get the shortest retention.
+- **Children:** a camera robot in a family hotel films children, who get extra protection under the
+  GDPR. They are covered like any person and never cropped; the DPIA says so.
+- **The camera rule:** whether a moving robot or staff phone camera falls under the Norwegian rules on
+  camera surveillance at work is an open question. We treat it as camera surveillance at work until
+  Datatilsynet says otherwise.
 - **Retention:** transcripts 30 days (already configured for the receptionist), Stemme the same, run
   logs deleted after the handover period the hotel sets, browser records moved to a shared store with
   its own retention.
@@ -145,9 +168,14 @@ inside the *Ring tilbake* `tel:` link.
   Working Environment Act (arbeidsmiljøloven) chapter 9 that is a control measure to discuss with
   employee representatives and announce before rollout, with signs where cameras film. We commit to
   no per-person performance statistics.
-- **AI Act:** the receptionist says it is an AI in its first sentence (Art. 50). The language model is
-  kept out of the robot's safety loop (safety rules are code), which matters if the robot is ever
-  assessed as machinery.
+- **AI Act:** Art. 50 (tell people they are talking to an AI) applies from 2 August 2026, and the
+  receptionist says it is an AI in its first sentence. The language model is kept out of the robot's
+  safety loop (safety rules are code), which matters under the Machinery Regulation (EU) 2023/1230,
+  which applies from 20 January 2027 and under which a hotel robot needs CE marking.
+- **Prices set by the receptionist:** its discount steps are fixed in a tool and the same for every
+  caller who pushes back, at most 10 % under the direct price (`src/features/reception/agentConfig.ts`):
+  a published ladder, not a price personalised by automated decision-making, which the EU consumer
+  rules (the Omnibus Directive, in Norway through the EEA) would require us to disclose.
 - **Liability:** the EU's new Product Liability Directive, (EU) 2024/2853, treats software as a
   product; the design answer is the same (safety gates in code, "done" only when verified), and a pilot
   writes it up as a one-page safety case.
@@ -188,5 +216,5 @@ inside the *Ring tilbake* `tel:` link.
   per-route limit; they fail closed today because no secret is set. Add a limit before a pilot sets it.
 - Stemme's agent config has no `privacy` block (`src/features/voice/agentConfig.ts`), so the account's
   default retention applies.
-- A stale comment in `src/app/api/reception/calls/route.ts` says anyone with the URL can read call
-  notes; that predates the login, and the route now answers 401 without a session.
+- The call log's cut-off (`RECEPTION_CALLS_SINCE`) is an env var: a deployment that doesn't set it
+  shows every call the agent has. The demo laptop sets it; Vercel doesn't yet.

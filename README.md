@@ -4,15 +4,18 @@
 over a hotel at 06:00 the night on one page: which rooms can be sold today and for how much, what is
 still open and who owns it, and what the night robot did and refused to do. Nothing on it says "done"
 unless it was confirmed. The robot is our AI agent, which played Wybe's live hotel simulation on its
-own; on the night in the app it reported "done" 73 times and Wybe's server confirmed all 73.
+own; on the night in the app it reported "done" 73 times and the referee in Wybe's simulation
+credited all 73 (973 of 976 over the final builds' 14 live nights).
 
 Built in 48 hours at **Oslo Sprint 2026** by **Team Fettero** (Hamad, ShirazIQ), for the main prize,
 Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is the demo hotel.
 
 ## See it in 60 seconds
 
-1. Open **https://lobby-sandy.vercel.app** on a laptop (1280 px or wider). It serves `main`; the screens
-   below are on `hamad/jury-loop` until the team merges it (or run it locally, below).
+1. **Run it locally** (below) or ask us for the laptop. The screens below are on `hamad/jury-loop`,
+   which is not deployed (team lead's rule: it is not merged to `main`). The public URL,
+   **https://lobby-sandy.vercel.app**, serves `main`: the older build, still under the old name
+   *Lobby*, with an older security header (no `connect-src`; checked with curl Sun 02:50).
 2. Log in as **`jury`**: the jury's own account (admin view). Its password is in our `/lever`
    submission, not in this repo, and the account is deleted after the event. (On the deployed URL it
    works once the team has set the new `LOBBY_USERS` there.)
@@ -42,20 +45,44 @@ test data, and every list says so.
   It plans on exact simulation time, reports "done" only after the server's score rises, and refuses
   unsafe moves in code. The work is done by rule-based flows per request type, found by probing an
   undocumented API; Claude is only a guarded fallback (about USD 0.001 spent all weekend).
-- **Score, as a distribution, not a best night:**
+- **Every live night of the last three builds, pinned to the commit** (Wybe practice shifts, Sun 8 Nov;
+  Wybe's final ranks the mean of ten unseen nights with the worst dropped):
 
-  | | |
-  |---|---|
-  | Best live practice night | **2,712** (seed 10), **#12 of 20** on Wybe's practice board when written (Sun 8 Nov); board top 3,448 |
-  | The final build's live nights | seed 10 2,707 · seed 16 2,680 · seed 5 2,584 · seed 23 2,334 · seed 9 1,965 · seed 11 1,914: **mean 2,364, median 2,459** |
-  | Seeds tuned on least (9 and 11) | 1,965 and 1,914, our honest preview of unseen nights |
-  | All 63 complete live practice nights, every version | median 1,888, mean 1,929 |
-  | The night in the app (`public/runs/demo.jsonl`) | seed 16, 2,680: 73 "done" reports, **73 confirmed** by the server, 8 false claims declined, one penalty (a slip on a wet floor) |
-  | Wybe's final (Sun 12:00–13:00) | revealed at 13:05 |
+  | Build on `hamad/final` | Played | Score per seed | Mean |
+  |---|---|---|---|
+  | `d4e445c` | 00:23–00:39 | 10: 2,707 · 16: 2,564 · 23: 2,254 · 5: 2,492 · **9: 1,965 · 11: 1,914** | 2,316 (tuned seeds 2,504; seeds 9 and 11: 1,940) |
+  | `cb72845` | 01:07–01:14 | 10: 2,707 · **16: 2,680** (the night in the app) · 23: 2,334 · 5: 2,584 | 2,576 |
+  | `8eac151`: the agent code of the final build (`hamad/final` head 2056404 adds only a rehearse command) | 01:50–01:58 | **10: 2,760** · 16: 2,679 · 23: 2,240 · 5: 2,559 | 2,560 (not played on 9 or 11) |
 
-- **How we evaluate:** a replay bed rebuilds **51 real nights** offline from their run logs and
-  predicts a real night's score at **3.8 %** mean error; every change has to beat the old code there
-  before it gets a live shift (`python -m agent replaybench --fidelity` on `hamad/final`).
+- **What we expect in the final: about 2,000 (1,900–2,100), not 2,760.** Seeds 9 and 11 are the only
+  nights a build played without being tuned on them: 1,940 there against 2,504 on its tuned seeds, 22 %
+  lower. The final build averages 2,560 on tuned seeds; 2,560 × 1,940 / 2,504 ≈ 1,980.
+- **"Done" is checked:** over those 14 nights the agent said "done" 976 times and the referee (Wybe's
+  server) credited 973, **99.7 %**; the 3 it didn't credit were all on seed 23. It declined 88 requests
+  as false or impossible; the referee credited 73 of those declines and gave 15 nothing.
+- **Board:** best practice score **2,798**, **#9 of 20** on Wybe's practice board at 02:47 Sun (top 3,448;
+  we played 188 practice shifts, the leader 1,556). That night came from a test branch (`cdc67f1`,
+  lookahead planner) that stranded on seed 23 in the same batch, so it is not in the final; the final
+  build's best, 2,760, would sit at #10.
+- **The night in the app** (`public/runs/demo.jsonl`, seed 16, 2,680, `cb72845`): 85 requests, 73
+  "done", **all 73 credited**; 8 declined, of which the referee credited 7 (6 orders that never existed,
+  1 already delivered) and not 1 (a spill report on floor 3); 4 still open at 06:00; one penalty (−15,
+  it slipped on a wet floor at 23:51).
+- **How we test a change before a live shift:** a replay bed (`agent/replaybed.py` on `hamad/final`)
+  rebuilds every full live night offline from its log: 72 nights by 02:50 Sun. Replayed with the code
+  that played them, 50 nights land within 61 points of live on average (**3.2 %**, 48 of 50 within
+  10 %; [`docs/runs/replay-fidelity.txt`](./docs/runs/replay-fidelity.txt)). That number is
+  **in-sample**: the bed's reward model was fitted on those same 50 nights. It shows the bed can
+  reproduce a night, not that it ranks a change correctly. On the two pairs of builds that played the
+  same seeds live, it got the direction right both times (+53 against live +72; −5 against live −17)
+  and was about 35 points off per seed. The wet-floor change in `8eac151` is the worked example: across
+  all 72 nights the bed gains +11.6 a night per seed (13 of 20 seeds better, 6 worse), which is why it
+  stays on for the final; live, on the four seeds it played, it came out −17 a night (+53, −1, −94,
+  −25). Four nights can't separate a change worth ±20 a night, and we don't claim they do. Details:
+  `docs/DEMO.md` § 1.1.
+- **Where the numbers come from:** [`docs/runs/ledger.csv`](./docs/runs/ledger.csv) (one row per live
+  start) and [`docs/runs/builds.csv`](./docs/runs/builds.csv) (one row per commit), rebuilt from the run
+  logs by `python3 scripts/ledger.py`.
 - **What it learned about the undocumented API:** [`docs/research/wybe-api.md`](./docs/research/wybe-api.md).
 - **Run it:** the commands are in [`CLAUDE.md`](./CLAUDE.md) § How to run / test
   (`.venv/bin/python -m agent run --seed 1` plays offline against a fake server by default).

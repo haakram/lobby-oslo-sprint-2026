@@ -16,6 +16,7 @@ import { useCamera } from "./useCamera";
 import { useDetector } from "./useDetector";
 import { useLiveIdentify } from "./useLiveIdentify";
 import type { SeenThing } from "./sceneSchedule";
+import { PrivacyNotice } from "./PrivacyNotice";
 import { useScene } from "./useScene";
 import { thingBoxes, thingOver } from "./things";
 
@@ -183,6 +184,8 @@ export function EyesScreen() {
         aria-hidden="true"
         className={cx("absolute inset-0 size-full object-cover", !ready && "invisible")}
       />
+
+      <PrivacyNotice />
 
       {cameraStatus === "idle" ? (
         <>

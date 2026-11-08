@@ -128,7 +128,15 @@ digits; the sample calls on our screens are made up and shown masked (`src/featu
   *Personer* switch (on by default): off, the detector skips people and both prompts ask Claude to leave
   out people and what they wear or hold (`useDetector.ts`, `identify.ts`, `scene.ts`). The start screen
   says *Roboten ser gjennom kameraet og kjenner igjen varer og omgivelser. Nettleseren spør om lov første
-  gang.*; it doesn't say what leaves the phone.
+  gang.* On top of the screen, in every state (before the camera starts, on a camera problem and live),
+  a notice in the shape of Datatilsynet's camera sign (camera in use, purpose, who is responsible, where
+  to read more; [datatilsynet.no, *Informasjon og sletting*](https://www.datatilsynet.no/personvern-pa-ulike-omrader/overvaking-og-sporing/kameraovervaking/informasjon-og-sletting/))
+  says *Kamera i bruk. Ingen lyd, ingen ansiktsgjenkjenning, og vi lagrer ingen bilder.*, and a tap opens
+  the purpose, what is sent (crops and whole frames, people included, to Claude: Anthropic, US, on the
+  SCCs, normally deleted within 30 days), the *Personer* switch and *Behandlingsansvarlig: hotellet.
+  Innsyn og spørsmål: resepsjonen.* (`src/features/eyes/PrivacyNotice.tsx`, tested). A phone or robot
+  camera isn't *fastmontert*, so the camera-surveillance definition in personopplysningsloven § 31 may
+  not apply; the GDPR's duty to inform (art. 13) does either way, and the notice is its first layer.
 - **No fail-closed:** while the detector is loading or after it has failed there are no live boxes, but
   the shutter still sends the whole frame (*Live-bokser er av. Ta bilde av varen med utløseren.*), and the
   10-second scan runs whenever the camera is on.

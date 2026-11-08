@@ -200,7 +200,7 @@ export function composeHandover({
   if (dirty.length > 0) {
     open.push({
       id: "clean",
-      text: `${dirty.length} rom må vaskes før innsjekk kl. 15:00: ${joinNb(dirty.map((room) => room.number))}.`,
+      text: dirty.length === 1 ? `Rom ${dirty[0].number} må vaskes før innsjekk kl. 15:00.` : `${dirty.length} rom må vaskes før innsjekk kl. 15:00: ${joinNb(dirty.map((room) => room.number))}.`,
       owner: cleaners.length ? `Renhold: ${joinNb(cleaners)}` : "Renhold",
       due: "14:00",
       href: "/rom",

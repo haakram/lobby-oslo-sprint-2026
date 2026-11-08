@@ -247,7 +247,8 @@ function ShelfPreview({
       <Card className="p-4 sm:p-5 animate-rise">
         <FloorMap matrix={matrix} legs={legs} order={tour.order} />
       </Card>
-      <Card className="flex flex-col gap-4 animate-rise [animation-delay:60ms]">
+      {/* On a phone the answer (which shelf, how far) comes before the map. */}
+      <Card className="flex flex-col gap-4 animate-rise [animation-delay:60ms] max-lg:order-first">
         <div>
           <h2 className="text-lg font-semibold tracking-[-0.01em]">Veien til {product.locationLabel}</h2>
           <p className="mt-1 text-sm text-muted">

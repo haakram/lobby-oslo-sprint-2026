@@ -52,10 +52,10 @@ async function fetchToken(): Promise<{ token: string } | VoiceProblem> {
 }
 
 /**
- * The Fettero voice session: microphone check, server token, ElevenLabs WebRTC session,
+ * The Lobby voice session: microphone check, server token, ElevenLabs WebRTC session,
  * transcript and the four allowlisted client tools. Must be used inside `ConversationProvider`.
  */
-export function useFetteroVoice(ui: VoiceUi) {
+export function useLobbyVoice(ui: VoiceUi) {
   const [preparing, setPreparing] = useState(false);
   const [problem, setProblem] = useState<VoiceProblem | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);

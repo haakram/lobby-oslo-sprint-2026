@@ -359,7 +359,7 @@ const dataCollection = {
 export function receptionAgentConfig(mode: ToolMode) {
   return {
     name: "Lobby resepsjon (Maria)",
-    tags: ["fettero", "reception", "oslo-sprint-26"],
+    tags: ["lobby", "reception", "oslo-sprint-26"],
     conversationConfig: {
       agent: {
         // The EU AI Act and GDPR: tell callers up front that this is an AI and that the call is written down.

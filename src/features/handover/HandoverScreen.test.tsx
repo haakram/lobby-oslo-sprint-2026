@@ -163,11 +163,11 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     // Nothing waits for the money step now: the signature carries the orange.
     expect(screen.getByRole("button", { name: "Kvitter mottatt" }).className).toMatch(/bg-accent/);
     // The print carries the masthead, the line and who made it; on test data no shredding line (no real guest); no contact address is invented.
-    const footer = screen.getByText("Fettero · Natten, ærlig overlevert. · Team Fettero, Oslo Sprint 2026 · Testdata: ingen ekte gjester.");
+    const footer = screen.getByText("Lobby · Natten, ærlig overlevert. · Team Lobby, Oslo Sprint 2026 · Testdata: ingen ekte gjester.");
     expect(footer.textContent).not.toMatch(/Makuleres/);
     expect(footer.tagName).toBe("FOOTER");
     expect(footer.textContent).not.toMatch(/@|kontakt|https?:|www\./i);
-    expect(document.querySelector("[data-print-masthead]")).toHaveTextContent(/^Fettero\s*Natten, ærlig overlevert\./);
+    expect(document.querySelector("[data-print-masthead]")).toHaveTextContent(/^Lobby\s*Natten, ærlig overlevert\./);
   });
 
   it("on the demo night reads act → evidence → sign: safety in the bell's red, the catch, the sleeper with its test-data note, the signature last", async () => {

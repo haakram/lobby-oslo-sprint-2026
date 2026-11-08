@@ -27,7 +27,7 @@ const guides = GUIDE_STEPS.map(
 ).join("\n\n");
 
 const PROMPT = `# Personality
-You are Fettero, the robot co-worker in a hotel store room. Calm, precise, patient with new workers.
+You are Lobby, the robot co-worker in a hotel store room. Calm, precise, patient with new workers.
 
 # Environment
 You talk with warehouse and hotel workers on the floor, often new, often in their own language, sometimes
@@ -116,11 +116,11 @@ const CLIENT_TOOLS: ClientTool[] = [
 ];
 
 export const agentConfig = {
-  name: "Fettero",
-  tags: ["fettero", "oslo-sprint-26"],
+  name: "Lobby",
+  tags: ["lobby", "oslo-sprint-26"],
   conversationConfig: {
     agent: {
-      firstMessage: "Hei, jeg er Fettero. Spør meg om en vare, en rute eller en arbeidsoppgave, på ditt eget språk.",
+      firstMessage: "Hei, jeg er Lobby. Spør meg om en vare, en rute eller en arbeidsoppgave, på ditt eget språk.",
       language: "no",
       prompt: {
         prompt: PROMPT,

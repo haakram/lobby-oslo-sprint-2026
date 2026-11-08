@@ -6,11 +6,11 @@ import { createClientTools } from "./tools";
 const prompt = agentConfig.conversationConfig.agent?.prompt;
 
 describe("agentConfig", () => {
-  it("is Fettero, on Claude, speaking Norwegian first", () => {
-    expect(agentConfig.name).toBe("Fettero");
+  it("is Lobby, on Claude, speaking Norwegian first", () => {
+    expect(agentConfig.name).toBe("Lobby");
     expect(prompt?.llm).toMatch(/^claude-/);
     expect(agentConfig.conversationConfig.agent?.language).toBe("no");
-    expect(agentConfig.conversationConfig.agent?.firstMessage).toMatch(/Fettero/);
+    expect(agentConfig.conversationConfig.agent?.firstMessage).toMatch(/Lobby/);
   });
 
   it("switches language when the speaker does", () => {

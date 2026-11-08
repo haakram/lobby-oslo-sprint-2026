@@ -60,7 +60,7 @@ def test_sends_auth_ua_and_xshift(tmp_path):
     session.cmd("status")
     r = reqs[1]
     assert r.headers["Authorization"] == "Bearer k123"
-    assert r.headers["User-Agent"] == "TeamFettero-agent/1.0"
+    assert r.headers["User-Agent"] == "TeamLobby-agent/1.0"
     assert r.headers["X-Shift"] == "w2-abc"
     assert json.loads(r.content) == {"cmd": "status"}
     assert "x-shift" not in reqs[0].headers

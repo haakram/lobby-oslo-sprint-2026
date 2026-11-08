@@ -160,7 +160,7 @@ export function EyesScreen() {
   if (!ready) hint = "Starter kameraet";
   else if (detector.status === "loading") hint = "Laster gjenkjenning";
   else if (detector.status === "failed") hint = "Live-bokser er av. Ta bilde av varen med utløseren.";
-  else if (allBoxes.length > 0 && autoActive) hint = "Hold varen stille, så kjenner Fettero den igjen.";
+  else if (allBoxes.length > 0 && autoActive) hint = "Hold varen stille, så kjenner Lobby den igjen.";
   else if (allBoxes.length > 0) hint = "Trykk på en boks for å kjenne igjen varen.";
 
   // What the sheet shows, derived so a live result fills an open sheet as soon as it lands.
@@ -324,7 +324,7 @@ function ObjectCard({ label }: { label: string }) {
       <Badge>Ikke en vare</Badge>
       <p className="text-2xl font-bold tracking-[-0.02em]">{label}</p>
       <p className="text-base text-muted">
-        Fettero kjenner igjen personer selv, uten å sende bildet, så dette kostet ingenting. Trykk på boksene
+        Lobby kjenner igjen personer selv, uten å sende bildet, så dette kostet ingenting. Trykk på boksene
         rundt det personen har på seg eller holder, eller ta bilde av hele bildet. Slå av «Personer» for å
         utelate dem.
       </p>

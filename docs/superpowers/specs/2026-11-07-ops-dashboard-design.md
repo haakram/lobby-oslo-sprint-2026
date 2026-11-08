@@ -1,17 +1,17 @@
 # Drift: the 06:00 handover dashboard — design
 
-**Owners:** ShirazIQ builds it in the Fettero app (Track B) and owns the demo (Track C); Hamad adds
+**Owners:** ShirazIQ builds it in the Lobby app (Track B) and owns the demo (Track C); Hamad adds
 two small things on the agent side (Track A). **Date:** 2026-11-07. **Status:** approved by the team
 lead to plan and build ("ja det kan du gjøre … planlegge det godt slik at vi kan vise alt det på kun
 2 min og at det løser et reelt problem i demoen"). The calls below are Claude's and can be checked.
-Builds on `2026-11-07-fettero-app-design.md` (ShirazIQ's Track B design) and the agent's run log v1.
+Builds on `2026-11-07-lobby-app-design.md` (ShirazIQ's Track B design) and the agent's run log v1.
 
 ## The real problem, in one sentence
 
 Every morning a hotel loses money in three quiet ways: **rooms that are clean but not marked ready**
 (guests wait, early check-in isn't sold), **linen and towels that disappear** (15–20 % lost before
 they're worn out) and **faults found too late** (noise, leaks, a broken AC that first show up as a
-one-star review). Fettero works the night, and at 06:00 the manager sees all of it on one screen and
+one-star review). Lobby works the night, and at 06:00 the manager sees all of it on one screen and
 acts on it in a minute.
 
 ## The 2-minute demo (one story, five beats)
@@ -25,7 +25,7 @@ maps to a prize. Times are targets; rehearse against a timer.
 | 0:15–0:50 | **Natten** (the night) | **Drift** screen: the hotel's room grid lights up as the night replays (rooms turn *Klar* when the robot's room check passes, *Ikke forstyrr* where it respected a DND sign); work orders appear as the robot finds them (*Støy rom 201*, *Søl 3. etasje*); score and clock from the real shift | Rooms not marked ready; faults found late | **Wybe** (the agent's real night, its score) |
 | 0:50–1:10 | **Send renholderne** | One tap: the rooms that still need cleaning become a route in the best order across floors: *"212 m spart · 38 % kortere"* | Cleaners walk in the wrong order, rooms ready late | **Holio 6** |
 | 1:10–1:30 | **Lintelling** | Phone camera at the linen shelf: boxes on the towels, *"9 håndklær · forventet 12 · 3 mangler"*, a work order appears on Drift | Linen disappears, counting is manual and rare | **Holio 7** + eyes without barcodes (**Holio 3**) |
-| 1:30–1:50 | **Gjesten sier fra** | A guest speaks Spanish into the robot: *"the AC in 204 doesn't work"*. Fettero answers in Spanish, asks *"Is everything else all right with the room?"*, and a work order *AC defekt · rom 204 · via stemme* lands on Drift. A cleaner then asks in Polish what to do first and hears the answer in Polish | Complaints caught while the guest is still here; training in your own language | **ElevenLabs** + **Holio 9** |
+| 1:30–1:50 | **Gjesten sier fra** | A guest speaks Spanish into the robot: *"the AC in 204 doesn't work"*. Lobby answers in Spanish, asks *"Is everything else all right with the room?"*, and a work order *AC defekt · rom 204 · via stemme* lands on Drift. A cleaner then asks in Polish what to do first and hears the answer in Polish | Complaints caught while the guest is still here; training in your own language | **ElevenLabs** + **Holio 9** |
 | 1:50–2:00 | **Close** | Drift, all green except the three work orders: *"Én hjerne. Øyne, ruter og stemme. Færre tomme rom, færre tapte håndklær, feil rettet før anmeldelsen."* | — | All |
 
 What we **don't** show in the 2 minutes (they exist, the jury can ask): product identification by

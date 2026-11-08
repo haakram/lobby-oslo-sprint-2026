@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Turn, VoicePhase } from "@/features/voice/useFetteroVoice";
+import type { Turn, VoicePhase } from "@/features/voice/useLobbyVoice";
 import { cx, PhoneIcon } from "@/ui";
 import { HOTEL, RECEPTIONIST_NAME } from "./hotel";
 

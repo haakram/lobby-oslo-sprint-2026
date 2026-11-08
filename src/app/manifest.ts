@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import { APP_NAME, DESCRIPTION, TAGLINE } from "@/ui/brand";
 
 /**
- * The installed app (add to home screen): the name, the one line and the F on night steel, the same mark
+ * The installed app (add to home screen): the name, the one line and the L on night steel, the same mark
  * as the favicon (`src/app/icon.svg`). The icons sit in `public/`; the proxy lets them and this file through
  * without a session (`src/features/auth/access.ts`), so a phone can fetch them before anyone logs in.
  */

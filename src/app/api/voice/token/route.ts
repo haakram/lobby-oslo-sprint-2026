@@ -11,7 +11,7 @@ function fail(status: number, error: string) {
 }
 
 /**
- * A short-lived ElevenLabs conversation token (WebRTC) for the Fettero agent.
+ * A short-lived ElevenLabs conversation token (WebRTC) for the Lobby agent.
  * The API key stays here; the browser only ever sees the token.
  */
 export async function GET(): Promise<Response> {

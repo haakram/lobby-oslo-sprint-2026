@@ -6,7 +6,7 @@ import { type ReactNode, useState, useSyncExternalStore } from "react";
 import { homeFor, type Role } from "@/features/auth/roles";
 import { useSession } from "@/features/auth/SessionProvider";
 import type { ModuleService } from "@/features/modules/registry";
-import { APP_NAME } from "./brand";
+import { BrandLockup } from "./BrandLockup";
 import { cx } from "./cx";
 import { RegenIcon } from "./icons/RegenIcon";
 import { barItemsFor, groupsFor, isActive, type NavGroup, type NavItem, onHostScreen } from "./nav";
@@ -78,8 +78,8 @@ function Rail({ groups, pathname, bell, home, place }: { groups: NavGroup[]; pat
     >
       <div className="flex items-start justify-between gap-1 pr-3">
         <Link href={home} className="flex min-w-0 flex-col px-6 pt-7 pb-6 focus-visible:outline-offset-[-4px]">
-          <span className="text-xl font-bold leading-none tracking-[-0.02em]">{APP_NAME}</span>
-          <span className="mt-1.5 text-xs text-muted">{place}</span>
+          <BrandLockup />
+          <span className="mt-2 text-xs text-muted">{place}</span>
         </Link>
         {bell && <div className="pt-5">{bell}</div>}
       </div>
@@ -149,8 +149,8 @@ function Bar({
       {/* The phone's top edge: the name, and the bell where people look for it. */}
       <header data-surface="dark" className="bg-bg pt-[env(safe-area-inset-top)] text-text lg:hidden">
         <div className="flex min-h-14 items-center justify-between gap-3 pr-2 pl-4">
-          <Link href={home} className="flex min-h-11 min-w-0 items-baseline gap-2 focus-visible:outline-offset-[-2px]">
-            <span className="text-lg font-bold tracking-[-0.02em]">{APP_NAME}</span>
+          <Link href={home} className="flex min-h-11 min-w-0 items-center gap-3 focus-visible:outline-offset-[-2px]">
+            <BrandLockup />
             <span className="truncate text-xs text-muted">{place}</span>
           </Link>
           {bell}

@@ -89,7 +89,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
         ) : result.checked === 0 ? (
           <div className="mt-3 flex max-w-xl flex-col gap-1">
             <h3 className="text-base font-semibold">Roboten har ikke sjekket noen rom ennå</h3>
-            <p className="text-base text-muted">Når roboten sjekker rom i natt, sammenligner Fettero det den finner med bookingsystemet her.</p>
+            <p className="text-base text-muted">Når roboten sjekker rom i natt, sammenligner Lobby det den finner med bookingsystemet her.</p>
           </div>
         ) : sellable === 0 && held === 0 && crowded === 0 && result.guestFound.length === 0 ? (
           <p className="mt-3 flex items-start gap-2 text-base">
@@ -186,7 +186,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { 
         {result && result.tooEarly.length > 0 && (
           <p className="mt-4 text-sm text-muted">
             Teller ikke: {result.tooEarly.map((row) => `rom ${number(row.room)} (sjekket ${hhmm(row.at)})`).join(", ")}. Et rom må være tomt etter kl.
-            01:00 før Fettero foreslår å selge det, så en gjest som er ute på kvelden ikke mister rommet.
+            01:00 før Lobby foreslår å selge det, så en gjest som er ute på kvelden ikke mister rommet.
           </p>
         )}
         <SourceNote className="mt-3" sources={["run-log", "test", "local"]} />

@@ -1,4 +1,4 @@
-// Creates the Fettero agent at ElevenLabs, or updates it when ELEVENLABS_AGENT_ID is already set.
+// Creates the Lobby agent at ElevenLabs, or updates it when ELEVENLABS_AGENT_ID is already set.
 // Prints only the agent id. Run only after ShirazIQ's yes:
 //
 //   npx tsx --env-file=.env src/features/voice/setup-agent.ts

@@ -4,14 +4,14 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef } from "react";
 import { Badge, EmptyState, fadeRise } from "@/ui";
 import { languageLabel, type LanguageCode } from "./language";
-import type { Turn } from "./useFetteroVoice";
+import type { Turn } from "./useLobbyVoice";
 
 /** The live conversation, newest at the bottom, with the language heard as a badge. */
 export function Transcript({
   turns,
   language,
-  agentLabel = "Fettero",
-  emptyText = "Trykk Snakk med Fettero og spør om en vare, en rute eller en arbeidsoppgave. Snakk det språket du vil.",
+  agentLabel = "Lobby",
+  emptyText = "Trykk Snakk med Lobby og spør om en vare, en rute eller en arbeidsoppgave. Snakk det språket du vil.",
 }: {
   turns: Turn[];
   language: LanguageCode | null;

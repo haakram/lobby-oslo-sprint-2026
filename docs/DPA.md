@@ -1,4 +1,4 @@
-# DPA.md — Databehandleravtale for en Fettero-pilot (utkast)
+# DPA.md — Databehandleravtale for en Lobby-pilot (utkast)
 
 > **For the hotel that says yes on Monday** (asked for in the marketing and legal reviews): a pilot sees the hotel's guest
 > data, so the hotel will want an Art. 28 agreement before anything is sent. This is a one-page draft
@@ -8,7 +8,7 @@
 > under GDPR Art. 28(7)), which are part of the EEA Agreement (Joint Committee decision 336/2022, in
 > force in the EEA from 10 Dec 2022, [EEA-Lex](https://www.efta.int/eea-lex/32021D0915)). The clauses
 > are used unchanged; we fill in the choices and the four annexes. Background: `docs/PRIVACY.md`.
-> **Open before anyone signs:** Fettero is not yet a company with an organisation number, and the
+> **Open before anyone signs:** Lobby is not yet a company with an organisation number, and the
 > pilot's server store (where data lives once it leaves the hotel's device) is not built.
 > **Changed at about 07:45 (legal review):** room 210's purpose in *Formål* (the occupant's safety
 > and a right guest register, revenue a side effect; the Art. 6(4) test in `docs/PRIVACY.md` § 10.2),
@@ -18,45 +18,45 @@
 
 ## Avtalen
 
-1. **Partene.** Hotellet er **behandlingsansvarlig**. Fettero er **databehandler** (GDPR art. 28).
+1. **Partene.** Hotellet er **behandlingsansvarlig**. Lobby er **databehandler** (GDPR art. 28).
    Partene i vedlegg I.
 2. **Vilkårene.** EU-kommisjonens standardavtalevilkår for behandlingsansvarlige og databehandlere
    (gjennomføringsbeslutning (EU) 2021/915), uendret, med disse valgene:
    - Klausul 5 (tiltredelse): ikke brukt.
-   - Klausul 7.7 (underdatabehandlere): **alternativ 2, generell skriftlig godkjenning**. Fettero
+   - Klausul 7.7 (underdatabehandlere): **alternativ 2, generell skriftlig godkjenning**. Lobby
      varsler hotellet skriftlig **30 dager** før en underdatabehandler legges til eller byttes, og
      hotellet kan protestere. Listen i vedlegg IV.
    - Klausul 9.2 (brudd hos databehandleren): varsel til hotellet uten ugrunnet opphold, og **senest
-     24 timer** etter at Fettero ble kjent med bruddet, så hotellet rekker 72-timersfristen overfor
+     24 timer** etter at Lobby ble kjent med bruddet, så hotellet rekker 72-timersfristen overfor
      Datatilsynet (art. 33).
    - Tillegg som ikke strider mot vilkårene (klausul 2): punkt 3–6 her.
-3. **Ingen skriving i hotellets systemer.** Piloten leser bookingsystemet (lesetilgang). Fettero
+3. **Ingen skriving i hotellets systemer.** Piloten leser bookingsystemet (lesetilgang). Lobby
    endrer aldri en booking og selger aldri et rom; et rom går til resepsjonen, som gjør endringen.
-4. **Ett signal per rom fra dørlåsen, aldri kort-id, aldri klokkeslett.** Fettero tar ikke imot dørlåsens logg.
+4. **Ett signal per rom fra dørlåsen, aldri kort-id, aldri klokkeslett.** Lobby tar ikke imot dørlåsens logg.
    Hotellet (eller låsleverandørens rapport) gir per gjesterom ett signal uten klokkeslett: et gjestekort
    står i energibryteren, eller ingen gjestekort er brukt i døra eller satt i energibryteren siden
    kl. 18:00. Kort for ansatte, hovedkort og nødkort fjernes før noe sendes. Har hotellet
    ikke en slik rapport, bruker piloten nattevaktens egen romsjekk i stedet.
 5. **Ingen ytelsesmåling av ansatte.** Navn på ansatte står i overleveringen for å vise hvem som eier
-   og har bekreftet hva. Fettero lager aldri statistikk per person, heller ikke av svartider (når
-   noen kvitterte for eller ble varslet om en sak). **Fettero brukes aldri til å finne ut hvem som
+   og har bekreftet hva. Lobby lager aldri statistikk per person, heller ikke av svartider (når
+   noen kvitterte for eller ble varslet om en sak). **Lobby brukes aldri til å finne ut hvem som
    kodet et kort eller til å granske en ansatt;** et avvik som et rom i bruk uten booking løses med
-   gjesten og registreringen, ikke med låsens ansattlogg, som Fettero heller ikke mottar (punkt 4).
-6. **Slutt.** Når piloten slutter (fire uker, eller tidligere), leverer Fettero sikkerhetsutdraget
+   gjesten og registreringen, ikke med låsens ansattlogg, som Lobby heller ikke mottar (punkt 4).
+6. **Slutt.** Når piloten slutter (fire uker, eller tidligere), leverer Lobby sikkerhetsutdraget
    (vedlegg II, *Varighet og lagring*) til hotellet, sletter deretter alt, også sin kopi av utdraget,
    innen **30 dager**, eller leverer alt tilbake hvis hotellet ber om det, og bekrefter slettingen
-   skriftlig (art. 28 nr. 3 bokstav g). Fettero beholder ingenting etter pilotens slutt; hvor lenge
+   skriftlig (art. 28 nr. 3 bokstav g). Lobby beholder ingenting etter pilotens slutt; hvor lenge
    utdraget oppbevares, bestemmer hotellet som behandlingsansvarlig.
 
 Signert for hotellet: ______________________ Dato: ________
-Signert for Fettero: _______________________ Dato: ________
+Signert for Lobby: _______________________ Dato: ________
 
 ## Vedlegg I: Partene
 
 | | Navn, org.nr., adresse | Kontaktperson | Rolle |
 |---|---|---|---|
 | Hotellet | [fylles ut] | [daglig leder eller driftssjef] | Behandlingsansvarlig |
-| Fettero | **[ikke stiftet ennå: selskapet signerer når det er registrert]** | Hamad, ShirazIQ | Databehandler |
+| Lobby | **[ikke stiftet ennå: selskapet signerer når det er registrert]** | Hamad, ShirazIQ | Databehandler |
 
 ## Vedlegg II: Beskrivelse av behandlingen
 
@@ -67,7 +67,7 @@ Signert for Fettero: _______________________ Dato: ________
 | **Opplysninger** | Fra bookingsystemet: gjestens navn, rom, ankomst og avreise, om utsjekken er registrert. Fra dørlås og energibryter: ett signal per rom (se punkt 4), aldri kort-id, navn, klokkeslett eller ansattes kort. Fra nattevakten: rom, funn, klokkeslett, hennes navn og et kort notat. Fra overleveringen: hvem som bekreftet et rom, hvem som registrerte bekreftelsen, og hva som ble sjekket (folio, bagasje, nøkkelkort); hvilken sikkerhetssak som ble varslet til hvem; hvem som kvitterte og når. Angrer noen, legges en ny linje til; ingenting slettes før lagringstiden er ute. **Ingen** betalingskort, fødselsnummer eller helseopplysninger. |
 | **Særlige kategorier** | Ingen. Nattevaktens notat gjelder rommet og oppgaven, aldri en gjests helse. |
 | **Behandlingen** | Lese, sammenstille og vise siden; skrive den ut. Ingen språkmodell på siden: hver linje er avledet av kildene. |
-| **Varighet og lagring** | Pilotens fire uker. Dørlåssignalet slettes 24 timer etter overleveringen det inngikk i. Nattevaktens registreringer slettes etter **30 dager** på enheten (konstanten `RETENTION_DAYS` i `src/features/staffinput/retention.ts`, brukt når loggen leses og skrives). En overlevering lagres [hotellet bestemmer; forslag 30 dager, samme tall], deretter slettes den. Sikkerhetslinjene uten navn (sted, siden når, om skilt ble satt ut, **hvilken rolle** som ble varslet og når: vaktmester, resepsjon) er sikkerhetsutdraget. Det beholdes **av hotellet**, ikke av Fettero [hotellet bestemmer; forslag tre år som standard, den relative foreldelsesfristen for et erstatningskrav, foreldelsesloven § 9 nr. 1; en linje knyttet til en meldt skade holdes til kravet er avgjort, fordi fristen løper fra skadelidte fikk kunnskap, og § 9 nr. 2 har en ytre grense på 20 år]. Ved pilotens slutt leverer Fettero utdraget til hotellet (punkt 6); i pilotbygget er utdraget den signerte utskriften. Utskriften makuleres etter vakten (står på arket), bortsett fra sikkerhetslinjene. |
+| **Varighet og lagring** | Pilotens fire uker. Dørlåssignalet slettes 24 timer etter overleveringen det inngikk i. Nattevaktens registreringer slettes etter **30 dager** på enheten (konstanten `RETENTION_DAYS` i `src/features/staffinput/retention.ts`, brukt når loggen leses og skrives). En overlevering lagres [hotellet bestemmer; forslag 30 dager, samme tall], deretter slettes den. Sikkerhetslinjene uten navn (sted, siden når, om skilt ble satt ut, **hvilken rolle** som ble varslet og når: vaktmester, resepsjon) er sikkerhetsutdraget. Det beholdes **av hotellet**, ikke av Lobby [hotellet bestemmer; forslag tre år som standard, den relative foreldelsesfristen for et erstatningskrav, foreldelsesloven § 9 nr. 1; en linje knyttet til en meldt skade holdes til kravet er avgjort, fordi fristen løper fra skadelidte fikk kunnskap, og § 9 nr. 2 har en ytre grense på 20 år]. Ved pilotens slutt leverer Lobby utdraget til hotellet (punkt 6); i pilotbygget er utdraget den signerte utskriften. Utskriften makuleres etter vakten (står på arket), bortsett fra sikkerhetslinjene. |
 | **Hvor** | I pilotbygget ligger registreringer og kvitteringer i nettleseren på hotellets egen enhet. Appen kjører hos Vercel; uten satt region kjører funksjonene i Vercels standardregion `iad1` (Washington, D.C.). Før piloten: regionen settes til `arn1` (Stockholm) og skrives inn her (vedlegg IV). Før noe lagres på en server: en ny versjon av dette vedlegget. |
 
 ## Vedlegg III: Tekniske og organisatoriske tiltak

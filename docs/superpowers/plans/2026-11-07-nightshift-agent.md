@@ -14,7 +14,7 @@
 
 - Python 3.12; runtime deps only `httpx`, `anthropic`, `python-dotenv` (`requirements.txt`); dev deps only `pytest`, `ruff` (`requirements-dev.txt`). Virtualenv `.venv`; run tools as `.venv/bin/python -m pytest`, `.venv/bin/python -m ruff check .`.
 - `mode: "final"` is sent only through `guard.check_mode`: requires env `FINAL_ARMED=1` **and** Oslo time in [2026-11-08 11:59, 2026-11-08 13:00). Every other start is `mode: "practice"`.
-- Endpoint `https://nightshift.wybe.me/` (`WYBE_NIGHTSHIFT_URL`), key `WYBE_NIGHTSHIFT_KEY`, header `Authorization: Bearer <key>`, User-Agent `TeamFettero-agent/1.0`, `X-Shift: <id>` on every in-shift call.
+- Endpoint `https://nightshift.wybe.me/` (`WYBE_NIGHTSHIFT_URL`), key `WYBE_NIGHTSHIFT_KEY`, header `Authorization: Bearer <key>`, User-Agent `TeamLobby-agent/1.0`, `X-Shift: <id>` on every in-shift call.
 - Global rate limit default **5 requests/s** across all shifts (`NIGHTSHIFT_MAX_RPS`).
 - No key value in any log, exception message, repr, test fixture or output. Logged headers show `Bearer <REDACTED>`.
 - **Tests never use the network**: `httpx.MockTransport` with `tests/fakes/fake_wybe.py`. Live calls only in Task 10 step "live smoke" and Task 12 (practice).
@@ -45,7 +45,7 @@
 - Modify: `.env.example` (add `NIGHTSHIFT_MAX_RPS=5`, `FINAL_ARMED=` with a comment), `docs/ARCHITECTURE.md` § 1 (Track A row: Python 3.12 + libs)
 
 **Interfaces:**
-- Produces: `Settings` (frozen dataclass: `url: str`, `key: str`, `anthropic_key: str | None`, `budget_usd: float`, `max_rps: float`, `final_armed: bool`, `user_agent: str = "TeamFettero-agent/1.0"`, `runs_dir: Path = Path("temp/runs")`; `__repr__` hides both keys), `load_settings(env_files: tuple[str, ...] = (".env", ".env.local")) -> Settings` (later file wins; real environment variables win over files); `FinalModeLocked(Exception)`; `FINAL_START = datetime(2026, 11, 8, 11, 59, tzinfo=ZoneInfo("Europe/Oslo"))`, `FINAL_END = datetime(2026, 11, 8, 13, 0, tzinfo=ZoneInfo("Europe/Oslo"))`; `check_mode(mode: str, *, armed: bool, now: datetime | None = None) -> None`.
+- Produces: `Settings` (frozen dataclass: `url: str`, `key: str`, `anthropic_key: str | None`, `budget_usd: float`, `max_rps: float`, `final_armed: bool`, `user_agent: str = "TeamLobby-agent/1.0"`, `runs_dir: Path = Path("temp/runs")`; `__repr__` hides both keys), `load_settings(env_files: tuple[str, ...] = (".env", ".env.local")) -> Settings` (later file wins; real environment variables win over files); `FinalModeLocked(Exception)`; `FINAL_START = datetime(2026, 11, 8, 11, 59, tzinfo=ZoneInfo("Europe/Oslo"))`, `FINAL_END = datetime(2026, 11, 8, 13, 0, tzinfo=ZoneInfo("Europe/Oslo"))`; `check_mode(mode: str, *, armed: bool, now: datetime | None = None) -> None`.
 
 - [ ] **Step 1: Create the venv and files**: `python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt`. `pyproject.toml`: `[tool.ruff] line-length = 110`, `[tool.pytest.ini_options] testpaths = ["tests"]`, `pythonpath = ["."]`.
 - [ ] **Step 2: Write the failing tests**
@@ -96,7 +96,7 @@ def test_settings_repr_hides_keys(tmp_path, monkeypatch):  # writes a temp .env 
   - Run log lines (all with `"v": 1`, `"t": <unix float>`): `{"type":"start","shift","mode","seed"}`, `{"type":"call","cmd","args","ok","clock","result","events","latency_ms","status"}`, `{"type":"decision","kind","data"}`, `{"type":"state","clock","location","score","battery","hands","cart"}`, `{"type":"end","score","requests_served","reason"}`
 
 - [ ] **Step 1: Write the failing tests** (all with `httpx.MockTransport`):
-  - `test_sends_auth_ua_and_xshift`: the handler records requests; after `start_shift("practice", seed=1)` and `session.cmd("status")`, the second request has `Authorization == "Bearer k123"`, `User-Agent == "TeamFettero-agent/1.0"`, `X-Shift == "w2-abc"`, body `{"cmd":"status"}` (no `args` key when empty).
+  - `test_sends_auth_ua_and_xshift`: the handler records requests; after `start_shift("practice", seed=1)` and `session.cmd("status")`, the second request has `Authorization == "Bearer k123"`, `User-Agent == "TeamLobby-agent/1.0"`, `X-Shift == "w2-abc"`, body `{"cmd":"status"}` (no `args` key when empty).
   - `test_start_shift_body`: body is `{"cmd":"start_shift","args":{"mode":"practice","seed":1}}`.
   - `test_final_blocked_before_any_request`: `start_shift("final")` with `final_armed=False` raises `FinalModeLocked` and the handler saw **0** requests.
   - `test_409_raises_shift_ended`.

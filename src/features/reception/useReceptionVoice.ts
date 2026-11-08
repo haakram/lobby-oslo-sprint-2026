@@ -3,7 +3,7 @@
 import { useConversation, useConversationClientTool, type MessagePayload } from "@elevenlabs/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { detectLanguage, type LanguageCode } from "@/features/voice/language";
-import type { Turn, VoicePhase, VoiceProblem } from "@/features/voice/useFetteroVoice";
+import type { Turn, VoicePhase, VoiceProblem } from "@/features/voice/useLobbyVoice";
 import { occupancyWith, type HeldRoom } from "./availability";
 import { createCallSink, type ReceptionRecord, type ReceptionSink } from "./records";
 import { createReceptionTools } from "./tools";

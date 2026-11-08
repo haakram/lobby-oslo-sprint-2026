@@ -2,7 +2,7 @@
 
 import { motion, useAnimationFrame, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { cx, MicIcon } from "@/ui";
-import type { VoicePhase } from "./useFetteroVoice";
+import type { VoicePhase } from "./useLobbyVoice";
 
 // How much of each new reading the orb takes per frame: smooth, but still on the beat of speech.
 const SMOOTHING = 0.22;
@@ -15,7 +15,7 @@ const CORE: Record<VoicePhase, string> = {
 };
 
 /**
- * The voice orb. While Fettero listens it moves with the worker's voice, while it speaks with its
+ * The voice orb. While Lobby listens it moves with the worker's voice, while it speaks with its
  * own; it never moves on its own. Under reduced motion it holds still and only its colour changes.
  */
 export function VoiceOrb({

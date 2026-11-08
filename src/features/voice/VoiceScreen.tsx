@@ -13,7 +13,7 @@ import { ConfirmTaskSheet } from "./ConfirmTaskSheet";
 import { GUIDES, type GuideStep } from "./guides";
 import type { VoiceUi } from "./tools";
 import { Transcript } from "./Transcript";
-import { useFetteroVoice, type VoicePhase, type VoiceProblem } from "./useFetteroVoice";
+import { useLobbyVoice, type VoicePhase, type VoiceProblem } from "./useLobbyVoice";
 import { VoiceOrb } from "./VoiceOrb";
 
 type Shown =
@@ -24,14 +24,14 @@ type Shown =
 
 const STATUS: Record<VoicePhase, string> = {
   idle: "Trykk og snakk på ditt eget språk.",
-  connecting: "Kobler til Fettero …",
+  connecting: "Kobler til Lobby …",
   listening: "Lytter",
-  speaking: "Fettero snakker",
+  speaking: "Lobby snakker",
 };
 
-/** /stemme: talk to Fettero in any language; it answers out loud and shows what it means. */
+/** /stemme: talk to Lobby in any language; it answers out loud and shows what it means. */
 /**
- * `ready`: the server has the Fettero agent (ELEVENLABS_AGENT_ID and the key). Without it the screen says
+ * `ready`: the server has the Lobby agent (ELEVENLABS_AGENT_ID and the key). Without it the screen says
  * so calmly up front, instead of offering a button that can only end in "ikke satt opp".
  */
 export function VoiceScreen({ ready = true }: { ready?: boolean }) {
@@ -69,7 +69,7 @@ function VoiceSession({ ready }: { ready: boolean }) {
     [addToPicklist],
   );
 
-  const voice = useFetteroVoice(ui);
+  const voice = useLobbyVoice(ui);
   const { tellAgent } = voice;
 
   const confirmTask = useCallback(() => {
@@ -117,7 +117,7 @@ function VoiceSession({ ready }: { ready: boolean }) {
                 <div className="flex max-w-sm flex-col items-center gap-2 text-center">
                   <p className="text-lg font-medium text-text">Stemmen er ikke slått på ennå</p>
                   <p className="text-base text-muted">
-                    Fettero-agenten er ikke lagt inn på denne serveren. Øyne og Ruter virker som vanlig.
+                    Lobby-agenten er ikke lagt inn på denne serveren. Øyne og Ruter virker som vanlig.
                   </p>
                   <div className="pt-3">
                     <Link href="/oyne" className={buttonClasses("secondary", "lg")}>
@@ -136,7 +136,7 @@ function VoiceSession({ ready }: { ready: boolean }) {
                     </Button>
                   ) : (
                     <Button size="lg" className="w-full max-w-xs" loading={busy} onClick={() => void voice.start()}>
-                      Snakk med Fettero
+                      Snakk med Lobby
                     </Button>
                   )}
                   {voice.problem && <ServiceProblem problem={voice.problem} onRetry={voice.start} />}
@@ -151,8 +151,8 @@ function VoiceSession({ ready }: { ready: boolean }) {
             <Transcript
               turns={voice.turns}
               language={voice.language}
-              // Without the agent there is no Snakk med Fettero to point at.
-              emptyText={ready ? undefined : "Samtalen med Fettero vises her når stemmen er slått på."}
+              // Without the agent there is no Snakk med Lobby to point at.
+              emptyText={ready ? undefined : "Samtalen med Lobby vises her når stemmen er slått på."}
             />
           </Card>
           <ShownPanel shown={shown} inPicklist={picklist.skus} onAdd={addToPicklist} />
@@ -176,7 +176,7 @@ function MicrophoneProblem({ problem, onRetry }: { problem: VoiceProblem; onRetr
       </h2>
       {denied ? (
         <>
-          <p className="text-base text-muted">Fettero må høre deg for å svare. Slik gir du tilgang:</p>
+          <p className="text-base text-muted">Lobby må høre deg for å svare. Slik gir du tilgang:</p>
           <ol className="flex list-decimal flex-col gap-1 pl-5 text-base text-text">
             <li>Trykk på låsen ved siden av adressen øverst.</li>
             <li>Slå på Mikrofon for denne siden.</li>
@@ -200,7 +200,7 @@ function ServiceProblem({ problem, onRetry }: { problem: VoiceProblem; onRetry: 
   return (
     <ErrorState
       className="w-full"
-      title={notSetUp ? "Stemmen er ikke satt opp" : "Fikk ikke kontakt med Fettero"}
+      title={notSetUp ? "Stemmen er ikke satt opp" : "Fikk ikke kontakt med Lobby"}
       body={
         notSetUp
           ? "Agenten er ikke koblet til serveren ennå. Prøv igjen når oppsettet er gjort."

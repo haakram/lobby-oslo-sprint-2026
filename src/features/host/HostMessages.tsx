@@ -11,7 +11,7 @@ export const MESSAGE_FIGURES = ["Meldinger siste døgn", "Svart automatisk", "Sv
 /**
  * Gjestemeldinger: every guest message in Norwegian, whatever language it came in, and what went back.
  * The common questions (code, wifi, parking, check-out) are answered by the auto-replies; the one that
- * needs the host is on top, with Fettero's suggestion and the answer one tap away.
+ * needs the host is on top, with Lobby's suggestion and the answer one tap away.
  *
  * TODO(phase-3): the inbox and the replies go through the channel's messaging API (Airbnb / Booking.com);
  * translation through the same model as the voice module.
@@ -21,7 +21,7 @@ export function HostMessages() {
   return (
     <HostPage
       module="vert-meldinger"
-      lede="Fettero svarer på det vanlige selv og oversetter alt til norsk. Det som trenger deg, ligger øverst."
+      lede="Lobby svarer på det vanlige selv og oversetter alt til norsk. Det som trenger deg, ligger øverst."
       figureLabels={MESSAGE_FIGURES}
     >
       {host.kind === "ready" && <Messages host={host} />}

@@ -1,12 +1,12 @@
-# Fettero
+# Lobby
 
-**Natten, ærlig overlevert.** *(The night, handed over honestly.)* Fettero gives the manager who takes
+**Natten, ærlig overlevert.** *(The night, handed over honestly.)* Lobby gives the manager who takes
 over a hotel at 06:00 the night on one page: what needs a person now and who owns it, which rooms can be
 sold today, and what the night robot did and refused to do. Nothing on it says "done" unless it was
-confirmed. ***Fettero finner rommene der bookingsystemet og dørlåsen er uenige — før renholdet gjør
+confirmed. ***Lobby finner rommene der bookingsystemet og dørlåsen er uenige — før renholdet gjør
 det.*** (It finds the rooms your booking system and your door locks disagree about, before
 housekeeping does.) For independent and chain hotels of 60–200 rooms, software first: hotel number one
-needs no robot, because Fettero reads the booking system (read-only), one signal per room from the door
+needs no robot, because Lobby reads the booking system (read-only), one signal per room from the door
 lock (no card id, no clock) and the night clerk's own entries.
 
 The robot in the demo is our AI agent, which played Wybe's live hotel simulation on its own, and we hold
@@ -23,7 +23,7 @@ robot itself delivered.
 free four-week pilot, software only, read-only on the booking system, with a one-page data processing
 agreement ([`docs/DPA.md`](./docs/DPA.md)).
 
-Built in 48 hours at **Oslo Sprint 2026** by **Team Fettero** (Hamad, ShirazIQ), for the main prize,
+Built in 48 hours at **Oslo Sprint 2026** by **Team Lobby** (Hamad, ShirazIQ), for the main prize,
 Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is the demo hotel.
 
 ## See it in 60 seconds
@@ -242,11 +242,10 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
 
 ## The name
 
-The product traded as *Lobby* until Saturday. Lobby is also a funded Zurich hotel-AI company sold
-through Apaleo, the channel we plan to use, so on this branch the product is **Fettero**: our team's
-coined name. The team lead decides whether `main` follows. Code identifiers (`lobby:` storage keys,
-`LOBBY_USERS`) keep the old name. The name isn't cleared yet: the trademark searches (Patentstyret, EUIPO,
-WIPO, and whether FERRERO's reputation reaches a sound-alike) are still to do (`docs/PRIVACY.md` § 9).
+The product is **Lobby** (team lead, Sun 8 Nov), the same word as the code identifiers (`lobby:`
+storage keys, `LOBBY_USERS`). A funded Zurich hotel-AI company also trades as Lobby and sells through
+Apaleo, the channel we plan to use, so the name isn't cleared: the trademark searches (Patentstyret,
+EUIPO, WIPO) are still to do (`docs/PRIVACY.md` § 9).
 
 ## Docs for the jury
 

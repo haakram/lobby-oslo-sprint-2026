@@ -131,10 +131,13 @@ describe("the navigation groups, from the module registry", () => {
 describe("AppNav on a desktop (the rail)", () => {
   it("lists the admin's screens under Hotellet, Drift, Roboten and Resepsjon, in registry order: the hotel only", () => {
     render(as("admin", <AppNav services={[]} />));
-    const labels = screen.getAllByRole("link").map((link) => link.textContent);
+    const [brand, ...links] = screen.getAllByRole("link");
+    const labels = links.map((link) => link.textContent);
     // The hotel's screens (Stemme is out without the voice agent), each once, in registry order under its group.
     const hotel = MODULES.filter((module) => module.group !== "utleie" && module.id !== "stemme").map((module) => module.name);
-    expect(labels).toEqual([expect.stringContaining("Fettero"), ...hotel]);
+    // The first link is the Lobby logo (an image, alt "Lobby"), then the screens.
+    expect(brand).toHaveAccessibleName(/^Lobby/);
+    expect(labels).toEqual(hotel);
     // The demo rail: 14 hotel screens, not 18 (the host's app is one tap away on the user plate).
     expect(hotel).toHaveLength(14);
     expect(screen.queryByText("Utleie")).not.toBeInTheDocument();
@@ -198,7 +201,7 @@ describe("AppNav on a desktop (the rail)", () => {
   it("gives the host their own rail: home is /vert, one group, and no view switcher in the user menu", () => {
     path.current = "/vert/meldinger";
     render(as("host", <AppNav />));
-    expect(screen.getByRole("link", { name: /Fettero/ })).toHaveAttribute("href", "/vert");
+    expect(screen.getByRole("link", { name: /Lobby/ })).toHaveAttribute("href", "/vert");
     expect(screen.getByText("Korttidsutleie i Oslo")).toBeInTheDocument();
     expect(screen.queryByText("Hotellet")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Oversikt" })).not.toBeInTheDocument();
@@ -328,7 +331,7 @@ describe("AppNav on a phone (the bar and Meny)", () => {
     path.current = "/rom";
     render(as("robot", <AppNav bell={<button type="button">Varsler, 4 nye</button>} />));
     const top = within(screen.getByRole("banner"));
-    expect(top.getByRole("link", { name: /^Fettero/ })).toHaveAttribute("href", "/");
+    expect(top.getByRole("link", { name: /^Lobby/ })).toHaveAttribute("href", "/");
     expect(top.getByRole("button", { name: "Varsler, 4 nye" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Varsler/ })).toHaveLength(1);
   });
@@ -338,7 +341,7 @@ describe("AppNav on a phone (the bar and Meny)", () => {
     path.current = "/vert/bookinger";
     render(as("host", <AppNav bell={<button type="button">Varsler, 4 nye</button>} />));
     const top = within(screen.getByRole("banner"));
-    expect(top.getByRole("link", { name: /^Fettero/ })).toHaveAttribute("href", "/vert");
+    expect(top.getByRole("link", { name: /^Lobby/ })).toHaveAttribute("href", "/vert");
     expect(top.getByText("Korttidsutleie i Oslo")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Varsler/ })).not.toBeInTheDocument();
     const bar = within(screen.getByRole("navigation", { name: "Hovedmeny" }));

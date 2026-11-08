@@ -281,7 +281,7 @@ const REAL_HOTEL = (
 /** On a hotel-rules night: what the rules cost in points and what the card shows instead (round 6). */
 function rulesCostLine(): string | null {
   const range = hotelRulesCostRange();
-  return range ? `Hotellregler koster ca. ${range[0]}–${range[1]} poeng per natt i simulatoren; Fettero viser hva roboten gjorde i stedet.` : null;
+  return range ? `Hotellregler koster ca. ${range[0]}–${range[1]} poeng per natt i simulatoren; Lobby viser hva roboten gjorde i stedet.` : null;
 }
 
 /** "79 %": a catch rate in whole per cent (the figure is an estimate; a decimal would claim more than it holds). */
@@ -553,7 +553,7 @@ function contradictionText(entry: SelfContradiction): string {
   const what = first && LUGGAGE_ITEM.test(first.item) ? "bagasje" : "noe";
   return `Rom ${entry.room}: roboten satte inn ${what}${first?.clock ? ` kl. ${first.clock.slice(0, 5)}` : ""}, så rommet tomt${
     entry.clock ? ` kl. ${entry.clock.slice(0, 5)}` : ""
-  } og meldte det tomt (${entry.request}). Robotens blikk og dens egen oppgavelogg er uenige, så Fettero regner den ikke som holdt.`;
+  } og meldte det tomt (${entry.request}). Robotens blikk og dens egen oppgavelogg er uenige, så Lobby regner den ikke som holdt.`;
 }
 
 /** "Skled i korridor 2B kl. 23:51 og krysset det samme våte gulvet 27 ganger til uten å sette skilt der." */

@@ -22,7 +22,7 @@ export type DecideInput = {
 
 /**
  * The brand files (src/app/ and public/): the tab icon, the home-screen icons and manifest, and the link
- * preview image. A browser asks for them before anyone logs in (and a Slack preview never logs in), and
+ * preview image, and the logo. A browser asks for them before anyone logs in (and a Slack preview never logs in), and
  * every role's tab needs them, so they answer without a session. Exact paths; nothing else in public/.
  */
 const BRAND_FILES = [
@@ -35,6 +35,11 @@ const BRAND_FILES = [
   "/icon-192.png",
   "/icon-512.png",
   "/icon-maskable-512.png",
+  // The Lobby logo: the rail's and the top bar's lockup, and the login page's full logo.
+  "/brand/lobby-mark.png",
+  "/brand/lobby-wordmark.png",
+  "/brand/lobby-logo-full.png",
+  "/brand/lobby-tagline.png",
 ];
 
 /** Reachable without a session. Exact paths, except the prefixes below. */

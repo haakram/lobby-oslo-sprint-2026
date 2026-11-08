@@ -4,7 +4,8 @@ Where the right handling is unknown, each routine implements the stated hypothes
 `hypothesis` decision ({id, request, action, score_before, score_after, ...}) so one exploratory
 live run shows from score deltas what is right. Every run of a hypothesis flow logs exactly one such
 line, however it ends (see Hyp). The safety rules of flows.py hold everywhere: a door is looked at
-before any knock or keycard, and "done" needs an observed score rise.
+before any knock or keycard, and "done" needs an observed score rise (score-blind, NS_SCORE_BLIND=1:
+the robot's own observation, Executor.done_gate; the scores are then log fields only).
 """
 
 from __future__ import annotations
@@ -15,14 +16,37 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from agent.client import ShiftEnded, WybeError
-from agent.executor import ActionFailed, Executor
+from agent.executor import (
+    NOISE_ACK,
+    ActionFailed,
+    Declined,
+    Executor,
+    OutOfStock,
+    answered,
+    heard,
+    night_seconds,
+    placed_inside,
+)
 from agent.flows import HANDLERS as BASE_HANDLERS
-from agent.flows import Result, _ask_room, _corridor, _door_sign, _knock, _open_with_keycard, _rose
+from agent.flows import (
+    Result,
+    _ask_room,
+    _corridor,
+    _door_sign,
+    _knock,
+    _open_with_keycard,
+    _refuse_checked_out,
+    _rose,
+    note_own_numbered,
+    own_object,
+    pick_for_others,
+)
 from agent.routing import NoRoute, best_tour
 from agent.tasks import Kind, Task
 
 CART_SLOTS = 8  # live: the 9th item in the cart is refused
 BAG_WORDS = ("bag", "luggage", "suitcase")
+BAG_PREFIXES = ("luggage", "bags", "bag", "suitcase")  # live: luggage-205, luggage-205-36; the fake: bags-205
 NOISE_SAY = ("Good evening. Sorry to disturb you — could you please keep the noise down? "
              "Other guests are sleeping.")
 STAFF = ("clerk", "maintenance")
@@ -41,7 +65,7 @@ class Hyp:
 
     def __init__(self, ex: Executor, hid: str, task: Task, **extra):
         self.ex, self.hid, self.task, self.extra = ex, hid, task, extra
-        self.before = ex.score_now()
+        self.before = ex.score_known()  # log fields only (score_at_start)
         self.logged = False
 
     def log(self, action: str, before, after, **extra) -> None:
@@ -66,10 +90,10 @@ def _hypothesis(hid: str):
                 raise
             except Exception as exc:
                 if not h.logged:
-                    h.log(f"failed: {exc}", h.before, ex.score_now())
+                    h.log(f"failed: {exc}", h.before, ex.score_known())
                 raise
             if not h.logged:
-                h.log("ended", h.before, ex.score_now())
+                h.log("ended", h.before, ex.score_known())
             return result
 
         return run
@@ -105,7 +129,7 @@ def named(ex: Executor, task: Task, h: Hyp) -> Result:
     covers the delivery (score_before is from before the ask)."""
     h.extra.update(guest=task.guest, room=None)
     cached = task.guest in ex.guest_rooms
-    room = _ask_room(ex, task.guest)
+    room = _ask_room(ex, task.guest, task.request)
     ex.ledger.set_room(task.request, room)
     h.extra["room"] = room
     found = f"{'cached' if cached else 'asked the clerk'}: {task.guest} is in {room}"
@@ -113,9 +137,9 @@ def named(ex: Executor, task: Task, h: Hyp) -> Result:
     try:
         note, after = BASE_HANDLERS[task.kind](ex, replace(task, room=room, item=item))
     except ActionFailed as exc:
-        h.log(f"{found}; {task.kind.value} failed: {exc}", h.before, ex.score_now())
+        h.log(f"{found}; {task.kind.value} failed: {exc}", h.before, ex.score_known())
         raise
-    h.log(f"{found}; {note}", h.before, ex.score_now())
+    h.log(f"{found}; {note}", h.before, ex.score_known())
     return note, after
 
 
@@ -140,11 +164,36 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
         raise ActionFailed("the cart is full: no room for the bags (dropped nothing)")
     if not ex.get_cart():  # bags are heavy, like trays
         raise ActionFailed("could not get the cart for the bags")
-    ex.go(ex.hotel.special.get("clerk", "front-desk"))
-    name = find_object(objects_here(ex.fresh_look()), BAG_WORDS, room) or "bags"
-    ok, text = ex.pick(name)
-    if not ok:
-        raise ActionFailed(f"could not pick {name}: {text}")
+    name = _own_bags(ex, task, [*ex.state.hands, *(ex.state.cart or [])])
+    if name is None:
+        ex.go(ex.hotel.special.get("clerk", "front-desk"))
+        objects = objects_here(ex.fresh_look())
+        from agent.flows import _fewer_objects_than_orders
+
+        base = _bags_base(room, objects)
+        if dup := _fewer_objects_than_orders(ex, task, objects, base):
+            score = ex.score_now()
+            hyp(ex, "H-duplicate", task, f"not redone: one set of bags for {room}, {dup}'s", score, score)
+            raise Declined(f"Duplicate of {dup}: only one set of bags for {room} is at the desk, and it is {dup}'s")
+        # A second set for a room carries the request number (live: luggage-205-36): only this one's.
+        name = own_object(ex, task, objects, base) or next(
+            (o for o in objects if any(w in o.lower() for w in BAG_WORDS) and not re.search(r"\d", o)), None)
+        if name is None:
+            others = [o for o in objects if o.startswith(base + "-")]
+            if others:
+                ex.log("note", request=task.request, text=f"not taken: {', '.join(others)} (other requests')")
+                raise Declined(f"No bags for {task.request} at the desk: {', '.join(others)} carry other "
+                               f"requests' numbers")
+            raise Declined(f"No bags for {room} are waiting at the desk; they went up already or were never left")
+        ok, text = ex.pick(name)
+        if not ok:
+            if f"no {name}".lower() in text.lower():
+                raise Declined(f"No bags for {room} are waiting at the desk; they went up already or were never left")
+            raise ActionFailed(f"could not pick {name}: {text}")
+        if name in objects:
+            objects.remove(name)
+        pick_for_others(ex, task, Kind.BAGS, lambda t: _bags_base(t.room, objects), objects)
+    note_own_numbered(ex, task, name)
     if not ex.state.carrying("keycard"):
         ex.gather("keycard")
     ex.go(corridor)
@@ -153,15 +202,29 @@ def _bags(ex: Executor, task: Task, h: Hyp) -> Result:
     opened = _open_with_keycard(ex, room)
     if not opened.ok:
         raise ActionFailed(f"keycard did not open {room}: {opened.result}")
-    mid = ex.score_now()
+    mid = ex.score_before()
     placed = ex.cmd("place", item=name, where=room)
     if placed.ok:
         ex.take(name)
     after = ex.score_now()
     h.log(f"placed {name} inside {room} after a keycard: {placed.result}", mid, after, score_at_start=h.before)
-    if placed.ok and _rose(mid, after):
+    if placed.ok and ex.done_gate("place", placed_inside(placed, name, room), str(placed.result), mid, after):
         return f"{name} taken up to {room}", None
+    if ex.blind:
+        raise ActionFailed(f"placed {name} at {room} ({placed.result}) but the reply did not put it inside")
     raise ActionFailed(f"placed {name} in {room} ({placed.result}) but the score did not rise")
+
+
+def _bags_base(room: str, names: list[str]) -> str:
+    """The plain name of a room's bags as `names` spell it: luggage-206 (live), bags-206 (the fake)."""
+    num = room.removeprefix("room-")
+    return next((f"{p}-{num}" for p in BAG_PREFIXES
+                 if any(n == f"{p}-{num}" or n.startswith(f"{p}-{num}-") for n in names)), f"luggage-{num}")
+
+
+def _own_bags(ex: Executor, task: Task, names: list[str]) -> str | None:
+    """This request's bags among `names` (own_object), whichever prefix they carry."""
+    return own_object(ex, task, names, _bags_base(task.room, names))
 
 
 # --- H-noise -------------------------------------------------------------------------------------
@@ -203,27 +266,30 @@ def noise(ex: Executor, task: Task, h: Hyp) -> Result:
     if not rooms:
         ex.work_order("stoy", f"Støyklage nær rom {num}: fant ingen kilde", room=task.room,
                       place=corridor, request=task.request)
-        h.log("nothing named in the look; did not knock", h.before, ex.score_now(), seen=seen)
+        h.log("nothing named in the look; did not knock", h.before, ex.score_known(), seen=seen)
         raise ActionFailed(f"no source of the noise named; saw {seen}")
     target = rooms[0]
+    _refuse_checked_out(ex, target, task.request)  # the look may point at a room whose guest has left
     ex.go(_corridor(ex, target))
-    answer = _knock(ex, target)  # looks at the door first
+    answer = _knock(ex, target)  # a plain knock: the reply names a DND sign
     if answer != "open":
         why = f"ikke forstyrr-skilt på {target}" if answer == "dnd" else f"kilden {target} svarte ikke"
         ex.work_order("stoy", f"Støyklage nær rom {num}: {why}", room=target, place=corridor,
                       request=task.request)
-        h.log(f"{target}: {answer}; said nothing", h.before, ex.score_now(), seen=seen)
+        h.log(f"{target}: {answer}; said nothing", h.before, ex.score_known(), seen=seen)
         if answer == "dnd":
             raise ActionFailed(f"Do Not Disturb sign on {target}; did not knock. Saw {seen}")
         raise ActionFailed(f"no answer at {target}; saw {seen}")
-    mid = ex.score_now()
-    ex.cmd("say", text=NOISE_SAY)
+    mid = ex.score_before()
+    said = ex.cmd("say", text=NOISE_SAY)
     after = ex.score_now()
     ex.work_order("stoy", f"Støyklage nær rom {num}: ba rom {target.removeprefix('room-')} dempe seg",
                   room=target, place=corridor, request=task.request)
     h.log(f"knocked on {target} and asked for quiet", mid, after, seen=seen, score_at_start=h.before)
-    if _rose(mid, after):
+    if ex.done_gate("say", answered(said, NOISE_ACK), heard(said) or "nothing heard", mid, after):
         return f"asked {target} to keep the noise down", None
+    if ex.blind:
+        raise ActionFailed(f"asked {target} to keep the noise down but heard no answer; saw {seen}")
     raise ActionFailed(f"asked {target} to keep the noise down but the score did not rise; saw {seen}")
 
 
@@ -261,64 +327,133 @@ def _find_wet(ex: Executor, floor: int, corridors: list[str], seen: list[str],
         ex.go(remaining.pop(0))
 
 
-def _rank(found: list[str], known: set[str], hotel) -> list[str]:
-    """Spots not known at task start first (walk order), then the known ones, newest first."""
-    age = {spot: i for i, spot in enumerate(hotel.wet_spots())}
-    old = sorted((s for s in found if s in known), key=lambda s: -age.get(s, -1))
-    return [s for s in found if s not in known] + old
+def _old_patches(ex: Executor, task: Task) -> set[str]:
+    """Wet spots first seen before the request's message arrived (its `at` clock; another team, 61
+    shifts: a patch first seen after it is the right one 95-98 % of the time, one before 12 of 30).
+    A patch seen between the message and the inbox read is new. No readable clock: every spot."""
+    ex.stamp_wet()  # what the last reply showed
+    try:
+        arrived = night_seconds(task.arrived)
+    except (AttributeError, TypeError, ValueError):
+        return set(ex.hotel.wet_spots())
+    return {spot for spot, seen in ex.wet_first_seen.items() if seen < arrived}
+
+
+def _newest_old_patch(ex: Executor, found: list[str]) -> str:
+    """The floor walked and only old patches on it: a new spill can land on a place already wet (the
+    server picks the place; spills never dry), so the sign goes on the one first seen wet last. Live:
+    10 such reports credited ("Noted. Thanks." +35..+72, the place wet 14-319 min before the message:
+    seed 2 R-038 on R-005's signed 3b, seed 4 R-032 on R-019's signed 1c, seed 8 R-035/R-036, seed 5
+    R-052 on its newest of two, seed 1 R-065 likewise), 6 not (-30); with two or more old patches the
+    newest was the right one each time it was tried (seeds 1, 5)."""
+    stamped = ex.wet_first_seen
+    return max(found, key=lambda s: (stamped.get(s, -1), -found.index(s)))
+
+
+def _take_old_sign(ex: Executor, task: Task) -> str | None:
+    """Out of signs (experiment sign_move): the sign over the oldest spill already reported done and
+    verified is picked up for the new patch. Returns where it stood, or None if none could be had.
+    One out of reach or refused is dropped for the night: never walked to again."""
+    for place in ex.movable_signs():
+        try:
+            ex.go(place)
+        except ActionFailed as exc:
+            ex.log("sign_move_failed", request=task.request, place=place, reason=str(exc)[:200])
+            ex.signs_placed.pop(place)
+            continue
+        ok, text = ex.pick_or_cart("wet-floor-sign")
+        if ok:
+            old = ex.signs_placed.pop(place)
+            ex.log("sign_moved", request=task.request, place=place, old_request=old)
+            return place
+        ex.log("sign_move_failed", request=task.request, place=place, reason=text[:200])
+        ex.signs_placed.pop(place)  # gone or refused: never walked to again
+    return None
 
 
 @_hypothesis("H-spill")
 def spill(ex: Executor, task: Task, h: Hyp) -> Result:
-    """H-spill: a wet-floor sign from storage, placed (no `where`) on the wet patch of floor N.
-    The first patch not known when the task started is signed; if the score does not rise, the
-    walk resumes past the patches seen so far, the sign is picked up and moved once to the next
-    not-known patch (else to the best other spot seen). At most two placements; done only on a
-    score rise."""
+    """H-spill: a wet-floor sign placed (no `where`) on the NEW wet patch of floor N and LEFT THERE;
+    the credit comes on the report, not the place (live seed 4, R-019/R-032: "Noted. Thanks." +43/+63
+    with the sign on the newly wet spot; six reports with the sign elsewhere: "Noted." -30). New: not
+    first seen wet before the request's message arrived (_old_patches), nor under a sign of ours.
+    The floor walked and only old patches on it: a sign from stock goes on the newest of them (a new
+    spill can land on a place already wet, _newest_old_patch). Done only with the sign placed and the robot
+    standing on it, on a score rise or (experiment spill_done) on the report; no wet patch at all or a
+    failed place: declined, nothing placed or moved. Never a second placement in one request. Out of
+    signs (experiments sign_move and spill_done): the sign over the oldest verified spill is moved, once
+    a new patch shows (never for an old one: a long fetch for a guess)."""
     floor = task.floor
-    known = set(ex.hotel.wet_spots())
+    known = _old_patches(ex, task) | set(ex.signs_placed)
     corridors = sorted(n for n, v in ex.hotel.nodes.items() if v["kind"] == "corridor" and v["floor"] == floor)
     if not corridors:
         raise ActionFailed(f"no corridors known on floor {floor}")
-    ex.gather("wet-floor-sign")
+    out_of_signs = False
+    try:
+        ex.gather("wet-floor-sign")
+    except OutOfStock:
+        if not ex.movable_signs():
+            h.log("no wet-floor sign left; nothing placed", h.before, ex.score_known())
+            raise Declined(f"No wet-floor sign left for the spill on floor {floor}: storage is empty "
+                           "and no placed sign may be moved.") from None
+        out_of_signs = True
     seen: list[str] = []
-    found, rest = _find_wet(ex, floor, corridors, seen, known)
+    found, _rest = _find_wet(ex, floor, corridors, seen, known)
+    new = [s for s in found if s not in known]
     if not found:
         ex.work_order("sol", f"Søl meldt i etasje {floor}: fant ikke vått gulv", request=task.request)
-        h.log("no wet patch seen; sign kept", h.before, ex.score_now(), seen=seen)
-        raise ActionFailed(f"no wet patch seen on floor {floor}: " + "; ".join(seen))
-    tried: list[str] = []
-    spot = _rank(found, known, ex.hotel)[0]
-    for attempt in range(2):  # the best candidate, then one retry
+        h.log("no wet patch seen; no sign placed", h.before, ex.score_known(), seen=seen, known=sorted(known))
+        raise Declined(f"No wet patch on floor {floor}. Seen: " + "; ".join(seen))
+    signed = {s.split(":")[0] for s in seen if "sign stands" in s.lower()}
+    if new:
+        spot = ([s for s in new if s not in signed] or new)[0]
+    elif out_of_signs:  # a credited sign is moved for a new patch only, never for a guess
+        h.log("only old wet patches and no sign in stock; nothing moved", h.before, ex.score_known(),
+              seen=seen, known=sorted(known), old=found)
+        raise Declined(f"No new wet patch on floor {floor} (only {', '.join(found)}, wet before this request "
+                       f"came in at {task.arrived}) and no wet-floor sign in stock.")
+    else:  # the floor walked, only old patches: a new spill can land on an already wet place
+        spot = _newest_old_patch(ex, found)
+    moved_from = _take_old_sign(ex, task) if out_of_signs else None
+    if out_of_signs and moved_from is None:
+        h.log(f"wet patch at {spot}; no sign to put on it", h.before, ex.score_known(), seen=seen)
+        raise Declined(f"No wet-floor sign for the wet patch at {spot}: storage is empty and no "
+                       "placed sign could be picked up.")
+    try:
         ex.go(spot)  # a warned exit: seen, so the robot creeps onto it
-        mid = ex.score_now()
-        placed = ex.cmd("place", item="wet-floor-sign")
-        if placed.ok:
-            ex.take("wet-floor-sign")
-        after = ex.score_now()
-        tried.append(f"{spot}: {placed.result}")
-        if placed.ok and _rose(mid, after):
-            ex.work_order("sol", f"Søl ved {spot}: varselskilt satt ut", place=spot, request=task.request)
-            h.log(f"placed a wet-floor sign at {spot}: {placed.result}", mid, after,
-                  score_at_start=h.before, seen=seen, tried=tried, known=sorted(known))
-            return f"wet-floor sign placed over the spill at {spot}", None
-        if attempt or not placed.ok:
-            break
-        ok, _text = ex.pick("wet-floor-sign")  # not the spill: take the sign along
-        if not ok:
-            break
-        passed = known | set(found)  # the patches seen so far are not it: walk on
-        more, rest = _find_wet(ex, floor, rest, seen, passed)
-        others = [s for s in more if s not in passed] or [s for s in _rank(found, known, ex.hotel) if s != spot]
-        others = others or [s for s in more if s != spot]
-        if not others:
-            break
-        ex.log("sign_moved", request=task.request, from_spot=spot, to_spot=others[0], walked_on=rest == [])
-        spot = others[0]
-    ex.work_order("sol", f"Søl ved {spot}: varselskilt satt ut", place=spot, request=task.request)
-    h.log(f"sign placed without a score rise: {'; '.join(tried)}", h.before, ex.score_now(),
-          seen=seen, tried=tried, known=sorted(known))
-    raise ActionFailed(f"placed a wet-floor sign ({'; '.join(tried)}) but the score did not rise")
+    except ActionFailed as exc:
+        h.log(f"could not reach the wet patch at {spot}", h.before, ex.score_known(), seen=seen)
+        raise Declined(f"Could not reach the wet patch at {spot}: {exc}") from None
+    mid = ex.score_before()
+    placed = ex.cmd("place", item="wet-floor-sign")
+    if placed.ok:
+        ex.take("wet-floor-sign")
+        ex.signs_placed[spot] = task.request
+    after = ex.score_now()
+    ex.work_order("sol", f"Søl ved {spot}: varselskilt {'satt ut' if placed.ok else 'ikke satt ut'}",
+                  place=spot, request=task.request)
+    h.log(f"placed a wet-floor sign at {spot}: {placed.result}", mid, after, score_at_start=h.before,
+          seen=seen, known=sorted(known), signed=sorted(signed), candidates=new, moved_from=moved_from)
+    if not placed.ok:
+        raise Declined(f"Could not place the wet-floor sign at {spot}: {placed.result}")
+    if ex.state.location != spot:  # the report is verified with the sign under the robot
+        raise Declined(f"Placed the wet-floor sign at {spot}, but the robot is at {ex.state.location} now.")
+    if ex.blind:  # score-blind: the place's own reply says whether the sign stands over a spill
+        confirmed = ex.done_gate("sign", "over the spill" in str(placed.result).lower(), str(placed.result), mid, after)
+        if not confirmed:
+            raise ActionFailed(f"placed a wet-floor sign at {spot} but the reply did not put it over a spill: "
+                               f"{placed.result}")
+    else:
+        confirmed = _rose(mid, after)
+    if not confirmed and not ex.experiment("spill_done"):
+        raise ActionFailed(f"placed a wet-floor sign at {spot} but the score did not rise")
+    if moved_from is not None:
+        ex.exp_claim("sign_move")  # one unverified report ends the moves for the night
+        return f"wet-floor sign moved from {moved_from} to the wet patch at {spot}", None
+    if confirmed:
+        return f"wet-floor sign placed over the spill at {spot}", None
+    ex.exp_claim("spill_done")
+    return f"wet-floor sign placed over the wet patch at {spot}", None
 
 
 # --- H-followup ----------------------------------------------------------------------------------
@@ -348,27 +483,56 @@ def followup(ex: Executor, task: Task, h: Hyp) -> Result:
     ex.work_order("gjesteklage", f"Gjesteklage fra rom {num}: bestilt {NORSK.get(item, item)} kom aldri",
                   room=task.room, request=task.request)
     orig = _original(ex, task)
-    if orig is None or orig.status == "done":
-        why = "no order on record" if orig is None else f"{orig.request} was already done"
-        h.log(f"delivered nothing: {why}", h.before, ex.score_now(), original=orig.request if orig else None)
-        raise ActionFailed(f"no order for {item} from {num} on record")
+    if orig is None and task.room and task.item and ex.experiment("followup_deliver"):
+        # Experiment: bring the item anyway (a place scored 0 live) and report done. The server's
+        # reply to that report says whether a follow-up is credited on the report instead.
+        from agent.flows import _deliver
+
+        ex.gather(task.item, 1)
+        try:
+            return _deliver(ex, task.room, task.item, 1)
+        except ActionFailed as exc:
+            if "did not rise" not in str(exc):
+                raise
+        ex.exp_claim("followup_deliver")
+        return f"{item} brought to {task.room} now (no earlier order on record)", None
+    if orig is None and ex.experiment("followup_probe"):
+        # Probe: does the manager or the clerk know more about an order we have no record of?
+        asked = ex.cmd("reply", request=task.request,
+                       text=f"No order for a {item} from {num} is on record tonight. Should I bring one now?")
+        ex.log("probe", name="followup_reply", request=task.request, reply=str(asked.result)[:300])
+        try:
+            ex.go(ex.hotel.special.get("clerk", "front-desk"))
+            answer = ex.cmd("ask", person="clerk", question=f"Did room {num} order a {item} tonight?")
+            ex.log("probe", name="followup_ask", request=task.request, reply=str(answer.result)[:300])
+        except ActionFailed as exc:
+            ex.log("probe", name="followup_ask", request=task.request, reply=f"failed: {exc}"[:200])
+    if orig is None:  # a false claim: declined with the reason scores +5 live (failed 0, done -20)
+        h.log("delivered nothing: no order on record", h.before, ex.score_known(), original=None)
+        raise Declined(f"No {item} order from {num} on record tonight; nothing was ordered.")
+    if orig.status == "done":  # live: a second call about a delivered order declined scored +5 (R-049)
+        h.log(f"delivered nothing: {orig.request} was already done", h.before, ex.score_known(),
+              original=orig.request)
+        raise Declined(f"The {item} for {num} was already delivered under {orig.request}; nothing more to bring.")
     queued = next((t for t in ex.queue if t.request == orig.request), None)
     if queued is not None:  # still waiting: do it now, under its own id
         ex.queue.remove(queued)
         out = ex.run(queued)
-        h.log(f"ran the waiting {orig.request}: {out.status}", h.before, ex.score_now(), original=orig.request)
+        h.log(f"ran the waiting {orig.request}: {out.status}", h.before, ex.score_known(), original=orig.request)
+        # Live (scout, 6 of 6): the follow-up itself is declined (+5) while the order is delivered
+        # under its own id; a follow-up reported done is a false done.
         if out.status == "done":
-            raise ActionFailed(f"delivered via {orig.request}")
-        raise ActionFailed(f"tried {orig.request} again: {out.note}")
+            raise Declined(f"The {item} for {num} is delivered now under {orig.request}; this call needs nothing more.")
+        raise Declined(f"The {item} order for {num} is {orig.request}, tried again: {out.note}")
     # The original was reported failed earlier: deliver again (a place may still score).
     try:
         BASE_HANDLERS[orig.kind](ex, replace(orig.task, room=orig.room))
     except ActionFailed as exc:
-        h.log(f"retried {orig.request}: {exc}", h.before, ex.score_now(), original=orig.request)
-        raise ActionFailed(f"retried {orig.request}: {exc}") from None
+        h.log(f"retried {orig.request}: {exc}", h.before, ex.score_known(), original=orig.request)
+        raise Declined(f"The {item} order for {num} is {orig.request}, tried again: {exc}") from None
     ex.ledger.set_status(orig.request, "done")  # served now: another follow-up must not redeliver it
-    h.log(f"redelivered {orig.request}", h.before, ex.score_now(), original=orig.request)
-    raise ActionFailed(f"delivered via {orig.request}")
+    h.log(f"redelivered {orig.request}", h.before, ex.score_known(), original=orig.request)
+    raise Declined(f"The {item} for {num} is delivered now under {orig.request}; this call needs nothing more.")
 
 
 HANDLERS: dict[Kind, Callable[[Executor, Task], Result]] = {

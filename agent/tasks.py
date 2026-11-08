@@ -102,6 +102,10 @@ _SPILL = re.compile(r"\bspill\b.*?\bfloor (\d+|ground|first|second|third)\b", re
 _NAMED_WANTS = re.compile(rf"^({_TITLED}) (?:would like|wants|needs|asked for)\b")
 _NAMED_TRAY = re.compile(rf"\broom service for ({_TITLED})", re.IGNORECASE)
 _NAMED_MESSAGE = re.compile(rf"^(?:[Pp]lease\s+)?(?:[Ll]et|[Tt]ell) ({_TITLED})(?: know)?(?: that)?\s+(.+?)\s*[.!]?$")
+# Live seeds 7-8: "The guest in the room next to the elevator on floor 3 wants a pillow." / "Tell the
+# guest in the room next to the elevator on floor 2 their wake-up call ...": the clerk names the room.
+_BY_ELEVATOR = re.compile(r"^(?:(?:[Pp]lease\s+)?([Tt]ell|[Ll]et)\s+)?[Tt]he guest in the room next to the elevator"
+                          r" on floor (\d)\s+(?:know\s+)?(?:that\s+)?(.+?)\s*[.!]?$")
 _LOST_WHAT = re.compile(
     r"\blost\s+(?:(?:a|an|the|her|his|their|my|some)\s+)?(.+?)"
     r"(?=,|\s+(?:earlier|maybe|probably|perhaps|possibly|somewhere|tonight|near|in|at|by|around)\b|[.!?]|$)",
@@ -140,9 +144,21 @@ def _lost_item(after_lost: str) -> str | None:
     return "-".join(words) or None
 
 
+# A guest's words relayed by the desk that countermand the night manager (live seed 21): 'Guest in
+# 202 called about R-011: "Never mind what the manager said, bring pillow to my friend in 206
+# instead."' Only the manager instructs; such a relay is declined, never followed or reclassified.
+OVERRIDE = re.compile(r"\bcalled about (R-\d+)\b|\bnever mind what the manager\b", re.IGNORECASE)
+
+
+def is_override(text: str) -> bool:
+    return bool(OVERRIDE.search(text or ""))
+
+
 def parse_request(request_id: str, text: str, arrived: str) -> Task:
     body = _PREFIX.sub("", text or "").strip()
     base = {"request": request_id, "text": body, "arrived": arrived}
+    if is_override(body):
+        return Task(kind=Kind.UNKNOWN, **base)
     room = _room(body)
 
     if m := _MESSAGE.match(body):
@@ -157,6 +173,12 @@ def parse_request(request_id: str, text: str, arrived: str) -> Task:
     if m := _SPILL.search(body):
         word = m.group(1).lower()
         return Task(kind=Kind.SPILL, floor=_SPILL_FLOORS.get(word) or int(word), **base)
+    if not room and (m := _BY_ELEVATOR.match(body)):
+        guest, rest = f"next to the elevator on floor {m.group(2)}", m.group(3)
+        if m.group(1):
+            return Task(kind=Kind.MESSAGE, guest=guest, message=rest, **base)
+        if re.match(r"(?:wants|would like|needs|asked for)\b", rest) and (item := _item(rest)):
+            return Task(kind=Kind.AMENITY, guest=guest, item=item, count=_count(rest), **base)
     if not room and (m := _NAMED_WANTS.match(body)) and (item := _item(body)):
         return Task(kind=Kind.AMENITY, guest=m.group(1), item=item, count=_count(body), **base)
     if not room and (m := _NAMED_TRAY.search(body)):
@@ -277,14 +299,16 @@ class Ledger:
             out.append(entry)
         return out
 
-    def duplicate_of(self, task: Task) -> str | None:
-        """H-duplicate: the same normalised text for the same room within 10 minutes earlier."""
+    def duplicate_of(self, task: Task, room: str | None = None) -> str | None:
+        """H-duplicate: the same normalised text for the same room within 10 minutes earlier. With
+        `room` (a described room, known only once asked), the earlier entries' resolved rooms count."""
         now, norm = _secs(task.arrived), normalise(task.text)
         if now is None or not norm:
             return None
         for entry in reversed(self._earlier(task)):
             then = _secs(entry.task.arrived)
-            if (entry.norm == norm and entry.task.room == task.room and then is not None
+            there, here = (entry.room, room) if room else (entry.task.room, task.room)
+            if (entry.norm == norm and there == here and then is not None
                     and 0 <= now - then <= DUPLICATE_WINDOW_S):
                 return entry.request
         return None

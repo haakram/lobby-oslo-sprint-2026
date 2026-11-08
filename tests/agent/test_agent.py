@@ -42,6 +42,7 @@ def test_full_shift_scores_and_never_false_reports(tmp_path):
     assert not fake.unsafe
     assert set(result) == {
         "shift", "seed", "score", "requests_served", "reason", "calls", "at_cap",
+        "requests", "min_battery", "dock_calls",
     }
     lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
     assert lines[0]["type"] == "start" and lines[-1]["type"] == "end"
@@ -312,7 +313,7 @@ def test_follow_up_and_its_order_are_delivered_once_through_the_loop(tmp_path):
                        params=Params(use_cart=False))
     placed = [e for e in fake.log if e["cmd"] == "place" and e["ok"]]
     assert [e["args"] for e in placed] == [{"item": "towel", "where": "room-104"}]
-    assert fake.reports == {"R-001": "done", "R-002": "failed"}
+    assert fake.reports == {"R-001": "done", "R-002": "declined"}  # live: +5 for the declined second call
     assert not fake.false_done and not fake.wrong_deliveries
     assert _decisions(tmp_path, result, "hypothesis")
     assert result["requests_served"] == 1  # R-001, also when the follow-up ran it
@@ -329,10 +330,10 @@ def test_full_night_with_the_live_request_types(tmp_path):
     for rid, kind in kinds.items():
         if kind in ("bags", "noise", "spill") or (kind == "amenity" and rid == "R-008"):
             assert fake.reports.get(rid) == "done", (rid, kind, fake.reports.get(rid))
-        if kind == "followup":
-            assert fake.reports.get(rid) == "failed", rid
+        if kind == "followup":  # declined (+5 live, 6 of 6), the order itself retried under its own id
+            assert fake.reports.get(rid) == "declined", rid
     ids = {d["id"] for d in _decisions(tmp_path, result, "hypothesis")}
-    assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill", "H-duplicate"} <= ids
+    assert {"H-bags", "H-named", "H-followup", "H-noise", "H-spill"} <= ids  # a tray duplicate is now judged at the pickup
     assert result["score"] >= 250
 
 
@@ -349,17 +350,22 @@ def test_offline_full_night_fits_the_final_call_budget_on_the_17_request_script(
     assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
 
 
-# Task 24 / 2: the calibrated seed-1 night (the 68 live requests, the default fake) is still over the
-# budget (integration review: 1409 calls). The ratchet stops it creeping up; the strict xfail keeps the
-# gap visible and turns into a failure (to be flipped) the day the night fits.
-CALIBRATED_NIGHT_RATCHET = 1450
+# Task 24 / 2: the calibrated seed-1 night (the 68 live requests, the default fake) was over the
+# budget (integration review: 1409 calls). Variant 15 (fewer status calls, docks and wet looks) made
+# it fit; the ratchet stops it creeping up, the budget test keeps it under the final's cap.
+CALIBRATED_NIGHT_RATCHET = 1500  # +70: the stale-look rule before corridor steps
 
 
 @pytest.fixture(scope="module")
 def calibrated_night(tmp_path_factory):
+    """Played as the final plays it (the call budget is the final's): navigate is final-only now, so
+    a practice night walks every leg (1,571 calls offline) where the final's executor navigates
+    (1,387). The session's mode is the only thing the executor reads of it."""
     fake = FakeWybe()
-    result = run_shift(client_for(tmp_path_factory.mktemp("calibrated"), fake.handler), seed=1,
-                       sim_end="06:00:00")
+    client = client_for(tmp_path_factory.mktemp("calibrated"), fake.handler)
+    session = client.start_shift("practice", seed=1)  # the fake's practice shift ...
+    session.mode = "final"  # ... with the final's executor behaviour
+    result = run_shift(client, session=session, sim_end="06:00:00")
     return fake, result
 
 
@@ -370,7 +376,6 @@ def test_calibrated_seed1_night_calls_stay_under_the_ratchet(calibrated_night):
     assert len(fake.log) <= CALIBRATED_NIGHT_RATCHET, len(fake.log)
 
 
-@pytest.mark.xfail(strict=True, reason="the calibrated seed-1 night is still over the final's call budget")
 def test_calibrated_seed1_night_fits_the_final_call_budget(calibrated_night):
     fake, _ = calibrated_night
     assert len(fake.log) <= FINAL_CALL_BUDGET, len(fake.log)
@@ -383,8 +388,10 @@ def test_loop_reads_the_inbox_only_when_a_message_is_waiting(tmp_path):
     inbox_calls = sum(1 for e in fake.log if e["cmd"] == "inbox")
     assert delivered >= 6  # the welcome and R-001..R-005
     assert inbox_calls <= delivered + 1, (inbox_calls, delivered)
-    cmds = [e["cmd"] for e in fake.log]
-    assert "inbox" not in {b for a, b in pairwise(cmds) if a == "scan"}  # not read after idle scans
+    # an idle scan is followed by an inbox read only when its own reply brought the inbox event
+    for a, b in pairwise(fake.log):
+        if a["cmd"] == "scan" and b["cmd"] == "inbox":
+            assert any(ev["type"] == "inbox" for ev in a["events"]), a
 
 
 # --- Task 18 / I1: a Brain room check never reaches a keycard on a noise text or an unknown room ------
@@ -522,3 +529,120 @@ def test_setup_failure_after_the_start_still_ends_the_shift(tmp_path, monkeypatc
     assert fake._ended and fake.log[-1]["cmd"] == "end_shift"
     lines = [json.loads(x) for x in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines()]
     assert lines[-1]["type"] == "end" and lines[-1]["reason"] == result["reason"]
+
+
+# --- scout: the manager's "Skip R-NNN" drops the request (live: a skipped request scores 0 even when done) ---
+
+
+def test_manager_skip_drops_the_queued_request(tmp_path):
+    # The skip arrives with R-001 (live skips come 8-29 min later): var-2's opening loadout already
+    # carries a towel, so a skip 1 s later would be read after the delivery and report "failed".
+    fake = FakeWybe(requests=[
+        ("22:03:30", "R-001", "104 wants a towel."),
+        ("22:03:30", "skip", "Skip R-001, 104 checked out. Don't bother with it."),
+        ("22:03:32", "R-002", "106 wants a pillow."),
+    ])
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1, sim_end="22:40:00")
+    assert fake.reports["R-001"] == "cancelled"  # live seed 4 R-019: +5 for the cancelled report
+    assert "R-002" in fake.reports
+    assert not any(e["cmd"] == "place" and (e["args"] or {}).get("where") == "room-104" for e in fake.log)
+    skipped = _decisions(tmp_path, result, "request_skipped")
+    assert [d["request"] for d in skipped] == ["R-001"] and skipped[0]["was_queued"] is True
+    assert skipped[0]["reported"] is True
+    assert result["requests_served"] == 1
+
+
+# --- variant 20: a skip read mid-task stops the running task (live seed 5 R-040: 9 min of scans after it) ---
+
+LOST_104 = ("22:03:30", "R-001", "Guest in 104 lost glasses, maybe the ground floor corridor.")
+
+
+def _mid_task_night(skip_at: str) -> FakeWybe:
+    return FakeWybe(requests=[LOST_104, ("22:30:00", "R-002", "106 wants a pillow.")], hidden={},
+                    skips=[(skip_at, "skip", "Skip R-001, 104 checked out. Don't bother with it.")],
+                    end_clock="22:45:00")
+
+
+def _clock_at(tmp_path, result, kind: str) -> str | None:
+    """The sim clock of the last call before the first decision of `kind`."""
+    clock = None
+    for line in (tmp_path / "runs" / f"{result['shift']}.jsonl").read_text().splitlines():
+        x = json.loads(line)
+        if x["type"] == "call":
+            clock = x.get("clock") or clock
+        elif x["type"] == "decision" and x["kind"] == kind:
+            return clock
+    return None
+
+
+def test_skip_read_mid_task_stops_the_search_and_reports_cancelled(tmp_path):
+    fake = _mid_task_night("22:14:00")  # 10.5 min after the request, during the search
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1)
+    assert fake.reports == {"R-001": "cancelled", "R-002": "done"}  # +5, and the next request still served
+    ends = [d for d in _decisions(tmp_path, result, "task_failed") if d["request"] == "R-001"]
+    assert [d["status"] for d in ends] == ["skipped"] and "mid-task" in ends[0]["note"]
+    assert "22:14:00" <= _clock_at(tmp_path, result, "task_failed") <= "22:15:30"  # at the next step
+    assert fake.false_done == [] and not fake.unsafe
+
+
+def test_task_younger_than_any_live_skip_reads_no_inbox_mid_task(tmp_path):
+    fake = FakeWybe(requests=[LOST_104, ("22:05:00", "R-002", "106 wants a pillow.")], hidden={},
+                    end_clock="22:45:00")
+    result = run_shift(client_for(tmp_path, fake.handler), seed=1)
+    reads = [e["clock"] for e in fake.log if e["cmd"] == "inbox" and e.get("clock")]
+    # R-002 waits from 22:05: the search (started 22:03:40) reads it only once 8 min old
+    assert not [c for c in reads if "22:03:41" <= c < "22:11:30"]
+    assert fake.reports.get("R-002") == "done"
+    assert all(d["status"] != "skipped" for d in _decisions(tmp_path, result, "task_failed"))
+
+
+# --- no close-out near 06:00: a declined real request pays 0, an open one at 06:00 costs nothing ------
+
+
+def test_a_request_near_six_is_tried_not_declined(tmp_path):
+    # Live: declining a real request pays 0 and a request open at 06:00 costs nothing, so the loop
+    # never declines what its estimate says cannot finish (offline seed 3 at 1.3: a spill priced at
+    # over 6 min at 05:53 was done in time, -44 when declined).
+    import agent.agent as mod
+    from agent.planner import Params, estimate_seconds
+    from agent.tasks import parse_request
+    from agent.world import Hotel, RobotState, clock_to_seconds
+
+    assert not any(hasattr(mod, name) for name in ("_close_out", "_too_late", "NIGHT_END_S"))
+    state = RobotState()
+    state.location = "charging-dock"
+    task = parse_request("R-001", "319 wants a towel.", "05:58:00")
+    assert estimate_seconds(task, state, Hotel.load(), Params()) > 120  # past 06:00 by the estimate
+    fake = FakeWybe(requests=[("05:58:00", "R-001", "319 wants a towel.")])
+    client = client_for(tmp_path, fake.handler)
+    session = client.start_shift("practice", seed=1)
+    fake._now = clock_to_seconds("05:58:00")  # R-001 comes with the loop's first status
+    run_shift(client, session=session, params=Params(use_cart=False))
+    assert fake.reports.get("R-001") != "declined"
+    started = _decisions(tmp_path, {"shift": session.shift_id}, "task_start")
+    assert [d["request"] for d in started] == ["R-001"]  # the robot keeps working until 06:00
+    assert not _decisions(tmp_path, {"shift": session.shift_id}, "closed_out")
+    assert any(e["cmd"] == "pick" for e in fake.log)
+
+
+def test_loop_logs_plan_mode_only_when_the_mode_flips(tmp_path):
+    # Task 4: six deliveries at once with the battery at 20 %: the backlog outruns what the battery
+    # covers (20 - backlog_min x 0.75 < 10), so the loop orders by value per second ("overload")
+    # until the queue is short again ("spt"); one decision per flip, never two alike in a row.
+    texts = ["104 wants a towel.", "210 wants a pillow.", "319 wants a toiletry kit.",
+             "208 wants a phone charger.", "317 wants a water bottle.", "106 wants a pillow."]
+    fake = FakeWybe(requests=[("22:00:30", f"R-{i:03d}", t) for i, t in enumerate(texts, 1)])
+
+    def handler(request):
+        reply = fake.handler(request)
+        if json.loads(request.content).get("cmd") == "start_shift":
+            fake.battery = 20
+        return reply
+
+    result = run_shift(client_for(tmp_path, handler), seed=1, sim_end="23:30:00")
+    modes = _decisions(tmp_path, result, "plan_mode")
+    assert modes and modes[0]["mode"] == "overload"
+    assert set(modes[0]) == {"mode", "queue", "backlog_min", "battery"}
+    assert modes[0]["queue"] >= 2 and modes[0]["battery"] - modes[0]["backlog_min"] * 0.75 < 10
+    assert all(a["mode"] != b["mode"] for a, b in pairwise(modes))
+    assert not fake.false_done and not fake.unsafe

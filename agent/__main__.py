@@ -1,8 +1,9 @@
-"""CLI: python -m agent run|final|route|viewer|bench|tune."""
+"""CLI: python -m agent run|final|rehearse|route|viewer|bench|tune|replaybench."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import threading
@@ -13,7 +14,7 @@ from pathlib import Path
 
 from agent import agent as shift
 from agent.brain import Brain, CostGuard
-from agent.client import WybeClient, WybeError
+from agent.client import ShiftSession, WybeClient, WybeError
 from agent.config import Settings, load_settings
 from agent.guard import OSLO, FinalModeLocked, check_mode
 
@@ -37,8 +38,16 @@ def cmd_run(args, settings: Settings, factory: ClientFactory) -> int:
     client = factory(settings, live=args.live)
     # Offline runs must not spend real Claude budget unless --brain is given.
     brain = _brain(settings) if (args.live or args.brain) else None
+    session = None
+    if getattr(args, "adopt", None):
+        # A live practice shift the server still lists (e.g. left mid-night by an outage): play on.
+        if not args.live:
+            print("--adopt needs --live", file=sys.stderr)
+            return 2
+        session = ShiftSession(client, args.adopt, "practice", args.seed)
+        session.log_decision("adopted_shift", {"shift": args.adopt})
     result = shift.run_shift(
-        client, mode="practice", seed=args.seed, brain=brain, sim_end=args.sim_end
+        client, mode="practice", seed=args.seed, brain=brain, sim_end=args.sim_end, session=session
     )
     print(f"shift {result['shift']}  score {result['score']}  "
           f"served {result['requests_served']}  ({result['reason']})")
@@ -63,6 +72,7 @@ def cmd_final(args, settings: Settings, factory: ClientFactory) -> int:
 
 
 def _final(settings: Settings, factory: ClientFactory) -> int:
+    from agent.bench import default_max_calls
     from agent.world import Hotel
 
     try:  # a bad params or map file must fail here, before any shift has started
@@ -103,7 +113,7 @@ def _final(settings: Settings, factory: ClientFactory) -> int:
         try:
             results[i] = shift.run_shift(
                 client, session=session, params=params, hotel=hotel, brain=brain,
-                real_time_limit_s=FINAL_REAL_TIME_S, stop=stop,
+                real_time_limit_s=FINAL_REAL_TIME_S, stop=stop, call_cap=default_max_calls(settings.max_rps),
             )
         except Exception as exc:  # noqa: BLE001
             results[i] = {"shift": session.shift_id, "score": None, "reason": f"crashed: {type(exc).__name__}"}
@@ -165,6 +175,23 @@ def _drop_final_lock(path: Path) -> None:
         pass
 
 
+def cmd_rehearse(args, settings: Settings, factory: ClientFactory) -> int:
+    from agent.bench import default_max_calls, parse_seeds
+    from agent.rehearse import format_summary, rehearse
+
+    if args.mode != "practice":
+        print("rehearse runs practice shifts only; the final is `final`", file=sys.stderr)
+        return 2
+    seeds = parse_seeds(args.seeds)
+    if not seeds:
+        print("rehearse: no seeds given", file=sys.stderr)
+        return 2
+    summary = rehearse(seeds, settings, factory, brain=_brain(settings), mode=args.mode,
+                       real_time_limit_s=args.minutes * 60, sim_end=args.sim_end)
+    print(format_summary(summary, default_max_calls(settings.max_rps)))
+    return 0 if summary.scores else 1
+
+
 def cmd_route(args, settings: Settings, factory: ClientFactory) -> int:
     from agent.routing import NoRoute, shortest_route
     from agent.world import Hotel
@@ -194,8 +221,8 @@ def _offline_factory():
 
     settings = load_settings()
 
-    def make(seed: int) -> WybeClient:
-        fake = FakeWybe(**offline_scenario(seed))
+    def make(seed: int, hourly_scale: float = 1.0) -> WybeClient:
+        fake = FakeWybe(**offline_scenario(seed, hourly_scale=hourly_scale))
         offline = replace(settings, key="offline", max_rps=1000.0, runs_dir=Path("temp/bench_runs"))
         return WybeClient(offline, transport=httpx.MockTransport(fake.handler), sleep=lambda s: None)
 
@@ -213,16 +240,23 @@ def cmd_bench(args, settings: Settings, factory: ClientFactory) -> int:
     from agent.bench import parse_seeds, run_bench
 
     seeds = parse_seeds(args.seeds)
+    if args.live and args.hourly_scale != 1.0:
+        print("--hourly-scale is offline only (generated nights); the live server plays its own", file=sys.stderr)
+        return 2
     if args.live:
         client = factory(settings, live=True)  # one client: its rate limiter is shared by all threads
         make = lambda: client
     else:
         make = _offline_factory()
     cap = _resolve_cap(args, settings)
-    res = run_bench(make, seeds, parallel=args.parallel, sim_end=args.sim_end, max_calls=cap)
+    res = run_bench(make, seeds, parallel=args.parallel, sim_end=args.sim_end, max_calls=cap,
+                    hourly_scale=args.hourly_scale)
     for seed, score in res.scores.items():
         at = f" at {res.cap_clocks[seed]}" if seed in res.cap_clocks else ""
-        print(f"seed {seed}  score {score}  calls {res.calls.get(seed, 0)}  capped {res.capped_scores[seed]}{at}")
+        low = res.min_battery.get(seed)
+        print(f"seed {seed}  score {score}  calls {res.calls.get(seed, 0)}  capped {res.capped_scores[seed]}{at}"
+              f"  requests {res.requests.get(seed, 0)}  served {res.served.get(seed, 0)}"
+              f"  min_battery {'-' if low is None else f'{low:.1f}'}  docks {res.dock_calls.get(seed, 0)}")
     print(f"mean {res.mean:.1f}  mean_drop_worst {res.mean_drop_worst:.1f}")
     print(f"cap {cap or 'none'}  capped mean {res.mean_capped:.1f}  "
           f"capped mean_drop_worst {res.mean_drop_worst_capped:.1f}")
@@ -236,12 +270,37 @@ def cmd_tune(args, settings: Settings, factory: ClientFactory) -> int:
     best, results = tune(
         _offline_factory(), parse_seeds(args.seeds), trials=args.trials, parallel=args.parallel,
         rng_seed=args.rng_seed, out_path=Path(args.out), max_calls=_resolve_cap(args, settings),
-        capped=args.optimise_capped,
+        capped=args.optimise_capped, hourly_scale=args.hourly_scale,
     )
     top = max(results, key=lambda r: r.mean_drop_worst_capped if args.optimise_capped else r.mean_drop_worst)
     print(f"baseline  mean {results[0].mean:.1f}  mean_drop_worst {results[0].mean_drop_worst:.1f}")
     print(f"best      mean {top.mean:.1f}  mean_drop_worst {top.mean_drop_worst:.1f}")
     print(f"params {best.to_json()}")
+    return 0
+
+
+def cmd_replaybench(args, settings: Settings, factory: ClientFactory) -> int:
+    """Real nights rebuilt from their live logs, replayed offline (never the live server)."""
+    from agent import replaybed
+    from agent.bench import parse_seeds
+
+    seeds = parse_seeds(args.seeds) if args.seeds else None
+    nights = replaybed.select_nights(args.logs, seeds)
+    if not nights:
+        print("no full live night found", file=sys.stderr)
+        return 1
+    scoring = replaybed.load_scoring(Path(args.scoring)) if args.scoring else replaybed.load_scoring()
+    if args.fit:
+        scoring = replaybed.fit_scoring(replaybed.select_nights())
+        replaybed.SCORING_FILE.write_text(json.dumps(scoring, indent=1, sort_keys=True) + "\n")
+        print(f"scoring refitted on {scoring['fitted_on_nights']} nights -> {replaybed.SCORING_FILE}")
+    rows = replaybed.replay_bench(
+        nights, code_dir=Path(args.code).resolve() if args.code else None,
+        vs_dir=Path(args.vs).resolve() if args.vs else None, fidelity=args.fidelity,
+        code_cache=Path(args.code_cache) if args.code_cache else None, parallel=args.parallel, scoring=scoring,
+        runs_dir=Path(args.runs_dir) if args.runs_dir else None, merge=not args.no_merge, repeats=args.repeats,
+    )
+    print(replaybed.bench_table(rows, show_flags=args.flags))
     return 0
 
 
@@ -253,9 +312,16 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--sim-end", default=None, help="stop at this sim clock, HH:MM:SS")
     p.add_argument("--live", action="store_true", help="use the real server (counted)")
     p.add_argument("--brain", action="store_true", help="allow Claude offline too (spends budget)")
+    p.add_argument("--adopt", default=None, metavar="SHIFT", help="play on a live practice shift the server lists (with --live)")
     p.set_defaults(fn=cmd_run)
     p = sub.add_parser("final", help="the 10 scored shifts (live; locked outside the window)")
     p.set_defaults(fn=cmd_final)
+    p = sub.add_parser("rehearse", help="dress rehearsal: LIVE practice seeds through the final's code path (max 4 at once)")
+    p.add_argument("--seeds", required=True, help="e.g. 1-10 or 3,7,12 (each is a counted live practice shift)")
+    p.add_argument("--mode", default="practice", help="practice only; final is refused")
+    p.add_argument("--minutes", type=float, default=44, help="real-time limit per shift (default 44, the final's)")
+    p.add_argument("--sim-end", default=None, help="stop at this sim clock, HH:MM:SS (default: the night's end)")
+    p.set_defaults(fn=cmd_rehearse)
     p = sub.add_parser("route", help="shortest route between two places")
     p.add_argument("src")
     p.add_argument("dst")
@@ -271,6 +337,7 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--live", action="store_true", help="use the real server (counted)")
     p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default: the final's, 44*60*rps/10; 0 = none). The capped score is the "
                    "last score the agent observed (status/end replies); retries are not counted")
+    p.add_argument("--hourly-scale", type=float, default=1.0, help="multiply every hour's generated requests (1.3: ~88 a night, like live seeds 10/16/23); seed 1 ignores it")
     p.set_defaults(fn=cmd_bench)
     p = sub.add_parser("tune", help="offline parameter search; writes the best params (never live)")
     p.add_argument("--seeds", default="1-20")
@@ -281,7 +348,26 @@ def main(argv: list[str] | None = None, *, client_factory: ClientFactory | None 
     p.add_argument("--max-calls", type=int, default=None, help="call cap per shift (default: the final's, 44*60*rps/10; 0 = none). The capped score is the "
                    "last score the agent observed (status/end replies); retries are not counted")
     p.add_argument("--optimise-capped", action="store_true", help="pick the best score at the call cap")
+    p.add_argument("--hourly-scale", type=float, default=1.0, help="multiply every hour's generated requests (1.3: ~88 a night, like live seeds 10/16/23); seed 1 ignores it")
     p.set_defaults(fn=cmd_tune)
+    p = sub.add_parser("replaybench", help="replay real live nights offline: does a change help on real nights?")
+    p.add_argument("--logs", default=None, help="a glob, folder or file of run logs; default 'all': every full live "
+                   "night under ~/Oslo_Sprint_26/temp/runs and ~/oslo-wt/*/temp/runs")
+    p.add_argument("--seeds", default=None, help="only these seeds, the newest night of each, e.g. 16,23")
+    p.add_argument("--code", default=None, help="root of another checkout whose agent package plays (default: this one)")
+    p.add_argument("--vs", default=None, help="a second checkout root to replay the same nights with (prints the gain)")
+    p.add_argument("--fidelity", action="store_true", help="replay each night with the commit that played it live "
+                   "(agent/data/replay_codes.json, exported with git archive)")
+    p.add_argument("--code-cache", default=None, help="where --fidelity unpacks old commits (default temp/replay_code)")
+    p.add_argument("--parallel", type=int, default=4)
+    p.add_argument("--scoring", default=None, help="per-kind reward fit (default agent/data/replay_scoring.json)")
+    p.add_argument("--fit", action="store_true", help="refit the reward on every full live night first and save it")
+    p.add_argument("--flags", action="store_true", help="list what each reconstruction had to assume")
+    p.add_argument("--no-merge", action="store_true", help="do not fill a night's gaps from other nights of its seed")
+    p.add_argument("--repeats", type=int, default=1, help="replay each night once per PYTHONHASHSEED 0..N-1 (the "
+                   "agent breaks ties by set order) and compare the means: less noise per night")
+    p.add_argument("--runs-dir", default=None, help="where the replays' run logs go (default temp/replay_runs)")
+    p.set_defaults(fn=cmd_replaybench)
     args = ap.parse_args(argv)
     return args.fn(args, load_settings(), client_factory or shift.make_client)
 

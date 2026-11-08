@@ -109,8 +109,10 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
    we heard on the phone this morning (§ 8) **[fill; if the round wasn't run, say "we haven't asked a
    hotel yet; that's step one"]**.
 2. **Live demo (3–4 min; Functionality, Design).** The § 2 story, then the extras the 2 minutes skip:
-   - **Ruter**: *Lag renholdsrute* on a seeded unsorted list of rooms across floors: *"N m spart · X %
-     kortere"* against the list order; with the cart it takes the lift. **[fill N and X off the screen]**
+   - **Ruter** (Holio pain 6): *Renhold* opens on today's rooms to clean, 7 rooms on 3 floors in the
+     order they come free: *ca. 3 min spart · 30 % kortere*, 3 lift rides instead of 6; with the cart it
+     takes the lift, never the stairs. The *Plukkliste* tab shows an example restocking order: *70 m
+     spart · 32 % kortere* on the test warehouse map. Re-read both off the screen.
    - **Resepsjon** (ElevenLabs): *Ring resepsjonen*, ask in English or Polish for a room next weekend; it
      says it is an AI, quotes the direct price, haggles in fixed steps (at most 10 % under), records a
      request that waits for *Bekreft*, never takes a card number. Ask callers on stage to use a made-up
@@ -327,8 +329,8 @@ up a polybag with a torn label: what happens, how long does it take, and how oft
 
 > "Honestly: we built the chain, not a warehouse mode. Øyne boxes what it sees on the phone; a tap
 > sends the crop to Claude, which reads the text on the pack and matches it to the catalogue; *Legg i
-> plukkliste* puts it on the pick list, and Ruter gives the shortest pick on a test warehouse map:
-> [N m, X % shorter] than the order the list came in. What isn't there yet: our catalogue is 12 test
+> plukkliste* puts it on the pick list, and Ruter gives the shortest pick on a test warehouse map: on
+> an example order of five items, 70 metres and 32 % shorter than the order the list came in. What isn't there yet: our catalogue is 12 test
 > SKUs in the prompt; we haven't measured accuracy [or: fill from the eval: 'on 20 items with no
 > barcode: R right, U unsure, W wrong, median S s, about K øre a scan']; the detector has no class for
 > a polybag, so you'd tap rather than wait for a box; and the work guides show on screen only in

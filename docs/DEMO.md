@@ -133,10 +133,10 @@ mottatt* last. The proof text (the referee, the ledger) sits behind *Slik vet vi
 2,680 points, build `cb72845`, `public/runs/demo.jsonl`) plus test bookings, each marked *Testdata:
 bookingen er lagt inn av teamet* on screen.
 
-**Timed on :3300 at Sun 04:16 as `siri`**, at 1152×720 (1440 px at 125 %, the projector) and at
-1440×900, in a clean browser (Playwright): the page shows *Åpent nå* 0.3–0.4 s after the address is
-opened; *Bekreft med resepsjonen* → *Merk som ledig for salg* answers in under 0.1 s, the release in
-under 0.1 s, *Kvitter mottatt* in under 0.1 s. The page is 2,951 px tall at 1152×720 (4.1 screens) and
+**Timed on :3300 at Sun 04:16 and again at 04:31 as `siri`**, at 1152×720 (1440 px at 125 %, the
+projector) and at 1440×900, in a clean browser (Playwright): the page shows *Åpent nå* 0.3–0.5 s after
+the address is opened; *Bekreft med resepsjonen* → *Merk som ledig for salg* answers in about 0.1 s,
+the release in about 0.1 s, *Kvitter mottatt* in under 0.1 s. The page is 2,951 px tall at 1152×720 (4.1 screens) and
 2,713 px at 1440×900 (3.0). **Three scrolls and three taps**: top → *Åpent nå* (the safety items, 209
 and 213 with its button all on one screen at both sizes) → *Robotens vurderinger i natt* (the refusals,
 *9 av 9* and *10 av 15* on one screen) → the end, *Kvitter mottatt*. Speech: 227 words with the numbers
@@ -230,7 +230,7 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
    (the simulator's verifier), and 185 of 189 on the robot's own judgement credited (97.9 %), room
    checks 117 of 117. The forecast for the final (median 2,035, 80 % 1,898–2,186) was committed before
    it. The page itself has no language model in it: every line is a projection of logs, so it can't make
-   anything up. The run-log contract is a file, `docs/runlog.schema.json` [if committed by then]: any robot that writes these lines gets the same 06:00 handover [if the *Kilde* switch has landed: 'and here is an Open-RMF sample on the same page'].
+   anything up. The run-log contract is a file, `docs/runlog.schema.json`, with an Open-RMF adapter beside the Wybe one: Natteskift's *Robotlogg* switch shows the same judgement card on an Open-RMF sample night (our own example, labelled), where 'done' needs two signals because there is no referee.
 4. **Business (1–2 min; Founders, Marketing).** The business slide, § 7: one buyer, one price with its
    arithmetic, today's tools, the channel, Monday's next step, the first 100 users.
 5. **Team (20 s; Team efficiency, Founders).** Hamad (agent, app, tooling) and ShirazIQ (UI, voice,
@@ -602,7 +602,7 @@ and what exactly does a robot have to send you on Monday?"* (Hamad, about 40 sec
 > two in 304, flagged for the desk to check; 10 of its 15 master-key entries without a knock, on its
 > card; 73 'done', 9 of them on its own judgement and all 9 credited, and 4 hand-backs, each with a
 > reason. None of that needs a PMS. Who pays first: the hotel, software only. Robot makers next, per
-> robot per month, because their hotel pilots stall on 'did it help'. What a robot sends us: one JSON line per event: tasks (start, done or handed back, with the evidence each 'done' rests on), hazards, security events, position and battery, in `docs/runlog.schema.json` [if committed by then]. [if the *Kilde* switch has landed: 'Here's a second robot's log, an Open-RMF task-state sample, on the same page.']
+> robot per month, because their hotel pilots stall on 'did it help'. What a robot sends us: one JSON line per event, in `docs/runlog.schema.json`: tasks (start, done or handed back, each 'done' with the signals it rests on: lock, photo, the guest's acknowledgement, a compartment sensor), room status, hazards, security events, position and battery. On Natteskift, switch *Robotlogg* to *Open-RMF (eksempel)*: an Open-RMF task-state sample, written by us and labelled as an example, goes through an adapter onto the same judgement card, with no referee, and a 'done' counts as confirmed only with two different signals.
 > In a hotel there's no referee, so 'done' without evidence shows as unconfirmed. [if asked at the
 > stand: 'We asked you this morning, and you said [answer as given].']"
 

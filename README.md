@@ -138,6 +138,8 @@ WIPO, and whether FERRERO's reputation reaches a sound-alike) are still to do (`
 | [`docs/HOLIO.md`](./docs/HOLIO.md) | Holio pains 3, 6 and 9: which screen, what works, what doesn't yet |
 | [`docs/PRIVACY.md`](./docs/PRIVACY.md) | Personal data, processors, retention, security controls with file paths |
 | [`docs/checks/threat-model.md`](./docs/checks/threat-model.md) | Threat model for login and roles |
+| [`docs/runlog.schema.json`](./docs/runlog.schema.json) | The vendor-neutral run log a robot sends (tasks with the evidence behind each "done", hazards, security events); an Open-RMF sample runs through it on Natteskift |
+| [`docs/runs/forecast.txt`](./docs/runs/forecast.txt) | The forecast for the final, committed before it |
 | [`DESIGN.md`](./DESIGN.md) | The design system and the module list |
 
 ## Run it locally

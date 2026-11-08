@@ -294,8 +294,9 @@ channel; [if] a 15-minute clearance search (Patentstyret, EUIPO TMview, WIPO) fo
 **The product juror (Opera; Product).** *"You built eighteen screens. What did you leave out of this demo,
 and why? And if a hotel could keep only one screen, which one?"* (ShirazIQ)
 
-> "We left out things we built. The admin's menu now shows only the hotel; the Airbnb host app has its
-> own login, and the voice screen hides itself until it's connected. Camera and voice are Q&A: real,
+> "We left out things we built. The admin's menu went from 18 entries to 13, the hotel only; the Airbnb
+> host app has its own login and sits under *Andre visninger*, and the voice screen leaves the menu
+> until it's connected. Camera and voice are Q&A: real,
 > but they don't change what the 06:00 manager decides. We also took out the red alert band: it made a
 > good night look like a crisis, so alerts moved to a bell, and the handover lists what's open with an
 > owner and a deadline. [if tested: 'N of 3 people found the sellable rooms in under S seconds.'] What

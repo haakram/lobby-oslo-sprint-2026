@@ -185,7 +185,15 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
   −125.8. It knocked before **59 of 59** keycard entries (the final build on the same seeds: 26 of
   61; both counted from the logs with the card's own rule, `masterKeyEntries`). The rows are in
   [`docs/runs/builds.csv`](./docs/runs/builds.csv) (commit `70d5be4`); the card shows the same numbers
-  behind *Slik vet vi det* (`src/features/nightshift/data/hotel-rules.json`).
+  behind *Slik vet vi det* (`src/features/nightshift/data/hotel-rules.json`), and Natteskift's
+  *Robotlogg* switch shows the seed-16 hotel-rules night as a second real log. **Two more rules,
+  replay only** (`hamad/hotelrules` `41b10f4`, 202 real nights, 30 seeds; not run live, not in the final
+  build): a room check that never calls a room empty against the robot's own record (its note says
+  NOT EMPTY and names its own bags) costs 0.0 points a night, fired 368 times on 190 nights, and live
+  the simulator thanked 389 of 390 room checks of rooms the robot had carried bags into; home by 05:45
+  (the master keycard back, then docked) costs −90.4 a night (−84.3 per seed); all six rules −207.3
+  (−172.1). The simulator's points reward behaviour a hotel would forbid, which is why the page shows
+  the hotel what the robot did instead of trusting the score.
 - **How we test a change before a live shift:** a replay bed (`agent/replaybed.py` on `hamad/final`)
   rebuilds every full live night offline from its log (72 when we ran it at 02:55 Sun). Replayed with the code
   that played them, 50 nights land within 61 points of live on average (**3.2 %**, 48 of 50 within

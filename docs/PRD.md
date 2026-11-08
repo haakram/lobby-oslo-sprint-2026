@@ -274,6 +274,11 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
     mode, `NS_HOTEL_RULES=1` on `70d5be4`, about 05:55 Sun, seeds 10/16/23/5): 2,605 / 2,584 / 2,393 /
     2,453 against the final build's 2,760 / 2,748 / 2,298 / 2,559, mean 2,509 against 2,591: −82 points
     a night, with a knock before 59 of 59 keycard entries (the final build: 26 of 61 on the same seeds).
+    Two more rules, replay only (`41b10f4`, 202 nights; not run live, not in the final build): a room
+    check never calls a room empty against the robot's own record (its note says NOT EMPTY and names
+    its own bags; 0.0 points a night, fired 368 times on 190 nights), and home by 05:45 with the master
+    keycard back (−90.4 a night). The simulator thanked 389 of 390 live room checks of rooms the robot
+    had carried bags into: its points reward what a hotel would forbid.
   - Lifts and doors need a per-building integration with the lift maker's API: the pilot's hard part,
     not "only the API adapter changes".
 - **Linen counting by camera** (Drift spec "should"): cut for time; Lager og lin shows test stock.

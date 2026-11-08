@@ -234,11 +234,6 @@ ignore fields they do not know. Schema for every line type: `docs/runlog.schema.
     `{"room", "signal": "no_card" | "card_in", "source": "door_lock"}` plus `"since": null` on `no_card`
     (the window from 18:00), never who and never when: `card_in` carries no clock (a time sent there is
     dropped on read).
-- A writer without a robot, Øyne (round 6, owner E, additive): *Ingen av disse* on an unsure camera match,
-  or *Meld som avvik* for an item not in the catalogue, writes a `work_order` (`type: "annet"`,
-  `data.source: "eyes"`, SKUs and the text on the package, `by`, `at`; no guest data) to the device's avvik
-  log (`lobby:oyne-avvik`, per handover day, 30 days, `src/features/eyes/deviations.ts`); Overlevering lists
-  it under *Åpent nå* with owner Renhold and 10:00 (`eyesOpenItem`). `TODO(phase-3)` a server store.
 
 **Read by the app (Lobby), additive, jury branch.** Rom og renhold compares the last `room_status` per
 room with the booking system's test snapshot (`src/features/rooms/pms.ts`, `TODO(phase-3)`):
@@ -276,7 +271,6 @@ same PR that first reads it.
 | `ELEVENLABS_AGENT_ID` | Track B server (`/api/voice/token`), `src/features/voice/setup-agent.ts` | no (blank in `.env.example`; printed by `setup-agent.ts`) | `.env` and Vercel project settings |
 | `APP_CLAUDE_BUDGET_USD` | Track B server (Claude spend meter) | no (default 5) | `.env.example` |
 | `ELEVENLABS_RECEPTION_AGENT_ID` | Track B server (`/api/reception/token`, `/api/reception/calls`), `src/features/reception/setup-agent.ts` | no: not a secret; defaults to the team's agent (`RECEPTION_AGENT_ID_DEFAULT` in `src/lib/env.ts`), set it only to use another agent | `src/lib/env.ts`; optional override in `.env` |
-| `RECEPTION_CALLS_SINCE` | Track B server (`/api/reception/calls`): calls that started earlier are never read or shown | no: an ISO time with its offset, e.g. `2026-11-08T05:30:00+01:00`; blank = every call; a malformed value fails closed (503) | `.env.local` and Vercel project settings |
 | `RECEPTION_PUBLIC_URL` | `src/features/reception/setup-agent.ts` (webhook mode; `https://` only) | no (blank in `.env.example`) | `.env` when setting up the phone agent |
 | `RECEPTION_TOOL_SECRET` | Track B server (`/api/reception/tools/[tool]`), `src/features/reception/setup-agent.ts` | **yes**: at least 24 characters, also stored at ElevenLabs as a workspace secret | `.env` and Vercel project settings |
 | `LOBBY_AUTH_SECRET` | Lobby app: `src/proxy.ts`, `/api/auth/*`, `getSession()` (HMAC key of the session cookie) | **yes**: at least 32 random bytes (`node scripts/lobby-hash.mjs --secret`); rotating it logs everyone out; missing = nobody logs in | `.env` and Vercel project settings |

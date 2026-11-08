@@ -205,7 +205,7 @@ describe("RequestsScreen (Forespørsler)", () => {
     render(<RequestsScreen today="2026-11-08" />);
     const towels = await screen.findByRole("button", { name: "Send roboten: Utstyr, Rom 214" });
     const row = rowWith("Rom 214 ønsker to ekstra håndklær.");
-    expect(within(row).getByText("Telefon (AI)")).toBeInTheDocument();
+    expect(within(row).getByText("Telefon (AI) · Eksempel")).toBeInTheDocument();
     expect(within(row).getByText("Forslag: roboten")).toBeInTheDocument();
     // A radiator is for a person: no robot button, the technician on shift instead.
     const radiator = rowWith(/Radiatoren på rom 134 virker ikke/);

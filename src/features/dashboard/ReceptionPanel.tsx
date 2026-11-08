@@ -15,8 +15,9 @@ export function ReceptionPanel({ className }: { className?: string }) {
 /**
  * The panel on calls someone else fetched (Oversikt passes its own, shared with the Nå band). It counts the
  * night's calls with owner E's `nightCalls`, the same source Overlevering counts (round 5): the live call log,
- * then last night's sample calls under one quiet "Eksempel" line, in every state, so it never says "Ingen
- * samtaler ennå" while Overlevering says 3.
+ * then last night's sample calls under one "Eksempel" line, in every state. The live part reads the same
+ * route as Resepsjon's Samtalelogg (`/api/reception/calls`), so when that log says "Ingen samtaler ennå", so
+ * does this panel; the samples below are marked as examples that are not in the call log.
  */
 export function ReceptionPanelView({ state, retry, className }: { state: CallsState; retry: () => void; className?: string }) {
   const night = nightCalls(state.kind === "ready" ? state.calls : []);
@@ -78,14 +79,14 @@ export function ReceptionPanelView({ state, retry, className }: { state: CallsSt
               }
             />
           )}
-          {state.kind === "ready" && night.total === 0 && (
+          {state.kind === "ready" && night.live.length === 0 && (
             <EmptyState as="h3" title="Ingen samtaler ennå" body="Samtaler fra telefonen og nettleseren vises her." />
           )}
           {state.kind === "ready" && night.live.length > 0 && <CallList label="Siste samtaler" calls={night.live.slice(0, SHOWN)} />}
           {state.kind !== "loading" && state.kind !== "hidden" && night.samples.length > 0 && (
             <div className="mt-3 border-t border-line pt-3 first:mt-0 first:border-t-0 first:pt-0">
               <p className="text-sm text-muted">
-                Eksempel: {night.samples.length} {night.samples.length === 1 ? "samtale" : "samtaler"} fra i natt (testdata)
+                Eksempel: {night.samples.length} {night.samples.length === 1 ? "samtale" : "samtaler"} fra i natt (testdata, ikke i samtaleloggen)
               </p>
               <CallList label="Eksempelsamtaler fra i natt" calls={night.samples.map((sample) => sample.note)} />
             </div>

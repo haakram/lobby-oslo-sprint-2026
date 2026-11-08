@@ -76,12 +76,12 @@ describe("Overlevering without a robot", () => {
     const { handover, sources } = withoutRobot();
     expect(handover.note).toMatchObject({ author: "Kjersti Lund", role: "Nattevakt" });
     expect(handover.note.text).toMatch(/^Rolig natt\. Støy fra rom 210/);
-    const staff = handover.timeline.filter((line) => line.by === "staff" && line.text.startsWith("Kjersti Lund "));
+    const staff = handover.timeline.filter((line) => line.by === "staff" && line.text.replace(/^Eksempel: /, "").startsWith("Kjersti Lund "));
     expect(staff.map((line) => [line.at, line.text])).toEqual([
       ["23:24", "Kjersti Lund så gjest eller bagasje på rom 210."],
       ["02:15", "Kjersti Lund meldte vått gulv i lobbyen: Ved inngangen, etter regnet."],
       ["04:24", "Kjersti Lund så rom 213 tomt og ryddig."],
-      ["04:35", "Kjersti Lund ordnet det AI-resepsjonisten tok imot: Rom 310 ber om vekking kl. 06:30."],
+      ["04:35", "Eksempel: Kjersti Lund ordnet det AI-resepsjonisten tok imot: Rom 310 ber om vekking kl. 06:30."],
     ]);
     expect(handover.timeline.some((line) => line.by === "ai")).toBe(true);
     expect(sources).toEqual({ staffEntries: 4, samples: 4, clerk: "Kjersti Lund", doorLockRooms: 36, doorLockFlags: 2 });

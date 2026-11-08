@@ -36,6 +36,8 @@ export type Figures = {
   /** Requests the night staff finished themselves (staff and in-room voice, 22:00–06:00), and the calls the AI receptionist took. */
   staffDone: number;
   calls: number;
+  /** How many of `calls` are seeded sample calls (not in Resepsjon's call log). */
+  sampleCalls: number;
   /** Guest matters the robot settled: noise, lost things found, spills made safe. */
   guestIssues: { noise: number; lost: number; spill: number };
   revenue: RoomRevenue;
@@ -335,6 +337,7 @@ export function composeHandover({
     robot: night.tally,
     staffDone,
     calls: phone.length,
+    sampleCalls: phone.filter((task) => task.origin === "demo").length,
     guestIssues: { noise: doneOf("noise"), lost: doneOf("lost_item"), spill: doneOf("spill") },
     revenue,
     safety: { wetFloors: wetFloors.length, stranger: safety.stranger !== null },
@@ -380,14 +383,16 @@ export function composeHandover({
     ranked.push({ at: hhmm(floor.reported?.at ?? null), text: `${floor.reported?.by ?? "Nattevakten"} meldte vått gulv ${placePhrase(floor.place)}${sign}.`, by: "staff" });
   }
   const calls = [...phone].sort((a, b) => NIGHT_ORDER(a.at || "00:00") - NIGHT_ORDER(b.at || "00:00"));
-  if (calls[0]) ranked.push({ at: calls[0].at, text: `AI-resepsjonisten tok en samtale og la den i Forespørsler: ${calls[0].record.message}`, by: "ai" });
+  // A seeded sample call is not in Resepsjon's call log, so its line says it is an example.
+  const sample = (call: (typeof calls)[number]) => (call.origin === "demo" ? "Eksempel: " : "");
+  if (calls[0]) ranked.push({ at: calls[0].at, text: `${sample(calls[0])}AI-resepsjonisten tok en samtale og la den i Forespørsler: ${calls[0].record.message}`, by: "ai" });
   const noise = night.workOrders.find((order) => order.type === "stoy");
   if (noise?.at) ranked.push({ at: hhmm(noise.at), text: `${humanizeText(noise.text).replace(/: ba /, ": roboten ba ")}.`, by: "robot" });
   const spill = night.workOrders.find((order) => order.type === "sol" && /varselskilt/.test(order.text));
   if (spill?.at) ranked.push({ at: hhmm(spill.at), text: `${humanizeText(spill.text)}.`, by: "robot" });
-  if (calls[1]) ranked.push({ at: calls[1].at, text: `AI-resepsjonisten tok en samtale: ${calls[1].record.message}`, by: "ai" });
+  if (calls[1]) ranked.push({ at: calls[1].at, text: `${sample(calls[1])}AI-resepsjonisten tok en samtale: ${calls[1].record.message}`, by: "ai" });
   const handled = calls.find((call) => call.demo?.handled);
-  if (handled?.demo?.handled) ranked.push({ at: handled.demo.handled.at, text: `${handled.demo.handled.who} ordnet det AI-resepsjonisten tok imot: ${handled.record.message}`, by: "staff" });
+  if (handled?.demo?.handled) ranked.push({ at: handled.demo.handled.at, text: `Eksempel: ${handled.demo.handled.who} ordnet det AI-resepsjonisten tok imot: ${handled.record.message}`, by: "staff" });
   const timeline = ranked
     .filter((line) => line.at && line.at !== "--:--")
     .slice(0, MAX_HIGHLIGHTS)

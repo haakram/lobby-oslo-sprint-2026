@@ -6,12 +6,12 @@ import { ReceptionPanelView } from "./ReceptionPanel";
 const retry = () => {};
 
 describe("Oversikt's Resepsjon widget counts the night's calls as Overlevering does (round 5, owner E's nightCalls)", () => {
-  it("shows last night's sample calls under one Eksempel line, never 'Ingen samtaler ennå' while there are samples", () => {
+  it("says 'Ingen samtaler ennå' as Resepsjon's call log does, with last night's samples under one Eksempel line", () => {
     const samples = nightCalls([]).samples.length;
     expect(samples).toBeGreaterThan(0);
     render(<ReceptionPanelView state={{ kind: "ready", calls: [] }} retry={retry} />);
-    expect(screen.queryByText("Ingen samtaler ennå")).not.toBeInTheDocument();
-    expect(screen.getByText(`Eksempel: ${samples} samtaler fra i natt (testdata)`)).toBeInTheDocument();
+    expect(screen.getByText("Ingen samtaler ennå")).toBeInTheDocument();
+    expect(screen.getByText(`Eksempel: ${samples} samtaler fra i natt (testdata, ikke i samtaleloggen)`)).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(samples);
   });
 

@@ -22,7 +22,7 @@ path or HTML is built from input.
 | User enumeration by timing | Unknown usernames are checked against a dummy scrypt hash with the same cost. | `handlers.test.ts` |
 | Leaked hashes | scrypt N = 2^17, r = 8, p = 1 (OWASP minimum), 16-byte salt per account; cost bounded when read so a bad env value can't exhaust memory. | `password.test.ts` |
 | Login CSRF, forced logout or view switch from another site | `SameSite=Lax`, and every `POST /api/auth/*` refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site`. | `handlers.test.ts` |
-| Another site drives a logged-in browser at a data or paid API | `SameSite=Lax`, the proxy's session check, and since the security review (Sun 8 Nov) each of `/api/identify`, `/api/scene`, `/api/reception/calls`, `/api/voice/token` and `/api/reception/token` refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site` with a 403 before the rate limit counts or any backend is reached (`refuseCrossSite`, `src/app/api/_lib/sameOrigin.ts`). | `sameOrigin.test.ts`, each route's `route.test.ts` |
+| Another site drives a logged-in browser at a data or paid API | `SameSite=Lax` and the proxy's session check. The route-level cross-site guard (403 on a foreign `Origin`) was on the review branch only and is not in this build (`docs/PRIVACY.md` § 5.1). | `proxy.test.ts` |
 | Open redirect after login | `next` must be a same-origin relative path (no `//`, `\`, scheme, control characters, `/login`, `/api`), and one the role may open; otherwise `/`. | `access.test.ts` |
 | Misconfigured deploy opens the app | Missing or short `LOBBY_AUTH_SECRET`, or missing/malformed `LOBBY_USERS` → nobody logs in (503 on login, every cookie invalid); the server log names the variable, never a value. | `config.test.ts`, `proxy.test.ts` |
 
@@ -42,9 +42,7 @@ server to server, and each call carries `x-reception-secret`, checked in constan
 - The login limiter lives in memory per server instance. On Vercel the client IP header is set by the
   platform; locally it can be spoofed (irrelevant there).
 - The data and paid APIs (`/api/identify`, `/api/scene`, `/api/reception/calls`, `/api/voice/token`,
-  `/api/reception/token`) no longer rely on the proxy and `SameSite=Lax` alone: since the security review (Sun 8 Nov) each
-  route refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site` itself with a 403, before the rate
-  limit counts or any backend is reached (`refuseCrossSite` in `src/app/api/_lib/sameOrigin.ts`, the
-  same `isSameOrigin` as the auth POSTs; tested in `sameOrigin.test.ts` and in each route's `route.test.ts`). Server Functions
+  `/api/reception/token`) rely on the proxy and `SameSite=Lax` alone in this build: the route-level
+  cross-site guard and per-user rate limits were on the review branch only (`docs/PRIVACY.md` § 5.1). Server Functions
   don't exist today; any added later must call `getSession()` itself, because a proxy matcher change can
   silently drop coverage.

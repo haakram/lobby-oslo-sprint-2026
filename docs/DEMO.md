@@ -294,25 +294,27 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
      on the test warehouse map, **16 m or 10 % shorter than a list sorted by shelf** (32 % against the
      list as written, shown beside it), and the four work guides as cards in Norsk, Polski, Українська
      and English. Re-read both off the screen.
-   - **Resepsjon** (ElevenLabs): *Samtalelogg* opens on last night's three calls, labelled *Eksempel*
-     (made-up guests and numbers, each with the guest's words, the language and the task it became), so
-     the screen is never empty if the live call or the wifi fails. Then *Ring resepsjonen*, ask in
+   - **Resepsjon** (ElevenLabs): *Samtalelogg* shows the receptionist's real calls, so after the team's
+     test calls are deleted it says *Ingen samtaler ennå* until someone calls. Last night's three sample
+     calls (made-up guests and numbers, labelled *Eksempel*) show on Oversikt, Forespørsler and
+     Overlevering instead, so those screens aren't empty if the live call or the wifi fails. Then *Ring resepsjonen*, ask in
      English or Polish for a room next weekend; it says it is an AI, quotes the direct price, haggles in
      fixed steps (at most 10 % under), records a request that waits for *Bekreft*, never takes a card
      number. Ask callers on stage to use a made-up name. (Team item: the live agent keeps the old guide
      and privacy wording until someone re-runs `src/features/reception/setup-agent.ts`.)
-   - **Robotens øyne** (Holio pain 3): boxes drawn on the phone (nothing sent); tap a product, Claude
-     reads the pack and matches the catalogue; when it is sure, *Vis vei* opens its route; when it isn't,
-     the SKU stays hidden and there is no *Vis vei* until the label agrees. People are never cropped and
-     sent. Holio detail: `docs/HOLIO.md`.
+   - **Robotens øyne** (Holio pain 3): boxes drawn on the phone, and live recognition sends each stable
+     box that isn't a person to Claude (on by default); tap a product, Claude reads the pack and matches
+     the catalogue, with a confidence label (*Sikker / Ganske sikker / Usikker, sjekk varen*); the card
+     shows the SKU, *Vis vei* and *Legg i plukkliste* at any confidence, so on *Usikker* the worker checks
+     the item. A person's own box is never sent, but people aren't covered in tap crops, around held items
+     or in whole frames (`docs/PRIVACY.md` § 5). Holio detail: `docs/HOLIO.md`.
 3. **How it works (1 slide, 1 min; IT and security, Innovation).** "The run log is an event stream;
    every screen is a projection of it." `Wybe simulation ⇄ our agent (Python: exact sim-time router,
    value-per-second planner, safety gates in code, "done" only after the server's score rises)` →
    `run log (JSONL v1, docs/ARCHITECTURE.md § 4.3)` → `Fettero (Next.js 16)`: Overlevering, Rom,
    Forespørsler, Natteskift, 3D-kart all read the same log through one selector. Beside it: camera →
    MediaPipe on the device → Claude (server-side key, spend cap); voice → ElevenLabs agents with short-
-   lived tokens from our server. Login with roles enforced on the server; per-user rate limits on the
-   paid routes. Evaluation: a replay bed of every full live night (72) screens a change before it gets
+   lived tokens from our server. Login with roles enforced on the server. Evaluation: a replay bed of every full live night (72) screens a change before it gets
    a live shift; it reproduces a night within 3.2 % with the code that played it (in-sample, § 1.1).
 "Done", split by what it rested on: over the last four builds' 18 live nights, 1,078 sent after
    the score rose (the simulator's verifier), and on the robot's own judgement 64 of 65 distinct claims
@@ -423,8 +425,9 @@ three of our reviews were locked out for minutes during the night. So nobody typ
 - [ ] Provider-side spend limits set in the Anthropic and ElevenLabs consoles (the app's meter is per
       server instance). Say "provider-side cap" in Q&A only once this box is ticked.
 - [ ] The team's own ElevenLabs test calls deleted before 14:00 (real names and numbers), so the call
-      log on stage holds only made-up callers. Belt and braces: `RECEPTION_CALLS_SINCE` set in the demo
-      laptop's `.env.local` (the app drops calls before it), checked on Forespørsler and the bell.
+      log on stage holds only made-up callers. The app has no cut-off by date (it shows the agent's latest
+      20 calls, numbers in full on Resepsjon), so this deletion is the only safeguard: check Resepsjon,
+      Forespørsler and the bell afterwards.
 - [ ] The demo account `siri` (Siri Haugen, nattleder) works on the demo laptop, so the sign-off and the
       stamps carry the story's name; its password stays out of git.
 - [ ] Phone round and hallway test run, results pasted in § 8, the **[fill]** lines in § 6 updated.
@@ -512,8 +515,8 @@ Follow-ups it may bring:
   the rule does: its look returns ground truth as text, and it drops what the robot delivered. That's
   why perception comes last in a hotel: the lock trail, the energy slot and the PMS first."
 - *"How accurate is the camera?"* "Not measured. The confidence is the model's own label, not
-  calibrated; when it's unsure a person picks between the products it could be." [or: fill from a
-  20-item run]
+  calibrated; when it's unsure the card says *Usikker, sjekk varen* and the worker checks the item." [or:
+  fill from a 20-item run]
 
 **Marketing review.** *"Name the first hotel that gets your Monday e-mail. Who did you speak to there,
 what did they say in their own words, and when that general manager clicks or scans what you sent,
@@ -690,10 +693,9 @@ At the Holio stand: *"Hand me this unlabelled T-shirt in a polybag. Which size i
 and what happens when you're wrong?"* (ShirazIQ)
 
 > "Honestly: it can't tell M from L. Our catalogue has no variants, and a reader of the text on the
-> pack can only read the size if the sticker is legible. When it isn't sure it says so, *Usikker*, and
-> shows the two or three products it could be, each with its description and shelf; the worker taps
-> *Ja, det er denne* or *Ingen av disse*. Nothing goes on the pick list or gets a route on the camera's
-> word, and *Ingen av disse* becomes an avvik with an owner and a deadline on the morning handover. In a warehouse the
+> pack can only read the size if the sticker is legible. When it isn't sure it says so, *Usikker, sjekk
+> varen*, and the worker checks the item before *Legg i plukkliste*; today the card doesn't offer the
+> other products it could be, and a wrong match isn't logged as an avvik. In a warehouse the
 > candidates should come from what's expected, the purchase order at receiving or the customer's order
 > at returns, plus the shop's own product photos: that's where accuracy jumps, and it isn't built. And
 > it isn't measured yet, so I won't give you a number."

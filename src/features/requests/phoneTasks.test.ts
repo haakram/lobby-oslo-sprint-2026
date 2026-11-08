@@ -77,7 +77,7 @@ describe("the request a phone task shows as", () => {
 
   it("waits with a suggestion, says who has it once assigned, and who did it once done", () => {
     const [towels, , wakeUp] = phoneTasks([], demoCalls("2026-11-08"));
-    expect(fromPhoneTask(towels, undefined)).toMatchObject({ source: "telefon", badge: "Telefon (AI)", status: "venter", handler: "Forslag: roboten", text: "Rom 214 ønsker to ekstra håndklær." });
+    expect(fromPhoneTask(towels, undefined)).toMatchObject({ source: "telefon", badge: "Telefon (AI) · Eksempel", status: "venter", handler: "Forslag: roboten", text: "Rom 214 ønsker to ekstra håndklær." });
     // Not sent anywhere yet (TODO(phase-3)): queued, pending, and the line says when it will go.
     expect(fromPhoneTask(towels, { to: "robot", who: "Roboten", at: "06:01" }, "tildelt")).toMatchObject({ handler: "Lagt i robotens kø · sendes når roboten er koblet til", pending: true });
     // Closed by staff after it was queued: never "Roboten ordnet det".

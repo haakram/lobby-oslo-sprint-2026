@@ -435,15 +435,22 @@ function saleStory(rooms: readonly string[], hours: number, value: number): stri
   return `Rom ${rooms.join(", ")}: funnet ledig ${hours} ${hours === 1 ? "time" : "timer"} tidligere · ca. ${formatKroner(value)} kr hvis utsolgt`;
 }
 
+/** " (eksempler)" or " (2 av dem eksempler)": seeded sample calls are not in Resepsjon's call log. */
+function sampleNote(calls: number, samples: number): string {
+  if (samples === 0) return "";
+  if (samples === calls) return calls === 1 ? " (et eksempel)" : " (eksempler)";
+  return ` (${samples} av dem ${samples === 1 ? "et eksempel" : "eksempler"})`;
+}
+
 /** Behind *Slik vet vi det*: who confirmed every "done", the refusals, the night staff's and the AI's share. */
-function robotProof({ robot, staffDone, calls }: Figures, declines: DeclineSplit | null): string {
+function robotProof({ robot, staffDone, calls, sampleCalls }: Figures, declines: DeclineSplit | null): string {
   const refused = declineShort(declines, robot.declined);
   return [
     `Hver «ferdig» er bekreftet av simulatoren (Wybe Night Shift): ${robot.done} av ${robot.reported}.`,
     refused ? `Avvist etter sjekk: ${refused}.` : null,
     robot.cancelled > 0 ? `${robot.cancelled} avlyst av nattlederen.` : null,
     staffDone > 0 ? `Nattevakten fullførte ${staffDone} ${staffDone === 1 ? "forespørsel" : "forespørsler"} selv.` : null,
-    `AI-resepsjonisten tok ${calls} ${calls === 1 ? "samtale" : "samtaler"}.`,
+    `AI-resepsjonisten tok ${calls} ${calls === 1 ? "samtale" : "samtaler"}${sampleNote(calls, sampleCalls)}.`,
     "I et ekte hotell finnes ingen dommer: der bekrefter gjesten, resepsjonen eller dørlåsloggen.",
   ]
     .filter(Boolean)

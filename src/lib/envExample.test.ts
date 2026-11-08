@@ -19,6 +19,16 @@ function filesUnder(dir: string, pattern: RegExp): string[] {
   });
 }
 
+/**
+ * The file without its comments, so a variable only named in a comment doesn't count as read. Rough on
+ * purpose: `//` after a colon (a URL) is kept, and `#` starts a comment only at a line start or after a space.
+ */
+function withoutComments(file: string): string {
+  const text = readFileSync(file, "utf8");
+  if (/\.(py|sh)$/.test(file)) return text.replace(/(^|\s)#.*$/gm, "$1");
+  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
 const documented = new Set(
   readFileSync(join(ROOT, ".env.example"), "utf8")
     .split("\n")
@@ -37,14 +47,14 @@ describe(".env.example", () => {
     expect(read.has("APP_CLAUDE_BUDGET_USD")).toBe(true);
   });
 
-  it("names no variable that nothing reads (the app, the agent, the viewer or the scripts)", () => {
+  it("names no variable that nothing reads (the app, the agent, the viewer or the scripts), comments not counted", () => {
     const code = [
       ...filesUnder(join(ROOT, "src"), /\.tsx?$/),
       ...filesUnder(join(ROOT, "agent"), /\.py$/),
       ...filesUnder(join(ROOT, "scripts"), /\.(sh|mjs)$/),
       join(ROOT, "next.config.ts"),
     ]
-      .map((file) => readFileSync(file, "utf8"))
+      .map(withoutComments)
       .join("\n");
     const unread = [...documented].filter((name) => !new RegExp(`\\b${name}\\b`).test(code));
     expect(unread).toEqual([]);

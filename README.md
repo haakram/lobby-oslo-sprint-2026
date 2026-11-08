@@ -82,8 +82,8 @@ Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is
 The menu shows the pilot: **Overlevering, Nattevaktens logg, Rom og renhold, Forespørsler, Natteskift**
 (Oversikt one tap away). Everything else we built sits under the folded **Utenfor piloten**: **Robotens øyne**
 on a phone (camera boxes; tap a product and Claude names it without a barcode; built for Holio),
-**Resepsjon** (allow the microphone, then *Ring resepsjonen*: the ElevenLabs AI receptionist; the screen
-says where the call goes; please give a made-up name), and more. The host view for short-let hosts
+**Resepsjon** (allow the microphone, then *Ring resepsjonen*: the ElevenLabs AI receptionist; please give
+a made-up name), and more. The host view for short-let hosts
 (`/vert`, its own login) was a test that the engine generalises; it is not part of the pilot.
 Bookings, guests, staff, stock and prices are test data, and every list says so.
 

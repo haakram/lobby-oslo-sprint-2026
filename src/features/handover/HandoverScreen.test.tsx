@@ -54,7 +54,7 @@ describe("HandoverScreen (Overlevering 06:00)", () => {
     expect(screen.getByText("Robotens oppdrag")).toBeInTheDocument();
     const proof = within(screen.getByRole("region", { name: "Natten i tall" })).getByText("Slik vet vi det").closest("details");
     expect(proof).toHaveTextContent(
-      `Hver «ferdig» er bekreftet av simulatoren (Wybe Night Shift): 1 av 1. Nattevakten fullførte ${STAFF_DONE} forespørsler selv. AI-resepsjonisten tok 3 samtaler. I et ekte hotell finnes ingen dommer: der bekrefter gjesten, resepsjonen eller dørlåsloggen.`,
+      `Hver «ferdig» er bekreftet av simulatoren (Wybe Night Shift): 1 av 1. Nattevakten fullførte ${STAFF_DONE} forespørsler selv. AI-resepsjonisten tok 3 samtaler (eksempler). I et ekte hotell finnes ingen dommer: der bekrefter gjesten, resepsjonen eller dørlåsloggen.`,
     );
     expect(screen.queryByText(/dommeren i Wybe|godkjent av dommeren/)).not.toBeInTheDocument();
     // The money leads with the certain cost: a room in use with no booking; the room found free is said as time, with its own link.

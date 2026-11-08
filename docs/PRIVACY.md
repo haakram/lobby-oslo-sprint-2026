@@ -11,17 +11,18 @@
 > periods and Vercel's default region (§ 3, § 7) were added at about 07:45 against Lovdata and Vercel's
 > documentation. A data processing agreement a hotel can sign is in [`docs/DPA.md`](./DPA.md). Not legal
 > advice; a pilot needs a lawyer's review. The full threat model for login and roles is in
-> [`docs/checks/threat-model.md`](./checks/threat-model.md).
+> [`docs/checks/threat-model.md`](./checks/threat-model.md). **The camera (§ 5) and the receptionist (§ 4, § 6)
+> were re-read on Sun 8 Nov at about 09:45 against the code that ships** (ShirazIQ's Øyne and Resepsjon, as on
+> `main`); the review branch's extra hardening for both is not in this build (§ 5.1).
 
 ## 1. In one paragraph
 
 The demo touches **no real guest or employee data**. Guests, staff, stock and work orders are made-up
 test data, marked on every screen ("Testdata til integrasjonen er på plass."). The robot's night comes
 from Wybe's hotel simulation, whose guests are fictional. The only real people in the system are the
-team: the login accounts, and our own test calls to the AI receptionist. The app shows **only calls
-after a cut-off** (`RECEPTION_CALLS_SINCE`, set on the demo laptop to Sun 8 Nov 05:30), so our 7 Nov
-test calls never reach a screen, and the team also deletes them in ElevenLabs before 14:00. There is
-**no database**.
+team: the login accounts, and our own test calls to the AI receptionist. Resepsjon's call log shows the
+agent's latest 20 calls with **no cut-off by date**, so the team deletes its 7 Nov test calls in
+ElevenLabs before the demo (before 14:00). There is **no database**.
 Camera frames and voice go to two AI processors, **Anthropic (Claude API)** and **ElevenLabs**, both
 outside the EEA. Nothing identifies people: there is no face recognition anywhere in the code. The
 pilot (software only) uses neither: it reads the booking system, **one signal per room from the door
@@ -39,7 +40,7 @@ lock and the energy slot, no card id, no clock**, and the night clerk's own entr
 | Guest names in the robot's night ("Dr Silva", "Ms Rossi") | No: Wybe's simulation | `public/runs/demo.jsonl` (live practice night of the final agent, seed 16) |
 | The host view's flats, guests and messages | No: invented | `src/features/host/demoData.ts` |
 | Login accounts (`hamad`, `shiraz`, `resepsjon`, `robot`, `vert`; `siri`, a demo persona with the team's password; and `jury` for the event) | Team only; the jury account has its own password and is deleted after the event | `LOBBY_USERS` env var, scrypt hashes, never passwords (`scripts/lobby-hash.mjs`) |
-| Receptionist calls: caller name, call-back number, dates, a summary | The team's own test calls (7 Nov), hidden by the cut-off and deleted before the demo; anyone who calls on stage | Held by ElevenLabs; read back on demand, only calls after `RECEPTION_CALLS_SINCE` (§ 4); phone numbers masked on every screen |
+| Receptionist calls: caller name, call-back number, dates, a summary | The team's own test calls (7 Nov), deleted before the demo; anyone who calls on stage | Held by ElevenLabs; read back on demand, the latest 20 calls (§ 4); Resepsjon shows the call-back number in full |
 | Camera frames | Whatever the phone sees | Øyne (§ 5) |
 | Voices | Whoever speaks to Stemme or Resepsjon | Streamed to ElevenLabs (§ 6) |
 
@@ -47,7 +48,7 @@ lock and the energy slot, no card id, no clock**, and the night clerk's own entr
 
 | Processor | Receives | From | Location |
 |---|---|---|---|
-| **Anthropic (Claude API)** | Product crops and some whole camera frames (Øyne); request text from the simulation when the agent's parser can't read it (rare: the agent's whole Claude spend this weekend is about USD 0.001, `temp/spend.json`) | `src/features/eyes/identify.ts`, `src/features/eyes/scene.ts`, `agent/brain.py` | US company; outside the EEA |
+| **Anthropic (Claude API)** | Crops of any box the camera finds that isn't a person, and whole camera frames, one every 10 seconds while live recognition or *Omgivelser* is on (both on by default) (Øyne, § 5); request text from the simulation when the agent's parser can't read it (rare: the agent's whole Claude spend this weekend is about USD 0.001, `temp/spend.json`) | `src/features/eyes/identify.ts`, `src/features/eyes/scene.ts`, `agent/brain.py` | US company; outside the EEA |
 | **ElevenLabs** | Voice audio, transcripts, post-call fields (`caller_name`, `callback_number`, dates, room type, guests, summary); uses Claude as the LLM inside its agents (billed by ElevenLabs, so Anthropic is a sub-processor there) | `src/features/voice/agentConfig.ts`, `src/features/reception/agentConfig.ts` | Outside the EEA |
 | **Vercel** | Hosting: every request passes through it | the deployment | US company; no function region is set in the repo (no `vercel.json`), so functions run in Vercel's default, `iad1`, Washington, D.C. ([Vercel docs, *Regions*](https://vercel.com/docs/regions), "Compute defaults"); an EU region such as `arn1` (Stockholm) is a **team check** before a pilot (§ 7) |
 
@@ -79,9 +80,9 @@ altogether (§ 7, "An EU hosting path").
 No analytics, no ad trackers, no third-party fonts at runtime (`next/font` self-hosts them), no CDN
 for the camera model (served from our own origin, `src/features/eyes/useDetector.ts`). MediaPipe's
 library has telemetry to Google built in (`odml.pa.googleapis.com`, found in the first legal
-review). The app answers that one host on the phone before any request exists, so it never leaves the
-device (`src/features/eyes/noTelemetry.ts`), and the Content-Security-Policy's `connect-src` (only our
-own origin, the local 3D viewer and ElevenLabs) is the backstop (`next.config.ts`). **On this build
+review). In this build only the Content-Security-Policy stops it: `connect-src` allows only our own
+origin, the local 3D viewer and ElevenLabs (`next.config.ts`), so the browser blocks the call and logs a
+CSP violation in the console (answering that host on the phone first is not in this build, § 5.1). **On this build
 only:** the public URL (lobby-sandy.vercel.app) serves `main`, whose older header has no `connect-src`
 (curl, Sun 02:50), so there the browser would let that call out.
 
@@ -91,62 +92,79 @@ only:** the public URL (lobby-sandy.vercel.app) serves `main`, whose older heade
 |---|---|---|
 | **Session cookie** `lobby_session` | Username, role, view, expiry; HMAC-SHA256 signed, nothing secret inside (`src/features/auth/session.ts`) | 12 hours |
 | **Run logs** (JSONL) | Every API call the agent made in the simulation, its decisions, the sim's fictional guests | Agent laptop `temp/runs/` (gitignored), kept for the event. One recorded night is committed (`public/runs/demo.jsonl`, seed 16) and served only behind login (`src/features/auth/roles.ts`, `SHARED_ROUTES`) |
-| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room confirmations (which receptionist, the three checks, who recorded it and when) and rooms sent to reception, the handover sign-off with the user's name (the screen says *lagret på denne enheten*), the night clerk's log per handover day (`lobby:nattevakt-logg`, corrections appended, never deleted), and Øyne's avvik log per handover day (`lobby:oyne-avvik`) | **The night clerk's log: 30 days**, as code (`RETENTION_DAYS` in `src/features/staffinput/retention.ts`; days older than that are dropped on load and on every write, tested; `/natt` says *Lagres på denne enheten i 30 dager*); Øyne's avvik log: 30 days, dropped when read (`src/features/eyes/deviations.ts`); the room confirmations with the receptionist's name (`lobby:room-check-marks`, pruned to the same `RETENTION_DAYS` on load and on write, `src/features/rooms/reconcile.ts`), who was told about a safety item (`lobby:handover-varslet`, kept per hazard) and the sign-off (`lobby:handover-signoff`): 30 days, and since round 7 both are append-only: *Angre* on *Varsle* adds a correction line, *Angre kvitteringen* adds *Kvittering trukket tilbake av …*, neither deletes (`src/features/handover/told.ts`, `signoff.ts`). The receptionist's requests and messages until staff settle them (newest 50) or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store with the same 30 days) |
-| **ElevenLabs** | Receptionist conversations: transcript and post-call fields, **no audio** | 30 days, set in the agent config (`privacy`, `src/features/reception/agentConfig.ts`; Resepsjon says the same before the call). **To check (team):** open the receptionist agent in the ElevenLabs dashboard, confirm *record voice* off and retention 30 days, and write the time here. Until then we say "configured", never "checked". The live agent carries a changed config only after `src/features/reception/setup-agent.ts` is run again |
+| **The browser** (`localStorage`) | The receptionist's booking requests and messages until staff settle them (validated, newest 50: `src/features/reception/useStoredRecords.ts`), staff ticks, work-order statuses (`src/features/dashboard/useOrderStatuses.ts`), the room confirmations (which receptionist, the three checks, who recorded it and when) and rooms sent to reception, the handover sign-off with the user's name (the screen says *lagret på denne enheten*), the night clerk's log per handover day (`lobby:nattevakt-logg`, corrections appended, never deleted) | **The night clerk's log: 30 days**, as code (`RETENTION_DAYS` in `src/features/staffinput/retention.ts`; days older than that are dropped on load and on every write, tested; `/natt` says *Lagres på denne enheten i 30 dager*); the room confirmations with the receptionist's name (`lobby:room-check-marks`, pruned to the same `RETENTION_DAYS` on load and on write, `src/features/rooms/reconcile.ts`), who was told about a safety item (`lobby:handover-varslet`, kept per hazard) and the sign-off (`lobby:handover-signoff`): 30 days, and since round 7 both are append-only: *Angre* on *Varsle* adds a correction line, *Angre kvitteringen* adds *Kvittering trukket tilbake av …*, neither deletes (`src/features/handover/told.ts`, `signoff.ts`). The receptionist's requests and messages until staff settle them (newest 50) or the browser data is cleared. On the staff device only; no server copy (`TODO(phase-3)`: a shared store with the same 30 days) |
+| **ElevenLabs** | Receptionist conversations: transcript and post-call fields, **no audio** | 30 days, set in the agent config (`privacy`, `src/features/reception/agentConfig.ts`). **To check (team):** open the receptionist agent in the ElevenLabs dashboard, confirm *record voice* off and retention 30 days, and write the time here. Until then we say "configured", never "checked". The live agent carries a changed config only after `src/features/reception/setup-agent.ts` is run again |
 | **ElevenLabs** | Stemme (staff voice) conversations | No retention setting in `src/features/voice/agentConfig.ts`: the account default applies. Set it before any pilot |
 | **Our server** | Nothing. No database, no file writes. Logs carry only error types or HTTP status, never bodies (`src/app/api/identify/route.ts`, `src/app/api/voice/token/route.ts`, `src/app/api/reception/tools/[tool]/route.ts`: "Arguments are never logged") | — |
 
 Call notes shown in Resepsjon are read from ElevenLabs on demand (`src/app/api/reception/calls/route.ts`,
 receptionist or admin only), cleaned of card numbers and control characters
-(`src/features/reception/scrub.ts`), and not stored by us. Only calls that started after
-`RECEPTION_CALLS_SINCE` are asked for, and checked again when they arrive; a malformed value fails
-closed (503) rather than showing every call (`src/app/api/_lib/callsSince.ts`). Phone numbers are masked
-on the server where the notes are mapped ("+47 ••• •• 493", `src/features/reception/maskPhone.ts`,
-`callLog.ts`), so Oversikt, Forespørsler, the bell and Resepsjon never show a full number as text. The
-full number still reaches a logged-in receptionist's or admin's browser in the call data, and becomes a
-tap-to-call `tel:` link **only on a touch device**; on a laptop it stays masked text with no link, so a
-hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
+(`src/features/reception/scrub.ts`), and not stored by us. The route asks for the agent's latest 20
+calls, with no cut-off by date. The call-back number is not masked: Resepsjon's *Samtalelogg* and its
+booking cards show it in full as text (`src/features/reception/callLog.ts`, `CallLogPanel.tsx`,
+`RecordCard.tsx`). Oversikt doesn't show numbers, and Forespørsler's call sheet shows only the last
+digits; the sample calls on our screens are made up and shown masked (`src/features/requests/nightCalls.ts`).
 
 ## 5. Camera frames (Robotens øyne)
 
 - **On the device first.** MediaPipe's object detector (EfficientDet-Lite0) draws the boxes in the
-  browser; that part sends nothing (`src/features/eyes/useDetector.ts`).
+  browser (score 0.3 or more, at most 10 boxes); that part sends nothing (`src/features/eyes/useDetector.ts`).
 - **What is sent to Claude** (as a JPEG, through our server, `src/app/api/identify/route.ts` and
   `src/app/api/scene/route.ts`):
-  1. **Automatically:** a crop (at most 768 px) of a box whose class is product-like (bottles, cups,
-     food, a toothbrush …). **People are never cropped and sent**: `person`, furniture, vehicles and
-     animals keep their free label only. **Guests' belongings are never sent either**, live or on a
-     tap: phones, handbags, backpacks, suitcases, books, laptops, keyboards, remotes and the like
-     (`BELONGING_CLASSES`): a phone at an ear or a bag on a shoulder would carry part of the person, and
-     a luggage tag would be read out. **A box whose crop would touch a person** (a bottle in a hand) is
-     never sent automatically; the hint says to tap instead (`src/features/eyes/cocoLabels.ts`,
-     `autoIdentify.ts`, `cropFrame.ts` `touchesPerson`).
-  2. **On a tap:** the crop of the tapped box, with every person the detector found painted over and
-     only the product's own box drawn back, so a held item stays readable.
+  1. **Automatically (live recognition, on by default):** a crop (the box plus a 10 % margin, at most
+     768 px) of every box that has been stable for 0.8 s and **isn't a person**, whatever class the
+     detector guessed, at most one request every 2 seconds. Phones, bags, books, laptops and an item in
+     someone's hand are sent too, and the margin can take in part of the person holding it
+     (`src/features/eyes/cocoLabels.ts` `isSentToClaude`, `autoIdentify.ts`, `cropFrame.ts`).
+  2. **On a tap:** the crop of the tapped box, as it is. A tap on a person's box sends nothing: it opens
+     a small card with the free label.
   3. **"Identifiser hele bildet":** the whole frame, at most 768 px (`src/features/eyes/EyesScreen.tsx`).
-  4. **"Omgivelser" scan (off by default; a person must switch it on):** the whole frame, at most 640
-     px, once every 10 seconds, to find doors, lifts and signs; the prompt tells Claude to ignore people
-     (`src/features/eyes/useScene.ts`, `src/features/eyes/scene.ts`, `EyesScreen.tsx`).
-- **People are painted over on the phone first:** before any crop or whole frame is sent (items 2–4),
-  every person the on-device detector found is covered (`src/features/eyes/cropFrame.ts`). The start screen
-  says what leaves the phone: product crops to Claude (Anthropic, USA), whole frames only on
-  *Omgivelser* or *Identifiser hele bildet*, people covered first, nothing stored by us.
-- **Fail closed:** until the on-device detector has read a frame, and after it has failed (a lost GPU
-  context), nobody in view can be covered, so Øyne sends **no image at all**: the shutter (*Identifiser
-  hele bildet*), taps on a box, live recognition and the *Omgivelser* scan are all off, with the reason
-  on screen (*Persondekkingen er av, så Fettero sender ingen bilder. Les SKU-en på etiketten.*). The
-  detector returns every detection (`maxResults: -1`), and the cover has no cap: every person it scores
-  at 0.3 or more is painted grey, however many, while the screen draws only the five most likely boxes
-  (`src/features/eyes/detections.ts`, `useDetector.ts`, `EyesScreen.tsx`, with tests). The start screen
-  says the same: people the camera finds are covered; while the cover is loading or off, nothing is sent.
-- **Honest gap:** the cover is only as good as the detector. A person it misses (far away, partly in
-  view, a face in a mirror or on a screen) is not covered, and a whole frame can still show documents or
-  belongings. A pilot keeps whole frames off by default and never films behind a guest's door.
+  4. **The 10-second scan:** the whole frame, at most 800 px, once every 10 seconds while *Omgivelser*
+     or live recognition is on (both on by default), to find doors, lifts and signs and the loose things
+     the detector misses (a cap, a pillow), including what a person wears or holds; the prompt asks for no
+     box for a person (`src/features/eyes/useScene.ts`, `sceneSchedule.ts`, `scene.ts`).
+- **People are not covered.** Nothing is painted over before a crop or a whole frame is sent, so a person
+  in view reaches Anthropic in whole frames, in tap crops and around a held item. The control is the
+  *Personer* switch (on by default): off, the detector skips people and both prompts ask Claude to leave
+  out people and what they wear or hold (`useDetector.ts`, `identify.ts`, `scene.ts`). The start screen
+  says *Roboten ser gjennom kameraet og kjenner igjen varer og omgivelser. Nettleseren spør om lov første
+  gang.*; it doesn't say what leaves the phone.
+- **No fail-closed:** while the detector is loading or after it has failed there are no live boxes, but
+  the shutter still sends the whole frame (*Live-bokser er av. Ta bilde av varen med utløseren.*), and the
+  10-second scan runs whenever the camera is on.
+- **Honest gap:** by default a whole frame goes out every 10 seconds with whatever is in view: people,
+  documents, screens, belongings. A pilot keeps whole frames off by default and never films behind a
+  guest's door.
 - **Stored?** Not by us: the route passes the image to Anthropic and returns JSON; nothing is written
   (`src/features/eyes/imageBody.ts` caps the image at 1.5 MB). Anthropic deletes API inputs and outputs
   within 30 days unless a usage-policy hold, the law or a zero-retention agreement says otherwise (§ 3.1).
 - **Identification:** none. No face model, no face matching, no guest identification anywhere in the
-  code; Claude is asked only for products (`identify.ts`) or building landmarks (`scene.ts`).
+  code. Claude is asked for more than products, though: `identify.ts` returns a kind (supply, room, guest,
+  person, other), a one-sentence summary of the whole picture that, with a person in it, says what they
+  wear and hold (*En person med caps holder en fjernkontroll.*), and up to 8 other things it sees; the
+  prompt says never to say who a person is or describe their face, body, age or gender. The scan returns
+  landmarks and loose things (`scene.ts`).
+
+### 5.1 Not in this build: hardening that lived only on the review branch
+
+The review branch (`hamad/jury-loop`) had these on Øyne, Resepsjon and their routes. The shipped camera
+and receptionist (ShirazIQ's, as on `main`) don't, so they are listed here for the team to decide on:
+
+- A person cover: every person the detector found painted over before any crop or whole frame left the
+  phone, and fail-closed (no image at all while the detector was loading or had failed).
+- Auto-send for product-like classes only; belongings (phones, bags, books, laptops …) never sent; a box
+  touching a person never sent automatically.
+- *Omgivelser* off by default, and a start screen saying what leaves the phone.
+- MediaPipe's telemetry host answered on the phone (`noTelemetry.ts`), not only blocked by the CSP.
+- An unsure match showing the two or three products it could be (*Ja, det er denne* / *Ingen av disse*),
+  with an avvik on Overlevering.
+- A cut-off for the call log (`RECEPTION_CALLS_SINCE`, 503 on a malformed value), call-back numbers
+  masked on the server, and a tap-to-call link only on touch devices.
+- A notice under *Ring resepsjonen* saying where the call goes and what is kept.
+- The receptionist's prompt saying "only the hotel and its technical providers" handle the call, instead
+  of "only hotel staff see it".
+- Per-user rate limits on `/api/identify`, `/api/scene`, `/api/voice/token` and `/api/reception/token`,
+  and a cross-site guard (403 on a foreign `Origin`) on those routes and `/api/reception/calls`.
 
 ## 6. Voice (Snakk gjennom roboten, Resepsjon)
 
@@ -156,20 +174,17 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   (`auth: { enableAuth: true }` in both agent configs).
 - **Recordings:** the receptionist is configured with `recordVoice: false` (transcripts only, 30 days).
   The staff agent (Stemme) has no such setting yet.
-- **Before the call:** Resepsjon says, under *Ring resepsjonen*, where the call goes and what is kept:
-  *Samtalen går til ElevenLabs (USA), som sender teksten til Claude (Anthropic, USA) for å svare. Ingen
-  lydopptak lagres, og teksten slettes etter 30 dager. Dette er en demo: bruk et oppdiktet navn og
-  nummer.* The notice and the agent read the same setting, so the screen can't promise more than the
-  agent is configured to do (`src/features/reception/callPrivacy.ts`). Stemme is not connected on the deployed
-  app today (its token route answers 503 "agenten mangler").
+- **Before the call:** Resepsjon shows no notice about where the call goes or what is kept: the screen
+  has the *Ring resepsjonen* button and the transcript (`src/features/reception/ReceptionScreen.tsx`; the
+  notice is on the review branch only, § 5.1). Stemme is not connected on the deployed app today (its token
+  route answers 503 "agenten mangler").
 - **What the receptionist collects** (prompt on `main`): only what a request needs (name, phone,
   dates, guests, room type, message); never national ID, passport, date of birth, address or email;
   sensitive details such as an accessibility need only with the caller's yes; **never card numbers**,
   CVC or passwords. It says it is an AI, tells callers the hotel is responsible for their data, the
   30-day deletion, how to ask for access or deletion, and that they can complain to Datatilsynet. It
-  says that only the hotel and its technical providers handle the call (it used to say "only hotel
-  staff see it", which was wrong: ElevenLabs and Anthropic process it too); the live agent carries the
-  new sentence only after `src/features/reception/setup-agent.ts` is run again. If a
+  still says that only hotel staff see the call, which is wrong: ElevenLabs and Anthropic process it too
+  (`src/features/reception/agentConfig.ts`; the corrected sentence is on the review branch only, § 5.1). If a
   caller doesn't want to be written down, it records nothing. (The controller name and e-mail in the
   prompt are placeholders for the fictional hotel.)
 - **A voice command never acts on its own:** Stemme's robot task only opens a confirm sheet, and
@@ -180,8 +195,7 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
 - **Known gap: a phone caller hears none of the transfer information (team item: ShirazIQ's prompt in
   `src/features/reception/agentConfig.ts`).** The first message says it is the hotel's AI assistant
   and that requests are written down; the US processors, the 30 days and the rights come only "if the
-  guest asks" (prompt § Privacy). The notice under *Ring resepsjonen* reaches only someone looking at
-  the screen. Art. 13 asks for the information "på det tidspunktet personopplysningene innhentes",
+  guest asks" (prompt § Privacy), and the screen has no notice either (§ 5.1). Art. 13 asks for the information "på det tidspunktet personopplysningene innhentes",
   including the recipients (Art. 13(1)(e)), the transfer to a third country (13(1)(f)) and the
   retention period (13(2)(a)) ([Lovdata, the GDPR in Norwegian](https://lovdata.no/dokument/NL/lov/2018-06-15-38/KAPITTEL_gdpr-3)).
   A layered notice is the accepted way to do that on a call: a short first layer, the rest on request
@@ -223,7 +237,8 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   person", because in a hotel with cameras that becomes data about a possibly innocent guest; such
   incident records get the shortest retention.
 - **Children:** a camera robot in a family hotel films children, who get extra protection under the
-  GDPR. They are covered like any person and never cropped; the DPIA says so.
+  GDPR. This build covers nobody in what it sends (§ 5); only a person's own box is never sent. The DPIA
+  says so.
 - **The camera rule:** whether a moving robot or staff phone camera falls under the Norwegian rules on
   camera surveillance at work is an open question. We treat it as camera surveillance at work until
   Datatilsynet says otherwise.
@@ -342,7 +357,6 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
 | **Signed session cookie**: HMAC-SHA256, `HttpOnly`, `Secure` in production, `SameSite=Lax`, 12 h | `src/features/auth/session.ts` |
 | **Roles enforced on the server** before every route (admin, resepsjonist, robotansvarlig); paid APIs need a login and the right role (checked live: `/api/identify`, `/api/scene`, `/api/voice/token`, `/api/reception/*` answer 401 without a session) | `src/proxy.ts`, `src/features/auth/access.ts`, `src/features/auth/roles.ts` |
 | **Login rate limit**: 5 failed tries per IP and username, 20 per IP, per 5 minutes (per server instance) | `src/features/auth/rateLimit.ts` |
-| **Per-user rate limits on the paid routes**, counted before any Claude or ElevenLabs call, 429 + `Retry-After`: `/api/identify` 40 a minute and 400 an hour, `/api/scene` 12 and 360, `/api/voice/token` and `/api/reception/token` 10 and 60 (per server instance) | `src/app/api/_lib/paidRouteLimit.ts` |
 | **A separate jury account** with its own password (admin view), so the team's password is never printed; deleted after the event | `scripts/lobby-hash.mjs` |
 | **CSRF**: every auth POST refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site`; no open redirect after login | `src/features/auth/handlers.ts` (`isSameOrigin`), `src/features/auth/access.ts` (`safeNext`) |
 | **Security headers**: `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options: DENY`, `Permissions-Policy` (camera and microphone for this origin only), and a CSP that starts from `default-src 'self'`: `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:` (no `eval` in production), styles, images and fonts from our origin, `connect-src` limited to our origin, the local viewer and ElevenLabs, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`; HSTS added by Vercel. Checked on :3300 Sun 03:05. Production (`main`) still serves the older, shorter header until it is redeployed | `next.config.ts` |
@@ -358,8 +372,9 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
 
 - The app's Claude spend meter lives in memory per server instance, so on serverless it resets on a
   cold start; set provider-side spend limits too.
-- The per-user limits on the paid routes, like the login limiter, live in memory per server instance:
-  on serverless, N instances allow N times the limit. The provider-side spend limits are the hard cap.
+- The paid routes (`/api/identify`, `/api/scene`, `/api/voice/token`, `/api/reception/token`) have no
+  per-user rate limit: a logged-in user is stopped only by the app's Claude meter, the agents' daily
+  call caps and the provider-side spend limits.
 - The team's accounts share one password (team lead's choice; `docs/checks/threat-model.md`); the jury
   has its own. Sessions can't be revoked one by one. **The named security step before a pilot:** one
   account per person with its own password, and sessions revocable one by one (`TODO(phase-3)`).
@@ -370,8 +385,7 @@ hover on a projector shows nothing (`src/features/reception/PhoneLink.tsx`).
   default retention applies.
 - `script-src` allows `'unsafe-inline'`, because Next.js streams each page's data as small inline
   scripts; a per-request nonce minted in `src/proxy.ts` is the stricter way (`TODO(phase-3)`).
-- The call log's cut-off (`RECEPTION_CALLS_SINCE`) is an env var: a deployment that doesn't set it
-  shows every call the agent has. The demo laptop sets it; Vercel doesn't yet.
+- Resepsjon's call log has no cut-off by date and shows call-back numbers in full (§ 4).
 
 ## 9. The name (trademark): the search is still to do
 

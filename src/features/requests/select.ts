@@ -222,7 +222,8 @@ export function fromPhoneTask(task: PhoneTask, assignment: PhoneAssignment | und
   return {
     id: task.id,
     source: "telefon",
-    badge: "Telefon (AI)",
+    // A seeded sample call is not in Resepsjon's call log: the badge says so.
+    badge: task.origin === "demo" ? "Telefon (AI) · Eksempel" : "Telefon (AI)",
     kind: task.kind,
     room: task.room,
     text: task.record.message,

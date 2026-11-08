@@ -134,7 +134,7 @@ describe("ReceptionScreen", () => {
     expect(screen.getByText("Ingen forespørsler ennå")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ring resepsjonen" }));
     expect(fake.start).toHaveBeenCalledTimes(1);
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   it("says before the call where it goes, what is kept and to use a made-up name", async () => {
@@ -144,7 +144,7 @@ describe("ReceptionScreen", () => {
     expect(call).toHaveAccessibleDescription(
       /ElevenLabs \(USA\), som sender teksten til Claude \(Anthropic, USA\).*Ingen lydopptak lagres, og teksten slettes etter 30 dager\..*bruk et oppdiktet navn/,
     );
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   it("shows a booking request as waiting, with room, dates and the direct price", async () => {
@@ -160,7 +160,7 @@ describe("ReceptionScreen", () => {
     expect(within(card).getByText("3042 kr (1521 kr/natt)")).toBeInTheDocument();
     expect(within(card).queryByText("Lovet ekstra")).not.toBeInTheDocument();
     expect(screen.queryByText("Ingen forespørsler ennå")).not.toBeInTheDocument();
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   it("confirms a booking on Bekreft, and the mark survives a reload", async () => {
@@ -174,13 +174,13 @@ describe("ReceptionScreen", () => {
     // Only the way back is left, and focus moved to it instead of falling to the page.
     expect(within(card).getAllByRole("button").map((button) => button.textContent)).toEqual(["Angre"]);
     expect(within(card).getByRole("button", { name: "Angre" })).toHaveFocus();
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
     first.unmount();
 
     render(<ReceptionScreen />);
     push(BOOKING);
     expect(within(screen.getByRole("article", { name: "Bookingforespørsel" })).getByText("Bekreftet")).toBeInTheDocument();
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   it("keeps what the receptionist took down across a reload, until staff settle it", async () => {
@@ -189,7 +189,7 @@ describe("ReceptionScreen", () => {
     push(BOOKING);
     push(MESSAGE);
     expect(screen.getAllByRole("article")).toHaveLength(2);
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
     first.unmount();
 
     // A new page load: nothing is pushed, the records come back from the browser, newest first.
@@ -200,7 +200,7 @@ describe("ReceptionScreen", () => {
     expect(within(cards[1]).getByText("Venter")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Bookinger og beskjeder" })).toBeInTheDocument();
     expect(screen.queryByText("Ingen forespørsler ennå")).not.toBeInTheDocument();
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   it("takes a tick back on Angre: the booking waits again", async () => {
@@ -216,7 +216,7 @@ describe("ReceptionScreen", () => {
     expect(within(card).getByRole("button", { name: "Bekreft" })).toHaveFocus();
     expect(within(card).getByRole("button", { name: "Avvis" })).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem("resepsjon-marks-v1") ?? "{}")).toEqual({});
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   it("rejects a booking on Avvis", async () => {
@@ -225,7 +225,7 @@ describe("ReceptionScreen", () => {
     push(BOOKING);
     fireEvent.click(screen.getByRole("button", { name: "Avvis" }));
     expect(within(screen.getByRole("article", { name: "Bookingforespørsel" })).getByText("Avvist")).toBeInTheDocument();
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   it("flags an urgent message and ticks it off on Ringt tilbake", async () => {
@@ -244,7 +244,7 @@ describe("ReceptionScreen", () => {
     fireEvent.click(within(card).getByRole("button", { name: "Angre" }));
     expect(within(card).getByText("Haster")).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Ringt tilbake" })).toBeInTheDocument();
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   it("shows a plain message as Ring tilbake", async () => {
@@ -252,7 +252,7 @@ describe("ReceptionScreen", () => {
     render(<ReceptionScreen />);
     push({ ...MESSAGE, id: "m-2", urgent: false });
     expect(within(screen.getByRole("article", { name: /Beskjed/ })).getByText("Ring tilbake")).toBeInTheDocument();
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   it("renders long and hostile text as plain text", async () => {
@@ -264,7 +264,7 @@ describe("ReceptionScreen", () => {
     expect(screen.getByText(hostile)).toBeInTheDocument();
     expect(screen.getByText(long.trim())).toHaveClass("break-words");
     expect(container.querySelector("img")).toBeNull();
-    await screen.findByText("Ingen samtaler ennå");
+    await screen.findByText("Ingen nye samtaler.");
   });
 
   describe("Samtalelogg", () => {
@@ -280,9 +280,51 @@ describe("ReceptionScreen", () => {
       expect(screen.getByText("Sjekk nettet og prøv igjen.")).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledWith("/api/reception/calls", { cache: "no-store" });
       fireEvent.click(screen.getByRole("button", { name: "Prøv igjen" }));
-      expect(await screen.findByText("Ingen samtaler ennå")).toBeInTheDocument();
-      expect(screen.getByText("Samtaler fra nettleseren og telefonen vises her.")).toBeInTheDocument();
+      expect(await screen.findByText("Ingen nye samtaler.")).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("opens on last night's sample calls, labelled Eksempel, instead of empty (jury round 4, the creative juror)", async () => {
+      stubCalls(ok({ calls: [] }));
+      render(<ReceptionScreen />);
+      await screen.findByText("Ingen nye samtaler.");
+      const samples = screen.getByRole("region", { name: /^Eksempel: 3 samtaler fra i natt/ });
+      expect(within(samples).getByText(/Oppdiktede gjester og numre/)).toBeInTheDocument();
+      expect(within(samples).getByRole("link", { name: "Forespørsler" })).toHaveAttribute("href", "/foresporsler");
+      const calls = within(within(samples).getByRole("list", { name: "Eksempelsamtaler" })).getAllByRole("listitem");
+      expect(calls).toHaveLength(3);
+      // The guest's own words, marked with their language, and what the receptionist wrote down.
+      expect(within(calls[0]).getByText("«Hi, this is room 214. Could we please get two extra towels?»")).toHaveAttribute("lang", "en");
+      expect(within(calls[0]).getByText("Rom 214 ønsker to ekstra håndklær.")).toBeInTheDocument();
+      expect(within(calls[0]).getByText("Camille Rousseau")).toBeInTheDocument();
+      expect(within(calls[0]).getByText("På engelsk")).toBeInTheDocument();
+      expect(within(calls[0]).getByText("Oppgave i Forespørsler")).toBeInTheDocument();
+      expect(within(calls[2]).getByText(/Ordnet av Kjersti Lund/)).toBeInTheDocument();
+      // Made-up numbers, masked like real ones, and never a link that calls them.
+      expect(within(calls[0]).getByText("+33 ••• •• 014")).toBeInTheDocument();
+      expect(samples.textContent).not.toContain("48 90");
+      expect(samples.querySelector('a[href^="tel:"]')).toBeNull();
+      // Panel title size, like Bookinger og beskjeder beside it.
+      expect(screen.getByRole("heading", { name: "Samtalelogg" })).toHaveClass("text-lg");
+    });
+
+    it("keeps the sample calls on screen when the live log fails", async () => {
+      stubCalls(async () => {
+        throw new TypeError("offline");
+      });
+      render(<ReceptionScreen />);
+      expect(await screen.findByText("Fikk ikke hentet samtaleloggen")).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: /^Eksempel: 3 samtaler fra i natt/ })).toBeInTheDocument();
+    });
+
+    it("puts a live call above the samples", async () => {
+      stubCalls(ok({ calls: [NOTE] }));
+      render(<ReceptionScreen />);
+      const live = await screen.findByRole("list", { name: "Siste samtaler" });
+      const samples = screen.getByRole("list", { name: "Eksempelsamtaler" });
+      expect(within(live).getByText("Ola Hansen")).toBeInTheDocument();
+      expect(live.compareDocumentPosition(samples) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByText("Ingen nye samtaler.")).not.toBeInTheDocument();
     });
 
     it("says the receptionist is not set up when the server answers 503", async () => {
@@ -315,7 +357,7 @@ describe("ReceptionScreen", () => {
     it("fetches again on Oppdater", async () => {
       const fetchMock = stubCalls(ok({ calls: [] }), ok({ calls: [NOTE] }));
       render(<ReceptionScreen />);
-      await screen.findByText("Ingen samtaler ennå");
+      await screen.findByText("Ingen nye samtaler.");
       fireEvent.click(screen.getByRole("button", { name: "Oppdater" }));
       expect(await screen.findByText("Ola Hansen")).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -324,7 +366,7 @@ describe("ReceptionScreen", () => {
     it("fetches again once when a call ends", async () => {
       const fetchMock = stubCalls(ok({ calls: [] }), ok({ calls: [NOTE] }));
       const view = render(<ReceptionScreen />);
-      await screen.findByText("Ingen samtaler ennå");
+      await screen.findByText("Ingen nye samtaler.");
       fake.connected = true;
       view.rerender(<ReceptionScreen />);
       expect(screen.getByRole("button", { name: "Legg på" })).toBeInTheDocument();

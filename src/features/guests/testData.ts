@@ -41,7 +41,10 @@ type Seed = {
  * 301–314, the seed-16 night in public/runs/demo.jsonl). These bookings are the booking system:
  * last night 31 of 36 rooms were sold (rooms/pms.ts reads them from here); 137 is closed for
  * maintenance and 132, 210, 312, 314 were free. 209 and 213 are booked, and the robot found them
- * empty and tidy; 210 has no booking, and the robot met a guest there.
+ * empty and tidy: 213 was due out today and never checked out (a sleeper, sold after reception
+ * confirms), while 209 is Hiroshi Sato's until tomorrow and the robot carried an arriving guest's
+ * bags in there three times (a double allocation, held back); 210 has no booking, and the robot
+ * met a guest there.
  */
 const SEEDS: Seed[] = [
   // In house
@@ -59,7 +62,8 @@ const SEEDS: Seed[] = [
   { name: "Hiroshi Sato", room: "room-209", from: -1, to: 1 },
   { name: "Astrid Moe", room: "room-211", from: -2, to: 3, guests: 2 },
   { name: "Petter Aas", room: "room-212", from: -1, to: 1 },
-  { name: "Ola Nygård", room: "room-213", from: -1, to: 2 },
+  // Due out today and never checked out: the robot found 213 empty and tidy at 04:24 (the textbook sleeper).
+  { name: "Ola Nygård", room: "room-213", from: -1, to: 0 },
   { name: "Liv Austad", room: "room-301", from: -1, to: 3 },
   { name: "Håkon Teigen", room: "room-302", from: -1, to: 2 },
   { name: "Marte Eide", room: "room-303", from: -2, to: 1, guests: 2 },

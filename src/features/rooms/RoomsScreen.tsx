@@ -18,6 +18,7 @@ import { byRole, cleanersToday } from "@/features/staff/testData";
 import { Badge, Button, buttonClasses, Card, EmptyState, ErrorState, Monogram, Skeleton, Stat } from "@/ui";
 import { assignRooms } from "./housekeeping";
 import { RoomChecksPanel } from "./RoomChecksPanel";
+import { useRoomCheck } from "./useRoomCheck";
 
 /**
  * Rom og renhold: the key rack (every room's status as the robot last saw it), today's cleaning
@@ -38,6 +39,8 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
   const outOfOrder = useMemo(() => outOfOrderRooms(maintenance), [maintenance]);
   const rackRooms = useMemo(() => (rooms ? withClosed(rooms, outOfOrder) : null), [rooms, outOfOrder]);
   const assignments = useMemo(() => (rooms ? assignRooms(rooms, cleanersToday()) : null), [rooms]);
+  // "Klare til salg" is the one figure Oversikt shows too: ready, free in the booking system or released today.
+  const { money } = useRoomCheck(ready ? run.lines : null, rackRooms);
 
   const [sheet, setSheet] = useState<{ room: string; open: boolean } | null>(initialRoom ? { room: initialRoom, open: true } : null);
   const openRoom = useCallback((room: string | null) => {
@@ -96,14 +99,19 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
     >
       <FigureRow label="Rommene i tall">
         {/* Ready rooms in green; the rest are plain counts. The rooms to clean are the header's action. */}
-        <Figure label="Klare til salg" value={counts?.klar} unit={rooms ? `av ${rooms.length}` : undefined} tone={counts?.klar ? "success" : "default"} />
+        <Figure
+          label="Klare til salg"
+          value={money?.readyToSell ?? undefined}
+          unit={rooms ? `av ${rooms.length}` : undefined}
+          tone={money?.readyToSell ? "success" : "default"}
+        />
         <Figure label="Må vaskes" value={counts?.ma_vaskes} />
         <Figure label="Ikke sjekket" value={counts?.ukjent} />
         <Figure label="Ute av drift" value={rooms ? outOfOrder.length : undefined} />
       </FigureRow>
 
       {/* Good news first: rooms the booking system thought were taken that can be sold today. */}
-      <RoomChecksPanel lines={ready ? run.lines : null} roomsInHotel={rooms?.length} />
+      <RoomChecksPanel lines={ready ? run.lines : null} rooms={rackRooms} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] lg:items-start lg:gap-8">
         <RoomBoard rooms={rackRooms} clock={robot?.clock ?? null} onOpen={openRoom} />

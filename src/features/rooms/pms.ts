@@ -13,6 +13,8 @@ export type PmsRoom = {
   room: string;
   /** The guest on the booking, when the system has one. */
   guest: string | null;
+  /** The booking's departure, YYYY-MM-DD: today is a guest due out (a sleeper when the room is empty). */
+  departure: string;
   /** Last night's room rate, NOK, breakfast included. */
   rate: number;
 };
@@ -39,7 +41,7 @@ export function pmsLastNight(today: string = osloToday()): ReadonlyMap<string, P
   const occupied = new Map<string, PmsRoom>();
   for (const stay of stays(today)) {
     if (!stay.room || stay.arrival >= today || stay.departure < today) continue;
-    occupied.set(stay.room, { room: stay.room, guest: stay.name, rate: RATES[stay.room] ?? STANDARD_RATE });
+    occupied.set(stay.room, { room: stay.room, guest: stay.name, departure: stay.departure, rate: RATES[stay.room] ?? STANDARD_RATE });
   }
   return occupied;
 }

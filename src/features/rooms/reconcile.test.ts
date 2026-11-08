@@ -2,9 +2,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { parseRunLog } from "@/features/nightshift/runlog";
+import type { RunLine } from "@/features/nightshift/runlog";
+import { addDays, osloToday } from "@/features/reception/dates";
 import { pmsLastNight, revenueLastNight } from "./pms";
-import { markRoom, personAtDoor, reconcileRooms, robotRoomChecks, ROOM_CHECK_MARKS } from "./reconcile";
+import { markRoom, personAtDoor, reconcileNight, reconcileRooms, robotDeliveries, robotRoomChecks, ROOM_CHECK_MARKS } from "./reconcile";
 import { TEST_NIGHT } from "./testNight";
+
+const demoLines = () => parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8")).lines;
 
 describe("the robot's room checks against the booking system", () => {
   it("keeps the robot's last word per room, with the shift clock and what it saw", () => {
@@ -16,18 +20,49 @@ describe("the robot's room checks against the booking system", () => {
 
   it("finds the rooms that can be sold, the guest without a booking, and leaves out a check before 01:00", () => {
     const result = reconcileRooms(robotRoomChecks(TEST_NIGHT), pmsLastNight());
-    expect(result.sellable).toEqual([{ room: "room-311", guest: "Silje Mørk", at: "03:14:30" }]);
+    expect(result.sellable).toEqual([{ room: "room-311", guest: "Silje Mørk", at: "03:14:30", departure: addDays(osloToday(), 1) }]);
+    expect(result.held).toEqual([]);
     expect(result.guestFound).toEqual([{ room: "room-210", at: "03:15:28", source: "knock", who: "Ms Bakke" }]);
     expect(result.tooEarly.map((row) => row.room)).toEqual(["room-301"]);
     expect(result).toMatchObject({ checked: 4, agree: 1 });
   });
 
-  it("reads the recorded demo night: 2 rooms to sell (209, 213), 1 guest without a booking (210)", () => {
-    const { lines } = parseRunLog(readFileSync(resolve(process.cwd(), "public/runs/demo.jsonl"), "utf8"));
-    const result = reconcileRooms(robotRoomChecks(lines), pmsLastNight());
-    expect(result.sellable.map((row) => row.room)).toEqual(["room-209", "room-213"]);
+  it("reads the recorded demo night: 213 to sell (due out today), 209 held (the robot carried an arrival's bags in), 210 a guest without a booking", () => {
+    const today = osloToday();
+    const result = reconcileNight(demoLines(), pmsLastNight(today));
+    expect(result.sellable).toEqual([{ room: "room-213", guest: "Ola Nygård", at: "04:24:42", departure: today }]);
+    expect(result.held).toHaveLength(1);
+    const [held] = result.held;
+    expect(held).toMatchObject({ room: "room-209", guest: "Hiroshi Sato", at: "03:47:31", departure: addDays(today, 1), deliveredAt: "05:16:33", arrival: true });
+    expect(held.deliveries.map((delivery) => delivery.at)).toEqual(["01:29:26", "04:35:26", "05:16:33"]);
     expect(result.guestFound.map((row) => row.room)).toEqual(["room-210"]);
     expect(result.agree).toBe(result.checked - 3);
+  });
+
+  it("lists what the robot put in each room tonight, and which of it was an arriving guest's bags", () => {
+    const deliveries = robotDeliveries(demoLines());
+    expect(deliveries.get("room-209")?.map((delivery) => [delivery.at, delivery.item, delivery.arrival])).toEqual([
+      ["01:29:26", "luggage-209", true],
+      ["04:35:26", "luggage-209-64", true],
+      ["05:16:33", "luggage-209-77", true],
+    ]);
+    expect(deliveries.get("room-136")?.every((delivery) => !delivery.arrival)).toBe(true);
+    // A sign put down in a corridor is not a delivery into a room.
+    expect([...deliveries.keys()].every((room) => room.startsWith("room-"))).toBe(true);
+  });
+
+  it("holds a room the robot delivered into after its check, and leaves one delivered to before the check for sale", () => {
+    const place = (clock: string, item: string): RunLine => ({ v: 1, type: "call", cmd: "place", args: { item, where: "room-311" }, ok: true, clock });
+    const after = reconcileNight([...TEST_NIGHT, place("04:10:00", "towel")], pmsLastNight());
+    expect(after.sellable).toEqual([]);
+    expect(after.held).toMatchObject([{ room: "room-311", deliveredAt: "04:10:00", arrival: false }]);
+    // A towel at 23:00 says nothing about 03:14; the empty-and-tidy check stands.
+    const before = reconcileNight([...TEST_NIGHT.slice(0, 3), place("23:00:00", "towel"), ...TEST_NIGHT.slice(3)], pmsLastNight());
+    expect(before.sellable.map((row) => row.room)).toEqual(["room-311"]);
+    // Bags for an arrival hold the room whenever they came.
+    const bags = reconcileNight([...TEST_NIGHT.slice(0, 3), place("23:00:00", "luggage-311"), ...TEST_NIGHT.slice(3)], pmsLastNight());
+    expect(bags.held.map((row) => row.room)).toEqual(["room-311"]);
+    expect(bags.agree).toBe(1);
   });
 
   it("names the person who opened the door, and nothing else", () => {
@@ -56,5 +91,14 @@ describe("the marks staff set per day", () => {
 
     localStorage.setItem("lobby:room-check-marks", JSON.stringify({ "2026-11-08": { "room-1": { action: "nonsense" } }, x: 3 }));
     expect(ROOM_CHECK_MARKS.read()).toEqual({ "2026-11-08": {} });
+  });
+
+  it("keeps the two steps of a sale: confirmed, then released with the confirmation it stood on", () => {
+    const confirmed = { action: "confirmed" as const, at: "06:02", by: "Siri Haugen", stamp: "2026-11-08T05:02:00.000Z" };
+    markRoom("2026-11-08", "room-213", confirmed);
+    expect(ROOM_CHECK_MARKS.read()["2026-11-08"]["room-213"]).toEqual(confirmed);
+    const released = { action: "released" as const, at: "06:03", by: "Siri Haugen", stamp: "2026-11-08T05:03:00.000Z", confirmed: { at: "06:02", by: "Siri Haugen", stamp: confirmed.stamp } };
+    markRoom("2026-11-08", "room-213", released);
+    expect(ROOM_CHECK_MARKS.read()["2026-11-08"]["room-213"]).toEqual(released);
   });
 });

@@ -1,59 +1,62 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { canAccess, useSession } from "@/features/auth";
 import { hhmm } from "@/features/dashboard/format";
+import type { RoomView } from "@/features/dashboard/selectors";
 import { PanelHead } from "@/features/modules/ModulePage";
 import { SourceNote } from "@/features/modules/SourceNote";
 import type { RunLine } from "@/features/nightshift/runlog";
 import { osloToday } from "@/features/reception/dates";
 import { formatClock } from "@/features/reception/format";
 import { Badge, Button, Card, RegenIcon, Skeleton } from "@/ui";
-import { formatKroner } from "@/features/dashboard/format";
-import { pmsLastNight, revenueLastNight, sellableValue } from "./pms";
-import { type GuestFound, markRoom, reconcileRooms, robotRoomChecks, ROOM_CHECK_MARKS, type RoomCheckMark, type Sellable } from "./reconcile";
+import { actionStamp, stampNow, useNowMs } from "@/ui/stamp";
+import { moneyHeadline, moneyMethod, releasedLine, shortDate } from "./money";
+import { type GuestFound, type Held, markRoom, type RoomCheckMark, type Sellable } from "./reconcile";
+import { SellSteps } from "./SellSteps";
+import { useRoomCheck } from "./useRoomCheck";
 
 const number = (room: string) => room.replace(/^room-/, "");
 
+/** "01:29, 04:35 og 05:16". */
+function clocks(times: readonly (string | null)[]): string {
+  const list = times.flatMap((time) => (time ? [hhmm(time)] : []));
+  return list.length <= 1 ? list.join("") : `${list.slice(0, -1).join(", ")} og ${list.at(-1)}`;
+}
+
 /**
  * Rom og renhold's panel for the robot's room checks against the booking system: the rooms the system
- * thought were occupied that can be sold today (good news first), and the rooms where the robot met a
- * guest the system doesn't have. One action each, marked per day in this browser.
+ * thought were occupied that can be sold after reception confirms (two steps, never one tap), the rooms
+ * the robot held back because it delivered into them tonight (a double allocation caught), and the
+ * rooms where the robot met a guest the system doesn't have. Marked per day in this browser.
  * TODO(phase-3): *Merk som ledig for salg* writes the room status to the PMS; the task goes to the
  * shared request desk.
  */
-export function RoomChecksPanel({ lines, today = osloToday(), roomsInHotel = 36 }: { lines: readonly RunLine[] | null; today?: string; roomsInHotel?: number }) {
+export function RoomChecksPanel({ lines, today = osloToday(), rooms = null }: { lines: readonly RunLine[] | null; today?: string; rooms?: readonly RoomView[] | null }) {
   const { user, effectiveRole } = useSession();
   const requestsLink = effectiveRole === null || canAccess(effectiveRole, "/foresporsler");
-  const marks = ROOM_CHECK_MARKS.use()[today] ?? {};
-  const result = useMemo(() => (lines ? reconcileRooms(robotRoomChecks(lines), pmsLastNight(today)) : null), [lines, today]);
-  // Last night's average rate from the same booking system: what a room found sellable is worth today.
-  const revenue = useMemo(() => revenueLastNight(roomsInHotel, pmsLastNight(today)), [roomsInHotel, today]);
+  const guestsLink = effectiveRole === null || canAccess(effectiveRole, "/gjester");
+  const { reconciliation: result, money, marks } = useRoomCheck(lines, rooms, today);
   const list = useRef<HTMLDivElement>(null);
   const refocus = useRef<string | null>(null);
 
-  // The row's button swaps for its result (or back): keep the keyboard on that row.
+  // The guest row's button swaps for its result (or back): keep the keyboard on that row.
   useEffect(() => {
     if (!refocus.current) return;
     list.current?.querySelector<HTMLElement>(`[data-room-action="${refocus.current}"]`)?.focus();
     refocus.current = null;
   });
 
-  const act = (room: string, action: RoomCheckMark["action"] | null) => {
+  const task = (room: string, on: boolean) => {
     refocus.current = room;
-    markRoom(today, room, action ? { action, at: formatClock(new Date().toISOString()), by: user?.name ?? null } : null);
+    markRoom(today, room, on ? { action: "task", at: formatClock(new Date().toISOString()), by: user?.name ?? null, stamp: stampNow() } : null);
   };
 
   const sellable = result?.sellable.length ?? 0;
-  const released = result?.sellable.filter((row) => marks[row.room]?.action === "released").length ?? 0;
-  const value = sellableValue(sellable, revenue);
-  const headline =
-    sellable === 0
-      ? null
-      : released === sellable
-        ? `${sellable === 1 ? "Rommet" : `Alle ${sellable} rom`} er merket ledig for salg i dag · ca. ${formatKroner(value)} kr.`
-        : `${sellable} rom kan selges i dag · ca. ${formatKroner(value)} kr`;
+  const held = result?.held.length ?? 0;
+  const headline = money ? moneyHeadline(money) : null;
+  const allReleased = money ? money.toSell.length === 0 && money.released.length > 0 : false;
 
   return (
     <section aria-labelledby="room-checks-heading" data-enter>
@@ -64,7 +67,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), roomsInHotel = 36 
           note={result ? `${result.agree} av ${result.checked} sjekkede rom stemmer med systemet.` : undefined}
         />
 
-        {!result ? (
+        {!result || !money ? (
           <div role="status" aria-busy="true" className="mt-4 flex flex-col gap-3">
             <span className="sr-only">Henter robotens romsjekk</span>
             <Skeleton className="h-7 w-2/3" />
@@ -76,7 +79,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), roomsInHotel = 36 
             <h3 className="text-base font-semibold">Roboten har ikke sjekket noen rom ennå</h3>
             <p className="text-base text-muted">Når roboten sjekker rom i natt, sammenligner Fettero det den finner med bookingsystemet her.</p>
           </div>
-        ) : sellable === 0 && result.guestFound.length === 0 ? (
+        ) : sellable === 0 && held === 0 && result.guestFound.length === 0 ? (
           <p className="mt-3 flex items-start gap-2 text-base">
             <RegenIcon name="circle-check" size={20} className="mt-0.5 shrink-0 text-success" />
             <span>
@@ -87,24 +90,41 @@ export function RoomChecksPanel({ lines, today = osloToday(), roomsInHotel = 36 
           <div ref={list} className="mt-4 flex flex-col gap-5">
             {headline && (
               <div className="flex items-start gap-2">
-                <RegenIcon name="circle-check" size={22} className="mt-0.5 shrink-0 text-success" />
+                {/* Green only for what is done: a room released. A room still to confirm is plain. */}
+                <RegenIcon name={allReleased ? "circle-check" : "key"} size={22} className={allReleased ? "mt-0.5 shrink-0 text-success" : "mt-0.5 shrink-0 text-muted"} />
                 <div className="flex flex-col gap-0.5">
-                  <p className="text-lg font-semibold tracking-[-0.01em]">{headline}</p>
-                  <p className="text-sm text-muted">
-                    Systemet trodde {sellable === 1 ? "det var" : "de var"} opptatt. Anslag: {sellable} × snittprisen i natt, {formatKroner(revenue.adr)} kr (testdata).
+                  <p aria-live="polite" className="text-lg font-semibold tracking-[-0.01em]">
+                    {headline}
                   </p>
+                  {(sellable > 0 || money.released.length > 0) && (
+                    <p className="text-sm text-muted">
+                      {releasedLine(money)}. {moneyMethod(money)}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10 xl:grid-cols-3">
               {sellable > 0 && (
                 <div className="min-w-0">
                   <h3 className="flex items-baseline gap-2 text-sm font-semibold">
-                    Kan selges i dag <span className="font-normal text-muted tabular-nums">{sellable}</span>
+                    Kan selges etter bekreftelse <span className="font-normal text-muted tabular-nums">{sellable}</span>
                   </h3>
                   <ul className="mt-1 divide-y divide-line">
                     {result.sellable.map((row) => (
-                      <SellableRow key={row.room} row={row} mark={marks[row.room]} onAct={act} />
+                      <SellableRow key={row.room} row={row} mark={marks[row.room]} today={today} />
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {held > 0 && (
+                <div className="min-w-0">
+                  <h3 className="flex items-baseline gap-2 text-sm font-semibold">
+                    Holdt tilbake <span className="font-normal text-muted tabular-nums">{held}</span>
+                  </h3>
+                  <ul className="mt-1 divide-y divide-line">
+                    {result.held.map((row) => (
+                      <HeldRow key={row.room} row={row} today={today} guestsLink={guestsLink} />
                     ))}
                   </ul>
                 </div>
@@ -116,7 +136,7 @@ export function RoomChecksPanel({ lines, today = osloToday(), roomsInHotel = 36 
                   </h3>
                   <ul className="mt-1 divide-y divide-line">
                     {result.guestFound.map((row) => (
-                      <GuestRow key={row.room} row={row} mark={marks[row.room]} onAct={act} requestsLink={requestsLink} />
+                      <GuestRow key={row.room} row={row} mark={marks[row.room]} onTask={task} requestsLink={requestsLink} />
                     ))}
                   </ul>
                 </div>
@@ -137,6 +157,22 @@ export function RoomChecksPanel({ lines, today = osloToday(), roomsInHotel = 36 
   );
 }
 
+/** What the booking system says about a booked room: who, and until when ("skulle reise i dag 8.11"). */
+export function bookingLine(row: Pick<Sellable, "guest" | "departure">, today: string): string {
+  const who = row.guest ? ` (${row.guest})` : "";
+  if (!row.departure) return `Systemet: opptatt${who}`;
+  return row.departure <= today
+    ? `Systemet: opptatt${who}, skulle reise i dag ${shortDate(row.departure)}. Utsjekk ikke registrert`
+    : `Systemet: opptatt${who} til ${shortDate(row.departure)}`;
+}
+
+/** "Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til 9.11. Dobbelt tildelt?" */
+export function heldLine(row: Held): string {
+  const until = row.departure ? ` til ${shortDate(row.departure)}` : "";
+  if (row.arrival) return `Bagasje levert ${hhmm(row.deliveredAt)} for dagens ankomst, men bookingen har gjest${until}. Dobbelt tildelt?`;
+  return `Roboten leverte noe inn på rommet kl. ${hhmm(row.deliveredAt)}, etter sjekken: rommet er i bruk.`;
+}
+
 function RowFrame({ room, children, action }: { room: string; children: React.ReactNode; action: React.ReactNode }) {
   return (
     <li className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 py-3">
@@ -148,15 +184,13 @@ function RowFrame({ room, children, action }: { room: string; children: React.Re
   );
 }
 
-function Done({ room, label, tone, mark, onUndo, extra }: { room: string; label: string; tone: "success" | "neutral"; mark: RoomCheckMark; onUndo: () => void; extra?: React.ReactNode }) {
+function Done({ room, label, mark, onUndo, extra }: { room: string; label: string; mark: RoomCheckMark; onUndo: () => void; extra?: React.ReactNode }) {
+  const now = useNowMs();
   return (
     <>
       <span aria-live="polite" className="flex flex-wrap items-center gap-2">
-        <Badge tone={tone}>{label}</Badge>
-        <span className="text-sm whitespace-nowrap text-muted">
-          {mark.at}
-          {mark.by ? ` · ${mark.by}` : ""}
-        </span>
+        <Badge>{label}</Badge>
+        <span className="text-sm whitespace-nowrap text-muted">{actionStamp(mark.by, mark.stamp, now)}</span>
       </span>
       {extra}
       <Button variant="ghost" size="sm" data-room-action={room} onClick={onUndo} aria-label={`Angre: rom ${number(room)}`}>
@@ -166,26 +200,41 @@ function Done({ room, label, tone, mark, onUndo, extra }: { room: string; label:
   );
 }
 
-function SellableRow({ row, mark, onAct }: { row: Sellable; mark: RoomCheckMark | undefined; onAct: (room: string, action: RoomCheckMark["action"] | null) => void }) {
+function SellableRow({ row, mark, today }: { row: Sellable; mark: RoomCheckMark | undefined; today: string }) {
+  return (
+    <RowFrame room={row.room} action={<SellSteps room={row.room} mark={mark} today={today} />}>
+      <p className="font-semibold">{bookingLine(row, today)}.</p>
+      <p className="text-muted">
+        Roboten fant rommet tomt og ryddig <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>.
+      </p>
+    </RowFrame>
+  );
+}
+
+/** The robot's catch: it found the room empty, but it had carried bags in for an arrival. Never for sale. */
+function HeldRow({ row, today, guestsLink }: { row: Held; today: string; guestsLink: boolean }) {
+  const earlier = row.deliveries.slice(0, -1).map((delivery) => delivery.at);
   return (
     <RowFrame
       room={row.room}
       action={
-        mark?.action === "released" ? (
-          <Done room={row.room} label="Ledig for salg" tone="success" mark={mark} onUndo={() => onAct(row.room, null)} />
-        ) : (
-          <Button variant="secondary" size="sm" data-room-action={row.room} onClick={() => onAct(row.room, "released")} aria-label={`Merk rom ${number(row.room)} som ledig for salg`}>
-            Merk som ledig for salg
-          </Button>
-        )
+        <>
+          <Badge tone="success">
+            <RegenIcon name="shield-check" size={14} className="mr-1 inline-block align-[-0.15em]" />
+            Roboten stoppet salget
+          </Badge>
+          {guestsLink && (
+            <Link href="/gjester" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
+              Åpne Gjester
+            </Link>
+          )}
+        </>
       }
     >
-      <p>
-        <span className="font-semibold">Systemet: opptatt</span>
-        {row.guest ? <span className="text-muted"> ({row.guest})</span> : null}
-      </p>
+      <p className="font-semibold">{heldLine(row)}</p>
       <p className="text-muted">
-        Roboten fant rommet tomt og ryddig <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>.
+        {bookingLine(row, today)}. Roboten fant rommet tomt og ryddig <span className="whitespace-nowrap">kl. {hhmm(row.at)}</span>
+        {earlier.length > 0 ? `, og bar inn bagasje også kl. ${clocks(earlier)}` : ""}. Flytt én av dem før innsjekk kl. 15:00.
       </p>
     </RowFrame>
   );
@@ -194,12 +243,12 @@ function SellableRow({ row, mark, onAct }: { row: Sellable; mark: RoomCheckMark 
 function GuestRow({
   row,
   mark,
-  onAct,
+  onTask,
   requestsLink,
 }: {
   row: GuestFound;
   mark: RoomCheckMark | undefined;
-  onAct: (room: string, action: RoomCheckMark["action"] | null) => void;
+  onTask: (room: string, on: boolean) => void;
   requestsLink: boolean;
 }) {
   const seen =
@@ -216,9 +265,8 @@ function GuestRow({
           <Done
             room={row.room}
             label="Oppgave til resepsjonen"
-            tone="neutral"
             mark={mark}
-            onUndo={() => onAct(row.room, null)}
+            onUndo={() => onTask(row.room, false)}
             extra={
               requestsLink ? (
                 <Link href="/foresporsler" className="flex min-h-11 items-center text-sm font-semibold text-accent-text hover:underline">
@@ -228,7 +276,7 @@ function GuestRow({
             }
           />
         ) : (
-          <Button variant="secondary" size="sm" data-room-action={row.room} onClick={() => onAct(row.room, "task")} aria-label={`Lag oppgave for resepsjonen: rom ${number(row.room)}`}>
+          <Button variant="secondary" size="sm" data-room-action={row.room} onClick={() => onTask(row.room, true)} aria-label={`Lag oppgave for resepsjonen: rom ${number(row.room)}`}>
             Lag oppgave for resepsjonen
           </Button>
         )

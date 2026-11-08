@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SessionProvider } from "@/features/auth/SessionProvider";
 import { formatKroner } from "@/features/dashboard/format";
+import type { RunLine } from "@/features/nightshift/runlog";
 import { pmsLastNight, revenueLastNight, sellableValue } from "./pms";
 import { RoomChecksPanel } from "./RoomChecksPanel";
 import { TEST_NIGHT } from "./testNight";
@@ -25,36 +26,58 @@ function rowOf(room: string): HTMLElement {
 beforeEach(() => localStorage.clear());
 
 describe("RoomChecksPanel (Rom: the robot's room checks against the booking system)", () => {
-  it("leads with the good news and shows each room with what the system says and what the robot found", () => {
+  it("leads with the money and shows each room with what the system says and what the robot found", () => {
     render(asDesk(<RoomChecksPanel lines={TEST_NIGHT} today={TODAY} />));
-    // The money, first: the line a hotel buys.
-    expect(screen.getByText(`1 rom kan selges i dag · ca. ${ONE_ROOM} kr`)).toBeInTheDocument();
-    expect(screen.getByText(`Systemet trodde det var opptatt. Anslag: 1 × snittprisen i natt, ${plain(formatKroner(REVENUE.adr))} kr (testdata).`)).toBeInTheDocument();
+    // The money, first, and honest: a person confirms before it is sold, and it is gross revenue.
+    expect(screen.getByText(`1 rom kan selges etter bekreftelse · ca. ${ONE_ROOM} kr`)).toBeInTheDocument();
+    expect(screen.getByText(`Frigitt i dag: ingen ennå. Brutto romsinntekt: 1 × snittprisen i natt, ${plain(formatKroner(REVENUE.adr))} kr (testdata). Ekstra inntekt bare en natt hotellet ellers ville vært utsolgt.`)).toBeInTheDocument();
     expect(screen.getByText("1 av 4 sjekkede rom stemmer med systemet.")).toBeInTheDocument();
     const sell = rowOf("311");
-    expect(within(sell).getByText("(Silje Mørk)")).toBeInTheDocument();
+    expect(within(sell).getByText("Systemet: opptatt (Silje Mørk) til 9.11.")).toBeInTheDocument();
     expect(within(sell).getByText("kl. 03:14")).toBeInTheDocument();
     expect(within(rowOf("210")).getByText(/Ms Bakke åpnet/)).toBeInTheDocument();
     // A check at 22:40 is not taken as proof the room is empty.
     expect(screen.getByText(/Teller ikke: rom 301 \(sjekket 22:40\)/)).toBeInTheDocument();
   });
 
-  it("marks a room as free to sell with who and when, keeps it for the day, and Angre takes it back", () => {
+  it("sells a room in two steps, never one tap: confirm with reception, then mark free to sell; each step stamps who, and Angre steps back", () => {
     const { unmount } = render(asDesk(<RoomChecksPanel lines={TEST_NIGHT} today={TODAY} />));
-    fireEvent.click(screen.getByRole("button", { name: "Merk rom 311 som ledig for salg" }));
-    const sell = rowOf("311");
+    expect(screen.queryByRole("button", { name: "Merk rom 311 som ledig for salg" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Bekreft med resepsjonen: rom 311" }));
+    let sell = rowOf("311");
+    expect(within(sell).getByText("Bekreftet med resepsjonen")).toBeInTheDocument();
+    expect(within(sell).getByText("Ana Pereira · nå")).toBeInTheDocument();
+    // Confirmed is not sold: the headline still offers the room.
+    expect(screen.getByText(`1 rom kan selges etter bekreftelse · ca. ${ONE_ROOM} kr`)).toBeInTheDocument();
+    const release = within(sell).getByRole("button", { name: "Merk rom 311 som ledig for salg" });
+    expect(release).toHaveFocus();
+
+    fireEvent.click(release);
+    sell = rowOf("311");
     expect(within(sell).getByText("Ledig for salg")).toBeInTheDocument();
-    expect(within(sell).getByText(/· Ana Pereira/)).toBeInTheDocument();
-    expect(screen.getByText(`Rommet er merket ledig for salg i dag · ca. ${ONE_ROOM} kr.`)).toBeInTheDocument();
-    const undo = within(sell).getByRole("button", { name: "Angre: rom 311" });
-    expect(undo).toHaveFocus();
+    expect(screen.getByText(`1 rom frigitt for salg i dag · ca. ${ONE_ROOM} kr`)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`^Frigitt i dag: 1 rom · ca. ${ONE_ROOM} kr\\.`))).toBeInTheDocument();
+    expect(within(sell).getByRole("button", { name: "Angre: rom 311" })).toHaveFocus();
     unmount();
 
-    // A reload keeps the mark.
+    // A reload keeps the mark; Angre goes back to the confirmation, not to nothing.
     render(asDesk(<RoomChecksPanel lines={TEST_NIGHT} today={TODAY} />));
-    expect(within(rowOf("311")).getByText("Ledig for salg")).toBeInTheDocument();
     fireEvent.click(within(rowOf("311")).getByRole("button", { name: "Angre: rom 311" }));
+    expect(within(rowOf("311")).getByText("Bekreftet med resepsjonen")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Merk rom 311 som ledig for salg" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Angre bekreftelsen: rom 311" }));
+    expect(screen.getByRole("button", { name: "Bekreft med resepsjonen: rom 311" })).toHaveFocus();
+  });
+
+  it("holds back a room the robot carried an arriving guest's bags into, as the catch it is, never for sale", () => {
+    const bags: RunLine = { v: 1, type: "call", cmd: "place", args: { item: "luggage-311", where: "room-311" }, ok: true, clock: "05:16:33" };
+    render(asDesk(<RoomChecksPanel lines={[...TEST_NIGHT.slice(0, -1), bags, ...TEST_NIGHT.slice(-1)]} today={TODAY} />));
+    expect(screen.getByText("Ingen rom å selge i dag · 1 holdt tilbake")).toBeInTheDocument();
+    const held = rowOf("311");
+    expect(within(held).getByText("Bagasje levert 05:16 for dagens ankomst, men bookingen har gjest til 9.11. Dobbelt tildelt?")).toBeInTheDocument();
+    expect(within(held).getByText("Roboten stoppet salget")).toBeInTheDocument();
+    expect(within(held).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(held).getByRole("link", { name: "Åpne Gjester" })).toHaveAttribute("href", "/gjester");
   });
 
   it("makes a task for reception for the guest the system doesn't have, with a way to Forespørsler", () => {

@@ -120,6 +120,7 @@ if [ -f pyproject.toml ] || [ -f requirements.txt ]; then
   STACK=1
   PY=python3
   [ -x .venv/bin/python ] && PY=.venv/bin/python
+  run "ledger: docs/runs/logs rebuild the build figures (SHA-256 checked)" "$PY" scripts/ledger.py --root docs/runs/logs --check
   if "$PY" -m ruff --version > /dev/null 2>&1; then
     run "ruff" "$PY" -m ruff check .
   else

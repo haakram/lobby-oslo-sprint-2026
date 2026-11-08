@@ -318,3 +318,28 @@ def test_a_score_blind_night_counts_its_own_checks_and_the_ones_that_said_no() -
     assert (row["blind_checks"], row["blind_said_no"]) == (2, 1)
     assert ledger.read_night(NIGHT)["blind_checks"] is None  # a sighted night has none
     assert "own_claims" not in ledger.COLUMNS
+
+
+def test_a_log_bundle_rebuilds_the_build_figures_on_its_own_and_catches_a_changed_log(tmp_path: Path, monkeypatch) -> None:
+    shift = "w2-" + "d" * 32
+    root = tmp_path / "final"
+    write_jsonl(root / "temp" / "live_runs.jsonl", [{"t": 1794096422.7, "shift": shift, "mode": "practice", "seed": 16}])
+    write_jsonl(root / "temp" / "runs" / f"{shift}.jsonl", [{**NIGHT[0], "shift": shift}, *NIGHT[1:]])
+    (root / "agent" / "data").mkdir(parents=True)
+    (root / "agent" / "data" / "replay_codes.json").write_text(json.dumps({"_doc": "", shift[:12]: {"commit": "cb72845"}}))
+    nights = ledger.collect([root])
+    for name, text in (("BUILDS_CSV", ledger.builds_csv(nights)), ("SUMMARY_TXT", ledger.summary(nights)),
+                       ("LEDGER_JSON", ledger.ledger_json(nights))):
+        (tmp_path / name).write_text(text, encoding="utf-8")
+        monkeypatch.setattr(ledger, name, tmp_path / name)
+
+    out = tmp_path / "logs"
+    assert [n.shift for n in ledger.write_bundle(nights, out)] == [shift]  # a final-branch build night
+    row = next(csv.DictReader((out / "manifest.csv").open(encoding="utf-8")))
+    assert (row["commit"], row["commit_source"], row["kind"], row["seed"]) == ("cb72845", "replay_codes", "build", "16")
+    assert (out / "SHA256SUMS").read_text().split() == [row["sha256"], f"{shift}.jsonl"]
+    assert ledger.main(["--root", str(out), "--check"]) == 0  # no checkout, no git: the copies and the manifest alone
+
+    log = out / f"{shift}.jsonl"
+    log.write_text(log.read_text().replace("Noted. Thanks.", "Noted.", 1))
+    assert ledger.main(["--root", str(out), "--check"]) == 1  # a changed log fails its digest

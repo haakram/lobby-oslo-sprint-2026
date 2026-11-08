@@ -94,15 +94,31 @@ Usage::
     python3 scripts/ledger.py --check               # exit 1 if the committed files are out of date
     python3 scripts/ledger.py --fidelity-from out.txt  # also the replay bed's fidelity table as CSV
     python3 scripts/ledger.py --faults-from real.md    # also the fault bed's per-type table (hamad/faults)
+    python3 scripts/ledger.py --bundle docs/runs/logs  # copy the logs behind the build-level figures, with a manifest
+    python3 scripts/ledger.py --root docs/runs/logs --check  # rebuild those figures from the copies alone
 
 ``docs/runs/summary.txt`` holds the printed summary (every figure README and DEMO quote), so ``--check`` also
 catches a figure that moved.
+
+The log bundle (review round 7, data review: "can anyone regenerate your ledger?"). The default roots are checkouts on
+one laptop; ``docs/runs/logs/`` holds a committed copy of the 28 logs the build-level figures rest on: the final
+branch's last four builds' complete nights (18, the demo night among them) and the dress rehearsal (10).
+``manifest.csv`` lists each with what a log alone cannot say, taken from the full ledger when the bundle was written:
+the start time from ``live_runs.jsonl`` (``t``, ``started``), the checkout, the night's ``kind``, its ``commit`` and
+``commit_source``; then its line count, size and SHA-256 (``SHA256SUMS`` has the same digests for
+``shasum -a 256 -c``). A root holding a ``manifest.csv`` is read as a bundle: every listed log is checked against its
+digest and read by the same rules as above (a stamped commit still wins). With ``--check`` it compares what the 28 logs
+rebuild with the committed files: ``builds.csv``'s rows for their commits, the summary's build-level lines (the final
+branch's split, distinct claims, holding against its own log and room checks; the rehearsal; the demo night) and
+``ledger.json``'s ``distinct_own``, ``room_checks_final`` and ``rehearsal``. Figures over all nights (the all-nights
+precision, the best night anywhere) need every log and are not in the bundle. scripts/check.sh runs that check.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
 import json
 import re
@@ -125,6 +141,14 @@ SUMMARY_TXT = REPO / "docs" / "runs" / "summary.txt"
 FAULT_TABLE_MD = REPO / "docs" / "runs" / "fault-bed-real.md"
 FAULT_BED_JSON = REPO / "src" / "features" / "nightshift" / "data" / "fault-bed.json"
 DEMO_LOG = REPO / "public" / "runs" / "demo.jsonl"
+# The log bundle (docs/runs/logs, see the docstring): its manifest, its digests, and what --check compares.
+BUNDLE_MANIFEST = "manifest.csv"
+BUNDLE_SUMS = "SHA256SUMS"
+MANIFEST_COLUMNS = ["shift", "seed", "t", "started", "checkout", "kind", "commit", "commit_source", "lines", "bytes",
+                    "sha256"]
+BUILD_LINES = ("done split, final branch's", "distinct own-judgement claims", "  holding against",
+               "  room checks contradicted", "dress rehearsal", "demo night")
+BUILD_JSON = ("distinct_own", "room_checks_final", "rehearsal")
 
 # Seed-specific board experiments, not builds (see the docstring): their nights are kind=board-test.
 BOARD_CHECKOUTS = frozenset({"lottery", "lawet", "wetoff", "lafinal", "boardtune", "hotelrules"})  # hotelrules: the hotel-rules cost experiment (NS_HOTEL_RULES=1)
@@ -510,26 +534,129 @@ def collect(roots: list[Path]) -> list[Night]:
                 night.commit, night.commit_source = head, "worktree_head"
         log = logs.get(shift)
         if log is not None:
-            lines = read_jsonl(log)
-            for key, value in read_night(lines).items():
-                setattr(night, key, value)
             try:
-                night.log = str(log.relative_to(home))
+                where = str(log.relative_to(home))
             except ValueError:
-                night.log = str(log)
-            start = start_line(lines)
-            if night.seed is None and isinstance(start.get("seed"), int):
-                night.seed = start["seed"]
-            stamp = start.get("build")
-            if isinstance(stamp, dict) and isinstance(stamp.get("commit"), str) and stamp["commit"]:
-                night.commit, night.commit_source = stamp["commit"][:7], "start_line"
-                if stamp.get("dirty") is True and night.kind == BUILD:
-                    night.kind = BOARD_TEST
-            if score_blind(lines):
-                night.kind = EXPERIMENT
+                where = str(log)
+            read_into(night, read_jsonl(log), where)
         nights.append(night)
     nights.sort(key=lambda night: night.t)
     return nights
+
+
+def read_into(night: Night, lines: list[dict], log: str) -> None:
+    """A night's columns from its log, then what its start line says (the seed, a stamped commit, a dirty tree, a
+    score-blind run), which wins over what was inferred from the checkout."""
+    for key, value in read_night(lines).items():
+        setattr(night, key, value)
+    night.log = log
+    start = start_line(lines)
+    if night.seed is None and isinstance(start.get("seed"), int):
+        night.seed = start["seed"]
+    stamp = start.get("build")
+    if isinstance(stamp, dict) and isinstance(stamp.get("commit"), str) and stamp["commit"]:
+        night.commit, night.commit_source = stamp["commit"][:7], "start_line"
+        if stamp.get("dirty") is True and night.kind == BUILD:
+            night.kind = BOARD_TEST
+    if score_blind(lines):
+        night.kind = EXPERIMENT
+
+
+def bundle_nights(nights: list[Night]) -> list[Night]:
+    """The nights behind the build-level figures: the final branch's last four builds' complete nights, the dress
+    rehearsal and the demo night (one of the first), by wall time."""
+    final = [n for n in nights if n.log and n.complete and n.kind == BUILD and n.commit in FINAL_BUILDS]
+    demo = DEMO_LOG.is_file() and start_line(read_jsonl(DEMO_LOG)).get("shift")
+    chosen = {n.shift: n for n in [*final, *rehearsal_nights(nights), *(n for n in nights if n.log and n.shift == demo)]}
+    return sorted(chosen.values(), key=lambda n: n.t)
+
+
+def write_bundle(nights: list[Night], out: Path) -> list[Night]:
+    """Copy the logs behind the build-level figures into `out`, with manifest.csv and SHA256SUMS (see the docstring)."""
+    out.mkdir(parents=True, exist_ok=True)
+    manifest = io.StringIO()
+    writer = csv.writer(manifest, lineterminator="\n")
+    writer.writerow(MANIFEST_COLUMNS)
+    sums = []
+    chosen = bundle_nights(nights)
+    for n in chosen:
+        source = Path(n.log) if Path(n.log).is_absolute() else Path.home() / n.log
+        data = source.read_bytes()
+        (out / f"{n.shift}.jsonl").write_bytes(data)
+        digest = hashlib.sha256(data).hexdigest()
+        writer.writerow([n.shift, "" if n.seed is None else n.seed, repr(n.t), n.started, n.checkout, n.kind, n.commit,
+                         n.commit_source, data.count(b"\n"), len(data), digest])
+        sums.append(f"{digest}  {n.shift}.jsonl\n")
+    (out / BUNDLE_MANIFEST).write_text(manifest.getvalue(), encoding="utf-8")
+    (out / BUNDLE_SUMS).write_text("".join(sums), encoding="utf-8")
+    return chosen
+
+
+def collect_bundle(root: Path) -> tuple[list[Night], list[str]]:
+    """The nights of a log bundle: every log its manifest lists, checked against its SHA-256 and read by the same
+    rules as a checkout's (read_into). Also returns what did not check out (a missing, changed or unlisted log)."""
+    with (root / BUNDLE_MANIFEST).open(encoding="utf-8", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    listed = {row["shift"] for row in rows}
+    problems = [f"not in the manifest: {path.name}" for path in sorted(root.glob("w2-*.jsonl")) if path.stem not in listed]
+    nights: list[Night] = []
+    for row in rows:
+        path = root / f"{row['shift']}.jsonl"
+        if not path.is_file():
+            problems.append(f"missing: {path.name}")
+            continue
+        if hashlib.sha256(path.read_bytes()).hexdigest() != row["sha256"]:
+            problems.append(f"SHA-256 differs from the manifest: {path.name}")
+            continue
+        night = Night(shift=row["shift"], started=row["started"], seed=int(row["seed"]) if row["seed"] else None,
+                      checkout=row["checkout"], kind=row["kind"], commit=row["commit"],
+                      commit_source=row["commit_source"], t=float(row["t"]))
+        try:
+            where = str(path.relative_to(REPO))
+        except ValueError:
+            where = str(path)
+        read_into(night, read_jsonl(path), where)
+        nights.append(night)
+    nights.sort(key=lambda night: night.t)
+    return nights, problems
+
+
+def bundle_figures(nights: list[Night]) -> tuple[dict[str, str], list[str], dict]:
+    """What a bundle rebuilds: builds.csv's rows by commit, the summary's build-level lines, ledger.json's sections."""
+    rows = builds_csv(nights).splitlines()[1:]
+    lines = [line for line in summary(nights).splitlines() if line.startswith(BUILD_LINES)]
+    doc = json.loads(ledger_json(nights))
+    return {row.split(",", 1)[0]: row for row in rows}, lines, {key: doc[key] for key in BUILD_JSON}
+
+
+def check_bundle(root: Path, check: bool) -> int:
+    """Print what the bundle's logs rebuild; with `check`, compare it with the committed files (exit 1 on a difference)."""
+    nights, problems = collect_bundle(root)
+    rows, lines, sections = bundle_figures(nights)
+    if not check:
+        sys.stdout.write("".join(f"{line}\n" for line in lines) + "".join(f"{row}\n" for row in rows.values()))
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        return 1 if problems else 0
+    committed_rows = {row.split(",", 1)[0]: row for row in BUILDS_CSV.read_text(encoding="utf-8").splitlines()[1:]}
+    for commit, row in rows.items():
+        if committed_rows.get(commit) != row:
+            problems.append(f"builds.csv row {commit} differs:\n  logs:      {row}\n  committed: {committed_rows.get(commit)}")
+    committed_lines = [line for line in SUMMARY_TXT.read_text(encoding="utf-8").splitlines() if line.startswith(BUILD_LINES)]
+    if lines != committed_lines:
+        problems.append("summary.txt build-level lines differ:\n" + "\n".join(f"  logs:      {line}" for line in lines)
+                        + "\n" + "\n".join(f"  committed: {line}" for line in committed_lines))
+    committed_doc = json.loads(LEDGER_JSON.read_text(encoding="utf-8"))
+    for key, value in sections.items():
+        if committed_doc.get(key) != value:
+            problems.append(f"ledger.json {key} differs")
+    for problem in problems:
+        print(problem, file=sys.stderr)
+    if not problems:
+        print(f"{len(nights)} logs match their SHA-256; they rebuild builds.csv's {len(rows)} rows "
+              f"({', '.join(rows)}), the summary's {len(lines)} build-level lines and ledger.json's "
+              f"{', '.join(sections)}")
+    return 1 if problems else 0
 
 
 def ledger_csv(nights: list[Night]) -> str:
@@ -751,9 +878,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="exit 1 if the committed files differ")
     parser.add_argument("--fidelity-from", type=Path, help="the printed output of replaybench --fidelity")
     parser.add_argument("--faults-from", type=Path, help="the fault bed's per-type table (hamad/faults temp/faults/real.md)")
+    parser.add_argument("--bundle", type=Path, help="copy the logs behind the build-level figures into DIR, with a manifest")
     args = parser.parse_args(argv)
     roots = [p.expanduser().resolve() for p in args.root] if args.root else default_roots()
+    if len(roots) == 1 and (roots[0] / BUNDLE_MANIFEST).is_file():
+        return check_bundle(roots[0], args.check)
     nights = collect(roots)
+    if args.bundle:
+        chosen = write_bundle(nights, args.bundle.expanduser().resolve())
+        print(f"wrote {len(chosen)} logs, {BUNDLE_MANIFEST} and {BUNDLE_SUMS} to {args.bundle}")
+        return 0
     outputs = {LEDGER_CSV: ledger_csv(nights), BUILDS_CSV: builds_csv(nights), LEDGER_JSON: ledger_json(nights)}
     if args.fidelity_from:
         table = args.fidelity_from.read_text(encoding="utf-8")

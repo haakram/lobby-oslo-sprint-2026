@@ -94,6 +94,8 @@ export type CrossNight = {
   /** The same two, counting only the "done" said on the robot's own judgement. */
   allOwn?: OwnPrecision | null;
   buildOwn?: OwnPrecision | null;
+  /** The score-blind runs (kind=experiment): the agent never read the score or the reply when it said "done". */
+  blind?: Precision | null;
 };
 
 /** The whole ledger, and the build that played `shift`. */
@@ -108,6 +110,7 @@ export function crossNightPrecision(shift: string | null, nights: readonly Ledge
     build: same && commit ? { ...same, commit } : null,
     allOwn: ownPrecision(nights),
     buildOwn: commit ? ownPrecision(sameNights) : null,
+    blind: precision(nights.filter((night) => night.kind === "experiment")),
   };
 }
 

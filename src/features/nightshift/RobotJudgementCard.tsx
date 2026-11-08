@@ -18,7 +18,7 @@ import {
 } from "./conduct";
 import { type DeclineSplit, declineSplit, declineSplitPlain } from "./declines";
 import { type RobotJudgement, robotJudgement } from "./judgement";
-import { type CrossNight, crossNightPrecision, grouped, LEDGER_META, percentText, shiftOf } from "./ledger";
+import { type CrossNight, crossNightPrecision, grouped, LEDGER_META, type Precision, percentText, shiftOf } from "./ledger";
 import type { RunLine } from "./runlog";
 
 /**
@@ -140,7 +140,7 @@ export function RobotJudgementView({
       {strangers.refusals.length > 0 && <StrangerIncident strangers={strangers} />}
 
       <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line pt-4 md:grid-cols-2">
-        <DoneRow basis={basis ?? unsplit(done)} />
+        <DoneRow basis={basis ?? unsplit(done)} blind={crossNight?.blind ?? null} />
         {declines ? (
           <DeclineRow declines={declines} />
         ) : (
@@ -210,8 +210,14 @@ function ownParts(own: DoneBasis["own"]): string {
  * The night's "done", split by what it rested on. The figure is the part that carries over to a hotel with
  * no referee: what the robot said on its own judgement, and how much of it held.
  */
-function DoneRow({ basis }: { basis: DoneBasis }) {
+function DoneRow({ basis, blind = null }: { basis: DoneBasis; blind?: Precision | null }) {
   const { reported, confirmed, own, afterRise, unknown } = basis;
+  // The answer to "hide the score": the score-blind live runs in the ledger (kind=experiment), computed.
+  const hidden = blind && (
+    <span className="mt-1 block">
+      Med poengsummen skjult: {grouped(blind.credited)} av {grouped(blind.reported)} «ferdig» godkjent ({blind.nights} {blind.nights === 1 ? "natt" : "netter"}).
+    </span>
+  );
   const realHotel = (
     <span className="mt-1 block">
       <span className="font-semibold text-text">I et ekte hotell</span> bekrefter låsloggen og robotens foto «ferdig». Ett signal alene står som «ikke
@@ -222,6 +228,7 @@ function DoneRow({ basis }: { basis: DoneBasis }) {
     return (
       <Row icon="circle-check" figure="0" label="«Ferdig» meldt">
         Roboten har ikke meldt noe ferdig ennå.
+        {hidden}
         {realHotel}
       </Row>
     );
@@ -243,6 +250,7 @@ function DoneRow({ basis }: { basis: DoneBasis }) {
       >
         {ev.confirmed > 0 && `${ev.confirmed} bekreftet av to uavhengige signaler (${joinNo(ev.signals.map(signalName))}). `}
         {short > 0 && `${short} har ikke to signaler og står som «ikke bekreftet».`}
+        {hidden}
         {realHotel}
       </Row>
     );
@@ -259,6 +267,7 @@ function DoneRow({ basis }: { basis: DoneBasis }) {
           ? "Alle ble meldt etter at simulatoren hadde bekreftet arbeidet; ingen på robotens egen vurdering ennå."
           : "Hva hvert «ferdig» bygde på, står ikke i loggen."}
         {missed > 0 && ` ${missed} ble ikke bekreftet og telles ikke som fullført.`}
+        {hidden}
         {realHotel}
       </Row>
     );
@@ -281,6 +290,7 @@ function DoneRow({ basis }: { basis: DoneBasis }) {
       {capitalise(ownParts(own))}: roboten meldte ferdig ut fra det den selv så
       {ownMissed === 0 ? (own.reported === 1 ? ", og det holdt." : `, og alle ${own.reported} holdt.`) : `; ${ownMissed} holdt ikke og telles ikke som fullført.`}
       {rest.length > 0 && ` ${rest.join("; ")} (${confirmed} av ${reported} bekreftet i alt).`}
+      {hidden}
       {realHotel}
     </Row>
   );
@@ -404,6 +414,13 @@ function HowWeKnow({ crossNight, source = null }: { crossNight?: CrossNight; sou
           «Egen vurdering»: poengsummen steg ikke mens roboten gjorde oppgaven, så den meldte ferdig uten å ha sett simulatorens bekreftelse. «Etter
           at simulatoren hadde bekreftet»: poengsummen steg før roboten meldte ferdig.
         </p>
+        {crossNight?.blind && (
+          <p>
+            «Med poengsummen skjult»: {crossNight.blind.nights} live-netter der agenten aldri leste poengsummen eller svaret når den avgjorde «ferdig»
+            (score-blind, <span className="font-mono text-xs">kind=experiment</span> i ledger.csv): {grouped(crossNight.blind.credited)} av{" "}
+            {grouped(crossNight.blind.reported)} godkjent ({percentText(crossNight.blind.percent)}).
+          </p>
+        )}
         {all && (
           <p>
             Alle {all.nights} live-netter med logg: {grouped(all.credited)} av {grouped(all.reported)} godkjent ({percentText(all.percent)})

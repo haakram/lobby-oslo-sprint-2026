@@ -32,6 +32,10 @@ describe("RobotJudgementCard on the demo night", () => {
       "5 romsjekker og 4 søl: roboten meldte ferdig ut fra det den selv så, og alle 9 holdt. De andre 64 meldte den først etter at simulatoren hadde bekreftet arbeidet (73 av 73 bekreftet i alt).",
     );
     expect(card).toHaveTextContent("I et ekte hotell bekrefter låsloggen og robotens foto «ferdig». Ett signal alene står som «ikke bekreftet».");
+    // The answer to "hide the score": the score-blind runs in the ledger (kind=experiment), computed, not typed in.
+    const { blind } = crossNightPrecision(shiftOf(DEMO));
+    expect(blind!.nights).toBeGreaterThan(0);
+    expect(card).toHaveTextContent(`Med poengsummen skjult: ${blind!.credited} av ${blind!.reported} «ferdig» godkjent (${blind!.nights} netter).`);
     // The referee, the ledger path and the commit hash only inside "Slik vet vi det" (the design juror).
     const main = card.cloneNode(true) as HTMLElement;
     main.querySelector("details")?.remove();

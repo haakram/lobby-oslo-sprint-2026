@@ -95,6 +95,14 @@ describe("the evidence ledger the app reads", () => {
     expect(allOwn!.roomChecks.reported).toBeLessThanOrEqual(allOwn!.reported);
     expect(buildOwn).toMatchObject({ nights: 4, reported: 43, credited: 42 });
   });
+
+  it("counts the score-blind runs (kind=experiment) on their own, from the rows", () => {
+    const { blind } = crossNightPrecision(shiftOf(DEMO));
+    const rows = LEDGER_NIGHTS.filter((entry) => entry.kind === "experiment" && (entry.done_reports ?? 0) > 0);
+    expect(blind?.nights).toBe(rows.length);
+    expect(blind?.reported).toBe(rows.reduce((sum, entry) => sum + (entry.done_reports ?? 0), 0));
+    expect(rows.every((entry) => entry.done_after_rise === 0)).toBe(true); // a blind agent never rested a done on the score
+  });
 });
 
 describe("ownPrecision", () => {
@@ -129,6 +137,7 @@ describe("precision", () => {
       build: null,
       allOwn: null,
       buildOwn: null,
+      blind: null,
     });
   });
 

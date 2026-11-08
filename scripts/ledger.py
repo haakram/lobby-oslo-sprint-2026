@@ -23,7 +23,7 @@ out. Read-only on the logs; it never calls the Wybe server.
 Builds and board tests (``kind``). A night is a ``board-test`` when it was started from a checkout that
 is a seed-specific board experiment, not a build of the agent:
 - the named board checkouts under ~/oslo-wt: ``lottery``, ``lawet``, ``wetoff``, ``lafinal``,
-  ``boardtune`` (``BOARD_CHECKOUTS``); or
+  ``boardtune``, ``hotelrules`` (the hotel-rules cost experiment) (``BOARD_CHECKOUTS``); or
 - any checkout on a board branch (``…/board-…``, e.g. ``hamad/board-lottery2``), so a new board
   checkout is caught without a new name here; or
 - any checkout whose working tree differs from its commit (tracked files changed against HEAD, by
@@ -106,7 +106,7 @@ FIDELITY_TXT = REPO / "docs" / "runs" / "replay-fidelity.txt"
 DEMO_LOG = REPO / "public" / "runs" / "demo.jsonl"
 
 # Seed-specific board experiments, not builds (see the docstring): their nights are kind=board-test.
-BOARD_CHECKOUTS = frozenset({"lottery", "lawet", "wetoff", "lafinal", "boardtune"})
+BOARD_CHECKOUTS = frozenset({"lottery", "lawet", "wetoff", "lafinal", "boardtune", "hotelrules"})  # hotelrules: the hotel-rules cost experiment (NS_HOTEL_RULES=1)
 BOARD_BRANCH = re.compile(r"(^|/)board-")
 BUILD, BOARD_TEST, EXPERIMENT = "build", "board-test", "experiment"
 # The final branch's last four builds (hamad/final, the README's "18 nights"): the done split is also

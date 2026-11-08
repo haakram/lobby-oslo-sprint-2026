@@ -43,7 +43,7 @@ type Seed = {
 
 const HUBS = new Set(["lobby", "front-desk", "lobby-bar", "charging-dock"]);
 const ROOM_OFFSET = 4;
-const MIN_GAP = 2.2;
+const MIN_GAP = 3;
 
 function fromSeed(): HotelMap {
   const data = seed as Seed;

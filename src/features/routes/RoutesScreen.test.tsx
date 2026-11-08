@@ -18,7 +18,13 @@ function Seed({ skus, children }: { skus: string[]; children: ReactNode }) {
   return <>{children}</>;
 }
 
+// A list scanned before Ruter opens is in the provider from the start (so the example order never lands on it).
 function renderWith(skus: string[], screenElement: ReactNode = <RoutesScreen params={{ modus: "plukk" }} />) {
+  return render(<PicklistProvider initial={skus}>{screenElement}</PicklistProvider>);
+}
+
+// Adds SKUs after the screen is up, as Øyne does in another tab of the same session.
+function renderAdding(skus: string[], screenElement: ReactNode) {
   return render(
     <PicklistProvider>
       <Seed skus={skus}>{screenElement}</Seed>
@@ -45,6 +51,16 @@ const NIGHT = [
   .map((line) => JSON.stringify(line))
   .join("\n");
 
+// Today's departures from the booking system's test data, fixed here: 206 at 07:30, 203 late (14:00).
+vi.mock("@/features/guests/testData", () => ({
+  selectGuestDay: () => ({
+    departures: [
+      { room: "room-203", notes: ["Sen utsjekk 14:00"] },
+      { room: "room-206", notes: [] },
+    ],
+  }),
+}));
+
 const fetchMock = vi.fn<typeof fetch>();
 
 beforeEach(() => {
@@ -60,20 +76,32 @@ afterEach(() => {
 const renderRoutes = (params: RouteParams) => renderWith([], <RoutesScreen params={params} />);
 
 describe("RoutesScreen, Renhold", () => {
-  it("opens on Renhold and says what to do when no rooms are chosen", async () => {
+  it("opens on Renhold with the day's round: the night's Må vaskes, then today's departures, in the order they come free", async () => {
     renderRoutes({});
     expect(screen.getByRole("tab", { name: /Renhold/ })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("heading", { name: "Ingen rom valgt" })).toBeInTheDocument();
-    expect(screen.getByText("Velg rom på kartet eller hent rommene som må vaskes.")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/runs/demo.jsonl", expect.anything());
-    // The night's log names three rooms to clean; room 399 is not on the map, so it gets a row of its own.
-    fireEvent.click(await screen.findByRole("button", { name: /Hent rommene som må vaskes/ }));
-    const stops = within(screen.getByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem");
-    expect(stops).toHaveLength(2);
-    expect(screen.getByRole("region", { name: "Rutetall" })).toBeInTheDocument();
+    // The night's log names three rooms to clean (399 is not on the map, so it gets a row of its own),
+    // and the booking system has 206 and 203 leaving today.
+    const list = await screen.findByRole("list", { name: "Rekkefølge" });
+    const stops = within(list).getAllByRole("listitem");
+    expect(stops).toHaveLength(4);
+    for (const room of ["Rom 201", "Rom 214", "Rom 206", "Rom 203"]) expect(within(list).getByText(room)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Dagens renhold/ })).toHaveTextContent("5");
+    // These four sit on one floor in an order that is already the best: the round itself is the headline.
+    expect(screen.getByRole("region", { name: "Rutetall" })).toHaveTextContent("for 4 rom");
     const apart = screen.getByRole("region", { name: "Rom som ikke er med i ruten" });
     expect(apart).toHaveTextContent("Rom 399 finnes ikke på kartet for i natt — besøk det manuelt");
     expect(screen.queryByText("Ingen rute funnet")).not.toBeInTheDocument();
+  });
+
+  it("says what to do when every room is taken out, and brings the day's round back", async () => {
+    renderRoutes({});
+    await screen.findByRole("list", { name: "Rekkefølge" });
+    fireEvent.click(screen.getByRole("button", { name: "Fjern alle rom" }));
+    expect(screen.getByRole("heading", { name: "Ingen rom valgt" })).toBeInTheDocument();
+    expect(screen.getByText("Velg rom på kartet eller hent rommene som må vaskes.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Hent dagens renhold/ }));
+    expect(within(screen.getByRole("list", { name: "Rekkefølge" })).getAllByRole("listitem")).toHaveLength(4);
   });
 
   it("loads the rooms from ?rom= and draws their route", async () => {
@@ -159,7 +187,8 @@ describe("RoutesScreen, Renhold on the seed-5 night", () => {
     expect(hotelForRun(parseRunLog(demo).lines).seed).toBe(5);
     fetchMock.mockImplementation(async () => new Response(demo, { status: 200 }));
     renderRoutes({});
-    fireEvent.click(await screen.findByRole("button", { name: /Hent rommene som må vaskes/ }));
+    await screen.findByRole("list", { name: "Rekkefølge" });
+    fireEvent.click(screen.getByRole("button", { name: /^Må vaskes/ }));
     const list = screen.getByRole("list", { name: "Rekkefølge" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(3);
     for (const room of ["Rom 201", "Rom 206", "Rom 327"]) expect(within(list).getByText(room)).toBeInTheDocument();
@@ -208,11 +237,29 @@ describe("RoutesScreen, Robot", () => {
 const THREE = ["FT-1007", "FT-1001", "FT-1010"];
 
 describe("RoutesScreen, Plukkliste", () => {
-  it("shows the empty state when the pick list is empty", () => {
+  it("opens on the example order when nobody has scanned yet, with what it saves", () => {
     renderWith([]);
+    expect(screen.getByText(/Eksempelordre: påfyll til etasjeskapene/)).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Plukkrekkefølge" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
+    // 2B, 1B, 2A, 1A as written: 216 m; the best round 146 m.
+    const stats = screen.getByRole("region", { name: "Rutetall" });
+    expect(within(stats).getByText("70")).toBeInTheDocument();
+    expect(within(stats).getByText("32")).toBeInTheDocument();
+  });
+
+  it("shows the empty state once the example is emptied, and the example never comes back", () => {
+    renderWith([]);
+    fireEvent.click(screen.getByRole("button", { name: "Tøm plukklisten" }));
     expect(screen.getByRole("heading", { name: "Plukklisten er tom" })).toBeInTheDocument();
     expect(screen.getByText(/Legg til varer fra Øyne/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Åpne Øyne" })).toHaveAttribute("href", "/oyne");
+  });
+
+  it("never puts the example on a list that is filled while the screen is open", () => {
+    renderAdding(THREE, <RoutesScreen params={{ sku: "FT-1001" }} />);
+    expect(screen.queryByText(/Eksempelordre/)).not.toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Plukkrekkefølge" })).getAllByRole("listitem")).toHaveLength(3);
   });
 
   it("shows total metres, saved metres and saved percent for three SKUs", () => {
@@ -275,7 +322,7 @@ describe("RoutesScreen, Plukkliste", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Renhold/ }));
     expect(screen.getByRole("heading", { name: "Ingen rom valgt" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: /Plukkliste/ }));
-    expect(screen.getByRole("heading", { name: "Plukklisten er tom" })).toBeVisible();
+    expect(screen.getByRole("list", { name: "Plukkrekkefølge" })).toBeVisible();
   });
 });
 

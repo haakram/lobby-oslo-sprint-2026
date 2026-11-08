@@ -27,8 +27,12 @@ const MIN_SEGMENT_S = 0.12;
 const WHOLE_DRAW_S = 2.4;
 const PIN_S = 0.15;
 
-/** Below this the floor scrolls sideways inside its panel instead of shrinking the room tiles. */
-const MIN_PX_PER_M = 12;
+/**
+ * Below this the floor scrolls sideways inside its panel instead of shrinking the room tiles. 10 px
+ * a metre keeps a room tile at 28 px and lets all three floors sit in one row from 1440 px, so a
+ * route across floors is seen whole above the fold (jury round 1).
+ */
+const MIN_PX_PER_M = 10;
 /** On touch a room tile is a target: 2.8 m × 16 px ≈ 45 px (DESIGN.md: touch targets ≥ 44 px). */
 const MIN_PX_PER_M_TOUCH = 16;
 const CONNECTOR = 2;
@@ -232,8 +236,8 @@ export function HotelPlan({
         })}
       </div>
 
-      {/* All three floors in one row only where they fit at their minimum width beside the rail. */}
-      <div style={layout} className="md:grid md:grid-cols-(--cols-rest) md:gap-4 min-[105rem]:grid-cols-(--cols-all)">
+      {/* All three floors in one row where they fit at their minimum width beside the rail (from 1440 px). */}
+      <div style={layout} className="md:grid md:grid-cols-(--cols-rest) md:gap-4 min-[90rem]:grid-cols-(--cols-all)">
         {floors.map((floor, index) => {
           const { frame, corridors, doors } = floorGeometry(map, floor);
           const here = Object.entries(map.nodes).filter(([, n]) => n.floor === floor);
@@ -260,7 +264,7 @@ export function HotelPlan({
               className={cx(
                 "min-w-0",
                 floor !== shown && "hidden md:block",
-                index === 0 && "md:col-span-full md:w-(--first-w) min-[105rem]:col-span-1 min-[105rem]:w-auto",
+                index === 0 && "md:col-span-full md:w-(--first-w) min-[90rem]:col-span-1 min-[90rem]:w-auto",
               )}
             >
               <header className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">

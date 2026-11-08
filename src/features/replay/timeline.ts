@@ -373,7 +373,7 @@ function describeCall(cmd: string, args: Record<string, unknown>, ok: boolean, r
       const outcome = str(args.outcome);
       return {
         label: "Rapporterte",
-        text: `${str(args.request) ?? ""} ${outcome === "done" ? "utført" : outcome === "failed" ? "ikke utført" : (outcome ?? "")}`,
+        text: `${str(args.request) ?? ""} ${outcome === "done" ? "fullført" : outcome === "failed" ? "ikke fullført" : (outcome ?? "")}`,
         tone: "neutral",
       };
     }

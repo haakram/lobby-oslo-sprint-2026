@@ -143,6 +143,11 @@ export function listOrderMetres(m: RouteMatrix, stops: string[]): number {
   return walk(m, uniqueStops(m, stops)).metres;
 }
 
+/** The whole walk for the stops in the order given (metres, seconds, path), from the start and back. */
+export function listOrderTour(m: RouteMatrix, stops: string[]): Tour {
+  return walk(m, uniqueStops(m, stops));
+}
+
 /** How much shorter the best tour is than the naive one; percent is a whole number. */
 export function savings(best: number, naive: number): { metres: number; percent: number } {
   const metres = Math.max(0, Math.round(naive - best));

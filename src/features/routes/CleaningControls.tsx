@@ -104,7 +104,7 @@ function Presets({
   }
   return (
     <div>
-      <span className={LABEL}>Hent rom fra natten</span>
+      <span className={LABEL}>Hent rom</span>
       {status === "loading" ? (
         <div className="flex flex-wrap gap-2" aria-busy="true" aria-label="Henter nattens romstatus">
           <Skeleton className="h-12 w-36" />
@@ -143,7 +143,7 @@ export function CleaningControls(props: {
 }) {
   return (
     <section aria-label="Planlegg runden" className="rounded-lg border border-line bg-surface p-4 sm:p-5">
-      <div className="flex flex-col gap-4 sm:gap-5 lg:flex-row lg:flex-wrap lg:items-end lg:gap-x-10">
+      <div className="flex flex-col gap-4 sm:gap-5 lg:flex-row lg:flex-wrap lg:items-end lg:gap-x-6">
         <StartPicker value={props.start} onChange={props.onStart} />
         <CartSwitch on={props.cart} onChange={props.onCart} />
         <Presets

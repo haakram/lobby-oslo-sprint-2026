@@ -31,9 +31,16 @@ function plan(m: RouteMatrix, products: Product[]) {
   };
 }
 
+/**
+ * TODO(phase-3): today's restocking order from the stock system. Test data: the floor cupboards'
+ * refill, in the order it was written down, so the tab shows a route before anyone has scanned.
+ */
+export const EXAMPLE_ORDER: readonly string[] = ["FT-1010", "FT-1004", "FT-1008", "FT-1001", "FT-1012"];
+
 /** Plukkliste: the shortest walk to every product on the pick list (Øyne and Stemme fill it). */
 export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: RouteMatrix }) {
-  const { skus, add, remove, clear } = usePicklist();
+  const { skus, add, remove, clear, seedOnce } = usePicklist();
+  const example = skus.length === EXAMPLE_ORDER.length && skus.every((sku, index) => sku === EXAMPLE_ORDER[index]);
   // The scanned list can't be rebuilt from anywhere else: Tøm keeps it for Angre.
   const [cleared, setCleared] = useState<string[] | null>(null);
   if (cleared && skus.length > 0) setCleared(null);
@@ -47,9 +54,12 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
   };
 
   // ?sku= from Øyne's "Vis vei". Layout effect: the route includes it before the first paint.
+  // Without one, an empty list gets the example order, once per session.
   useLayoutEffect(() => {
-    if (addSku && productBySku(addSku)) add(addSku);
-  }, [addSku, add]);
+    if (addSku) {
+      if (productBySku(addSku)) add(addSku);
+    } else seedOnce(EXAMPLE_ORDER);
+  }, [addSku, add, seedOnce]);
 
   const loaded: LoadedRoutes = useMemo(() => (matrix ? { ok: true, matrix } : loadRoutes()), [matrix]);
   const products = useMemo(() => skus.map(productBySku).filter((p): p is Product => p !== undefined), [skus]);
@@ -60,8 +70,9 @@ export function PicklistMode({ addSku, matrix }: { addSku?: string; matrix?: Rou
 
   // TODO(phase-2): drop the badge when the matrix comes from Track A's router (npm run routes).
   const badge = (
-    <p className="mb-4 flex items-center gap-2 text-sm text-muted">
+    <p className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
       <Badge>Testkart</Badge> Plukklisten bruker et lagerkart til prøve.
+      {example && <span>Eksempelordre: påfyll til etasjeskapene, i den rekkefølgen den ble skrevet. Legg til varer fra Øyne for din egen liste.</span>}
     </p>
   );
 

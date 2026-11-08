@@ -19,6 +19,7 @@ describe("robotJudgement on the demo night (seed 16, 2,680 points)", () => {
     expect(judgement.strangers.refusals[0]).toEqual({ clock: "01:17:02", room: "308" });
     expect(judgement.strangers.refusals.at(-1)).toEqual({ clock: "05:11:40", room: "205" });
     expect(judgement.strangers.keycardWaits).toEqual(["room-209", "room-304"]);
+    expect(judgement.strangers.reply).toBe("I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID.");
   });
 
   it("counts every done against the server's confirmation: 73 of 73", () => {

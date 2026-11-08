@@ -107,7 +107,7 @@ export function RobotJudgementView({
 }
 
 function StrangerIncident({ strangers }: { strangers: RobotJudgement["strangers"] }) {
-  const { refusals, rooms, keycardWaits } = strangers;
+  const { refusals, rooms, keycardWaits, reply } = strangers;
   const times = refusals.map((refusal) => refusal.clock.slice(0, 5));
   const span = times.length > 1 ? `mellom ${times[0]} og ${times.at(-1)}` : `kl. ${times[0]}`;
   const count = refusals.length;
@@ -128,11 +128,26 @@ function StrangerIncident({ strangers }: { strangers: RobotJudgement["strangers"
             )} til han var borte.`}{" "}
           Samme person ved flere dører: nattevakten bør vite om det.
         </p>
+        {reply && (
+          <p className="mt-2 max-w-[72ch] text-sm text-muted">
+            Roboten svarte (engelsk):{" "}
+            <q lang="en" className="text-text">
+              {reply}
+            </q>
+          </p>
+        )}
         <ol aria-label="Når og hvor" className="mt-2 flex flex-wrap gap-1.5">
           {refusals.map((refusal, index) => (
             <li key={index} className="rounded-sm bg-sunken px-2 py-1 font-mono text-sm text-text tabular-nums sm:text-xs">
               {refusal.clock.slice(0, 5)}
-              {refusal.room && <span className="text-muted"> · rom {refusal.room}</span>}
+              {/* On a phone "rom" goes, so the seven fit in two rows instead of seven. */}
+              {refusal.room && (
+                <span className="text-muted">
+                  {" "}
+                  · <span className="max-sm:sr-only">rom </span>
+                  {refusal.room}
+                </span>
+              )}
             </li>
           ))}
         </ol>

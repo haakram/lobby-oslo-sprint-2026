@@ -16,6 +16,7 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(card).toHaveTextContent("ba roboten slippe ham inn i 7 ulike rom mellom 01:17 og 05:11");
     expect(card).toHaveTextContent("ga ikke fra seg nøkkelkort og fulgte ikke etter");
     expect(card).toHaveTextContent("To ganger ventet den med å låse opp rom 209 og rom 304 til han var borte");
+    expect(card).toHaveTextContent("Roboten svarte (engelsk): I'm sorry, I can't open rooms for guests. Please ask the front desk to check your ID.");
     const times = within(card).getByRole("list", { name: "Når og hvor" });
     expect(within(times).getAllByRole("listitem")).toHaveLength(7);
     expect(within(times).getAllByRole("listitem")[0]).toHaveTextContent("01:17 · rom 308");
@@ -30,6 +31,7 @@ describe("RobotJudgementCard on the demo night", () => {
     expect(card).toHaveTextContent("4Skilt for vått gulv satt ut");
     expect(card).toHaveTextContent("Korridor 3d, 3a, 2a og 3c.Vått uten skilt ved slutten: korridor 2b og 3d.");
     expect(card).toHaveTextContent("Ingen dører hadde Ikke forstyrr-skilt i natt.");
+    // The person's English plea is not shown; only the robot's own reply, as a quote.
     expect(card).not.toHaveTextContent(/bathrobe|locked out/i);
   });
 

@@ -75,7 +75,8 @@
   background: var(--accent);
   padding: 6px 10px;
   border-radius: 6px;
-  max-width: 280px;
+  /* Beside the robot it must still fit a phone's width: the rest ellipsises. */
+  max-width: min(280px, 42vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -137,7 +138,7 @@
 .h3d-labels[data-compact] .h3d-robot {
   font-size: 12px;
   padding: 4px 8px;
-  max-width: 220px;
+  max-width: min(220px, 42vw);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   if (!body.ok) return json({ error: body.error }, 400);
 
   try {
-    const result = await identifyProduct(body.base64, body.mediaType);
+    const result = await identifyProduct(body.base64, body.mediaType, {}, body.people);
     return json(result, 200);
   } catch (error) {
     if (error instanceof BudgetExceeded) {

@@ -8,13 +8,15 @@ import type { Box } from "./smoothBoxes";
 
 /**
  * `object`: a thing we never send (a person); `product`: not checked yet; `busy`: being identified;
- * `missing`: checked, not in the catalogue; `known`: matched in the catalogue. `category` picks the
- * colour of the corners and the tag.
+ * `scanned`: named by the whole-frame scan, not checked against the catalogue; `missing`: checked,
+ * not in the catalogue; `known`: matched in the catalogue. `category` picks the colour of the
+ * corners and the tag. `note`, when set, replaces the state's word after the name ("hotellutstyr").
  */
 export type BoxLabel = {
   text: string;
-  state: "object" | "product" | "busy" | "missing" | "known";
+  state: "object" | "product" | "busy" | "scanned" | "missing" | "known";
   category: BoxCategory;
+  note?: string | null;
 };
 
 const FALLBACK: BoxLabel = { text: "Ukjent", state: "object", category: "unknown" };
@@ -27,6 +29,7 @@ const TONE: Record<BoxLabel["state"], { word: string | null; spoken: string | nu
   object: { word: null, spoken: null },
   product: { word: "trykk for å sjekke", spoken: "ikke sjekket" },
   busy: { word: null, spoken: null },
+  scanned: { word: null, spoken: null },
   missing: { word: "ikke i katalogen", spoken: "ikke i katalogen" },
   known: { word: null, spoken: "i katalogen" },
 };
@@ -37,9 +40,12 @@ const TONE: Record<BoxLabel["state"], { word: string | null; spoken: string | nu
  */
 export const BIG_BOX_SHARE = 0.25;
 
+/** The word after the name: the label's own note, else its state's. */
+const tagWord = (label: BoxLabel) => (label.note !== undefined ? label.note : TONE[label.state].word);
+
 function spokenName(label: BoxLabel): string {
   if (label.state === "object") return label.text;
-  const spoken = TONE[label.state].spoken;
+  const spoken = label.note !== undefined ? label.note : TONE[label.state].spoken;
   return spoken ? `${label.text}, ${spoken}, vis kortet` : `${label.text}, vis kortet`;
 }
 
@@ -146,7 +152,7 @@ export function BoxOverlay({
 
       {stackBoxes(boxes, videoSize).map(({ box, area, tagOnly }, layer) => {
         const label = labels[box.id] ?? FALLBACK;
-        const tone = TONE[label.state];
+        const word = tagWord(label);
         // Cut to what is on screen: object-fit: cover crops the video, and a tag off the edge can't be tapped.
         const left = Math.max(0, area.x * scale + offsetX);
         const top = Math.max(0, area.y * scale + offsetY);
@@ -163,7 +169,7 @@ export function BoxOverlay({
           >
             {label.state === "known" && <RegenIcon name="check" strokeWidth={2.5} className="mr-1 inline size-4 align-[-3px]" />}
             {label.text}
-            {tone.word && <span className="font-medium"> · {tone.word}</span>}
+            {word && <span className="font-medium"> · {word}</span>}
           </span>
         );
         return (

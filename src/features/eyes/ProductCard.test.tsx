@@ -21,6 +21,9 @@ const match: IdentifyResult = {
   name: "Sjampo 250 ml",
   category: "hygiene",
   textSeen: ["Mild sjampo", "250 ml"],
+  kind: "supply",
+  summary: "",
+  seen: [],
   confidence: "high",
   product: shampoo,
 };
@@ -30,6 +33,9 @@ const noMatch: IdentifyResult = {
   name: "Hvit sprayflaske",
   category: "unknown",
   textSeen: ["Glassrens", "500 ml"],
+  kind: "supply",
+  summary: "",
+  seen: [],
   confidence: "low",
   product: null,
 };
@@ -55,6 +61,34 @@ describe("ProductCard", () => {
     expect(screen.getByText("Glassrens")).toBeInTheDocument();
     expect(screen.getByText("500 ml")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Vis vei" })).not.toBeInTheDocument();
+  });
+
+  it("never calls a pillow or a cap missing from the catalogue: it says what kind of thing it is", () => {
+    render(<ProductCard result={{ ...noMatch, name: "Pute", kind: "room" }} />);
+    expect(screen.getByText("Hotellutstyr")).toBeInTheDocument();
+    expect(screen.queryByText("Ikke i katalogen")).not.toBeInTheDocument();
+    expect(screen.queryByText(/finnes ikke i katalogen/)).not.toBeInTheDocument();
+  });
+
+  it("shows the sentence about the whole picture and the other things seen", () => {
+    render(
+      <ProductCard
+        result={{
+          ...noMatch,
+          name: "Person",
+          kind: "person",
+          summary: "En person med caps holder en fjernkontroll.",
+          seen: [
+            { name: "Caps", kind: "guest" },
+            { name: "Fjernkontroll", kind: "room" },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("En person med caps holder en fjernkontroll.")).toBeInTheDocument();
+    expect(screen.getByText("Ser også")).toBeInTheDocument();
+    expect(screen.getByText("Caps").parentElement).toHaveTextContent("Caps · gjestens eiendel");
+    expect(screen.getByText("Fjernkontroll").parentElement).toHaveTextContent("Fjernkontroll · hotellutstyr");
   });
 
   it("adds the SKU to the pick list", () => {

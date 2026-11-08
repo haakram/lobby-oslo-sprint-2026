@@ -28,6 +28,9 @@ const shampoo: IdentifyResult = {
   name: "Sjampo 250 ml",
   category: "hygiene",
   textSeen: ["Sjampo"],
+  kind: "supply",
+  summary: "",
+  seen: [],
   confidence: "high",
   product: productBySku("FT-1001")!,
 };

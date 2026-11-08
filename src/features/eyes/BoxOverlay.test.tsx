@@ -41,6 +41,17 @@ describe("BoxOverlay", () => {
     expect(screen.getByRole("button", { name: "Person" })).toBeInTheDocument();
   });
 
+  it("puts a kind note in place of the state's word, and says nothing for a scanned supply", () => {
+    renderOverlay([box("p"), box("q", { x: 200 }), box("r", { x: 300 })], {
+      p: { text: "Pute", state: "missing", category: "linen", note: "hotellutstyr" },
+      q: { text: "Caps", state: "scanned", category: "other", note: "gjestens eiendel" },
+      r: { text: "Sjampo", state: "scanned", category: "hygiene", note: null },
+    });
+    expect(screen.getByRole("button", { name: "Pute, hotellutstyr, vis kortet" })).toHaveTextContent("Pute · hotellutstyr");
+    expect(screen.getByRole("button", { name: "Caps, gjestens eiendel, vis kortet" })).toHaveTextContent("Caps · gjestens eiendel");
+    expect(screen.getByRole("button", { name: "Sjampo, vis kortet" })).toHaveTextContent(/^Sjampo$/);
+  });
+
   it("colours each box by its category, tag and corners alike", () => {
     renderOverlay([box("a"), box("c", { x: 200 }), box("e", { label: "person", x: 0, y: 0, w: 400, h: 300 })]);
     const frame = (name: string) => screen.getByRole("button", { name }).parentElement!;

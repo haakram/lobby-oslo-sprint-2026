@@ -35,13 +35,40 @@ describe("describeScene", () => {
           { label: "Romskip", x: 0.5, y: 0.5, w: 0.1, h: 0.1 },
           { label: "Heis", x: 0.75, y: -0.25, w: 0.5, h: 0.75 },
         ],
+        things: [],
       },
     });
-    const landmarks = await describeScene("AAAA", "image/jpeg", { client, meter: meter() });
+    const { landmarks } = await describeScene("AAAA", "image/jpeg", { client, meter: meter() });
     expect(landmarks).toEqual([
       { label: "Dør", x: 0.1, y: 0.1, w: 0.2, h: 0.6 },
       { label: "Heis", x: 0.75, y: 0, w: 0.25, h: 0.5 },
     ]);
+  });
+
+  it("returns cleaned things beside the landmarks, never a person", async () => {
+    const { client } = fakeClient({
+      parsed_output: {
+        landmarks: [],
+        things: [
+          { name: "Caps", category: "other", kind: "guest", x: 0.4, y: 0.1, w: 0.2, h: 0.1 },
+          { name: "Person", category: "other", kind: "person", x: 0.3, y: 0.1, w: 0.4, h: 0.9 },
+        ],
+      },
+    });
+    const { things } = await describeScene("AAAA", "image/jpeg", { client, meter: meter() });
+    expect(things).toEqual([{ name: "Caps", category: "other", kind: "guest", x: 0.4, y: 0.1, w: 0.2, h: 0.1 }]);
+  });
+
+  it("asks to leave out what people wear or hold when people are off, in the user turn", async () => {
+    const { client, parse } = fakeClient({ parsed_output: { landmarks: [], things: [] } });
+    await describeScene("AAAA", "image/jpeg", { client, meter: meter() }, false);
+    await describeScene("AAAA", "image/jpeg", { client, meter: meter() });
+    type Params = { system: { text: string }[]; messages: { content: { type: string; text?: string }[] }[] };
+    const [off, on] = parse.mock.calls.map(([params]) => params as Params);
+    expect(off.messages[0].content[1].text).toMatch(/Leave out everything a person wears or holds/);
+    expect(on.messages[0].content[1].text).not.toMatch(/Leave out/);
+    // The system prompt is the same both ways, so the prompt cache holds.
+    expect(off.system[0].text).toBe(on.system[0].text);
   });
 
   it("throws SceneRefused on a refusal", async () => {
@@ -60,7 +87,7 @@ describe("describeScene", () => {
 
   it("records usage on the shared meter, and stops before the cap", async () => {
     const { client, parse } = fakeClient({
-      parsed_output: { landmarks: [] },
+      parsed_output: { landmarks: [], things: [] },
       usage: { input_tokens: 1_000_000, output_tokens: 0 },
     });
     const capped = createSpendMeter(4);
@@ -73,7 +100,7 @@ describe("describeScene", () => {
   });
 
   it("sends the image with effort low and fallbacks", async () => {
-    const { client, parse } = fakeClient({ parsed_output: { landmarks: [] } });
+    const { client, parse } = fakeClient({ parsed_output: { landmarks: [], things: [] } });
     await describeScene("AAAA", "image/jpeg", { client, meter: meter() });
     const params = parse.mock.calls[0][0] as {
       model: string;

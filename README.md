@@ -218,7 +218,13 @@ Bookings, guests, staff, stock and prices are test data, and every list says so.
 - **Where the numbers come from:** [`docs/runs/ledger.csv`](./docs/runs/ledger.csv) (one row per live
   start) and [`docs/runs/builds.csv`](./docs/runs/builds.csv) (one row per commit), rebuilt from the run
   logs by `python3 scripts/ledger.py`, with the "done" split in its own columns (`done_after_rise`,
-  `done_own`, `done_own_credited`). Board tests (seed-specific nights from test checkouts: 134 started by
+  `done_own`, `done_own_credited`). **Check them yourself without our machines:** the 28 run logs
+  behind the build-level figures (the final branch's last four builds' 18 complete nights, the demo
+  night among them, and the dress rehearsal's 10; 16 MB) are committed in
+  [`docs/runs/logs/`](./docs/runs/logs/) with a SHA-256 manifest, and
+  `python3 scripts/ledger.py --root docs/runs/logs --check` checks every digest and rebuilds
+  `builds.csv`'s five rows and the 64 of 65, 54 of 65, 88 of 101 and 8 of 9 from them in about 0.2 s
+  (the gate, `scripts/check.sh`, runs it). Board tests (seed-specific nights from test checkouts: 134 started by
   07:00, 129 of them ran to 06:00, 126 of those on seeds 10 and 16, best 2,808; the four hotel-rules
   nights count here too) are marked `kind=board-test` in the ledger and kept out of the build rows.
 - **What it learned about the undocumented API:** [`docs/research/wybe-api.md`](./docs/research/wybe-api.md).

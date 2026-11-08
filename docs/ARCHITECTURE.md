@@ -112,6 +112,63 @@ Task 22 (additive): `report_skipped_ambiguous`: `{"request": "R-014", "other": "
 (waiting, declined as a duplicate, failed or unreported) may have earned that rise, so the request is not
 reported at all; its `task_failed` line has status `skipped`.
 
+Decision kinds of the integrated final build (additive; every kind the code logs that is not listed
+above; data fields as written by `Executor.log` / `ShiftSession.log_decision`). The viewer ignores kinds
+it does not know.
+
+Tasks and requests:
+- `task_start`: `{request, kind, room, item}`.
+- `note`: `{request, text}`; free-text remark of a flow (a skipped bag, a failed top-up).
+- `request_skipped`: `{request, text, was_queued, reported, reply}`; the night manager skipped a request.
+- `room_checked_out`: `{room, request, dropped}`; the guest left, queued tasks for that room were dropped.
+- `override_declined`: `{request, text}`; a guest message relayed by the desk that countermands the manager.
+- `brain_classified`: `{request, kind, room, item}`; the Brain's accepted classification.
+- `picked_for_later`: `{request, item, during}`; an item for another queued request taken on the way.
+- `experiment`: `{name, request, verified, reply, score}`; `report_unverified`: `{request, reply}`.
+- `executor_error`: `{request, error, message, where}`; `after_task_failed`: `{request, reason}`;
+  `opening_failed`: `{step, reason}`; `wybe_error`: `{error, streak}` or `{error, during: "end_shift"}`;
+  `end_failed`: `{error}`.
+
+Planner:
+- `plan_mode`: `{mode: "overload" | "spt", queue, backlog_min, battery}`; logged when the mode flips.
+
+Battery and charging:
+- `battery_low`: `{battery, at, dock, reserve, forced, target}`; `battery_unknown`: `{battery}`;
+  `charge_deferred`: `{battery, queued, inbox, running}`; `charge_failed`: `{error, reason}`.
+- `charge_woken`: `{battery, queued}` (a message woke the charge); `charged`: `{battery, woken, wakes}`.
+- `charge_block`: `{from, to, minutes, queued, woken, forced, target}`; one per charging block.
+- `top_up`: `{from, to, to_place, minutes, woken, queued, request}`; charging on the way (navigate top-up).
+- `skipped_while_charging`: `{request}`; the manager skipped the running task while the robot charged.
+- `dock_kept` `{dock, at, clock}` · `dock_learnt` `{dock, believed}` · `dock_reverted` `{dock, learnt, reason}` ·
+  `dock_out_of_reach` `{at, dock, reason}` · `dock_replan` `{at, dock, reason, dropped}`.
+
+Stock and cart:
+- `restock`: `{want, short}`; `loadout_top_up`: `{at, picked}`; `stock_cart`: `{picked}`;
+  `stock_cart_skip`: `{place, reason}`; `stock_miss`: `{item, at}`; `hands_full`: `{item, at}`;
+  `cart_dropped`: `{at, to_reach, ok, left_in_cart}`; `get_cart_failed`: `{reason}`; `ensure_item_failed`: `{item, reason}`.
+- `survey`: `{from_place, looked, stock}`; `survey_skip`: `{place, reason}`; `survey_failed`: `{reason}`.
+
+Lost items:
+- `lost_item_seen`: `{item, at}` (a look listed it); `lost_item_vanished`: `{item, at}` (it is gone from where it was seen).
+- `lost_item_beyond`: `{item, candidates, request}`; `lost_item_ambiguous`: `{item, candidates}`; `found_item_gone`: `{item, at, reply}`.
+- `scan`: `{at, found}`; `scan_skip`: `{place, reason}`; `scan_cap`: `{request, cap, queued}` (busy scan cap hit);
+  `look_failed`: `{at, reason}`; `wait_failed`: `{reason}`.
+
+Signs and wet floors:
+- `sign_moved`: `{request, place, old_request}`; `sign_move_failed`: `{request, place, reason}`.
+- `wet_floor`: `{edge: [from, to], slipped, navigated?}`.
+
+Asking people:
+- `asked_manager`: `{request, phrase, reply}`; `manager_answer`: `{request, room, phrase}`;
+  `asked_room`: `{guest, room, answer}`; `clerk_named_someone_else`: `{guest, answer}`;
+  `desk_note`: `{object, request, text}`; `keycard_withheld`: `{room, who, final?}`; `probe`: `{name, request, reply}`.
+
+Map and movement:
+- `map_learnt`: `{at, lost, new}`; `edge_learnt`: `{edge: [from, to], metres}`; `replan`: `{at, reason, to}`;
+  `stale_room_link`: `{room, corridor}`; `move_refused_repeatedly`: `{at, to, times, reason, edge_dropped}`;
+  `navigate_declined`: `{at, to, reply}`; `navigate_short`: `{at, to}`;
+  `explore_skip`: `{place, reason}`; `floor_explored`: `{floor, target, looked, found, reason?}`.
+
 `task_done`/`task_failed` `points` (changed with Task 18): the score rise the flow itself observed,
 from the loop's last `status` before the task to the flow's verifying `status` after its last
 `place`/`say`. It **excludes the report's own +5**, which shows on the next `state` line. Sum

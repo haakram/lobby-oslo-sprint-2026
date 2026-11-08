@@ -338,7 +338,7 @@ Each juror scores from their own field (CONTEXT § 11). Every part names the fie
 
 The login limiter counts failed tries per address: 5 per address and user and 20 per address in 5
 minutes (`src/features/auth/rateLimit.ts`). On venue wifi every juror shares one public address, and
-three jurors were locked out for minutes during the night's reviews. So nobody types a password on stage.
+three of our reviews were locked out for minutes during the night. So nobody types a password on stage.
 
 - [ ] **Run the production build on the demo laptop, not `next dev`** (security and data review):
       `npm ci && npm run build && npm start`, then http://localhost:3000, with `.env.local` as in § 4.

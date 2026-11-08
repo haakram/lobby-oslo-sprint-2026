@@ -771,9 +771,27 @@ class Executor:
         # The floor of `to` was seen by any look that listed it as an exit (a spot is wet from
         # every side, world.mark_wet), not only by a look from here: the newest such look counts.
         seen = [t for t in (self._look_clock.get(here), self._exit_seen.get(to)) if t is not None]
+        news = self._spill_news(self.hotel.floor(to))
+        if seen and news is not None and max(seen) < news:
+            return True  # a spill on this floor was reported since that look: a new patch lies somewhere here
         if seen and price.on("wet"):
             return self._look_worth(to, now, max(seen))
         return not seen or now - max(seen) > (WET_LOOK_BUSY_S if self._busy() else WET_LOOK_S)
+
+    def _spill_news(self, floor: int | None) -> int | None:
+        """The arrival (sim s) of the newest spill request on `floor` still queued or running: since then a
+        new patch lies somewhere on that floor (live, final build: 4 of 14 slips were onto a floor with such a
+        spill waiting, seed 9 R-036 corridor-3a 2 min after its message, seed 23 R-037 corridor-3d after 8)."""
+        newest = None
+        for task in [*self.queue, self.current]:
+            if task is None or task.kind != Kind.SPILL or floor is None or task.floor != floor:
+                continue
+            try:
+                arrived = clock_to_seconds(task.arrived)
+            except (ValueError, AttributeError):
+                continue
+            newest = arrived if newest is None else max(newest, arrived)
+        return newest
 
     def _busy(self) -> bool:
         """BUSY_QUEUE or more tasks queued, or the battery under BUSY_BATTERY: time is dearer than

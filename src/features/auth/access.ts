@@ -20,8 +20,25 @@ export type DecideInput = {
   hadCookie?: boolean;
 };
 
+/**
+ * The brand files (src/app/ and public/): the tab icon, the home-screen icons and manifest, and the link
+ * preview image. A browser asks for them before anyone logs in (and a Slack preview never logs in), and
+ * every role's tab needs them, so they answer without a session. Exact paths; nothing else in public/.
+ */
+const BRAND_FILES = [
+  "/favicon.ico",
+  "/icon.svg",
+  "/apple-icon.png",
+  "/manifest.webmanifest",
+  "/opengraph-image.png",
+  "/twitter-image.png",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon-maskable-512.png",
+];
+
 /** Reachable without a session. Exact paths, except the prefixes below. */
-const PUBLIC_EXACT = new Set(["/login", "/api/auth/login", "/api/auth/logout", "/favicon.ico"]);
+const PUBLIC_EXACT = new Set(["/login", "/api/auth/login", "/api/auth/logout", ...BRAND_FILES]);
 const PUBLIC_PREFIXES = [
   "/_next/",
   // ElevenLabs' phone agent calls these server to server; each call carries its own shared secret

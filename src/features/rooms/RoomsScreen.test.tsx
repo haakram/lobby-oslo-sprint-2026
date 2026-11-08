@@ -67,7 +67,8 @@ describe("RoomsScreen (Rom og renhold)", () => {
 
     // One primary on the screen, in the header, above the rack (a phone sees it without scrolling).
     const send = await screen.findByRole("link", { name: "Lag renholdsrute" });
-    expect(send).toHaveAttribute("href", "/ruter?rom=room-201,room-214");
+    // Ruter opens on Dagens renhold (the night's dirty rooms and today's departures), where the saving shows.
+    expect(send).toHaveAttribute("href", "/ruter");
     expect(send.compareDocumentPosition(screen.getByRole("region", { name: "Romstatus" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(rack().getByRole("button", { name: /^Rom 201: Må vaskes/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Renholdere i dag" })).toBeInTheDocument();

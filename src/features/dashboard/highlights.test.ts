@@ -73,7 +73,7 @@ describe("the greeting", () => {
     expect(totals).toEqual({ done: NIGHT.tally.done, total: NIGHT.tally.total, staffDone: 2 });
     expect(nightSummary(data(), totals)).toBe(`Roboten fullførte ${NIGHT.tally.done} av ${NIGHT.tally.total} oppdrag. Nattevakten ordnet 2 til. Ingen rom venter på renhold.`);
     const dirty = data().rooms!.map((room, index) => (index < 3 ? { ...room, status: "ma_vaskes" as const } : room));
-    expect(nightSummary(data({ rooms: dirty }), totals)).toMatch(/ 3 rom skal vaskes før innsjekk\.$/);
+    expect(nightSummary(data({ rooms: dirty }), totals)).toMatch(/ Før innsjekk skal 3 rom vaskes\.$/);
   });
 
   it("calls a night that went well fine, and is plain about the rest", () => {

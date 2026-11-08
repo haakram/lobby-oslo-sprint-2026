@@ -3,7 +3,7 @@ import { canAccess } from "@/features/auth/roles";
 import { buttonClasses, RegenIcon, Skeleton } from "@/ui";
 import type { DashboardData } from "./data";
 import { greeting, nightSummary, nightTotals, nightVerdict } from "./highlights";
-import { cleaningHref } from "./selectors";
+import { cleaningHref, DAY_ROUND } from "./selectors";
 
 /**
  * The top of Oversikt (team lead 2026-11-08: good news first): a greeting honest about the time of
@@ -38,7 +38,8 @@ export function Greeting({ data }: { data: DashboardData }) {
         )}
       </div>
       {dirty.length > 0 ? (
-        <Link href={cleaningHref(dirty.map((room) => room.id))} className={buttonClasses("primary")}>
+        // Ruter opens on Dagens renhold: the night's dirty rooms and today's departures, with the saving.
+        <Link href={DAY_ROUND} className={buttonClasses("primary")}>
           Lag renholdsrute
         </Link>
       ) : unchecked.length > 0 ? (

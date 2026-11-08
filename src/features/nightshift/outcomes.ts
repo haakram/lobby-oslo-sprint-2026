@@ -322,7 +322,8 @@ export function outcomeRows(timeline: Timeline, upToEvent: number, outcomes: Nig
       return {
         request: outcome.request,
         task,
-        text: task?.text || request?.text || "",
+        // The replay may already quote the guest's words («…»); the row quotes them once.
+        text: (task?.text || request?.text || "").replace(/^«(.*)»$/s, "$1"),
         t: task?.start ?? request?.t ?? 0,
         verdict: outcome.verdict,
         reason: outcome.reason,

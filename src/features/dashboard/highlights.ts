@@ -164,7 +164,8 @@ export function nightSummary(data: Pick<DashboardData, "rooms" | "role">, totals
   const work = `Roboten fullførte ${totals.done} av ${totals.total} oppdrag.${staff}`;
   if (!data.rooms || !canAccess(data.role, "/rom")) return work;
   const dirty = data.rooms.filter((room) => room.status === "ma_vaskes").length;
-  return dirty > 0 ? `${work} ${dirty} rom skal vaskes før innsjekk.` : `${work} Ingen rom venter på renhold.`;
+  // A sentence never starts with a digit.
+  return dirty === 0 ? `${work} Ingen rom venter på renhold.` : `${work} Før innsjekk skal ${dirty === 1 ? "ett" : dirty} rom vaskes.`;
 }
 
 /** Where a figure comes from, said under the row: the robot's log, test data, or our estimate. */

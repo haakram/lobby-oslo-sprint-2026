@@ -7,6 +7,7 @@ import { formatKroner, nightLabel } from "@/features/dashboard/format";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { FigureRow, ModulePage, PanelHead } from "@/features/modules/ModulePage";
+import { RobotJudgementCard } from "@/features/nightshift/RobotJudgementCard";
 import { SourceNote } from "@/features/modules/SourceNote";
 import { osloToday } from "@/features/reception/dates";
 import { type DemoCall, demoCalls } from "@/features/reception/demoCalls";
@@ -189,6 +190,13 @@ export function HandoverScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
             <SourceNote className="mt-3" sources={["run-log", "reception", "test"]} />
           </Card>
         </section>
+
+        {/* The robot's judgement calls (owner C's card, the whole night): the stranger it refused, every "done" confirmed. */}
+        {ready && run.lines.length > 0 && (
+          <div data-enter className="lg:col-start-1 lg:row-start-3">
+            <RobotJudgementCard lines={run.lines} id="vurderinger-overlevering" />
+          </div>
+        )}
 
         <section aria-labelledby="sign-heading" data-enter className="lg:col-start-2 lg:row-start-2">
           <Card className={cx("sm:p-6", signoff && "border-success")}>

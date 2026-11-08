@@ -8,7 +8,7 @@ import { placeLabel } from "@/features/dashboard/labels";
 import { RoomBoard } from "@/features/dashboard/RoomBoard";
 import { RoomSheet } from "@/features/dashboard/RoomSheet";
 import { RunBadge } from "@/features/dashboard/TopBar";
-import { cleaningHref, countRooms, selectRoomNight, withClosed } from "@/features/dashboard/selectors";
+import { cleaningHref, countRooms, DAY_ROUND, selectRoomNight, withClosed } from "@/features/dashboard/selectors";
 import { useNight } from "@/features/dashboard/useNight";
 import { useOrderStatuses } from "@/features/dashboard/useOrderStatuses";
 import { outOfOrderRooms, selectMaintenance } from "@/features/maintenance/select";
@@ -84,7 +84,7 @@ export function RoomsScreen({ viewerUrl, initialRoom = null }: { viewerUrl?: str
       meta={run.source === "live" ? <RunBadge run={run} /> : undefined}
       actions={
         dirty.length > 0 ? (
-          <Link href={cleaningHref(dirtyIds)} className={buttonClasses("primary")}>
+          <Link href={DAY_ROUND} className={buttonClasses("primary")}>
             Lag renholdsrute
           </Link>
         ) : unchecked.length > 0 ? (

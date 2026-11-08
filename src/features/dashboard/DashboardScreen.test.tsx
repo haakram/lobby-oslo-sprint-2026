@@ -171,8 +171,9 @@ describe("DashboardScreen (Oversikt, the home page)", () => {
     render(as("admin", <DashboardScreen />));
 
     const send = await screen.findByRole("link", { name: "Lag renholdsrute" });
-    expect(send).toHaveAttribute("href", "/ruter?rom=room-201,room-214");
-    expect(screen.getByText(/2 rom skal vaskes før innsjekk\.$/)).toBeInTheDocument();
+    // Ruter opens on Dagens renhold (the night's dirty rooms and today's departures), where the saving shows.
+    expect(send).toHaveAttribute("href", "/ruter");
+    expect(screen.getByText(/Før innsjekk skal 2 rom vaskes\.$/)).toBeInTheDocument();
     // One primary action on the page, and it is this one.
     expect(screen.getAllByRole("link", { name: /^Lag / })).toHaveLength(1);
     expect(rooms().getByRole("link", { name: /^Rom 201: Må vaskes/ })).toBeInTheDocument();

@@ -146,7 +146,6 @@ export function RequestsScreen({ viewerUrl, demo, today: day }: { viewerUrl?: st
       <FigureRow label="Forespørslene i tall">
         {/* What got done first, in green; the rest are plain counts (what needs a person is in the bell). */}
         <Stat label="Fullført" value={figure(totals.done)} unit={runLoading ? undefined : `av ${totals.total}`} tone={runLoading ? "default" : "success"} />
-        <Stat label="Pågår" value={figure(counts.pagar)} />
         <Stat label="Venter" value={figure(counts.venter)} />
         <Stat label="Feilet" value={figure(counts.feilet)} />
         {/* Not failures: the robot refused a claim with no order on record, or the night manager called it off. */}

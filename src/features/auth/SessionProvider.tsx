@@ -12,6 +12,8 @@ export type SessionContextValue = {
   view: Role | null;
   /** The role the server judges every request by (= view). Filter navigation with canAccess(effectiveRole, href). */
   effectiveRole: Role | null;
+  /** The open demo (no accounts configured): no login, so no logout and no view switch either. */
+  openDemo: boolean;
   /** Admins only: look at the app as another role (or "admin" to go back). Reloads the page. */
   switchView: (view: Role) => Promise<void>;
   logout: () => Promise<void>;
@@ -55,6 +57,7 @@ const LOGGED_OUT: SessionContextValue = {
   user: null,
   view: null,
   effectiveRole: null,
+  openDemo: false,
   switchView,
   logout,
 };
@@ -62,13 +65,13 @@ const LOGGED_OUT: SessionContextValue = {
 const SessionContext = createContext<SessionContextValue>(LOGGED_OUT);
 
 /** Wraps the app in the root layout with the session the server read for this request. */
-export function SessionProvider({ session, children }: { session: Session | null; children: ReactNode }) {
+export function SessionProvider({ session, openDemo = false, children }: { session: Session | null; openDemo?: boolean; children: ReactNode }) {
   const value = useMemo<SessionContextValue>(
     () =>
       session
-        ? { status: "authenticated", user: session.user, view: session.view, effectiveRole: session.effectiveRole, switchView, logout }
+        ? { status: "authenticated", user: session.user, view: session.view, effectiveRole: session.effectiveRole, openDemo, switchView, logout }
         : LOGGED_OUT,
-    [session],
+    [session, openDemo],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

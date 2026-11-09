@@ -1,4 +1,5 @@
 import { authConfig } from "./config";
+import { demoSession, isOpenDemo } from "./demo";
 import { verifySession } from "./session";
 import type { Session } from "./types";
 
@@ -6,10 +7,12 @@ type Env = Record<string, string | undefined>;
 
 /**
  * The session a cookie stands for, or null. The user must still be in LOBBY_USERS with the same role, so
- * removing an account (or changing its role) there logs it out on its next request. Missing or broken
- * configuration: null for everyone (fail closed).
+ * removing an account (or changing its role) there logs it out on its next request. No LOBBY_USERS at all:
+ * the open demo, where everyone is the demo admin (./demo.ts). Set but broken, or no secret: null for
+ * everyone (fail closed).
  */
 export function resolveSession(token: string | undefined, env: Env = process.env, nowMs: number = Date.now()): Session | null {
+  if (isOpenDemo(env)) return demoSession(nowMs);
   if (!token) return null;
   const config = authConfig(env);
   if (!config.ok) return null;

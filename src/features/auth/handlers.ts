@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { safeNext } from "./access";
 import { authConfig } from "./config";
+import { isOpenDemo } from "./demo";
 import { DUMMY_HASH, verifyPassword } from "./password";
 import { createLoginLimiter } from "./rateLimit";
 import { resolveSession } from "./resolve";
@@ -20,6 +21,8 @@ type LoginLimiter = ReturnType<typeof createLoginLimiter>;
 
 const MAX_BODY_BYTES = 2048;
 const GENERIC_LOGIN_ERROR = "Feil brukernavn eller passord.";
+/** The open demo (no LOBBY_USERS): everyone is already the demo admin, so there is no login or view switch. */
+const OPEN_DEMO_ERROR = "Åpen demo: ingen innlogging.";
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 /** One limiter per server instance. */
@@ -107,6 +110,7 @@ export async function handleLogin(
   { env = process.env, limiter = sharedLimiter, now = Date.now }: { env?: Env; limiter?: LoginLimiter; now?: () => number } = {},
 ): Promise<NextResponse> {
   if (!isSameOrigin(request)) return fail(403, "Ikke tillatt.");
+  if (isOpenDemo(env)) return fail(404, OPEN_DEMO_ERROR);
   const body = await readJson(request);
   if (!body.ok) return fail(body.status, body.error);
   const parsed = loginSchema.safeParse(body.value);
@@ -161,6 +165,7 @@ const viewSchema = z.object({ view: z.enum(ADMIN_VIEWS) });
 
 export async function handleView(request: NextRequest, env: Env = process.env): Promise<NextResponse> {
   if (!isSameOrigin(request)) return fail(403, "Ikke tillatt.");
+  if (isOpenDemo(env)) return fail(404, OPEN_DEMO_ERROR);
   const config = authConfig(env);
   const session = resolveSession(request.cookies.get(SESSION_COOKIE)?.value, env);
   if (!session || !config.ok) return fail(401, "Ikke innlogget.");

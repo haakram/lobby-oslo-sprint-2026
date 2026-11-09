@@ -1,10 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { decide } from "@/features/auth/access";
+import { isOpenDemo } from "@/features/auth/demo";
 import { resolveSession } from "@/features/auth/resolve";
 import { SESSION_COOKIE, sessionCookieOptions } from "@/features/auth/session";
 
 // Next 16 "proxy" (formerly middleware); runs on the Node.js runtime before every route.
-// Who may open what lives in src/features/auth/roles.ts; the decision itself in access.ts.
+// Who may open what lives in src/features/auth/roles.ts; the decision itself in access.ts. With no accounts
+// configured (no LOBBY_USERS) the app is an open demo: every request is the demo admin (auth/demo.ts).
 
 const NO_STORE = { "Cache-Control": "no-store" } as const;
 
@@ -16,6 +18,7 @@ export function proxy(request: NextRequest): NextResponse {
     search: request.nextUrl.search,
     session: session && { role: session.user.role, view: session.view },
     hadCookie: Boolean(token),
+    openDemo: isOpenDemo(),
   });
 
   switch (decision.kind) {

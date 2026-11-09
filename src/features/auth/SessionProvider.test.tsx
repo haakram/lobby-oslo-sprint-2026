@@ -33,6 +33,17 @@ describe("useSession", () => {
     });
   });
 
+  it("says whether this is the open demo (no accounts configured); off unless the layout says so", () => {
+    expect(renderHook(() => useSession(), { wrapper: withSession(ADMIN) }).result.current.openDemo).toBe(false);
+    const openDemo = ({ children }: { children: ReactNode }) => (
+      <SessionProvider session={ADMIN} openDemo>
+        {children}
+      </SessionProvider>
+    );
+    expect(renderHook(() => useSession(), { wrapper: openDemo }).result.current.openDemo).toBe(true);
+    expect(renderHook(() => useSession()).result.current.openDemo).toBe(false);
+  });
+
   it("reads as logged out without a session, and outside a provider (components stay testable)", () => {
     const loggedOut = { status: "unauthenticated", user: null, view: null, effectiveRole: null };
     expect(renderHook(() => useSession(), { wrapper: withSession(null) }).result.current).toMatchObject(loggedOut);

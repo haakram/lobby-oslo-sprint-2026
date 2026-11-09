@@ -24,7 +24,7 @@ path or HTML is built from input.
 | Login CSRF, forced logout or view switch from another site | `SameSite=Lax`, and every `POST /api/auth/*` refuses a foreign `Origin` or `Sec-Fetch-Site: cross-site`. | `handlers.test.ts` |
 | Another site drives a logged-in browser at a data or paid API | `SameSite=Lax` and the proxy's session check. The route-level cross-site guard (403 on a foreign `Origin`) was on the review branch only and is not in this build (`docs/PRIVACY.md` § 5.1). | `proxy.test.ts` |
 | Open redirect after login | `next` must be a same-origin relative path (no `//`, `\`, scheme, control characters, `/login`, `/api`), and one the role may open; otherwise `/`. | `access.test.ts` |
-| Misconfigured deploy opens the app | Missing or short `LOBBY_AUTH_SECRET`, or missing/malformed `LOBBY_USERS` → nobody logs in (503 on login, every cookie invalid); the server log names the variable, never a value. | `config.test.ts`, `proxy.test.ts` |
+| Misconfigured deploy opens the app | With accounts set: a missing or short `LOBBY_AUTH_SECRET`, or a malformed `LOBBY_USERS` → nobody logs in (503 on login, every cookie invalid); the server log names the variable, never a value. **Public copy:** no `LOBBY_USERS` at all is the open demo on purpose (every request is the demo admin, `src/features/auth/demo.ts`), so set `LOBBY_USERS` before deploying with paid API keys. | `config.test.ts`, `resolve.test.ts`, `proxy.test.ts`, `proxy.openDemo.test.ts` |
 
 **Deliberate exception.** `/api/reception/tools/*` skips the session check: ElevenLabs' phone agent calls it
 server to server, and each call carries `x-reception-secret`, checked in constant time by the route.

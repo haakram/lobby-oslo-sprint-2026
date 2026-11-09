@@ -244,3 +244,31 @@ describe("POST /api/auth/view", () => {
     expect((await handleView(request, env)).status).toBe(403);
   });
 });
+
+describe("the open demo (no LOBBY_USERS)", () => {
+  const demoEnv = { LOBBY_AUTH_SECRET: SECRET };
+
+  it("has no login: POST /api/auth/login answers 404 and sets no cookie", async () => {
+    const response = await handleLogin(post("/api/auth/login", { username: "hamad", password: PASSWORD }), { env: demoEnv, limiter: createLoginLimiter() });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Åpen demo: ingen innlogging." });
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("has no view switch: POST /api/auth/view answers 404", async () => {
+    const response = await handleView(post("/api/auth/view", { view: "receptionist" }), demoEnv);
+    expect(response.status).toBe(404);
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("GET /api/auth/session is the demo admin, without a cookie", async () => {
+    const response = await handleSession(new NextRequest(`${ORIGIN}/api/auth/session`), {});
+    expect(response.status).toBe(200);
+    expect((await response.json()).session).toMatchObject({ user: { u: "demo", name: "Demo", role: "admin" }, view: "admin", effectiveRole: "admin" });
+  });
+
+  it("keeps the login when accounts are configured", async () => {
+    const response = await handleLogin(post("/api/auth/login", { username: "hamad", password: PASSWORD }), deps());
+    expect(response.status).toBe(200);
+  });
+});

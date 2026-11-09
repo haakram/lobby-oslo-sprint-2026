@@ -129,6 +129,26 @@ describe("decide: logged in", () => {
   });
 });
 
+describe("decide: the open demo (no accounts configured)", () => {
+  const demo = { session: as("admin"), openDemo: true };
+
+  it("sends /login to the home page, whatever next says", () => {
+    expect(decide({ pathname: "/login", search: "", ...demo })).toEqual({ kind: "redirect", location: "/", clearCookie: false });
+    expect(decide({ pathname: "/login/", search: "?next=%2Fhotell", ...demo })).toEqual({ kind: "redirect", location: "/", clearCookie: false });
+  });
+
+  it("opens every page and API to the demo admin", () => {
+    for (const pathname of ["/", "/overlevering", "/hotell", "/oyne", "/resepsjon", "/vert", "/runs/demo.jsonl", "/api/scene", "/api/reception/calls"]) {
+      expect(decide({ pathname, search: "", ...demo })).toEqual({ kind: "next" });
+    }
+  });
+
+  it("leaves the login behaviour alone when the flag is off", () => {
+    expect(decide({ pathname: "/login", search: "", session: as("admin") })).toMatchObject({ location: "/overlevering" });
+    expect(decide({ pathname: "/hotell", search: "", session: null })).toMatchObject({ kind: "redirect", location: "/login?next=%2Fhotell" });
+  });
+});
+
 describe("decide: the host (an Airbnb host with their own app)", () => {
   it("lands on /vert: from /login, and from / (no Oversikt for the host, so no 403 on the front page)", () => {
     expect(decide({ pathname: "/login", search: "", session: as("host") })).toEqual({ kind: "redirect", location: "/vert", clearCookie: false });

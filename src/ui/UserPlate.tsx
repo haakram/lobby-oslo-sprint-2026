@@ -13,11 +13,12 @@ import { HOST_HOME } from "./nav";
  * Bottom-left of the navigation: who is logged in (a generated monogram, the name, the role). The
  * plate opens a small menu: for admins the view switcher (Admin · Resepsjonist · Robotansvarlig),
  * which calls `switchView` (the server reloads the page), then "Andre visninger" (the Airbnb host's app,
- * kept out of the admin's hotel rail), and "Logg ut" for everyone. Escape or a
+ * kept out of the admin's hotel rail), and "Logg ut" for everyone. In the open demo (no accounts
+ * configured) there is nothing to switch or log out of: the menu keeps only "Andre visninger". Escape or a
  * click outside closes the menu; the arrow keys move between the views (one Tab stop for the group).
  */
 export function UserPlate({ className, onSwitched }: { className?: string; onSwitched?: () => void }) {
-  const { user, view, switchView, logout } = useSession();
+  const { user, view, switchView, logout, openDemo } = useSession();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<Role | "logout" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,11 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
 
   if (!user) return null;
   const admin = user.role === "admin";
-  const roleWord = admin && view && view !== "admin" ? `Admin · viser som ${roleLabel(view).toLowerCase()}` : roleLabel(user.role);
+  const roleWord = openDemo
+    ? "Åpen demo · ingen innlogging"
+    : admin && view && view !== "admin"
+      ? `Admin · viser som ${roleLabel(view).toLowerCase()}`
+      : roleLabel(user.role);
 
   async function pick(role: Role) {
     setPending(role);
@@ -79,7 +84,7 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
     <div ref={root} onKeyDown={onKeyDown} className={cx("flex flex-col gap-1", className)}>
       {open && (
         <div id={listId} className="flex flex-col gap-0.5 rounded-sm bg-sunken p-1 animate-fade">
-          {admin && (
+          {admin && !openDemo && (
             <div role="radiogroup" aria-label="Vis som" onKeyDown={moveBetweenViews} className="flex flex-col gap-0.5">
               <p className="px-3 pt-1.5 pb-0.5 text-xs text-muted">Vis som</p>
               {ADMIN_VIEWS.map((role, index) => (
@@ -95,7 +100,7 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
             </div>
           )}
           {admin && (
-            <div className="flex flex-col gap-0.5 border-t border-line">
+            <div className={cx("flex flex-col gap-0.5", !openDemo && "border-t border-line")}>
               <p className="px-3 pt-1.5 pb-0.5 text-xs text-muted">Andre visninger</p>
               <Link
                 href={HOST_HOME}
@@ -118,19 +123,21 @@ export function UserPlate({ className, onSwitched }: { className?: string; onSwi
               {error}
             </p>
           )}
-          <button
-            type="button"
-            onClick={() => void out()}
-            disabled={pending !== null}
-            className={cx(
-              "flex min-h-10 items-center gap-2 rounded-sm px-3 text-sm text-muted",
-              "transition-colors duration-[120ms] ease-standard hover:text-text focus-visible:outline-offset-[-2px] disabled:opacity-50",
-              admin && "border-t border-line",
-            )}
-          >
-            <RegenIcon name="log-out" size={16} />
-            {pending === "logout" ? "Logger ut …" : "Logg ut"}
-          </button>
+          {!openDemo && (
+            <button
+              type="button"
+              onClick={() => void out()}
+              disabled={pending !== null}
+              className={cx(
+                "flex min-h-10 items-center gap-2 rounded-sm px-3 text-sm text-muted",
+                "transition-colors duration-[120ms] ease-standard hover:text-text focus-visible:outline-offset-[-2px] disabled:opacity-50",
+                admin && "border-t border-line",
+              )}
+            >
+              <RegenIcon name="log-out" size={16} />
+              {pending === "logout" ? "Logger ut …" : "Logg ut"}
+            </button>
+          )}
         </div>
       )}
       <button

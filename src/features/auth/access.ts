@@ -18,6 +18,8 @@ export type DecideInput = {
   session: { role: Role; view: Role } | null;
   /** A session cookie was sent (even one that didn't verify): clear it on the way to /login. */
   hadCookie?: boolean;
+  /** The open demo (no LOBBY_USERS, ./demo.ts): there is no login page, /login goes to the home page. */
+  openDemo?: boolean;
 };
 
 /**
@@ -91,7 +93,8 @@ export function safeNext(raw: unknown): string {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
-export function decide({ pathname, search, session, hadCookie = false }: DecideInput): Decision {
+export function decide({ pathname, search, session, hadCookie = false, openDemo = false }: DecideInput): Decision {
+  if (openDemo && stripSlash(pathname) === "/login") return { kind: "redirect", location: "/", clearCookie: false };
   if (session && stripSlash(pathname) === "/login") {
     const next = safeNext(new URLSearchParams(search).get("next"));
     return { kind: "redirect", location: next !== "/" && canAccess(session.view, next) ? next : homeFor(session.view), clearCookie: false };

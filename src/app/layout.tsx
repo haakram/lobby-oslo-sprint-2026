@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Martian_Mono, Schibsted_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 import { SessionProvider, ViewAsBanner } from "@/features/auth";
+import { isOpenDemo } from "@/features/auth/demo";
 import { getSession } from "@/features/auth/server";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { PicklistProvider } from "@/features/picklist/PicklistProvider";
@@ -68,7 +69,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             Hopp til innhold
           </a>
         )}
-        <SessionProvider session={session}>
+        <SessionProvider session={session} openDemo={isOpenDemo()}>
           <PicklistProvider>
             <div className="min-h-dvh lg:flex">
               {/* Not secret: the local viewer server's URL; the bell reads the same night as the pages. */}

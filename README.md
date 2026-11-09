@@ -37,7 +37,7 @@ Click a still to play its video (GitHub plays the mp4 in the file view).
 | | |
 |---|---|
 | [![3D replay of the robot's night across floors](media/still-3d-map.png)](media/lobby-launch-40s.mp4) **The launch film** (40 s): 3D replay, routes, camera, storage, receptionist, handover | [![The 06:00 handover page](media/still-handover.png)](media/dub-launch.mp4) **The handover** (15 s): the night on one page |
-| [![The camera recognising rolled towels and a trunk](media/still-camera.png)](media/hard-stat.mp4) **The pitch in numbers** (25 s): what a missed room costs, and the price | [![Maria, the AI receptionist, answering in German](media/still-receptionist.png)](media/receptionist-maria.mp4) **Maria answers** (35 s): the AI receptionist switches to the caller's language |
+| [![NOK 30 a room a month against a cloud PMS at USD 5–12](media/still-numbers.png)](media/hard-stat.mp4) **The pitch in numbers** (25 s): what a missed room costs, and the price | [![Maria, the AI receptionist, answering in German](media/still-receptionist.png)](media/receptionist-maria.mp4) **Maria answers** (35 s): the AI receptionist switches to the caller's language |
 
 The app running locally, as it is in this repo (no login, test data):
 

@@ -83,7 +83,7 @@ library has telemetry to Google built in (`odml.pa.googleapis.com`, found in the
 review). In this build only the Content-Security-Policy stops it: `connect-src` allows only our own
 origin, the local 3D viewer and ElevenLabs (`next.config.ts`), so the browser blocks the call and logs a
 CSP violation in the console (answering that host on the phone first is not in this build, § 5.1). **On this build
-only:** the public URL (lobby-sandy.vercel.app) serves `main`, whose older header has no `connect-src`
+only:** the public URL (the team's hackathon deployment) serves `main`, whose older header has no `connect-src`
 (curl, Sun 02:50), so there the browser would let that call out.
 
 ## 4. What is stored where

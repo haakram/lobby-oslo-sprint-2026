@@ -396,7 +396,7 @@ three of our reviews were locked out for minutes during the night. So nobody typ
       `93f71d4`; `agent/` on `main` is `8de9ffc`'s byte for byte (the dress-rehearsal build). If
       `hamad/final` moves before 12:00, merge it again.
 - [ ] The jury-loop app merged to `main` and deployed, if the team lead says so; the deployed URL shows
-      the screens in § 2. Until then the only public deployment (`lobby-sandy.vercel.app`) serves `main`: the old name
+      the screens in § 2. Until then the only public deployment (the team's hackathon deployment) serves `main`: the old name
       *Lobby* and an older CSP without `connect-src` (curl, Sun 02:50). A security juror will curl it;
       the README says so, and the demo runs from the laptop.
 - [x] Name: the product trades as Lobby (team lead, Sun 8 Nov). The trademark search (Patentstyret,

@@ -31,7 +31,7 @@ Holio's brief says "pick one", so the stand path leads with pain 3 and shows 6 a
 into. Five physical items on the table, Øyne open on a phone (logged in, camera allowed, network on).
 
 **How the phone reaches this build (decide before 14:00, team lead):** a phone's camera needs a secure
-context (HTTPS, or `localhost`). The only HTTPS deployment (`lobby-sandy.vercel.app`) serves `main`,
+context (HTTPS, or `localhost`). The only HTTPS deployment (the team's hackathon deployment) serves `main`,
 which has neither the label gate nor the guides, and a phone on the laptop's `http://<ip>:3300` gets no
 camera at all. So either this branch gets an HTTPS preview or tunnel the team lead agrees to, or Øyne
 runs on the laptop's own webcam at `localhost`, which counts as a secure context. Write the chosen

@@ -363,7 +363,7 @@ robot, on Overlevering 06:00, where she lands after login; every move is a tap):
 - Have we any hotel person to quote? None so far. The phone round and hallway test (`docs/DEMO.md`
   § 8) are planned for Sunday morning, run by ShirazIQ while Hamad is at the Wybe final (team to
   confirm). The night desks are reachable before 06:45, the buyers 08:00–09:30 (§ 8.1).
-- The public URL, lobby-sandy.vercel.app, serves `main` with an older CSP; `hamad/jury-loop` isn't
+- The public URL, the team's hackathon deployment, serves `main` with an older CSP; `hamad/jury-loop` isn't
   deployed (team lead's rule).
 - The name isn't cleared. A funded Zurich hotel-AI company also trades as Lobby, on the same PMS
   channel (Apaleo); a proper search is still to do: Patentstyret, EUIPO TMview and WIPO in classes 9,

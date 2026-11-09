@@ -31,13 +31,21 @@ function stored(): Record<string, unknown>[] {
 }
 
 beforeEach(() => {
+  // The sample night is 7–8 Nov 2026: pin the clock to that morning so the screen's "today" (and the
+  // booking system's "should have left 7.11") reads the same whatever day the tests run. Only Date is
+  // faked; timers stay real for findBy and waitFor.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-08T05:30:00+01:00"));
   localStorage.clear();
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 describe("Nattevaktens logg", () => {
   it("starts with the rooms the door lock wants checked, against the booking system", async () => {

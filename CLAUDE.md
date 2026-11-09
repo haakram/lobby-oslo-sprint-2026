@@ -1,5 +1,9 @@
 # CLAUDE.md — Project entry point
 
+> **Public copy.** This is the file that steered every AI session during the hackathon, kept as it
+> was. `MEMORY.md` and `docs/sessions/` were internal team notes and are not part of this copy, so
+> the session ritual below refers to files you won't find here.
+
 > Every AI session in this repo starts here, for every teammate. **Read this file fully, then
 > `MEMORY.md`, before touching code.** Start a session with `/kickoff` and end it with `/handoff`
 > (§ Session ritual) so a closed chat never loses context.

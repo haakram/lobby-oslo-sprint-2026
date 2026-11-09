@@ -1,339 +1,248 @@
-# Lobby
+<div align="center">
 
-**Natten, ærlig overlevert.** *(The night, handed over honestly.)* Lobby gives the manager who takes
-over a hotel at 06:00 the night on one page: what needs a person now and who owns it, which rooms can be
-sold today, and what the night robot did and refused to do. Nothing on it says "done" unless it was
-confirmed. ***Lobby finner rommene der bookingsystemet og dørlåsen er uenige — før renholdet gjør
-det.*** (It finds the rooms your booking system and your door locks disagree about, before
-housekeeping does.) For independent and chain hotels of 60–200 rooms, software first: hotel number one
-needs no robot, because Lobby reads the booking system (read-only), one signal per room from the door
-lock (no card id, no clock) and the night clerk's own entries.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="media/logo.png">
+  <img src="media/logo-light.png" alt="Lobby" width="180">
+</picture>
 
-The robot in the demo is our AI agent, which played Wybe's live hotel simulation on its own, and we hold
-it to the same rule. On the night in the app it said "done" 73 times: 64 after it had seen the
-simulator's score rise, and 9 on its own judgement (5 room checks, 4 spills). The simulator credited all
-9, but the robot's own log contradicts one (it reported 209 empty at 03:47 after carrying bags in at
-01:29), so the card says **8 of 9 hold against its own log**. The same rule over every night: on the
-final branch the simulator credited 64 of 65 distinct own-judgement claims, but **54 of 65 hold against
-the robot's own log** (95 % interval 72–90 %), because the simulator's room check doesn't see what the
-robot itself delivered.
+# Lobby: AI night shift for hotels
 
-**For** 60–200-room hotels, the manager who takes over at 06:00 · **Price** NOK 30 per room per month ·
-**First channel** direct, from the Sunday phone round (`docs/DEMO.md` § 8.1, not run yet) · **Ask** a
-free four-week pilot, software only, read-only on the booking system, with a one-page data processing
-agreement ([`docs/DPA.md`](./docs/DPA.md)).
+**Natten, ærlig overlevert.** *(The night, handed over honestly.)*
 
-Built in 48 hours at **Oslo Sprint 2026** by **Team Lobby** (Hamad, ShirazIQ), for the main prize,
-Wybe Night Shift, Holio (pains 3, 6 and 9) and ElevenLabs. *Hotell Nattskift* is the demo hotel.
+[![Oslo Sprint 2026](https://img.shields.io/badge/Oslo%20Sprint-2026-0D0F1B)](#the-hackathon-snapshot)
+[![Wybe final: 9th of 29](https://img.shields.io/badge/Wybe%20final-9th%20of%2029-FF6A1A)](#results)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](#stack)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](#stack)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](#stack)
 
-## See it in 60 seconds
+</div>
 
-1. **Run it locally** (below) or ask us for the laptop: the demo runs live from our laptop. The
-   screens below are on `hamad/jury-loop`, which is not deployed (team lead's rule: it is not merged to
-   `main`). A note on production, so nobody judges the wrong build: the only public deployment
-   (`lobby-sandy.vercel.app`) serves `main`, the older build, still under the old name *Lobby*, with an
-   older security header (no `connect-src`; checked with curl Sun 02:50).
-2. Log in as **`jury`**: the jury's own account (admin view). Its password is in our `/lever`
-   submission, not in this repo, and the account is deleted after the event.
-3. You land on **Overlevering 06:00**. Every move is a tap; it reads in the order the manager works:
-   act, then evidence, then sign.
-   1. **The top:** four figures, each a link to its row: ***Rom 209** · Robotens minne og øyne er
-      uenige*, drawn as two points, *01:29 bagasje levert · 03:47 meldt tomt*, and *Sjekk rommet før
-      innsjekk* (the robot reported it empty, but its own log says it carried bags in; a guest is booked
-      there, so the room is checked, never "held back"); *ca. 1 500 kr · Rom 210 i bruk uten booking ·
-      En natt ingen fakturerer · PMS-en kan selge rommet til en ny gjest i dag* (the risk, said as one),
-      with *Rom 213: funnet ledig 5 timer tidligere · ca. 1 500 kr hvis utsolgt* as its own link and
-      *Slik regner vi*; *5 saker · Sikkerhet, straks*, with how many were told to nobody; and the
-      robot's *73 av 77* with *72 av 73 holder · 1 motsagt av egen logg (rom 209)* in ink. Oversikt and
-      Rom tell the money the same way, 210 first. One quiet band says what is test data, and that the
-      night clerk's entries are samples, marked *Eksempel*.
-   2. **The switch *Natten fra: Med robot | Uten robot*.** *Uten robot* builds the same page from the
-      booking system, one signal per room from the door lock (no card id, no clock) and the night clerk's own
-      entries (*Nattevaktens logg*, `/natt`), with no robot line: the product hotel number one buys.
-   3. **Where the lock and the booking system disagree, shown as sources:** 210 is in use with no
-      booking (*Dørlåsen · kort i rommet*, *Nattevakt · ikke tomt 23:24*); 213 was due out yesterday,
-      the check-out never recorded (*Dørlåsen · ingen kort siden kl. 18*, *Nattevakt · tomt 04:24*):
-      *Bekreftet av to kilder* without the robot, three with it; on *Åpent nå* the two stand together
-      under *Bookingsystemet og dørlåsen er uenige · 2 rom*. The night clerk's note found 210 first
-      (*«Støy fra rom 210 rundt 23:20 …»*), and the row gives it an owner and a deadline. The money
-      step on 213: reception's name is typed (the field starts empty), three facts (folio, bags, key
-      card), *Bekreft med resepsjonen*, then *Send til resepsjonen*; the row reads *Venter på PMS-en*
-      and *Bekreftet av Hanne Vold (resepsjon) · registrert av Siri Haugen*, because the pilot never
-      writes to the booking system and the manager typed the receptionist's name. Nothing says "sold".
-   4. ***Åpent nå*, safety first:** four wet floors (the robot's three and the night clerk's lobby,
-      signed at 02:16) and a stranger who asked the robot to open seven doors, *straks*, each with how
-      long it waited for a person (*6 t 9 min uten at noen ble varslet*) and a *Varsle …* button that
-      records who was told, kept per hazard so it holds across *Med robot* and *Uten robot*; *Angre*
-      adds a correction line and never deletes, and so does *Angre kvitteringen*; the robot itself at
-      06:00, not docked and still holding the master keycard;
-      then everything by deadline, each with an owner. *Med robot* adds the night clerk's entries, it
-      never replaces them.
-   5. ***Robotens vurderinger i natt*:** three figures, *8 av 9* "done" on its own judgement hold
-      against its own log, *7* refusals of the stranger, *10 av 15* keycard entries without a knock;
-      the robot's faults in amber (*Robotens feil*), its wins in ink; beside the night clerk's note,
-      *«Rolig natt.»* The referee, both cross-night figures (64 and 54 of 65), the score-blind run and
-      the fault test's catch rate sit behind *Slik vet vi det*.
-   6. ***Kvitter mottatt*,** last. It says in one line when a safety item was told to nobody, and the
-      receipt keeps the count.
+A robot agent that works a hotel's night shift and never says "done" without proof, and an app that
+hands the whole night to the 06:00 manager on one page.
 
-   Then, if you like: **Forespørsler** (what the robot handed back is pinned first, with the reason)
-   and **3D-kart → *Spill av*** (the robot's real night, replayed from its log).
+**48 h, two people, 9th of 29 in a live, server-scored final** at Oslo Sprint 2026 (Oslo, 6–8 November
+2026). This is a cleaned public copy of our hackathon submission: organiser material and contact
+details are removed, and it runs with no login and no API keys.
 
-The menu shows the pilot: **Overlevering, Nattevaktens logg, Rom og renhold, Forespørsler, Natteskift**
-(Oversikt one tap away). Everything else we built sits under the folded **Utenfor piloten**: **Robotens øyne**
-on a phone (camera boxes; tap a product and Claude names it without a barcode; built for Holio),
-**Resepsjon** (allow the microphone, then *Ring resepsjonen*: the ElevenLabs AI receptionist; please give
-a made-up name), and more. The host view for short-let hosts
-(`/vert`, its own login) was a test that the engine generalises; it is not part of the pilot.
-Bookings, guests, staff, stock and prices are test data, and every list says so.
+## Demo
 
-## The Night Shift agent
+<div align="center">
 
-- **Where:** the final agent is on **`main`** since 05:59 Sun (PR #25, merge `93f71d4`: `8de9ffc`'s
-  `agent/`, byte for byte) and on the `hamad/final` branch ([`agent/`](./agent/) in Python, tests in
-  [`tests/agent/`](./tests/agent/); `agent/` on this branch, `hamad/jury-loop`, is older). It plays Wybe's simulated hotel robot through Wybe's API and is scored only by Wybe's server.
-  It plans on exact simulation time, reports "done" for a delivery only after the server's score rises,
-  and refuses unsafe moves in code. Room checks and spill reports rest on what it saw (it looked inside;
-  its sign stands over the patch), because the server credits those on the report itself; that a spill
-  report is credited is a rule it learned from Saturday's nights (`spill_done` on `hamad/final`), and if
-  a shift's first spill report goes uncredited it sends no more that shift. The work is done by rule-based flows per request type, found by probing an
-  undocumented API; Claude is only a guarded fallback (about USD 0.001 spent all weekend).
-- **Every live night of the last four builds, pinned to the commit** (Wybe practice shifts, Sun 8 Nov;
-  Wybe's final ranks the mean of ten unseen nights with the worst dropped):
+[![The 40-second launch film: the app's home, the 3D replay and the routes](media/lobby-preview.gif)](media/lobby-launch-40s.mp4)
 
-  | Build on `hamad/final` | Played | Score per seed | Mean |
-  |---|---|---|---|
-  | `d4e445c` | 00:23–00:39 | 10: 2,707 · 16: 2,564 · 23: 2,254 · 5: 2,492 · **9: 1,965 · 11: 1,914** | 2,316 (tuned seeds 2,504; seeds 9 and 11: 1,940) |
-  | `cb72845` | 01:07–01:14 | 10: 2,707 · **16: 2,680** (the night in the app) · 23: 2,334 · 5: 2,584 | 2,576 |
-  | `8eac151` | 01:50–01:58 | **10: 2,760** · 16: 2,679 · 23: 2,240 · 5: 2,559 | 2,560 |
-  | `c3801e0`: the head of `hamad/final` at 03:30 (`8eac151`'s agent plus the end-of-night battery guard and a spill look) | 03:26 | **10: 2,760** · 16: 2,748 · 23: 2,298 · 5: 2,559 | 2,591 (not played on 9 or 11) |
+</div>
 
-  **The build that plays at 12:00 is the head of `hamad/final`: `8de9ffc` at 05:50** (`c3801e0` plus a
-  corridor closed for cleaning avoided for 90 minutes instead of 30; `013f90d` has the same agent). On
-  the tuned seeds (04:50) it scored 10: 2,759 · 16: 2,748 · 23: 2,298 · 5: 2,559 (mean 2,591). **The
-  dress rehearsal, on ten seeds no build had ever played** (22, 34, 53, 55, 67, 70, 78, 83, 86, 93,
-  started 05:02, all 10 complete at 05:50): **22: 2,085 · 34: 2,166 · 53: 2,481 · 55: 2,138 · 67: 2,312
-  · 70: 2,186 · 78: 2,008 · 83: 2,236 · 86: 1,786 · 93: 1,969; the final's statistic, the mean of the
-  best 9 of 10, is 2,176**, with 573 of 573 "done" credited ([`docs/runs/builds.csv`](./docs/runs/builds.csv)). If the
-  head moves before 12:00, the forecast below is regenerated for it. This agent is the one on `main`
-  (PR #25, merged 05:59), as the submission requires.
+Click a still to play its video (GitHub plays the mp4 in the file view).
 
-- **What we expect in the final: a median of 2,050, 80 % between 1,759 and 2,393, not 2,760**, for
-  `8de9ffc` ([`docs/runs/forecast.txt`](./docs/runs/forecast.txt), from `python3 scripts/forecast.py`,
-  regenerated 05:50 Sun with the whole rehearsal, before the final). The model is log score = build + seed, fitted on every
-  complete live build night (67 build×seed cells), then 20,000 simulated finals of the best 9 of 10
-  unseen seeds. Why lower than the 2,591 on tuned seeds: **mostly seed difficulty**. The four seeds the
-  build played are easy ones, which alone is −19 %; the tuning penalty we can measure is about −5 %,
-  from two nights (`d4e445c` on seeds 9 and 11), so it is rough, and the band now carries its
-  uncertainty (drawn per simulated final) and the leave-one-cell-out error (the data review's
-  correction; the earlier, narrower method gave 1,903–2,196). **Out of sample:** the forecast committed at 04:08, before the
-  dress rehearsal, gave a final median of 2,035 (80 % 1,898–2,186) and a mean night of 1,989 on unseen
-  seeds; the rehearsal's best 9 of 10 came in at **2,176, inside that committed interval**, and its mean
-  night, 2,137, was 7 % above the forecast (2 % above it without the tuning penalty). Practice
-  seeds go to 999, so a holdout was always there; the larger risk no band covers is that the final may
-  use another map and other tasks (the note at the top of `docs/research/wybe-api.md`). **A second
-  forecast, committed at 06:44 Sun before the final (`c6b8c54`), from the rehearsal alone: a median of
-  2,170, 80 % between 2,055 and 2,301** (a posterior predictive of its ten nights; no model, no tuned
-  seed). How the ten rehearsal seeds were chosen is not recorded; the seed hunt's estimates put them
-  at typical, not easy (percentile ranks 8–85). After 13:05 the final goes next to both.
-- **"Done" is checked, and we say what it rests on:** over the 18 nights of the four builds in the
-  table the agent said "done" 1,267
-  times and the referee (Wybe's server) credited 1,263, 99.7 %. But **1,078** of them were sent after
-  the agent had already seen the score rise, so they are credited by construction. **On its own
-  judgement it made 189 claims and 185 were credited (97.9 %): room checks 117 of 117, spill reports 68
-  of 72**; the 4 misses are one probe on seed 23 repeated in every build. Those 189 are the same
-  claims replayed: counted once per (seed, request), **64 of 65 distinct claims were credited (95 %
-  interval 92–99.7 %)**. That is what the simulator credited, and a hotel has no simulator. **Held
-  against the robot's own log, 54 of 65 hold (95 % interval 72–90 %)**: the other ten are rooms it
-  reported empty after it had placed something inside them itself that night (the card's 209 rule,
-  `selfContradictions`, now run over every night by `scripts/ledger.py`), and the simulator credited
-  all ten; its look drops what the robot delivered. On the dress rehearsal's ten never-played seeds:
-  101 of 101 own-judgement "done" credited, **88 of 101 hold against its own log**; 13 of 64 room checks
-  contradicted, on 8 of 10 nights. The printed figures: [`docs/runs/summary.txt`](./docs/runs/summary.txt).
-  **With the score hidden:** four live practice nights on a side branch (`hamad/blind`, Sun 04:26,
-  seeds 10, 16, 23 and 5) where the agent never used the score or the referee's wording to decide
-  "done", only what it saw (the place reply, the guest's answer, the sign over the spill). It made the
-  same 291 "done" reports as the sighted build `c3801e0` (the same score on three seeds, +6 on the
-  fourth), and the referee
-  credited 290. Its own check never said "not done" on those nights (0 of 265 checks), so this shows
-  the score wasn't needed there, **not how well the robot catches a failure**. **That was measured
-  separately, offline, with failures injected** (side branch `hamad/faults`, `4571de3`; 20 rebuilt real
-  nights × 5 draws, 13 kinds of fault, 640 nights): **the score-blind check caught 251 of 317 injected
-  failures (79 %) with 5 % of actions failing**, 79 % at 15 % and 81 % at 30 %; 88 %, 87 % and 90 %
-  without the sleeping-guest type ([`docs/runs/fault-bed-real.md`](./docs/runs/fault-bed-real.md)). One
-  injected failure in five became a false "done". Precision over every "done" moves with how often
-  things fail, so it comes second: 98.5 % (recall 99.8 %) at 5 %, 95.5 / 99.7 % at 15 %, 91.0 / 99.7 %
-  at 30 % (the sighted build: 98.8 / 99.5, 96.4 / 99.0, 92.0 / 98.3). It said "not done" 256, 734 and
-  1,578 times, against once with no faults. What it misses every time: a guest asleep in a room it
-  checked (the look says so; the flow still reports the check done), a polite reply that doesn't
-  answer, music that starts again; and some look-alike lost items. The fault bed's ground truth is the
-  simulator's, so it can't see the 209 failure. The fault
-  wordings are ours, so this measures the kinds of failure, not how often a real robot meets them. Over every
-  live night with a log, every version, the app's judgement card recomputes the plain credited share
-  from the ledger, so it moves as nights are logged. It declined 112 requests as false or impossible; the referee credited 93 of those declines
-  and gave 19 nothing.
-- **Board:** best practice score **2,808**, **#10 of 20** on Wybe's practice board at 07:37 Sun, one
-  point above #11 (top 3,448; we had played 360 practice shifts, the leader 1,556;
-  `nightshift-board.wybe.me/data`). That night came from a board test (the `lottery` checkout,
-  `d7040b7`, seed 10, started 05:55), a seed-specific test branch, so it is not in the final; the
-  final branch's best, 2,760 (`8eac151` and `c3801e0`), would sit at #12.
-- **The night in the app** (`public/runs/demo.jsonl`, seed 16, 2,680, `cb72845`): 85 requests, 73
-  "done", **all 73 credited**, 64 of them after the score rose and **9 on its own judgement (5 room
-  checks, 4 spills), all 9 credited (95 % interval 70–100 %)**. But one of the 9 is contradicted by
-  the robot's own log: at 01:29 it placed luggage-209 inside room 209, and at 03:47 it reported the room
-  "empty and tidy" (R-049), which the referee credited. So the card says **8 of 9 hold against its own
-  log**: the simulator's look is a text oracle, and a real room check has false negatives. 8 declined,
-  of which the referee credited 7 (6 orders that never existed, 1 already delivered) and not 1 (a spill
-  report on floor 3); 4 still open at 06:00; one penalty (−15, it slipped on a wet floor at 23:51).
-  At 06:00 it is not docked and still holds the master keycard (battery about 20 %): the handover lists
-  that as an item with an owner.
-- **What hotel rules cost** (asked for in the domain reviews): a knock before every keycard entry, no sign moved off a
-  wet floor, known wet corridors avoided. The build that plays still does all three for Wybe's game
-  (`sign_move` is on, the bags flow enters with the master key, a known wet corridor is priced at its
-  sim cost); a pilot runs with them off. **The cost in Wybe's sim, measured in the replay bed** (164
-  real nights, side branch `hamad/hotelrules`, `70d5be4`): all four rules together **−125.8 points a
-  night** (−100.4 weighted per seed), no strands. Most of it is one rule: never moving a sign off a wet
-  floor costs −105.2, because the store holds three signs, so across the 164 nights the robot declined
-  415 spill reports for "no sign left"; a knock before every keycard entry costs −12.4; signing a patch nobody reported
-  −30.1; avoiding a known wet corridor 0 (with the cart there is no dry way round). So the safe rule is
-  nearly free with a stock of signs on every floor, which is what a hotel would do. **Live on Wybe's
-  server** (hotel-rules mode, `NS_HOTEL_RULES=1` on `70d5be4`, four nights complete at about 05:55 Sun,
-  seeds 10/16/23/5): **2,605 · 2,584 · 2,393 · 2,453 against the final build's 2,760 · 2,748 · 2,298 ·
-  2,559 on the same seeds, mean 2,509 against 2,591: −82 points a night**, less than the replay's
-  −125.8. It knocked before **59 of 59** keycard entries (the final build on the same seeds: 26 of
-  61; both counted from the logs with the card's own rule, `masterKeyEntries`). The rows are in
-  [`docs/runs/builds.csv`](./docs/runs/builds.csv) (commit `70d5be4`); the card shows the same numbers
-  behind *Slik vet vi det* (`src/features/nightshift/data/hotel-rules.json`), and Natteskift's
-  *Robotlogg* switch shows the seed-16 hotel-rules night as a second real log. **Two more rules,
-  replay only** (`hamad/hotelrules` `41b10f4`, 202 real nights, 30 seeds; not run live, not in the final
-  build): a room check that never calls a room empty against the robot's own record (its note says
-  NOT EMPTY and names its own bags) costs 0.0 points a night, fired 368 times on 190 nights, and live
-  the simulator thanked 389 of 390 room checks of rooms the robot had carried bags into; home by 05:45
-  (the master keycard back, then docked) costs −90.4 a night (−84.3 per seed); all six rules −207.3
-  (−172.1). The simulator's points reward behaviour a hotel would forbid, which is why the page shows
-  the hotel what the robot did instead of trusting the score.
-- **How we test a change before a live shift:** a replay bed (`agent/replaybed.py` on `hamad/final`)
-  rebuilds every full live night offline from its log (72 when we ran it at 02:55 Sun). Replayed with the code
-  that played them, 50 nights land within 61 points of live on average (**3.2 %**, 48 of 50 within
-  10 %; [`docs/runs/replay-fidelity.txt`](./docs/runs/replay-fidelity.txt)). That number is
-  **in-sample**: the bed's reward model was fitted on those same 50 nights. It shows the bed can
-  reproduce a night, not that it ranks a change correctly. On the two pairs of builds that played the
-  same seeds live, it got the direction right both times (+53 against live +72; −5 against live −17)
-  and was about 35 points off per seed. The wet-floor change in `8eac151` is the worked example: across
-  all 72 nights the bed gains +11.6 a night per seed (13 of 20 seeds better, 6 worse), which is why it
-  stays on for the final; live, on the four seeds it played, it came out −17 a night (+53, −1, −94,
-  −25). Four nights can't separate a change worth ±20 a night, and we don't claim they do. Details:
-  `docs/DEMO.md` § 1.1.
-- **Where the numbers come from:** [`docs/runs/ledger.csv`](./docs/runs/ledger.csv) (one row per live
-  start) and [`docs/runs/builds.csv`](./docs/runs/builds.csv) (one row per commit), rebuilt from the run
-  logs by `python3 scripts/ledger.py`, with the "done" split in its own columns (`done_after_rise`,
-  `done_own`, `done_own_credited`). **Check them yourself without our machines:** the 28 run logs
-  behind the build-level figures (the final branch's last four builds' 18 complete nights, the demo
-  night among them, and the dress rehearsal's 10; 16 MB) are committed in
-  [`docs/runs/logs/`](./docs/runs/logs/) with a SHA-256 manifest, and
-  `python3 scripts/ledger.py --root docs/runs/logs --check` checks every digest and rebuilds
-  `builds.csv`'s five rows and the 64 of 65, 54 of 65, 88 of 101 and 8 of 9 from them in about 0.2 s
-  (the gate, `scripts/check.sh`, runs it). Board tests (seed-specific nights from test checkouts: 134 started by
-  07:00, 129 of them ran to 06:00, 126 of those on seeds 10 and 16, best 2,808; the four hotel-rules
-  nights count here too) are marked `kind=board-test` in the ledger and kept out of the build rows.
-- **What it learned about the undocumented API:** [`docs/research/wybe-api.md`](./docs/research/wybe-api.md).
-- **Run it:** the commands are in [`CLAUDE.md`](./CLAUDE.md) § How to run / test
-  (`.venv/bin/python -m agent run --seed 1` plays offline against a fake server by default).
-
-## The name
-
-The product is **Lobby** (team lead, Sun 8 Nov), the same word as the code identifiers (`lobby:`
-storage keys, `LOBBY_USERS`). A funded Zurich hotel-AI company also trades as Lobby and sells through
-Apaleo, the channel we plan to use, so the name isn't cleared: the trademark searches (Patentstyret,
-EUIPO, WIPO) are still to do (`docs/PRIVACY.md` § 9).
-
-## Docs for the jury
-
-Overnight the build was steered by our own structured reviews, AI-assisted, one per judging field
-(design, security, product, legal, domain, data, marketing, founders). They are internal reviews, not
-the jury, and the docs name the field, never a person. They are not user tests: those are in
-`docs/DEMO.md` § 8, still **PENDING**.
-
-| File | What's in it |
+| | |
 |---|---|
-| [`docs/DEMO.md`](./docs/DEMO.md) | The pitch, the 2-minute script, the agent's numbers, the business slide, each review's question with an honest answer, the Sunday user test |
-| [`docs/PRD.md`](./docs/PRD.md) | What we built, for whom, and what we cut (draft for team review) |
-| [`docs/HOLIO.md`](./docs/HOLIO.md) | Holio pains 3, 6 and 9: which screen, what works, what doesn't yet |
-| [`docs/PRIVACY.md`](./docs/PRIVACY.md) | Personal data, processors, retention, security controls with file paths |
-| [`docs/checks/threat-model.md`](./docs/checks/threat-model.md) | Threat model for login and roles |
-| [`docs/runlog.schema.json`](./docs/runlog.schema.json) | The vendor-neutral run log a robot sends (tasks with the evidence behind each "done", hazards, security events); an Open-RMF sample runs through it on Natteskift |
-| [`docs/runs/forecast.txt`](./docs/runs/forecast.txt) | The forecast for the final, committed before it |
-| [`DESIGN.md`](./DESIGN.md) | The design system and the module list |
+| [![3D replay of the robot's night across floors](media/still-3d-map.png)](media/lobby-launch-40s.mp4) **The launch film** (40 s): 3D replay, routes, camera, storage, receptionist, handover | [![The 06:00 handover page](media/still-handover.png)](media/dub-launch.mp4) **The handover** (15 s): the night on one page |
+| [![The camera recognising rolled towels and a trunk](media/still-camera.png)](media/hard-stat.mp4) **The pitch in numbers** (25 s): what a missed room costs, and the price | [![Maria, the AI receptionist, answering in German](media/still-receptionist.png)](media/receptionist-maria.mp4) **Maria answers** (35 s): the AI receptionist switches to the caller's language |
 
-## Run it locally
+The app running locally, as it is in this repo (no login, test data):
+
+![Overlevering 06:00, the handover page, in the open demo](media/app-handover.png)
+
+The camera in the videos is fed stock footage (credited below); the receptionist is a real ElevenLabs
+call.
+
+## The problem
+
+At night a hotel runs on one clerk, and at 06:00 a manager inherits whatever the night left behind:
+rooms where the booking system and the door lock disagree (a guest "still in" an empty room, a room in
+use with no booking), wet floors nobody was told about, and requests half done. A night robot could
+help, but only if its "done" can be trusted. Lobby puts the night on one page, says which rooms need a
+person now and which can be sold today, and counts a robot's "done" only when there is proof.
+
+## What's in the repo
+
+**A. The Night Shift agent** ([`agent/`](agent/), Python). Wybe Robotics ran a live simulation of a
+hotel robot with an undocumented API: "ask the robot". Our agent found the commands by probing, then
+played whole night shifts on its own (towels, lost items, room checks, spills, strangers at the door),
+scored only by Wybe's server: tasks done, speed, no false "done", no unsafe moves. It plans on exact
+simulation time, routes across floors with Dijkstra, and refuses unsafe moves in code. Claude is only a
+guarded fallback for odd requests (about USD 0.001 spent all weekend, under a hard cap).
+
+**B. The Lobby app** ([`src/`](src/), Next.js). What the hotel sees:
+
+- **Overlevering 06:00**: the handover page. What needs a person now and who owns it, which rooms can
+  be sold today, and what the robot did and refused to do, each "done" marked with its proof.
+- **3D-kart**: a 3D replay of the robot's real night across three floors, from its run log.
+- **Ruter**: shortest cleaning and picking routes across floors.
+- **Robotens øyne**: a camera that recognises supplies without a barcode, with an on-device detector
+  (MediaPipe EfficientDet-Lite0) drawing boxes and Claude naming the product.
+- **Lager og lin**: storage per linen room, with refill lists.
+- **Resepsjon**: Maria, an AI phone receptionist on ElevenLabs that answers in the caller's language,
+  takes bookings and messages, and keeps the call log.
+- **GDPR work**: [`docs/PRIVACY.md`](docs/PRIVACY.md) (what is stored, where, for how long) and
+  [`docs/DPA.md`](docs/DPA.md) (a one-page data processing agreement for a pilot hotel).
+
+**How they connect:** the agent writes a run log, one JSON line per call and reply
+([`docs/runlog.schema.json`](docs/runlog.schema.json)). The app reads that log: the 3D map replays it,
+and the handover counts the robot's "done" against it. The night in the app
+([`public/runs/demo.jsonl`](public/runs/demo.jsonl)) is a real practice night our agent played against
+Wybe's server (seed 16, 2,680 points).
+
+## How it works
+
+```mermaid
+flowchart LR
+    O["Observe<br/>inbox, status, events"] --> P["Plan<br/>value per sim-second,<br/>Dijkstra across floors"]
+    P --> S{"Safe?<br/>Do Not Disturb, occupied,<br/>a stranger at the door"}
+    S -- no --> H["Hand it to a person<br/>report failed, 0 points"]
+    S -- yes --> A["Act<br/>one command, under 20 s"]
+    A --> V{"Did the server's<br/>score rise?"}
+    V -- yes --> D["Report done"]
+    V -- no --> F["Report failed"]
+    D --> O
+    F --> O
+    H --> O
+```
+
+1. **Observe.** Read the inbox and the robot's status; every request goes into a ledger, so follow-ups
+   and duplicates are judged against it.
+2. **Plan.** Estimate each task's points per simulated second and pick the best next one; routes are
+   exact shortest paths that avoid corridors closed for cleaning and never cut through a guest room.
+3. **Act.** One command at a time, well under the 20-second action limit.
+4. **Verify.** **The agent never reports "done" until it has seen the server's score rise** (or, for a
+   room check, looked inside the room itself). A false "done" cost 30 points; an honest "failed" cost
+   nothing. The app holds the robot to the same rule.
+
+Ten shifts ran in parallel in the final under one global rate limit. An offline fake of Wybe's server
+([`agent/offline.py`](agent/offline.py)) and a replay bed that rebuilds real live nights from their logs
+([`agent/replaybed.py`](agent/replaybed.py)) let us test a change before it ever met the live server.
+
+## Results
+
+| Wybe Night Shift final | Sun 8 Nov 2026, 12:00–13:00 |
+|---|---|
+| Place | **9th of 29 teams** |
+| Our score | **2,175.26** |
+| Winner | 2,486.87 |
+| Scoring | 10 secret shifts, one try each, run in parallel; the average with the worst dropped, by Wybe's server only |
+| Our forecast | 2,176, from a dress rehearsal at 05:50 on ten seeds no build had played (573 of 573 "done" credited) |
+
+What we'd change: most of our tuning went into four practice seeds (mean 2,591 there), but on unseen
+nights the same build scored about 2,176, so next time that time goes into rules that hold on any night.
+
+## Quick start (no keys)
+
+You need Python 3.12 and Node 20 or newer. Nothing below needs an API key or an account.
+
+**The agent against the offline fake server:**
+
+```bash
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m agent run --seed 1               # one full night shift, offline
+.venv/bin/python -m agent viewer                     # 3D viewer of that night: http://127.0.0.1:8765
+.venv/bin/python -m agent route front-desk room-319  # a shortest route across floors
+```
+
+**The app on test data, with no login:**
 
 ```bash
 npm ci
-cp .env.example .env.local                      # then fill it in (ask the team where the secrets live)
-node scripts/lobby-hash.mjs --secret            # prints LOBBY_AUTH_SECRET=…
-node scripts/lobby-hash.mjs --users <password> [<jury password>]  # LOBBY_USERS=… (the team's accounts, and the jury's)
-npm run dev                                     # http://localhost:3000
-npm run build && npm start                      # the production build (the demo's offline backup)
-npm test                                        # app tests (vitest)
-.venv/bin/python -m pytest                      # agent tests (after ./scripts/setup.sh)
+npm run dev                                          # http://localhost:3000
 ```
 
-Login needs `LOBBY_AUTH_SECRET` and `LOBBY_USERS`; Robotens øyne needs `ANTHROPIC_API_KEY`; the voice
-screens need `ELEVENLABS_API_KEY` and their agent ids. Every variable is listed in
-[`.env.example`](./.env.example). Stack: Next.js 16, React 19, three.js, MediaPipe, the Claude API and
-ElevenLabs for the app; Python 3.12 and httpx for the agent.
+With no accounts configured the app is an open demo: you are a demo admin and every screen is in the
+menu. Open **3D-kart** and press *Spill av* to replay the recorded live night, or **Overlevering 06:00**
+for the handover. Bookings, guests, staff, stock and prices are test data, and every list says so.
 
-## New teammate? Start here
+**Tests:**
 
 ```bash
-claude update           # a current Claude Code is needed for the team's plugins
-git clone <repo-url>
-cd <repo>
-./scripts/setup.sh      # git hooks, .env, the team's Claude Code plugins, dependencies
-# fill in .env (ask the team where the secrets live)
+npm test                                             # 1,291 app tests (Vitest)
+npm run lint && npm run typecheck
+.venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q   # 906 agent tests
 ```
 
-You now have the same AI setup as everyone else: superpowers, frontend-design, chrome-devtools-mcp
-and diagram-design plugins, the Scrapling skill, Playwright and Context7 (approve them when Claude
-Code asks), and `/kickoff` / `/handoff`. Details in `docs/OPERATIONS.md` § 9.
+## Running with your own keys
 
-Then open the folder in Claude Code and either:
+Copy [`.env.example`](.env.example) to `.env` and fill in what you need. Keys stay on the server; the
+browser only ever gets short-lived tokens. Without a key, its screens show a calm *ikke satt opp* (not
+set up) message and the rest of the app works.
 
-- paste the **next-chat prompt** from the newest file in [`docs/sessions/`](./docs/sessions/) (its
-  last section), to continue exactly where the last session stopped; or
-- type **`/kickoff`**: it syncs with `main`, reads the docs in order and tells you the team state,
-  your lane and your next task.
+| Variable | What it powers | Without it |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | The camera naming a product (Claude); the agent's guarded fallback | Boxes still come from the on-device detector; naming says *ikke satt opp*; the agent stays rule-based |
+| `APP_CLAUDE_BUDGET_USD`, `ANTHROPIC_BUDGET_USD` | Spend caps for the app and the agent | Defaults: USD 5 and USD 30 |
+| `ELEVENLABS_API_KEY` | The receptionist and the voice screen (Stemme) | Both say *ikke satt opp* |
+| `ELEVENLABS_RECEPTION_AGENT_ID`, `ELEVENLABS_AGENT_ID` | Your own ElevenLabs agents (`src/features/reception/setup-agent.ts`, `src/features/voice/setup-agent.ts` create them) | Needed with your own ElevenLabs key |
+| `RECEPTION_PUBLIC_URL`, `RECEPTION_TOOL_SECRET` | The receptionist on a real phone number | Tools run in the browser |
+| `LOBBY_USERS`, `LOBBY_AUTH_SECRET` | The login, back on: roles, scrypt hashes and a signed session cookie (`node scripts/lobby-hash.mjs`) | The open demo, no login |
+| `WYBE_NIGHTSHIFT_KEY`, `WYBE_NIGHTSHIFT_URL` | `--live` play against Wybe's server | The offline fake server |
 
-Every session ends with **`/handoff`**, which saves a session note, updates `MEMORY.md` and
-`docs/PLAN.md`, merges the work into `main` when CI is green, and leaves the prompt for the next chat.
-That's how everyone, and every AI, stays on the same page.
+`--live` needed the event's server, which is closed now; the offline fake and the replay bed still run.
 
-## How we work
+## Stack
 
-- `main` is protected and always demo-able. Work on `<your-name>/<topic>`, open a PR, merge when CI
-  is green. Details in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
-- Tasks and owners: [`docs/PLAN.md`](./docs/PLAN.md). Live status: [`MEMORY.md`](./MEMORY.md).
-- Using an AI assistant? Claude Code starts at [`CLAUDE.md`](./CLAUDE.md); other tools at
-  [`AGENTS.md`](./AGENTS.md).
-
-## Docs map
-
-| File | What's in it |
+| Layer | Choice |
 |---|---|
-| `CLAUDE.md` | AI entry point: reading order, working agreement, team rules |
-| `AGENTS.md` | Points Cursor, Codex, Copilot … at the same rules |
-| `MEMORY.md` | Live status board, one lane per teammate |
-| `CONTRIBUTING.md` | Git workflow: branches, PRs, shared docs, conflicts |
-| `DESIGN.md` | Design tokens, type, colour, voice |
-| `docs/CONTEXT.md` | The hackathon: challenge, judging, deadlines, team, verbatim brief |
-| `docs/PRD.md` | What we build and what we don't |
-| `docs/PRIVACY.md` | Personal data, processors, retention, security controls |
-| `docs/ARCHITECTURE.md` | Stack, folders, module owners, contracts |
-| `docs/AI_RULES.md` | Hard rules for humans and AIs |
-| `docs/PLAN.md` | Phased roadmap, tasks, owners |
-| `docs/OPERATIONS.md` | Setup, the gate, env, CI, deploy, demo day, troubleshooting |
-| `docs/DEMO.md` | Demo script, pitch, submission checklist |
-| `docs/HOLIO.md` | Holio pains 3, 6 and 9: screens and honest status |
-| `docs/sessions/` | One handoff note per work session |
-| `docs/superpowers/` | Specs and plans from brainstorming sessions |
-| `docs/research/` · `docs/checks/` | Research notes · reviews, audits, test reports |
+| Agent | Python 3.12, httpx, rule-based flows per request type, Dijkstra routing; Claude (`anthropic` SDK) as a metered fallback |
+| App | Next.js 16 (App Router), React 19, TypeScript 6, Tailwind CSS 4, zod |
+| 3D | three.js |
+| Camera | MediaPipe Tasks Vision (EfficientDet-Lite0, in the browser) and Claude |
+| Voice | ElevenLabs Agents (receptionist and voice), short-lived tokens from our server |
+| Auth | HMAC-signed session cookie, scrypt password hashes, roles enforced in the Next proxy (off in the open demo) |
+| Tests and CI | Vitest and Testing Library, pytest, ESLint; GitHub Actions running `scripts/check.sh` and gitleaks over the full history |
+
+## Repo layout
+
+```text
+agent/          the Night Shift agent: shift loop, planner, routing, executor, offline fake server, replay bed
+tests/          pytest suites for the agent and the scripts
+viewer/         the agent's own 3D viewer (python -m agent viewer)
+src/app/        Next.js routes and API handlers
+src/features/   one folder per screen: handover, hotel3d, routes, eyes, inventory, reception, auth, ...
+public/runs/    the recorded live night the app replays
+docs/           product, architecture, privacy, DPA, plans, research, run data
+media/          the images and videos in this README
+```
+
+`CLAUDE.md`, [`docs/AI_RULES.md`](docs/AI_RULES.md) and the rest of [`docs/`](docs/) are the
+instructions every AI session read before touching code; they are kept as they were during the event.
+
+## How we built it
+
+Two people and a crowd of parallel AI subagents (Claude Code). Every piece of work went from a short
+design, to a written plan ([`docs/superpowers/plans/`](docs/superpowers/plans/)), to subagents building
+independent tasks in parallel, each change on its own branch. One gate,
+[`scripts/check.sh`](scripts/check.sh), ran secret scanning, doc checks, lint, typecheck, tests and the
+build before every push and in CI. Small pull requests: 570 commits and 24 merged PRs between
+Saturday 11:47 and the Sunday 14:00 code freeze. Independent mock-jury reviews
+([`docs/checks/`](docs/checks/)) and a threat model
+([`docs/checks/threat-model.md`](docs/checks/threat-model.md)) fed back into the build.
+
+## The hackathon snapshot
+
+The tag **`oslo-sprint-2026-submission`** marks the code as submitted. The commits after it are this
+public copy: a new README, media and doc cleanup, and the open demo (no login when no users are
+configured). History was rewritten for the public copy, so commit ids differ from our private repo:
+organiser files, contact details, internal team notes and an old shared password were removed, and
+jurors are named by their field only.
+
+## Team
+
+- **Hamad** ([@haakram](https://github.com/haakram)): team lead; the Night Shift agent, the tooling and
+  much of the app.
+- **ShirazIQ** ([@ShirazIQ](https://github.com/ShirazIQ)): the UI, the camera (Robotens øyne), the
+  ElevenLabs receptionist and voice, and the demo.
+
+## Acknowledgements
+
+- **Oslo Sprint 2026**: a weekend hackathon in Oslo where teams build a working product from scratch
+  in 48 hours.
+- **Wybe Robotics**: set the Night Shift challenge and ran the live hotel-robot simulation that scored
+  every team's agent.
+- **Holio**: brought real warehouse problems; ours were finding an item without a barcode, shorter
+  walking routes, and guidance in the worker's own language.
+- **ElevenLabs**: the voice behind the receptionist, and the voice-over in the videos.
+- **Mixkit**: the music in the videos, and the stock footage fed to the camera in them (free licences).
+
+Lobby is a hackathon project, not a company or a product for sale, and it is not affiliated with any
+of the organisations above. The name may collide with an existing hotel-tech company.
+
+## Licence
+
+No licence yet (all rights reserved).

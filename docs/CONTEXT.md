@@ -1,20 +1,21 @@
 # CONTEXT.md — The hackathon
 
 > Everything about the event that shapes what we build. Every AI session reads this to weigh
-> trade-offs, so the rules, scoring and deadlines here are exact. Sources: the three files in `docs/`
-> (`Oslo Sprint – Kickoff.pptx` incl. speaker notes, `Wybe Night Shift – Arrangørguide_1.pdf`,
-> `Hackathon - Holio og utfordringer fra lagerdriften.pdf`) and the organisers' Discord posts the
-> team lead pasted on 2026-11-07 (§ 8). Read on 2026-11-07.
+> trade-offs, so the rules, scoring and deadlines here are exact. Written from the organisers' kickoff
+> slides, the Wybe and Holio challenge guides and the organisers' Discord posts, read on 2026-11-07.
+>
+> **Public copy:** the organisers' files and their verbatim text are not included here; the parts
+> that shaped our work are summarised in our own words. Jurors are named by their field only.
 
 ## 1. Event
 
 | | |
 |---|---|
-| Name | **Oslo Sprint** — vibecoding hackathon. "One weekend. One MVP." |
+| Name | **Oslo Sprint** — a vibecoding hackathon: one weekend, one working MVP |
 | Dates | Fri 6 – Sun 8 November 2026 |
 | Place | BI Startup Village, Nydalsveien 37, Oslo. Wi-Fi: `BI-Guest` |
 | Open | Fri until 21:00 · Sat 09:00–23:30 · Sun from 09:00 |
-| All info | Discord: https://discord.gg/yGu4xxftmB (schedule, rules, updates, digital mentors, ElevenLabs codes) |
+| All info | The event's Discord server (schedule, rules, updates, digital mentors, ElevenLabs codes) |
 | Site | oslosprint.org |
 
 ## 2. Rules (strictly enforced)
@@ -34,12 +35,12 @@
 
 | Prize | Amount | Decided by | What wins it |
 |---|---|---|---|
-| **Main prize** (Opera) | **NOK 50,000** | Jury | A finished product (app, website, game, tool…). "Doesn't have to be perfect, but it has to work well enough to show off the idea and its main features." |
+| **Main prize** (Opera) | **NOK 50,000** | Jury | A finished product (app, website, game, tool…). It need not be perfect, but it must work well enough to show the idea and its main features. |
 | **Wybe Night Shift** | **NOK 10,000** | Server score only | Highest average score over the 10 final shifts, worst one dropped (§ 5). |
 | **Holio** | **NOK 10,000** | Holio / jury | A solution to one of nine warehouse pains, shown for the people who work there (§ 6). |
-| **ElevenLabs** | 6 months ElevenLabs Scale ($299/mo, $1,794) | ElevenLabs | "Best product built with ElevenLabs." Every participant gets a free Creator subscription (code on Discord). |
+| **ElevenLabs** | 6 months ElevenLabs Scale ($299/mo, $1,794) | ElevenLabs | The best product built with ElevenLabs. Every participant gets a free Creator subscription (code on Discord). |
 
-Holio's document leaves its judging criteria blank ("filled in by the organiser"). Ask Holio.
+Holio's document left its judging criteria blank, to be filled in by the organiser. Ask Holio.
 
 ## 4. Timeline (Europe/Oslo)
 
@@ -69,7 +70,7 @@ someone has to start and watch the 10 shifts.
 
 ## 5. Wybe Night Shift (side challenge, NOK 10,000)
 
-**What it is:** "A robot is working the night shift at Hotel Wybe. You are its brain." An AI agent
+**What it is:** a robot works the night shift at a hotel, and the team writes its brain. An AI agent
 controls a hotel robot **in a simulation**, through an API. It is a robotics-and-AI challenge, but
 the robot is simulated: the score comes from the server, not from the jury.
 
@@ -78,22 +79,22 @@ the robot is simulated: the score comes from the server, not from the jury.
 2026-11-07: `POST` a JSON body `{"cmd":"<command>","args":{…}}`; replies look like
 `{"ok":…,"clock":…,"result":…,"events":[…],"note":…}`. `{"cmd":"help"}` lists help, whoami,
 start_shift, shifts, leaderboard. The full command map is in `docs/research/wybe-api.md`. Wybe's
-message to the team: "Score as high as you can before Sunday 13:00. Anything goes, as long as it
-talks to the endpoint."
+message to the teams, in short: score as high as you can before Sunday 13:00; any approach is fine as
+long as it talks to the endpoint.
 
 **How it works**
 
-1. The team joins through one link: **https://nightshift-board.wybe.me/join** ("no key needed", open
-   the link and sign up). The organiser guide calls it "one key, one address. Nothing more."
-2. **No documentation.** "How does the API work?" → "**Ask the robot.**" The agent has to find out
-   which commands the robot understands.
+1. The team signs up through one link on Wybe's leaderboard site and gets one key and one
+   address, nothing else.
+2. **No documentation.** The way to learn the API is to ask the robot itself: the agent has to find
+   out which commands the robot understands.
 3. The night manager sends tasks: **towels, lost items, room checks.** There are always more tasks
    than anyone can finish.
 4. **Surprises along the way.** Good judgement earns points; careless actions cost points.
 5. A laptop and internet are enough. ChatGPT, Claude and anything else are allowed. Teams pay for
    their own AI services.
 
-**Scoring** ("right, fast and safe")
+**Scoring** (right, fast and safe)
 
 - **+** every task the robot actually completes. **Faster earns more.**
 - **−** wrong deliveries, **claiming something is done when it isn't**, unsafe or careless choices.
@@ -119,7 +120,7 @@ hand-steering.** Don't attack or overload the server. Everything else is allowed
 logged, and breaking a rule can disqualify. Server problems go to Wybe's stand.
 
 **Contact:** Wybe's challenge owner, at the Wybe stand. Wybe also has a physical
-humanoid robot at the venue all weekend ("a robot employee from Moss").
+humanoid robot at the venue all weekend.
 
 **What this means for us:** only the agent's autonomous play scores here. A camera feed, voice or
 a dashboard earns no Wybe points (they can earn points for the main prize, Holio and ElevenLabs).
@@ -137,9 +138,9 @@ per web shop). Behind it sits a WMS that tracks every item, shelf location and o
 
 The flow an item takes: **receiving → storage → picking → packing → shipping → returns.**
 
-**The task:** "Pick one of nine real challenges from warehouse operations and show a solution for
-the people working there. No prior knowledge needed. The directions are just examples: how you
-solve it is up to you. **Use test data only** (never real customer data)."
+**The task, in short:** pick one of nine real warehouse problems and show a solution for the people
+who work there. No prior knowledge is needed, the suggested directions are only examples, and
+**only test data** may be used (never real customer data).
 
 | # | Pain | The problem | Suggested direction |
 |---|---|---|---|
@@ -168,86 +169,29 @@ volumvekt (volumetric weight) · SKU / EAN (item number / barcode).
 
 ## 7. Jury
 
-| Who | Role | Why it matters to us |
-|---|---|---|
-| The founder juror | Founder | Founder lens |
-| **The Wybe juror** | Engineering lead, **Wybe Robotics** | Wybe challenge owner |
-| **The Wybe engineer** | Engineer, **Wybe Robotics** | Wybe |
-| **The Holio juror** | **Head of Holio** | Holio challenge owner |
-| The security juror | Ethical hacker | Will probe security: keys, inputs |
-| The data juror | Data engineer | Data and ML soundness |
-| **The product juror** | AI product lead, **Opera** | Main-prize sponsor |
-| The law juror | Lawyer | Privacy: cameras in a hotel, guests' voices (GDPR) |
-| The marketing juror | Founder and lecturer | Marketing, story |
-| The design juror | Digital designer | Design quality |
-| **The creative juror** | Creative and product marketing, **Opera** | Main-prize sponsor |
+Eleven jurors, named here by field only: founders, the Wybe challenge owners (two Wybe Robotics
+engineers), the Holio lead, IT security (an ethical hacker who would probe keys and inputs), data and
+ML, AI product and creative marketing (two people from Opera, the main-prize sponsor), law (privacy:
+cameras in a hotel, guests' voices, GDPR), marketing and story, and design.
 
-Two Opera people are on the jury. Saturday 16–17 is the panel talk: our chance to ask Wybe and
-Holio what they reward.
+Saturday 16–17 is the panel talk: our chance to ask Wybe and Holio what they reward.
 
-## 8. Original brief (verbatim)
+## 8. The brief, summarised
 
-> The team lead's words of 2026-11-07, kept so the full intent is available to every session.
+**The team lead's opening brief to the AI (2026-11-07), in short:** build for the Wybe Night Shift
+challenge, deliver by Sunday 14:00, and read the event files first. The robot should recognise and
+sort hotel products (soap, shampoo, food), collect used towels and check rooms; speak and listen
+through ElevenLabs, translate for guests who speak another language, and turn what staff say into
+the right command. Around it: an app with camera recognition (a live feed with boxes around what the
+robot sees), shortest routes across a hotel with several floors, the Claude API as the brain, and a
+demo for the jury. Aim for the top of the Wybe leaderboard; for Holio, pains 3, 6 and 9. Scrapling
+and the team lead's starred GitHub repos were offered as tools.
 
-> all right, good. The plan now is that we are making a project for the hackathon. The delivery
-> time is tomorrow at 14 pm. The idea is wybe night shift, before you do anything, I want you to go
-> through the files that I have attached now as context for the hackathon.
->
-> We are building a machine learning algorithm where the robot can categorize products (for
-> example, let's say food items, like soap, shampoo, etc.), as well as pick up old towels and do
-> room checks. It can talk through Eleven Labs, and we can also talk to it. It can also translate if
-> we have guests that are in a different language. If we talk to it, it can understand what we are
-> saying and do the right command based off of that.
->
-> What we need is an app to fit the robot. We need a machine learning algorithm for categorizing
-> and camera-gjennkjenning, shortest route etc.
->
-> Remember, this will be in a hotel with multiple levels, and we need to do a demo that we will
-> show to the judges/juries at the end. For the brain, I want you to use, for example, the Claude
-> API and then some algorithm for camera recognition where you can see what it sees. If you click
-> on that, then it is possible to see the live feed and then boxes of categorization. For example,
-> how people do with camera and trafic for categorization. If you need a backend, you can just use
-> Cloudflare R2 if that is fine.
->
-> […] there is a leaderboard, we need to be on the top […] the holio goal is 3,6,9 […]
->
-> For scraping the internet, you can use the Scrapling tool: https://github.com/d4vinci/Scrapling
-> I also have a bunch of GitHub repos that you might use: just look at my stars on my GitHub and
-> download them if you want to.
-
-**Organisers' Discord posts the team lead pasted (verbatim):**
-
-> Wybe Night Shift: how the final works (Sunday) 🏁
-> • 11:45: practice closes. Your agent should be done by then.
-> • 12:00–13:00: the final. Start it with start_shift and mode: "final". Same API, same commands as in practice.
-> • Every team plays the same 10 secret shifts, each in its own order. You get one try per shift and no restarts.
-> • Start all 10 at 12:00. They can run in parallel. A shift is capped at 45 min, everything stops at 13:00, and a shift you never start scores 0.
-> • 20 seconds per action. If your agent is slower, the robot stands idle and loses sim time. status and inbox don't reset the timer.
-> • Ranking: the average of your 10 final shifts, with your worst one dropped. The practice leaderboard doesn't count.
-> • 13:05: results revealed. NOK 10,000 to the winner.
->
-> 📊 Leaderboard: https://nightshift-board.wybe.me/
-> It updates every 10 seconds and shows your best practice shift. During the final it only shows progress (x/10 shifts per team). Scores stay hidden until the reveal at 13:05.
-
-> Side challenge: Holio – make life easier in the warehouse
-> Holio is the software that runs the warehouse behind online stores: incoming orders, stock on the shelves, packing, shipping labels and returns.
->
-> The task
-> Pick one of nine real challenges from warehouse operations and show a solution for the people working there. No prior knowledge needed.
->
-> The nine challenges
-> Missing dimensions – measure with the phone camera
-> Manual delivery notes – read them from a photo
-> No barcode – recognise items from a photo
-> Wrong item in the box – camera check before sealing
-> Wrong box size – suggest a box from the order
-> Long walks – shorter picking routes
-> Stock counts and shrinkage – find shelves with errors
-> Assessing returns – guided, with photos
-> Training – guidance in their own language
-> The directions are just examples – how you solve it is up to you. Use test data only.
->
-> Prize: NOK 10,000
+**The organisers' Discord posts, in short:** the Wybe final post repeats the rules in § 5 (practice
+closes 11:45; the final runs 12:00–13:00 with `mode: "final"`; ten secret shifts, one try each, run
+in parallel, 45 minutes at most; 20 seconds per action; rank by the average with the worst shift
+dropped; scores hidden until 13:05). The Holio post lists the nine warehouse problems in § 6, says the
+directions are only examples and that only test data may be used, and names the NOK 10,000 prize.
 
 **Decisions made after this brief (they override it where they differ), team lead 2026-11-07:**
 
@@ -290,7 +234,7 @@ Holio what they reward.
 
 ## 11. How we're judged and how to submit (Saturday-morning deck, read 2026-11-07)
 
-Source: `docs/Oslo Sprint – Saturday morning.pptx` (slides and speaker notes).
+Source: the organisers' Saturday-morning slides and speaker notes (not included in this copy).
 
 **Submit (deadline Sun 14:00, code freeze):** one GitHub repo for the team; **the jury looks at the
 commit history** (code committed before kickoff counts against you); type `/lever` in #general

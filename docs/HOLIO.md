@@ -6,7 +6,7 @@
 > were re-read at about 09:45 against the camera that ships (ShirazIQ's, as on `main`), which has no picker
 > between candidate products and no avvik. Lobby is a hotel product; this page says plainly which parts
 > of it work for a web-shop warehouse today, which parts are hotel stand-ins, and what we would build
-> first. The brief: `docs/CONTEXT.md` § 6 and *Hackathon - Holio og utfordringer fra lagerdriften.pdf*.
+> first. The brief: `docs/CONTEXT.md` § 6 and Holio's challenge guide (an organiser document, not included in this public copy).
 
 ## In one paragraph
 

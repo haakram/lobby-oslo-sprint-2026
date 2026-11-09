@@ -78,7 +78,7 @@ fi
 
 # 2. The docs CLAUDE.md's reading order depends on.
 missing=""
-for f in CLAUDE.md AGENTS.md MEMORY.md README.md CONTRIBUTING.md .env.example \
+for f in CLAUDE.md AGENTS.md README.md CONTRIBUTING.md .env.example \
   docs/CONTEXT.md docs/PRD.md docs/ARCHITECTURE.md docs/AI_RULES.md docs/PLAN.md docs/OPERATIONS.md; do
   [ -f "$f" ] || missing="$missing $f"
 done

@@ -16,7 +16,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](#stack)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-2E7D4F)](LICENSE)
 
-**[▶ Live demo (no login, test data)](https://lobby-oslo-sprint-2026.j4v5vcvg4k.workers.dev)**
+**[▶ Live demo (no login, test data)](https://lobby-oslo-sprint-2026.haakram.workers.dev)**
 
 </div>
 
@@ -152,7 +152,7 @@ With no accounts configured the app is an open demo: you are a demo admin and ev
 menu. Open **3D-kart** and press *Spill av* to replay the recorded live night, or **Overlevering 06:00**
 for the handover. Bookings, guests, staff, stock and prices are test data, and every list says so.
 
-The [live demo](https://lobby-oslo-sprint-2026.j4v5vcvg4k.workers.dev) is this same build on Cloudflare Workers
+The [live demo](https://lobby-oslo-sprint-2026.haakram.workers.dev) is this same build on Cloudflare Workers
 (`npm run deploy`, OpenNext). It has no keys, so the camera's AI naming and the receptionist show
 *ikke satt opp* (not set up) there.
 

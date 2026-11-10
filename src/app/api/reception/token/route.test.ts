@@ -4,7 +4,7 @@ vi.mock("server-only", () => ({}));
 
 const sdk = vi.hoisted(() => ({ getWebrtcToken: vi.fn() }));
 
-vi.mock("@elevenlabs/elevenlabs-js", () => ({
+vi.mock("@/lib/elevenlabs", () => ({
   ElevenLabsClient: class {
     conversationalAi = { conversations: { getWebrtcToken: sdk.getWebrtcToken } };
   },

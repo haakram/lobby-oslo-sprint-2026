@@ -1,4 +1,4 @@
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { ElevenLabsClient } from "@/lib/elevenlabs";
 import { voiceEnv, type VoiceEnv } from "@/lib/env";
 
 // A fresh token per request; never cached, never prerendered.

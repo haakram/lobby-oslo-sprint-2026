@@ -4,7 +4,7 @@ vi.mock("server-only", () => ({}));
 
 const sdk = vi.hoisted(() => ({ list: vi.fn() }));
 
-vi.mock("@elevenlabs/elevenlabs-js", () => ({
+vi.mock("@/lib/elevenlabs", () => ({
   ElevenLabsClient: class {
     conversationalAi = { conversations: { list: sdk.list } };
   },

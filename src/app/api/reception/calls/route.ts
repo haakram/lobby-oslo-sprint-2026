@@ -1,4 +1,4 @@
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { ElevenLabsClient } from "@/lib/elevenlabs";
 import { RECEPTION_DATA_FIELDS } from "@/features/reception/agentConfig";
 import { toCallNotes } from "@/features/reception/callLog";
 import { receptionEnv, type ReceptionEnv } from "@/lib/env";

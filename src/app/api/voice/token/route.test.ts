@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-// A fake ElevenLabs SDK: records what it was built with and asked for, never calls the network.
+// A fake ElevenLabs client: records what it was built with and asked for, never calls the network.
 const sdk = vi.hoisted(() => ({
   constructedWith: [] as unknown[],
   getWebrtcToken: vi.fn(),
 }));
 
-vi.mock("@elevenlabs/elevenlabs-js", () => ({
+vi.mock("@/lib/elevenlabs", () => ({
   ElevenLabsClient: class {
     conversationalAi = { conversations: { getWebrtcToken: sdk.getWebrtcToken } };
     constructor(options: unknown) {

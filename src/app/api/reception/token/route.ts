@@ -1,4 +1,4 @@
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { ElevenLabsClient } from "@/lib/elevenlabs";
 import { receptionEnv, type ReceptionEnv } from "@/lib/env";
 
 export const dynamic = "force-dynamic";

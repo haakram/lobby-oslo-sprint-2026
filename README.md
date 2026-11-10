@@ -16,6 +16,8 @@
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](#stack)
 [![Licence: MIT](https://img.shields.io/badge/licence-MIT-2E7D4F)](LICENSE)
 
+**[▶ Live demo (no login, test data)](https://lobby-oslo-sprint-2026.j4v5vcvg4k.workers.dev)**
+
 </div>
 
 A robot agent that works a hotel's night shift and never says "done" without proof, and an app that
@@ -150,10 +152,14 @@ With no accounts configured the app is an open demo: you are a demo admin and ev
 menu. Open **3D-kart** and press *Spill av* to replay the recorded live night, or **Overlevering 06:00**
 for the handover. Bookings, guests, staff, stock and prices are test data, and every list says so.
 
+The [live demo](https://lobby-oslo-sprint-2026.j4v5vcvg4k.workers.dev) is this same build on Cloudflare Workers
+(`npm run deploy`, OpenNext). It has no keys, so the camera's AI naming and the receptionist show
+*ikke satt opp* (not set up) there.
+
 **Tests:**
 
 ```bash
-npm test                                             # 1,291 app tests (Vitest)
+npm test                                             # 1,294 app tests (Vitest)
 npm run lint && npm run typecheck
 .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q   # 906 agent tests
 ```
@@ -186,6 +192,7 @@ set up) message and the rest of the app works.
 | Camera | MediaPipe Tasks Vision (EfficientDet-Lite0, in the browser) and Claude |
 | Voice | ElevenLabs Agents (receptionist and voice), short-lived tokens from our server |
 | Auth | HMAC-signed session cookie, scrypt password hashes, roles enforced in the Next proxy (off in the open demo) |
+| Hosting (demo) | Cloudflare Workers via the OpenNext adapter (`@opennextjs/cloudflare`), no keys set |
 | Tests and CI | Vitest and Testing Library, pytest, ESLint; GitHub Actions running `scripts/check.sh` and gitleaks over the full history |
 
 ## Repo layout

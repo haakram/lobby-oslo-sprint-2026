@@ -14,6 +14,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)](#stack)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](#stack)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](#stack)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-2E7D4F)](LICENSE)
 
 </div>
 
@@ -245,4 +246,5 @@ of the organisations above. The name may collide with an existing hotel-tech com
 
 ## Licence
 
-No licence yet (all rights reserved).
+[MIT](LICENSE) for the code. The demo videos and the logo in `media/` are the team's own, and the music
+and stock footage inside the videos stay under their Mixkit licences.
